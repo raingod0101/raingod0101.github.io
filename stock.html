@@ -11,20 +11,29 @@
         .content-wrap { position: relative; z-index: 10; display: flex; flex-direction: column; align-items: center; }
 
         /* 數據框 */
-        .box { border: 1px solid #00ff00; padding: 25px; background: rgba(0, 10, 0, 0.9); width: 380px; box-shadow: 0 0 20px rgba(0, 255, 0, 0.3); }
-        .row { display: flex; justify-content: space-between; align-items: center; margin: 12px 0; border-bottom: 1px solid #003300; padding-bottom: 8px; }
-        .label { color: #008800; font-size: 13px; text-transform: uppercase; font-weight: bold; }
-        .val { color: #fff; font-size: 26px; font-weight: bold; font-variant-numeric: tabular-nums; }
+        .box { border: 1px solid #00ff00; padding: 25px; background: rgba(0, 10, 0, 0.9); width: 420px; box-shadow: 0 0 20px rgba(0, 255, 0, 0.3); }
+        .row { display: flex; justify-content: space-between; align-items: baseline; margin: 12px 0; border-bottom: 1px solid #003300; padding-bottom: 8px; }
         
-        /* 特別強調 Offset */
-        .offset-val { color: #00ff00; font-size: 42px; text-shadow: 0 0 15px #00ff00; }
+        /* 標籤樣式 */
+        .label { color: #008800; font-size: 11px; text-transform: uppercase; font-weight: bold; margin-bottom: 4px; }
+        
+        /* 數值樣式 */
+        .val { color: #1fc4ed; font-size: 24px; font-weight: bold; font-variant-numeric: tabular-nums; }
+        
+        /* 左側：漲跌價格 (原本 Offset 的位置) */
+        .change-main { color: #ff3333; font-size: 32px; text-shadow: 0 0 10px rgba(255,0,0,0.2); }
+        
+        /* 右側：Offset (移到右邊) */
+        .offset-val { color: #eeff00; font-size: 24px; text-shadow: 0 0 15px rgba(238, 255, 0, 0.4); }
         
         .status-bar { display: flex; justify-content: space-between; font-size: 10px; color: #004400; margin-top: 15px; width: 100%; }
-        #sync-light { color: #00ff00; }
         
         h1 { font-size: 20px; margin: 0 0 15px 0; border-left: 5px solid #00ff00; padding-left: 12px; letter-spacing: 2px; }
-        .loading { color: #ffff00; animation: blink 1s infinite; }
-        @keyframes blink { 50% { opacity: 0; } }
+        
+        /* 雙欄佈局專用 */
+        .split-row { display: flex; justify-content: space-between; align-items: flex-end; width: 100%; margin-bottom: 20px; border-bottom: 2px solid #005500; padding-bottom: 15px; }
+        .col { display: flex; flex-direction: column; }
+        .right-align { align-items: flex-end; text-align: right; }
     </style>
 </head>
 <body>
@@ -33,11 +42,17 @@
 
 <div class="content-wrap">
     <div class="box">
-        <h1>TSMC_NODE_2330</h1>
+        <h1>TSMC 2330</h1>
         
-        <div class="row" style="flex-direction: column; align-items: flex-start; border: none; margin-bottom: 20px;">
-            <span class="label" style="margin-bottom: 5px;">Price Offset (Current - 1960)</span>
-            <span id="price-offset" class="val offset-val">LOADING</span>
+        <div class="split-row">
+            <div class="col">
+                <span class="label">Price Change</span>
+                <span id="change-price-only" class="val change-main">--</span>
+            </div>
+            <div class="col right-align">
+                <span class="label">Offset (REF: 1960)</span>
+                <span id="price-offset" class="val offset-val">---</span>
+            </div>
         </div>
         
         <div class="row">
@@ -46,12 +61,12 @@
         </div>
         
         <div class="row">
-            <span class="label">Change Rate</span>
-            <span id="change" class="val" style="font-size: 20px;">--</span>
+            <span class="label">Percentage</span>
+            <span id="change-percent" class="val" style="font-size: 20px;">--</span>
         </div>
 
         <div class="status-bar">
-            <span>REF: 1960 | SYNC: <span id="sys-status">ACTIVE</span></span>
+            <span>NETWORK: <span id="sys-status">ACTIVE</span></span>
             <span id="update-time">--:--:--</span>
         </div>
     </div>
@@ -65,9 +80,10 @@
     async function getStock() {
         const sysStatus = document.getElementById('sys-status');
         const offsetEl = document.getElementById('price-offset');
+        const changePriceEl = document.getElementById('change-price-only');
+        const percentEl = document.getElementById('change-percent');
         
         try {
-            // 使用更快速的金融 API 節點
             const symbol = '2330.TW';
             const cacheBuster = Date.now();
             const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1m&range=1d&_=${cacheBuster}`;
@@ -86,12 +102,17 @@
             const offset = (price - 1960).toFixed(1);
             
             // 更新 UI
-            offsetEl.innerText = offset;
-            document.getElementById('price-real').innerText = price.toFixed(1);
+            // 1. 右側 Offset
+            offsetEl.innerText = (offset > 0 ? "+" : "") + offset;
             
-            const changeEl = document.getElementById('change');
-            changeEl.innerText = (diff >= 0 ? '▲ ' : '▼ ') + Math.abs(diff).toFixed(1) + ` (${percent}%)`;
-            changeEl.style.color = diff >= 0 ? '#ff3333' : '#33ff33';
+            // 2. 左側 漲跌價格
+            changePriceEl.innerText = (diff >= 0 ? '▲ ' : '▼ ') + Math.abs(diff).toFixed(1);
+            changePriceEl.style.color = diff >= 0 ? '#ff3333' : '#33ff33';
+
+            // 3. 其他資訊
+            document.getElementById('price-real').innerText = price.toFixed(1);
+            percentEl.innerText = (diff >= 0 ? '+' : '') + percent + "%";
+            percentEl.style.color = diff >= 0 ? '#ff3333' : '#33ff33';
 
             const now = new Date();
             document.getElementById('update-time').innerText = now.toTimeString().split(' ')[0];
@@ -103,12 +124,11 @@
             console.error("Fetch error:", e);
             sysStatus.innerText = "TIMEOUT_RETRY";
             sysStatus.style.color = "#ff0000";
-            // 發生錯誤時縮短重試時間
             setTimeout(getStock, 5000);
         }
     }
 
-    // 每 20 秒更新一次 (台股報價 API 本身仍會有固定延遲，但縮短抓取頻率可降低載入失敗感)
+    // 每 20 秒更新一次
     setInterval(getStock, 20000);
     getStock();
 </script>
