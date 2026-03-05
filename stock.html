@@ -1,171 +1,116 @@
+
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Raingod</title>
+    <title>Stock Terminal - Offset Mode</title>
     <style>
         body { background: #000; color: #00ff00; font-family: 'Courier New', monospace; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; overflow: hidden; }
         #bg { position: fixed; top: 0; left: 0; width: 100%; height: 100%; opacity: 0.05; z-index: 1; word-break: break-all; font-size: 10px; pointer-events: none; }
         
-        /* 切換按鈕樣式 */
-        .nav { position: relative; z-index: 20; margin-bottom: 20px; display: flex; gap: 10px; }
-        .nav-btn { background: transparent; border: 1px solid #00ff00; color: #00ff00; padding: 8px 15px; cursor: pointer; font-family: 'Courier New', monospace; font-size: 14px; transition: 0.3s; }
-        .nav-btn.active { background: #00ff00; color: #000; box-shadow: 0 0 10px #00ff00; }
-        .nav-btn:hover { background: rgba(0, 255, 0, 0.2); }
+        .content-wrap { position: relative; z-index: 10; display: flex; flex-direction: column; align-items: center; }
 
-        /* 內容區塊控制 */
-        .content-wrap { position: relative; z-index: 10; }
-        .tab-content { display: none; }
-        .tab-content.active { display: block; }
-
-        /* 台積電樣式 */
-        .monitor-box {
-            border: 1px solid #00ff00; padding: 30px;
-            background: rgba(0, 10, 0, 0.95);
-            box-shadow: 0 0 20px rgba(0, 255, 0, 0.1);
-            min-width: 300px;
-        }
-        .data-line { font-size: 24px; margin: 10px 0; letter-spacing: 2px; }
-        .label { color: #008800; font-size: 14px; margin-right: 10px; }
-        .value { color: #ffffff; font-weight: bold; text-shadow: 0 0 8px #00ff00; }
-        .sub-value { color: #008800; font-size: 16px; margin-left: 10px; text-shadow: none; }
-
-        /* 經典賽樣式 */
-        .box { border: 1px solid #1a1a1a; padding: 15px; background: #000; width: 280px; }
-        .row { display: flex; justify-content: space-between; align-items: center; margin: 2px 0; }
-        .n { color: #fff; font-size: 20px; font-weight: bold; }
-        .s { color: #00ff00; font-size: 28px; font-weight: bold; }
-        .details { font-size: 11px; color: #008800; border-top: 1px solid #222; padding-top: 8px; margin-top: 8px; display: flex; justify-content: space-between; }
-        .player-info { color: #444; font-size: 10px; margin-top: 5px; border-left: 2px solid #004400; padding-left: 5px; }
-        #event { color: #888; font-size: 9px; margin-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .hr { border-bottom: 1px solid #222; margin: 8px 0; }
-        h1 { font-size: 20px; margin: 5px 0; }
+        /* 數據框 */
+        .box { border: 1px solid #00ff00; padding: 25px; background: rgba(0, 10, 0, 0.9); width: 380px; box-shadow: 0 0 20px rgba(0, 255, 0, 0.3); }
+        .row { display: flex; justify-content: space-between; align-items: center; margin: 12px 0; border-bottom: 1px solid #003300; padding-bottom: 8px; }
+        .label { color: #008800; font-size: 13px; text-transform: uppercase; font-weight: bold; }
+        .val { color: #fff; font-size: 26px; font-weight: bold; font-variant-numeric: tabular-nums; }
+        
+        /* 特別強調 Offset */
+        .offset-val { color: #00ff00; font-size: 42px; text-shadow: 0 0 15px #00ff00; }
+        
+        .status-bar { display: flex; justify-content: space-between; font-size: 10px; color: #004400; margin-top: 15px; width: 100%; }
+        #sync-light { color: #00ff00; }
+        
+        h1 { font-size: 20px; margin: 0 0 15px 0; border-left: 5px solid #00ff00; padding-left: 12px; letter-spacing: 2px; }
+        .loading { color: #ffff00; animation: blink 1s infinite; }
+        @keyframes blink { 50% { opacity: 0; } }
     </style>
 </head>
 <body>
 
 <div id="bg"></div>
 
-<div class="nav">
-    <button class="nav-btn active" onclick="showTab('stock', this)">TSMC</button>
-    <button class="nav-btn" onclick="showTab('mlb', this)">WBC</button>
-</div>
-
 <div class="content-wrap">
-    <div id="stock" class="tab-content active">
-        <div class="monitor-box">
-            <div class="data-line">
-                <span class="label">TSMC_OFFSET</span>
-                <span id="price-offset" class="value">...</span>
-            </div>
-            <div class="data-line">
-                <span class="label">MARKET_PRC</span>
-                <span id="price-real" class="sub-value">--</span>
-            </div>
-            <div class="data-line">
-                <span class="label">CHANGE_PCT</span>
-                <span id="change" class="value">--</span>%
-            </div>
+    <div class="box">
+        <h1>TSMC_NODE_2330</h1>
+        
+        <div class="row" style="flex-direction: column; align-items: flex-start; border: none; margin-bottom: 20px;">
+            <span class="label" style="margin-bottom: 5px;">Price Offset (Current - 1960)</span>
+            <span id="price-offset" class="val offset-val">LOADING</span>
         </div>
-    </div>
+        
+        <div class="row">
+            <span class="label">Market Price</span>
+            <span id="price-real" class="val">--</span>
+        </div>
+        
+        <div class="row">
+            <span class="label">Change Rate</span>
+            <span id="change" class="val" style="font-size: 20px;">--</span>
+        </div>
 
-    <div id="mlb" class="tab-content">
-        <div class="box">
-            <h1>Raingod雨神</h1>
-            <h1>經典賽轉播</h1>
-            <div class="row"><div class="n" id="h-n">---</div><div class="s" id="h-s">0</div></div>
-            <div class="hr"></div>
-            <div class="row"><div class="n" id="a-n">---</div><div class="s" id="a-s">0</div></div>
-            
-            <div class="details">
-                <span id="bso">B0-S0 O0</span>
-                <span id="bases">◇◇◇</span>
-            </div>
-            
-            <div class="player-info">
-                <div>P: <span id="pitcher" style="color:#666">---</span></div>
-                <div>B: <span id="batter" style="color:#aaa">---</span></div>
-            </div>
-
-            <div id="event">READY_SIGNAL...</div>
+        <div class="status-bar">
+            <span>REF: 1960 | SYNC: <span id="sys-status">ACTIVE</span></span>
+            <span id="update-time">--:--:--</span>
         </div>
     </div>
 </div>
 
 <script>
-    // --- 切換邏輯 ---
-    function showTab(tabId, btn) {
-        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-        document.getElementById(tabId).classList.add('active');
-        btn.classList.add('active');
-    }
-
-    // --- 背景特效 ---
+    // 數字跳動背景邏輯
     const bg = document.getElementById('bg');
-    bg.innerText = Array.from({length: 5000}, () => Math.floor(Math.random()*2)).join('');
+    bg.innerText = Array.from({length: 4000}, () => Math.floor(Math.random()*2)).join('');
 
-    // --- 台積電數據 ---
     async function getStock() {
-        const symbol = "2330.TW";
+        const sysStatus = document.getElementById('sys-status');
+        const offsetEl = document.getElementById('price-offset');
+        
         try {
-            const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent('https://query1.finance.yahoo.com/v8/finance/chart/' + symbol)}`);
-            const json = await res.json();
-            const data = JSON.parse(json.contents);
+            // 使用更快速的金融 API 節點
+            const symbol = '2330.TW';
+            const cacheBuster = Date.now();
+            const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1m&range=1d&_=${cacheBuster}`;
             
-            const price = data.chart.result[0].meta.regularMarketPrice;
-            const prevClose = data.chart.result[0].meta.previousClose;
-            const diff = (((price - prevClose) / prevClose) * 100).toFixed(2);
+            const res = await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`);
+            if (!res.ok) throw new Error('Network Error');
             
-            // 計算需求數值
+            const data = await res.json();
+            const result = data.chart.result[0];
+            const price = result.meta.regularMarketPrice;
+            const prevClose = result.meta.previousClose;
+            const diff = price - prevClose;
+            const percent = ((diff / prevClose) * 100).toFixed(2);
+            
+            // 計算 Offset: 股價 - 1960
             const offset = (price - 1960).toFixed(1);
-
-            // 更新 DOM
-            document.getElementById('price-offset').innerText = offset;
-            document.getElementById('price-real').innerText = price;
-            document.getElementById('change').innerText = (diff >= 0 ? '+' : '') + diff;
             
-        } catch (e) { 
-            document.getElementById('price-offset').innerText = "ERR"; 
+            // 更新 UI
+            offsetEl.innerText = offset;
+            document.getElementById('price-real').innerText = price.toFixed(1);
+            
+            const changeEl = document.getElementById('change');
+            changeEl.innerText = (diff >= 0 ? '▲ ' : '▼ ') + Math.abs(diff).toFixed(1) + ` (${percent}%)`;
+            changeEl.style.color = diff >= 0 ? '#ff3333' : '#33ff33';
+
+            const now = new Date();
+            document.getElementById('update-time').innerText = now.toTimeString().split(' ')[0];
+            
+            sysStatus.innerText = "ONLINE";
+            sysStatus.style.color = "#00ff00";
+
+        } catch (e) {
             console.error("Fetch error:", e);
+            sysStatus.innerText = "TIMEOUT_RETRY";
+            sysStatus.style.color = "#ff0000";
+            // 發生錯誤時縮短重試時間
+            setTimeout(getStock, 5000);
         }
     }
 
-    // --- MLB 數據 ---
-    async function updateMLB() {
-        try {
-            const url = 'https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard';
-            const res = await fetch(url);
-            const data = await res.json();
-            if(!data.events || data.events.length === 0) return;
-
-            const e = data.events[0];
-            const comp = e.competitions[0];
-            const sit = comp.situation;
-
-            document.getElementById('h-n').innerText = comp.competitors[0].team.abbreviation;
-            document.getElementById('h-s').innerText = comp.competitors[0].score;
-            document.getElementById('a-n').innerText = comp.competitors[1].team.abbreviation;
-            document.getElementById('a-s').innerText = comp.competitors[1].score;
-
-            if (sit) {
-                document.getElementById('bso').innerText = `B${sit.balls}-S${sit.strikes} O${sit.outs}`;
-                document.getElementById('bases').innerText = (sit.onFirst?'◈':'◇')+(sit.onSecond?'◈':'◇')+(sit.onThird?'◈':'◇');
-                document.getElementById('pitcher').innerText = sit.pitcher ? sit.pitcher.athlete.shortName.toUpperCase() : "N/A";
-                document.getElementById('batter').innerText = sit.batter ? sit.batter.athlete.shortName.toUpperCase() : "N/A";
-                document.getElementById('event').innerText = (sit.lastPlayText || e.status.type.shortDetail).toUpperCase();
-            } else {
-                document.getElementById('event').innerText = e.status.type.shortDetail.toUpperCase();
-            }
-        } catch (err) {}
-    }
-
-    // 初始化與定時
+    // 每 20 秒更新一次 (台股報價 API 本身仍會有固定延遲，但縮短抓取頻率可降低載入失敗感)
+    setInterval(getStock, 20000);
     getStock();
-    updateMLB();
-    setInterval(getStock, 1000); // 1分鐘更新一次股價
-    setInterval(updateMLB, 1000); // 15秒更新一次比分
 </script>
-
 </body>
 </html>
