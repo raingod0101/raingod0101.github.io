@@ -1,156 +1,209 @@
-
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Raingod</title>
+    <title>TERMINAL v8.0 - TWD CURRENCY</title>
     <style>
-        body { background: #000; color: #00ff00; font-family: 'Courier New', monospace; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; overflow: hidden; }
-        #bg { position: fixed; top: 0; left: 0; width: 100%; height: 100%; opacity: 0.05; z-index: 1; word-break: break-all; font-size: 10px; pointer-events: none; }
+        :root { --neon-green: #00ff66; --neon-blue: #00d4ff; --neon-red: #ff3e3e; --neon-gold: #fbff00; --bg-dark: #050505; }
+        body { background: var(--bg-dark); color: var(--neon-green); font-family: 'Segoe UI', 'Consolas', monospace; margin: 0; padding: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
         
-        .content-wrap { position: relative; z-index: 10; display: flex; flex-direction: column; align-items: center; }
+        header { background: #000; border-bottom: 1px solid #1a331a; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+        .tab-group { display: flex; gap: 8px; }
+        .tab-btn { background: transparent; border: 1px solid #004400; color: #008800; padding: 8px 20px; cursor: pointer; font-weight: bold; transition: 0.3s; }
+        .tab-btn.active { background: var(--neon-green); color: #000; box-shadow: 0 0 15px rgba(0, 255, 102, 0.4); }
 
-        /* 數據框 */
-        .box { border: 1px solid #00ff00; padding: 25px; background: rgba(0, 10, 0, 0.9); width: 420px; box-shadow: 0 0 20px rgba(0, 255, 0, 0.3); }
-        .row { display: flex; justify-content: space-between; align-items: baseline; margin: 12px 0; border-bottom: 1px solid #003300; padding-bottom: 8px; }
-        
-        /* 標籤樣式 */
-        .label { color: #008800; font-size: 11px; text-transform: uppercase; font-weight: bold; margin-bottom: 4px; }
-        
-        /* 數值樣式 */
-        .val { color: #1fc4ed; font-size: 24px; font-weight: bold; font-variant-numeric: tabular-nums; }
-        
-        /* 左側：漲跌價格 (原本 Offset 的位置) */
-        .change-main { color: #ff3333; font-size: 32px; text-shadow: 0 0 10px rgba(255,0,0,0.2); }
-        
-        /* 右側：Offset (移到右邊) */
-        .offset-val { color: #eeff00; font-size: 24px; text-shadow: 0 0 15px rgba(238, 255, 0, 0.4); }
-        
-        .status-bar { display: flex; justify-content: space-between; font-size: 10px; color: #004400; margin-top: 15px; width: 100%; }
-        
-        h1 { font-size: 20px; margin: 0 0 15px 0; border-left: 5px solid #00ff00; padding-left: 12px; letter-spacing: 2px; }
-        
-        /* 雙欄佈局專用 */
-        .split-row { display: flex; justify-content: space-between; align-items: flex-end; width: 100%; margin-bottom: 20px; border-bottom: 2px solid #005500; padding-bottom: 15px; }
-        .col { display: flex; flex-direction: column; }
-        .right-align { align-items: flex-end; text-align: right; }
+        main { flex-grow: 1; position: relative; overflow: hidden; }
+        .view-pane { position: absolute; width: 100%; height: 100%; display: none; flex-direction: column; }
+        .view-pane.active { display: flex; }
+
+        /* 儀表板 */
+        .dashboard { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; background: #0a0a0a; padding: 20px; border-bottom: 2px solid #003300; }
+        .stat-card { border-left: 3px solid var(--neon-blue); padding-left: 15px; }
+        .stat-label { font-size: 10px; color: #008800; text-transform: uppercase; margin-bottom: 4px; }
+        .stat-val { font-size: 24px; font-weight: 900; color: #fff; }
+
+        /* 控制列 */
+        .control-bar { padding: 12px 20px; background: #001100; display: flex; gap: 8px; border-bottom: 1px solid #1a331a; }
+        input { background: #000; border: 1px solid #005500; color: #fff; padding: 8px; font-size: 13px; width: 100px; outline: none; }
+        .add-btn { background: var(--neon-blue); border: none; padding: 8px 20px; font-weight: bold; cursor: pointer; color: #000; }
+
+        /* 表格樣式 */
+        .scroll-area { flex-grow: 1; overflow-y: auto; padding: 0 20px; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 15px 10px; color: #008800; font-size: 11px; border-bottom: 2px solid #003300; position: sticky; top: 0; background: var(--bg-dark); }
+        td { padding: 15px 10px; border-bottom: 1px solid #0a1a0a; font-size: 14px; }
+
+        /* 行情格點 */
+        .market-scroll { flex-grow: 1; overflow-y: auto; padding: 15px; }
+        .market-section-title { font-size: 12px; color: var(--neon-gold); padding: 10px; background: #111; border-left: 4px solid var(--neon-gold); margin: 15px 0 10px 0; }
+        .market-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+        .m-card { background: #080808; border: 1px solid #111; padding: 12px; display: flex; justify-content: space-between; align-items: center; }
+
+        .up { color: var(--neon-red); } .down { color: var(--neon-green); }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-thumb { background: #003300; }
     </style>
 </head>
 <body>
 
-<div id="bg"></div>
+<header>
+    <div class="tab-group">
+        <button class="tab-btn active" onclick="switchTab('market')">🌐 全球行情 MARKET</button>
+        <button class="tab-btn" onclick="switchTab('ledger')">📊 我的帳本 VAULT</button>
+    </div>
+    <div style="font-size: 11px; color: #444;">CURRENCY: TWD (台幣預設)</div>
+</header>
 
-<div class="content-wrap">
-    <div class="box">
-        <h1>TSMC 2330 Raingod</h1>
-        
-        <div class="split-row">
-            <div class="col">
-                <span class="label">Price Change</span>
-                <span id="change-price-only" class="val change-main">--</span>
-            </div>
-            <div class="col right-align">
-                <span class="label">Offset (REF: 1960)</span>
-                <span id="price-offset" class="val offset-val">---</span>
-            </div>
-        </div>
-        
-        <div class="row">
-            <span class="label">Market Price</span>
-            <span id="price-real" class="val">--</span>
-        </div>
-        
-        <div class="row">
-            <span class="label">Percentage</span>
-            <span id="change-percent" class="val" style="font-size: 20px;">--</span>
-        </div>
-
-        <div class="status-bar">
-            <span>NETWORK: <span id="sys-status">ACTIVE</span></span>
-            <span id="update-time">--:--:--</span>
+<main>
+    <div id="pane-market" class="view-pane active">
+        <div class="market-scroll">
+            <div class="market-section-title">全球指數與台股權值</div>
+            <div class="market-grid" id="grid-main"></div>
+            <div class="market-section-title">熱門 ETF 分類</div>
+            <div class="market-grid" id="grid-etf"></div>
+            <div class="market-section-title">金融族群</div>
+            <div class="market-grid" id="grid-fin"></div>
         </div>
     </div>
-</div>
+
+    <div id="pane-ledger" class="view-pane">
+        <div class="dashboard">
+            <div class="stat-card"><span class="stat-label">總市值 (TWD)</span><div id="total-value" class="stat-val">NT$ 0</div></div>
+            <div class="stat-card" style="border-left-color: var(--neon-gold);"><span class="stat-label">累積損益 (TWD)</span><div id="total-profit" class="stat-val">---</div></div>
+            <div class="stat-card" style="border-left-color: var(--neon-red);"><span class="stat-label">總投報率</span><div id="total-roi" class="stat-val">0.00%</div></div>
+            <div class="stat-card" style="border-left-color: #333;"><span class="stat-label">預估證交稅 (0.3%)</span><div id="total-tax" class="stat-val" style="color:#666">NT$ 0</div></div>
+        </div>
+
+        <div class="control-bar">
+            <input type="text" id="in-sym" placeholder="代碼 (如:2330)">
+            <input type="number" id="in-cost" placeholder="台幣成本">
+            <input type="number" id="in-shares" placeholder="股數">
+            <input type="text" id="in-note" placeholder="備註" style="flex-grow:1; max-width: 150px;">
+            <button class="add-btn" onclick="addRecord()">＋ 記錄買入</button>
+        </div>
+
+        <div class="scroll-area">
+            <table>
+                <thead>
+                    <tr><th>標的名稱</th><th>買入單價</th><th>持有股數</th><th>即時現價</th><th>損益 / 投報</th><th>備註</th><th></th></tr>
+                </thead>
+                <tbody id="ledger-body"></tbody>
+            </table>
+        </div>
+    </div>
+</main>
 
 <script>
-// 數字跳動背景邏輯
-    const bg = document.getElementById('bg');
-    bg.innerText = Array.from({length: 4000}, () => Math.floor(Math.random()*2)).join('');
+    // 資料庫擴充
+    const STOCK_DB = {
+        '^TWII':'加權指數','^OTC':'櫃買指數','2330.TW':'台積電','2317.TW':'鴻海','2454.TW':'聯發科','2308.TW':'台達電','2303.TW':'聯電','2382.TW':'廣達','2357.TW':'華碩','3231.TW':'緯創','2603.TW':'長榮','2609.TW':'陽明','2615.TW':'萬海','2618.TW':'星宇航空','0050.TW':'元大台灣50','0056.TW':'元大高股息','00878.TW':'國泰永續高股息','00919.TW':'群益精選高息','00929.TW':'復華科技優息','00940.TW':'元大價值高息','2881.TW':'富邦金','2882.TW':'國泰金','2886.TW':'兆豐金','2891.TW':'中信金','2884.TW':'玉山金','NVDA':'輝達(USD)','TSLA':'特斯拉(USD)','AAPL':'蘋果(USD)'
+    };
 
-    // 全域變數用於存儲標題資訊
-    let currentStockInfo = "TSMC Loading...";
-    let showRaingod = false;
+    const SECTIONS = {
+        'main': ['^TWII','2330.TW','2317.TW','2454.TW','2382.TW','2603.TW','NVDA','TSLA'],
+        'etf': ['0050.TW','00878.TW','00919.TW','00929.TW','0056.TW','00940.TW'],
+        'fin': ['2881.TW','2882.TW','2886.TW','2891.TW','2884.TW']
+    };
 
-    // 處理標題切換的計時器 (每 5 秒切換一次狀態)
-    setInterval(() => {
-        showRaingod = !showRaingod;
-        if (showRaingod) {
-            document.title = "Raingod";
+    let myData = JSON.parse(localStorage.getItem('myTwdVaultV8')) || [];
+
+    function switchTab(mode) {
+        document.querySelectorAll('.tab-btn, .view-pane').forEach(el => el.classList.remove('active'));
+        if(mode === 'market') {
+            document.querySelector('.tab-btn:nth-child(1)').classList.add('active');
+            document.getElementById('pane-market').classList.add('active');
         } else {
-            document.title = currentStockInfo;
-        }
-    }, 5000);
-
-    async function getStock() {
-        const sysStatus = document.getElementById('sys-status');
-        const offsetEl = document.getElementById('price-offset');
-        const changePriceEl = document.getElementById('change-price-only');
-        const percentEl = document.getElementById('change-percent');
-        
-        try {
-            const symbol = '2330.TW';
-            const cacheBuster = Date.now();
-            const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1m&range=1d&_=${cacheBuster}`;
-            
-            const res = await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`);
-            if (!res.ok) throw new Error('Network Error');
-            
-            const data = await res.json();
-            const result = data.chart.result[0];
-            const price = result.meta.regularMarketPrice;
-            const prevClose = result.meta.previousClose;
-            const diff = price - prevClose;
-            const percent = ((diff / prevClose) * 100).toFixed(2);
-            
-            // 計算 Offset
-            const offset = (price - 1960).toFixed(1);
-            
-            // --- 更新網頁內 UI ---
-            offsetEl.innerText = (offset > 0 ? "+" : "") + offset;
-            changePriceEl.innerText = (diff >= 0 ? '▲ ' : '▼ ') + Math.abs(diff).toFixed(1);
-            changePriceEl.style.color = diff >= 0 ? '#ff3333' : '#33ff33';
-
-            document.getElementById('price-real').innerText = price.toFixed(1);
-            percentEl.innerText = (diff >= 0 ? '+' : '') + percent + "%";
-            percentEl.style.color = diff >= 0 ? '#ff3333' : '#33ff33';
-
-            const now = new Date();
-            document.getElementById('update-time').innerText = now.toTimeString().split(' ')[0];
-            
-            sysStatus.innerText = "ONLINE";
-            sysStatus.style.color = "#00ff00";
-
-            // --- 更新 Title 資訊字串 ---
-            // 格式：1050.5 +1.2%(+12.5)
-            const sign = diff >= 0 ? '+' : '';
-            currentStockInfo = `${price.toFixed(1)} ${sign}${percent}%(${sign}${diff.toFixed(1)})`;
-            
-            // 如果當前不是在顯示 Raingod，立即更新標題
-            if (!showRaingod) {
-                document.title = currentStockInfo;
-            }
-
-        } catch (e) {
-            console.error("Fetch error:", e);
-            sysStatus.innerText = "TIMEOUT_RETRY";
-            sysStatus.style.color = "#ff0000";
-            setTimeout(getStock, 5000);
+            document.querySelector('.tab-btn:nth-child(2)').classList.add('active');
+            document.getElementById('pane-ledger').classList.add('active');
         }
     }
 
-    // 每 20 秒抓取一次新數據
-    setInterval(getStock, 20000);
-    getStock();
+    function addRecord() {
+        let sym = document.getElementById('in-sym').value.trim().toUpperCase();
+        if(!sym.includes('.') && !isNaN(sym)) sym += ".TW";
+        const entry = { id: Date.now(), sym, cost: parseFloat(document.getElementById('in-cost').value)||0, shares: parseFloat(document.getElementById('in-shares').value)||0, note: document.getElementById('in-note').value||"-" };
+        if(!entry.sym || entry.cost <= 0) return;
+        myData.push(entry);
+        localStorage.setItem('myTwdVaultV8', JSON.stringify(myData));
+        renderLedger(); updateAll();
+        ['in-sym','in-cost','in-shares','in-note'].forEach(id => document.getElementById(id).value = '');
+    }
+
+    function removeEntry(id) {
+        myData = myData.filter(i => i.id !== id);
+        localStorage.setItem('myTwdVaultV8', JSON.stringify(myData));
+        renderLedger(); updateAll();
+    }
+
+    function renderLedger() {
+        const body = document.getElementById('ledger-body');
+        body.innerHTML = myData.map(item => `
+            <tr data-sym="${item.sym}" data-cost="${item.cost}" data-shares="${item.shares}">
+                <td><b style="color:#fff">${STOCK_DB[item.sym] || item.sym}</b><br><small style="color:#444">${item.sym}</small></td>
+                <td style="color:var(--neon-blue)">${item.cost.toLocaleString()}</td>
+                <td>${item.shares.toLocaleString()}</td>
+                <td class="l-price">---</td>
+                <td class="l-profit-roi">---</td>
+                <td style="font-size:11px; color:#444">${item.note}</td>
+                <td><span style="cursor:pointer;color:#222" onclick="removeEntry(${item.id})">×</span></td>
+            </tr>
+        `).join('');
+    }
+
+    async function updateAll() {
+        const allSyms = new Set([...Object.values(SECTIONS).flat(), ...myData.map(i => i.sym)]);
+        const priceMap = {};
+        let tVal=0, tProfit=0, tCost=0;
+
+        for (let s of allSyms) {
+            try {
+                const url = `https://query1.finance.yahoo.com/v8/finance/chart/${s}?interval=1m&range=1d&_=${Date.now()}`;
+                const res = await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`);
+                const d = await res.json();
+                const q = d.chart.result[0].meta;
+                priceMap[s] = { p: q.regularMarketPrice, pre: q.previousClose };
+            } catch(e) {}
+        }
+
+        // 行情牆
+        Object.keys(SECTIONS).forEach(key => {
+            document.getElementById(`grid-${key}`).innerHTML = SECTIONS[key].map(s => {
+                const d = priceMap[s];
+                const pct = d ? ((d.p - d.pre)/d.pre*100).toFixed(2) : "0.00";
+                return `<div class="m-card">
+                    <div><small style="color:#333">${s}</small><br><b>${STOCK_DB[s]||'---'}</b></div>
+                    <div style="text-align:right">
+                        <div style="font-weight:bold;color:var(--neon-blue)">${d?d.p.toLocaleString():'---'}</div>
+                        <div class="${pct>=0?'up':'down'}">${pct>=0?'+':''}${pct}%</div>
+                    </div>
+                </div>`;
+            }).join('');
+        });
+
+        // 帳本台幣計算
+        document.querySelectorAll('#ledger-body tr').forEach(row => {
+            const s=row.dataset.sym, c=parseFloat(row.dataset.cost), sh=parseFloat(row.dataset.shares);
+            if(priceMap[s]) {
+                const p=priceMap[s].p, profit=(p-c)*sh, roi=((p-c)/c*100).toFixed(2);
+                row.querySelector('.l-price').innerText = p.toLocaleString();
+                row.querySelector('.l-profit-roi').innerHTML = `
+                    <div class="${profit>=0?'up':'down'}" style="font-weight:bold">${profit>=0?'+':''}${Math.round(profit).toLocaleString()}</div>
+                    <div style="font-size:11px; color:${profit>=0?'#f33':'#0f6'}">${roi}%</div>
+                `;
+                tVal+=(p*sh); tProfit+=profit; tCost+=(c*sh);
+            }
+        });
+
+        document.getElementById('total-value').innerText = "NT$ " + Math.round(tVal).toLocaleString();
+        const tpEl = document.getElementById('total-profit');
+        tpEl.innerText = (tProfit>=0?"NT$ ":"NT$ -") + Math.round(Math.abs(tProfit)).toLocaleString();
+        tpEl.style.color = tProfit>=0?'var(--neon-red)':'var(--neon-green)';
+        document.getElementById('total-roi').innerText = tCost>0 ? ((tProfit/tCost)*100).toFixed(2)+"%" : "0.00%";
+        document.getElementById('total-tax').innerText = "NT$ " + Math.round(tVal * 0.003).toLocaleString();
+    }
+
+    renderLedger(); updateAll();
+    setInterval(updateAll, 30000);
 </script>
 </body>
 </html>
