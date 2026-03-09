@@ -1,124 +1,80 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
-
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>Avoid GO!</title>
+    <title>Avoid GO! | Raingod</title>
+    <link rel="stylesheet" href="menu.css">
+    <style>
+        body { background: #000; color: #fff; overflow: hidden; cursor: none; }
+        #game-info { position: fixed; top: 80px; left: 50%; transform: translateX(-50%); font-family: 'Arial Black'; font-size: 2rem; color: rgba(255,255,255,0.2); }
+        canvas { display: block; filter: contrast(1.2) brightness(1.2); }
+    </style>
 </head>
-
 <body>
-    <!--
-    <div style="background-color:skyblue; display: flex; align-items: center;gap: 20px;"> 
-        <a href="https://raingod0101.github.io/"><img src="p3.png" width="70" height="70"></a>
-        <a href="math.html"><span style="font-size: 40px;">數學</span></a>
-        <a href="game.html"><span style="font-size: 40px;">遊戲</span></a>
-    </div>
-    -->
-    <script src="https://freegeometricgames.com/raingod_code.js"></script> //新導覽列
     <div id="nav_bar"></div>
-    
-    <div style="text-align: center;">
-        <canvas id="canvas" width="500" height="300" style="border: 2px solid black"></canvas>
-        <h2 id="status">空白鍵開始遊戲</h2>
-    </div>
+    <div id="game-info">TIME: <span id="timer">0.00</span>s</div>
+    <canvas id="gameCanvas"></canvas>
 
+    <script src="loadMenu.js"></script>
     <script>
-        let x = 25;
-        var oxs = [];
-        var oys = [];
-        var ocolors = [];
-        const WIDTH = 50;
-        const HEIGHT = 30;
-        const BLOCK_SIZE = 10;
+        const canvas = document.getElementById('gameCanvas'), ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth; canvas.height = window.innerHeight;
 
-        var ctx = document.getElementById("canvas").getContext("2d");
+        let player = { x: canvas.width/2, y: canvas.height/2, r: 8 };
+        let bullets = [], startTime = Date.now(), particles = [];
 
-        function update(d) {
-            if (d === "ArrowLeft" && x > 0) x--;
-            else if (d === "ArrowRight" && x < 49) x++;
-
-            ctx.clearRect(0, 0, 2000, 2000);
-
-            ctx.strokeStyle = "#e9e9e9";
-            ctx.lineWidth = 2;
-
-            ctx.beginPath();
-
-            for (let x = 0; x <= WIDTH; x++) {
-                ctx.moveTo(BLOCK_SIZE * x, 0);
-                ctx.lineTo(BLOCK_SIZE * x, HEIGHT * BLOCK_SIZE);
-            }
-
-            for (let y = 0; y <= HEIGHT; y++) {
-                ctx.moveTo(0, y * BLOCK_SIZE);
-                ctx.lineTo(WIDTH * BLOCK_SIZE, y * BLOCK_SIZE);
-            }
-
-            ctx.stroke();
-
-            for (let i = 0; i < oxs.length; i++) {
-                ctx.fillStyle = ocolors[i];
-                console.log(ocolors[i]);
-                ctx.fillRect(BLOCK_SIZE * oxs[i], BLOCK_SIZE * oys[i], BLOCK_SIZE, BLOCK_SIZE);
-
-                if (oxs[i] === x && oys[i] === 25) {
-                    oxs.length = 0;
-                    oys.length = 0;
-                    update();
-
-                    started = false;
-                    document.getElementById("status").innerText = "你失敗了!\n分數: " + score + " / 500";
-                }
-                else if (score > 499) {
-                    oxs.length = 0;
-                    oys.length = 0;
-                    update();
-
-                    started = false;
-                    document.getElementById("status").innerText = "你贏了!\n分數: 500 / 500\n空白鍵在玩一次";
-                }
-            }
-
-            ctx.fillStyle = "black";
-            ctx.fillRect(BLOCK_SIZE * x, BLOCK_SIZE * 25, BLOCK_SIZE, BLOCK_SIZE);
+        function spawnBullet() {
+            const side = Math.floor(Math.random()*4);
+            let x, y, vx, vy;
+            const speed = 3 + (Date.now() - startTime)/5000; // 隨時間變快
+            if(side===0){x=Math.random()*canvas.width; y=-20; vx=(Math.random()-0.5)*2; vy=speed;}
+            else if(side===1){x=Math.random()*canvas.width; y=canvas.height+20; vx=(Math.random()-0.5)*2; vy=-speed;}
+            else if(side===2){x=-20; y=Math.random()*canvas.height; vx=speed; vy=(Math.random()-0.5)*2;}
+            else {x=canvas.width+20; y=Math.random()*canvas.height; vx=-speed; vy=(Math.random()-0.5)*2;}
+            bullets.push({x, y, vx, vy, r: 4});
         }
-        update();
 
-        let started = false;
-        document.body.addEventListener('keydown', (e) => {
-            if (e.key === "ArrowRight" || e.key === "ArrowLeft") update(e.key);
+        function update() {
+            const timeElapsed = (Date.now() - startTime)/1000;
+            document.getElementById('timer').innerText = timeElapsed.toFixed(2);
+            
+            if(Math.random() < 0.1) spawnBullet();
 
-            if (e.key === " " && !started) started = true;
-        });
-
-        setInterval(() => {
-            if (started) spawn_blocks();
-        }, 100);
-
-        let score = 0;
-        function spawn_blocks() {
-            const color = '#' + (Math.random() * 0xFFFFFF << 0).toString(16);
-
-            for (let i = 0; i < oys.length; i++) {
-                oys[i] = oys[i] + 1;
-            }
-
-            for (let i = 0; i < WIDTH; i++) {
-                const r = Math.random();
-
-                if (r < 0.05) {
-                    oys.push(0);
-                    oxs.push(i);
-                    ocolors.push(color);
+            bullets.forEach((b, i) => {
+                b.x += b.vx; b.y += b.vy;
+                // 碰撞檢測
+                const dist = Math.hypot(player.x - b.x, player.y - b.y);
+                if(dist < player.r + b.r) {
+                    alert("你被擊中了！生存時間: " + timeElapsed.toFixed(2) + "秒");
+                    location.reload();
                 }
-            }
-
-            score++;
-            document.getElementById("status").innerText = "分數: " + score + " / 500";
-
-            update();
+                if(b.x< -50 || b.x > canvas.width+50 || b.y < -50 || b.y > canvas.height+50) bullets.splice(i, 1);
+            });
         }
+
+        function draw() {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.15)'; // 拖尾效果
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // 繪製玩家 (藍光)
+            ctx.shadowBlur = 20; ctx.shadowColor = '#007aff';
+            ctx.fillStyle = '#007aff';
+            ctx.beginPath(); ctx.arc(player.x, player.y, player.r, 0, Math.PI*2); ctx.fill();
+
+            // 繪製子彈 (紅雷射)
+            ctx.shadowBlur = 10; ctx.shadowColor = '#ff3b30';
+            ctx.fillStyle = '#ff3b30';
+            bullets.forEach(b => {
+                ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI*2); ctx.fill();
+            });
+        }
+
+        window.onmousemove = e => {
+            player.x = e.clientX;
+            player.y = e.clientY;
+        };
+
+        function loop() { update(); draw(); requestAnimationFrame(loop); }
+        loop();
     </script>
 </body>
-
 </html>
