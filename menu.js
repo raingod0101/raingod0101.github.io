@@ -10,21 +10,16 @@ document.addEventListener("DOMContentLoaded", function() {
             <div class="subtopbar_drops">
                 <a class="subtopbar" href="math.html">數學工具</a>
                 <div class="subtopbar_drop_c">
-                    <a class="subtopbar_ta" href="math1.html">質因數分解</a>
-                    <a class="subtopbar_ta" href="math6.html">質數查詢</a>
                 </div>
             </div>
             <div class="subtopbar_drops">
                 <a class="subtopbar" href="game.html">線上遊戲</a>
                 <div class="subtopbar_drop_c">
-                    <a class="subtopbar_ta" href="game1.html">現代貪吃蛇</a>
-                    <a class="subtopbar_ta" href="game2.html">Avoid GO!</a>
                 </div>
             </div>
             <div class="subtopbar_drops">
                 <a class="subtopbar" href="tool.html">實用工具</a>
                 <div class="subtopbar_drop_c">
-                    <a class="subtopbar_ta" href="tool1.html">Google 翻譯</a>
                 </div>
             </div>
         </div>
