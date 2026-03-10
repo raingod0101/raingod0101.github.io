@@ -27,8 +27,8 @@ document.addEventListener("DOMContentLoaded", function() {
                         <b style="color:#00ff66">Raingod.io</b>
                         <a href="index.html" style="color:#fff;text-decoration:none">首頁</a>
                         <a href="stock.html" style="color:#fff;text-decoration:none">股票</a>
-                        <a href="dragon.html" style="color:#fff;text-decoration:none">貓龍</a>
-                        <a href="google.html" style="color:#fff;text-decoration:none">Google</a>
+                        <a href="CD.html" style="color:#fff;text-decoration:none">貓龍</a>
+                        <a href="google1.html" style="color:#fff;text-decoration:none">Google</a>
                         <a href="seat.html" style="color:#fff;text-decoration:none">座位</a>
                     </div>
                 `;
