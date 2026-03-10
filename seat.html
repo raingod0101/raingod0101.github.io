@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>座位生成 | Raingod</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap');
+        body { font-family: 'Noto Sans TC', sans-serif; background: #f1f5f9; overflow: hidden; }
+        .is-blocked { background: #cbd5e1 !important; opacity: 0.1; }
+        .seat-card { transition: all 0.4s ease; border-width: 2px; }
+        .custom-scroll::-webkit-scrollbar { width: 5px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .modal-mask { position: fixed; z-index: 9998; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.6); display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+        .is-pinned { border-color: #ef4444 !important; background-color: #fef2f2 !important; }
+    </style>
+</head>
+<body class="h-screen flex flex-col">
+
+<div id="app" class="flex flex-col h-full">
+    <header class="bg-white border-b px-8 py-4 flex items-center justify-between z-50 shadow-sm">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg"><i class="fas fa-graduation-cap"></i></div>
+            <h1 class="text-xl font-black text-slate-800 tracking-tight">座位生成 <span class="text-indigo-600">Raingod</span></h1>
+        </div>
+
+        <div class="flex items-center gap-3">
+            <button @click="downloadImage" class="bg-emerald-500 hover:bg-emerald-600 text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-lg transition-all active:scale-95 flex items-center gap-2">
+                <i class="fas fa-download"></i> 下載座位圖 (PNG)
+            </button>
+            <button @click="editMode = !editMode" :class="editMode ? 'bg-orange-500 text-white shadow-lg' : 'bg-slate-100 text-slate-600'" class="px-5 py-2.5 rounded-xl text-xs font-bold transition-all">
+                {{ editMode ? '儲存格局' : '調整格局' }}
+            </button>
+            <button @click="smartShuffle" class="bg-slate-900 hover:bg-black text-white px-8 py-2.5 rounded-xl font-black text-sm shadow-xl transition-all">
+                開始排座位
+            </button>
+        </div>
+    </header>
+
+    <div class="flex flex-1 overflow-hidden">
+        <aside class="w-80 bg-white border-r flex flex-col shadow-inner">
+            <div class="p-6 border-b flex justify-between items-center bg-slate-50">
+                <h3 class="font-black text-slate-700 text-sm">全班名單 ({{ students.length }})</h3>
+                <button @click="addStudent" class="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center shadow-lg hover:scale-110 transition"><i class="fas fa-plus"></i></button>
+            </div>
+            
+            <div class="flex-1 overflow-y-auto p-4 custom-scroll space-y-3">
+                <div v-for="(s, idx) in students" :key="s.id" class="p-4 bg-white border-2 rounded-2xl group relative hover:border-indigo-200 shadow-sm transition-all">
+                    <div class="flex flex-col gap-2">
+                        <div class="flex items-center justify-between">
+                            <input v-model="s.name" class="font-black text-slate-800 outline-none w-2/3 border-b-2 border-transparent focus:border-indigo-400">
+                            <button @click="removeStudent(idx)" class="text-slate-300 hover:text-rose-500 transition"><i class="fas fa-trash-alt text-xs"></i></button>
+                        </div>
+                        <div class="flex gap-2">
+                            <select v-model.number="s.height" class="flex-1 text-[11px] font-bold bg-slate-50 rounded-lg p-1.5 outline-none cursor-pointer">
+                                <option :value="1">極矮</option><option :value="2">偏矮</option><option :value="3">適中</option><option :value="4">偏高</option><option :value="5">極高</option>
+                            </select>
+                            <button @click="openAvoidModal(s)" class="flex-1 text-[11px] font-bold bg-rose-50 text-rose-600 rounded-lg p-1.5 hover:bg-rose-100 transition">
+                                避開 ({{ s.avoidIds.length }})
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <main class="flex-1 p-8 overflow-auto flex flex-col items-center">
+            
+            <div class="mb-6 flex gap-6 bg-white px-8 py-4 rounded-3xl shadow-md border-2 transition-all" :class="editMode ? 'border-orange-400 bg-orange-50' : 'border-white'">
+                <div class="flex items-center gap-3">
+                    <span class="text-xs font-black text-slate-400">橫排(寬)</span>
+                    <input type="number" v-model.number="config.cols" :disabled="!editMode" class="w-12 text-center text-lg font-black text-indigo-600 rounded-lg p-1 bg-white border disabled:opacity-40">
+                </div>
+                <div class="flex items-center gap-3">
+                    <span class="text-xs font-black text-slate-400">縱深(列)</span>
+                    <input type="number" v-model.number="config.rows" :disabled="!editMode" class="w-12 text-center text-lg font-black text-indigo-600 rounded-lg p-1 bg-white border disabled:opacity-40">
+                </div>
+                <div v-if="!editMode" class="flex items-center text-[10px] font-bold text-indigo-400 px-3">
+                    <i class="fas fa-lock mr-1"></i> 
+                </div>
+            </div>
+
+            <div id="export-area" class="bg-white p-16 rounded-[3rem] shadow-2xl flex flex-col items-center min-w-fit">
+                <div class="w-full max-w-xl text-center mb-16">
+                    <div class="h-2 bg-slate-800 rounded-full w-full mb-3 shadow-sm"></div>
+                    <span class="text-xs font-black tracking-[1.5em] text-slate-300">講台 / 黑板方向</span>
+                </div>
+
+                <div class="grid gap-5" :style="gridStyle">
+                    <div v-for="(seat, idx) in grid" :key="idx" 
+                         class="relative aspect-[1.3] min-w-[135px] border-2 border-dashed border-slate-100 rounded-[2.2rem] flex items-center justify-center seat-card"
+                         :class="{ 'is-blocked': blockedSeats.includes(idx), 'bg-white shadow-md border-solid border-slate-200': seat && !blockedSeats.includes(idx), 'is-pinned': seat && seat.pinned, 'ring-2 ring-orange-400': editMode && !blockedSeats.includes(idx) }"
+                         @click="handleSeatClick(idx)">
+                        
+                        <div v-if="seat && !blockedSeats.includes(idx)" class="w-full h-full p-4 flex flex-col justify-center items-center relative text-center">
+                            <button @click.stop="togglePin(idx)" class="absolute top-2.5 right-4 text-[10px] transition-all" :class="seat.pinned ? 'text-rose-500 scale-125' : 'text-slate-200 hover:text-indigo-400'">
+                                <i class="fas fa-thumbtack"></i>
+                            </button>
+                            
+                            <span class="text-xl font-black text-slate-800 tracking-tight">{{ seat.name }}</span>
+                            <div class="mt-1.5 px-3 py-0.5 rounded-full bg-slate-50 text-[10px] font-black text-slate-400">
+                                {{ heightToText(seat.height) }}
+                            </div>
+                        </div>
+                        <div v-if="editMode && !seat && !blockedSeats.includes(idx)" class="text-[9px] text-slate-300 font-bold uppercase">Seat</div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div v-if="currentAvoidStudent" class="modal-mask" @click.self="currentAvoidStudent = null">
+        <div class="bg-white rounded-[3rem] p-10 w-[500px] max-h-[85vh] flex flex-col shadow-2xl">
+            <h2 class="text-2xl font-black mb-1 text-slate-800">避開設定：<span class="text-rose-500">{{ currentAvoidStudent.name }}</span></h2>
+            <p class="text-[11px] text-slate-400 mb-8 font-bold uppercase tracking-widest">點選同學以確保大風吹時不會坐在他們左右</p>
+            
+            <div class="flex-1 overflow-y-auto custom-scroll grid grid-cols-2 gap-3 mb-8 p-1">
+                <div v-for="other in filteredStudents" :key="other.id" 
+                     @click="toggleAvoid(other.id)"
+                     class="p-4 border-2 rounded-2xl cursor-pointer transition-all flex items-center gap-3 font-bold text-sm"
+                     :class="currentAvoidStudent.avoidIds.includes(other.id) ? 'border-rose-500 bg-rose-50 text-rose-600 shadow-sm' : 'border-slate-50 text-slate-400 hover:border-indigo-100'">
+                    <i class="fas" :class="currentAvoidStudent.avoidIds.includes(other.id) ? 'fa-check-circle' : 'fa-circle'"></i>
+                    {{ other.name }}
+                </div>
+            </div>
+            
+            <button @click="currentAvoidStudent = null" class="w-full bg-indigo-600 text-white font-black py-5 rounded-2xl hover:bg-indigo-700 transition-all shadow-xl active:scale-95">
+                設定完成
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+const { createApp, ref, computed, watch, onMounted } = Vue;
+
+createApp({
+    setup() {
+        const config = ref({ rows: 5, cols: 6 });
+        const students = ref(JSON.parse(localStorage.getItem('AI_SEAT_FINAL_PRO'))?.students || []);
+        const blockedSeats = ref(JSON.parse(localStorage.getItem('AI_SEAT_FINAL_PRO'))?.blockedSeats || []);
+        const grid = ref([]);
+        const editMode = ref(false);
+        const currentAvoidStudent = ref(null);
+
+        const save = () => {
+            localStorage.setItem('AI_SEAT_FINAL_PRO', JSON.stringify({
+                students: students.value,
+                blockedSeats: blockedSeats.value,
+                config: config.value,
+                grid: grid.value
+            }));
+        };
+
+        const heightToText = (h) => ({ 1: "極矮", 2: "偏矮", 3: "適中", 4: "偏高", 5: "極高" }[h]);
+        
+        const shuffleArr = (arr) => {
+            for (let i = arr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+            return arr;
+        };
+
+        const smartShuffle = () => {
+            const total = config.value.rows * config.value.cols;
+            let newGrid = Array(total).fill(null);
+            
+            // 1. 保留釘選者
+            grid.value.forEach((s, i) => { 
+                if (s && s.pinned && i < total && !blockedSeats.value.includes(i)) {
+                    newGrid[i] = { ...s }; 
+                }
+            });
+            
+            const pinnedIds = newGrid.filter(s => s).map(s => s.id);
+            let pool = shuffleArr(students.value.filter(s => !pinnedIds.includes(s.id)));
+            pool.sort((a, b) => a.height - b.height);
+
+            let availableIndices = [];
+            for (let i = 0; i < total; i++) {
+                if (!newGrid[i] && !blockedSeats.value.includes(i)) availableIndices.push(i);
+            }
+
+            // 2. 智慧填充 + 黑名單檢查
+            for (let idx of availableIndices) {
+                if (pool.length === 0) break;
+                
+                let found = -1;
+                for (let k = 0; k < pool.length; k++) {
+                    const candidate = pool[k];
+                    const leftSeat = (idx % config.value.cols !== 0) ? newGrid[idx - 1] : null;
+                    const rightSeat = ((idx + 1) % config.value.cols !== 0) ? newGrid[idx + 1] : null;
+                    
+                    const conflict = (s) => s && (candidate.avoidIds.includes(s.id) || s.avoidIds?.includes(candidate.id));
+                    
+                    if (!conflict(leftSeat) && !conflict(rightSeat)) {
+                        found = k;
+                        break;
+                    }
+                }
+                
+                let chosen = (found !== -1) ? pool.splice(found, 1)[0] : pool.splice(0, 1)[0];
+                newGrid[idx] = { ...chosen, pinned: false };
+            }
+
+            grid.value = newGrid;
+            save();
+        };
+
+        const handleSeatClick = (idx) => {
+            if (editMode.value) {
+                const i = blockedSeats.value.indexOf(idx);
+                if (i > -1) blockedSeats.value.splice(i, 1);
+                else { blockedSeats.value.push(idx); grid.value[idx] = null; }
+                save();
+            }
+        };
+
+        const downloadImage = () => {
+            const area = document.getElementById('export-area');
+            html2canvas(area, { 
+                scale: 2, 
+                backgroundColor: "#ffffff",
+                borderRadius: 48
+            }).then(canvas => {
+                const link = document.createElement('a');
+                link.download = `班級座位表_${new Date().toLocaleDateString()}.png`;
+                link.href = canvas.toDataURL("image/png");
+                link.click();
+            });
+        };
+
+        onMounted(() => {
+            const data = JSON.parse(localStorage.getItem('AI_SEAT_FINAL_PRO'));
+            if (data) {
+                config.value = data.config;
+                students.value = data.students;
+                blockedSeats.value = data.blockedSeats;
+                grid.value = data.grid || Array(config.value.rows * config.value.cols).fill(null);
+            } else {
+                grid.value = Array(config.value.rows * config.value.cols).fill(null);
+            }
+        });
+
+        watch([config, students, blockedSeats], save, { deep: true });
+
+        return { 
+            config, students, grid, blockedSeats, editMode, currentAvoidStudent,
+            gridStyle: computed(() => ({ display: 'grid', gridTemplateColumns: `repeat(${config.value.cols}, minmax(135px, 1fr))`, width: 'fit-content' })),
+            filteredStudents: computed(() => students.value.filter(s => s.id !== currentAvoidStudent.value.id)),
+            smartShuffle, handleSeatClick, heightToText, downloadImage,
+            togglePin: (idx) => { if (grid.value[idx]) grid.value[idx].pinned = !grid.value[idx].pinned; },
+            addStudent: () => students.value.unshift({ id: Date.now(), name: "新同學", height: 3, avoidIds: [] }),
+            removeStudent: (idx) => { students.value.splice(idx, 1); save(); },
+            openAvoidModal: (s) => currentAvoidStudent.value = s,
+            toggleAvoid: (id) => {
+                const idx = currentAvoidStudent.value.avoidIds.indexOf(id);
+                if (idx > -1) currentAvoidStudent.value.avoidIds.splice(idx, 1);
+                else currentAvoidStudent.value.avoidIds.push(id);
+            }
+        };
+    }
+}).mount('#app');
+</script>
+</body>
+</html>
