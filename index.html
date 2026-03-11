@@ -3,43 +3,151 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Raingod0101</title>
-    <link rel="stylesheet" href="menu.css">
+    <title>Raingod | Tech Space</title>
     <style>
-        /* 讓主畫面看起來很高級的背景 */
-        .hero-section {
-            height: 80vh;
+        :root {
+            --tech-cyan: #00d2ff;
+            --tech-blue: #3a7bd5;
+            --bg-black: #050505;
+        }
+
+        body, html {
+            margin: 0; padding: 0;
+            background-color: var(--bg-black);
+            color: #fff;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            height: 100vh;
+            overflow: hidden;
             display: flex;
-            flex-direction: column;
             justify-content: center;
             align-items: center;
-            text-align: center;
-            background: radial-gradient(circle at top right, #e3f2fd, #ffffff);
         }
-        h1 { font-size: 3.5rem; color: #1d1d1f; margin-bottom: 1rem; }
-        p { color: #86868b; font-size: 1.2rem; }
+
+        /* 1. 柔和的數位背景 (慢速、模糊) */
+        #canvas-bg {
+            position: fixed;
+            top: 0; left: 0;
+            z-index: 1;
+            filter: blur(2px); /* 模糊處理，減少視覺衝擊 */
+            opacity: 0.4;     /* 調低亮度，不搶戲 */
+        }
+
+        /* 2. 靜謐的環境光 (中心發亮) */
+        .ambient-light {
+            position: fixed;
+            width: 100vw; height: 100vh;
+            background: radial-gradient(circle at center, rgba(0, 210, 255, 0.05) 0%, transparent 70%);
+            z-index: 2;
+            pointer-events: none;
+        }
+
+        /* 3. RAINGOD 主視覺 - 平穩優雅 */
+        .raingod-container {
+            position: relative;
+            z-index: 10;
+            text-align: center;
+        }
+
+        .raingod-title {
+            font-size: clamp(3rem, 15vw, 8rem);
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.25em;
+            margin: 0;
+            /* 漸層文字 */
+            background: linear-gradient(135deg, #fff 30%, var(--tech-cyan) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            /* 穩定的光暈動畫 */
+            animation: pulse-glow 4s ease-in-out infinite alternate;
+        }
+
+        /* 4. 底部的緩慢進度裝飾 (增加細節感) */
+        .loading-bar {
+            width: 200px;
+            height: 2px;
+            background: rgba(255, 255, 255, 0.1);
+            margin: 20px auto;
+            position: relative;
+            overflow: hidden;
+        }
+        .loading-bar::after {
+            content: '';
+            position: absolute;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: var(--tech-cyan);
+            animation: scan-line 3s infinite cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* 動畫邏輯：柔和呼吸 */
+        @keyframes pulse-glow {
+            from {
+                filter: drop-shadow(0 0 5px rgba(0, 210, 255, 0.2));
+                letter-spacing: 0.25em;
+            }
+            to {
+                filter: drop-shadow(0 0 25px rgba(0, 210, 255, 0.6));
+                letter-spacing: 0.28em; /* 極微小的展開感 */
+            }
+        }
+
+        @keyframes scan-line {
+            0% { left: -100%; }
+            50%, 100% { left: 100%; }
+        }
+
     </style>
 </head>
 <body>
 
-    <div id="nav_placeholder"></div>
+    <div class="ambient-light"></div>
+    <canvas id="canvas-bg"></canvas>
 
-    <section class="hero-section">
-        <h1>探索數學與遊戲的奧秘</h1>
-        <p>這是一個專為效率與體驗設計的實驗空間。</p>
-    </section>
+    <div class="raingod-container">
+        <h1 class="raingod-title">RAINGOD</h1>
+        <div class="loading-bar"></div>
+    </div>
 
     <script>
-        // 為了讓你本地測試也能看到（解決 fetch 失敗問題）
-        // 如果 fetch 失敗，我們手動定義一個內容作為備份
-        fetch('menu.html')
-            .then(res => res.text())
-            .then(html => document.getElementById('nav_placeholder').innerHTML = html)
-            .catch(() => {
-                console.log("偵測到本地開啟，改用手動注入...");
-                // 這裡可以放備份的 HTML 字符串，或是提示部署
-            });
+        const canvas = document.getElementById('canvas-bg');
+        const ctx = canvas.getContext('2d');
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        const alphabet = "01010189ABCDEF"; // 減少複雜字元
+        const fontSize = 18;
+        const columns = canvas.width / fontSize;
+        const rainDrops = Array.from({ length: Math.floor(columns) }).fill(0);
+
+        function draw() {
+            ctx.fillStyle = "rgba(5, 5, 5, 0.1)"; // 較慢的覆蓋速度，增加流動感
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = "rgba(0, 210, 255, 0.15)"; // 降低文字亮度
+            ctx.font = fontSize + "px monospace";
+
+            for (let i = 0; i < rainDrops.length; i++) {
+                const text = alphabet.charAt(Math.floor(Math.random() * alphabet.length));
+                ctx.fillText(text, i * fontSize, rainDrops[i] * fontSize);
+
+                // 讓下落更緩慢
+                if (rainDrops[i] * fontSize > canvas.height && Math.random() > 0.99) {
+                    rainDrops[i] = 0;
+                }
+                rainDrops[i] += 0.5; // 速度減半
+            }
+        }
+
+        // 降低幀率，減輕眼睛負擔
+        setInterval(draw, 50);
+
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
     </script>
 </body>
 </html>
-
