@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Raingod | Tech Space</title>
+    <title>Raingod | Lab</title>
+    <link rel="stylesheet" href="menu.css">
     <style>
         :root {
             --tech-cyan: #00d2ff;
-            --tech-blue: #3a7bd5;
             --bg-black: #050505;
         }
 
@@ -15,139 +15,129 @@
             margin: 0; padding: 0;
             background-color: var(--bg-black);
             color: #fff;
-            font-family: 'Segoe UI', Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             height: 100vh;
             overflow: hidden;
-            display: flex;
-            justify-content: center;
-            align-items: center;
         }
 
-        /* 1. 柔和的數位背景 (慢速、模糊) */
+        /* 導覽列容器：確保它在最上層且有毛玻璃感 */
+        #nav_placeholder {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        /* 柔和數位背景 */
         #canvas-bg {
             position: fixed;
             top: 0; left: 0;
             z-index: 1;
-            filter: blur(2px); /* 模糊處理，減少視覺衝擊 */
-            opacity: 0.4;     /* 調低亮度，不搶戲 */
+            filter: blur(1.5px);
+            opacity: 0.3;
         }
 
-        /* 2. 靜謐的環境光 (中心發亮) */
-        .ambient-light {
-            position: fixed;
-            width: 100vw; height: 100vh;
-            background: radial-gradient(circle at center, rgba(0, 210, 255, 0.05) 0%, transparent 70%);
-            z-index: 2;
-            pointer-events: none;
-        }
-
-        /* 3. RAINGOD 主視覺 - 平穩優雅 */
-        .raingod-container {
+        /* 主畫面居中內容 */
+        .hero-section {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
             position: relative;
             z-index: 10;
-            text-align: center;
         }
 
         .raingod-title {
-            font-size: clamp(3rem, 15vw, 8rem);
+            font-size: clamp(3rem, 12vw, 7rem);
             font-weight: 800;
             text-transform: uppercase;
-            letter-spacing: 0.25em;
-            margin: 0;
-            /* 漸層文字 */
-            background: linear-gradient(135deg, #fff 30%, var(--tech-cyan) 100%);
+            letter-spacing: 0.3em;
+            background: linear-gradient(to bottom, #fff 40%, var(--tech-cyan));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            /* 穩定的光暈動畫 */
-            animation: pulse-glow 4s ease-in-out infinite alternate;
+            animation: soft-glow 4s ease-in-out infinite alternate;
         }
 
-        /* 4. 底部的緩慢進度裝飾 (增加細節感) */
-        .loading-bar {
-            width: 200px;
-            height: 2px;
-            background: rgba(255, 255, 255, 0.1);
-            margin: 20px auto;
-            position: relative;
-            overflow: hidden;
-        }
-        .loading-bar::after {
-            content: '';
-            position: absolute;
-            left: -100%;
-            width: 100%;
-            height: 100%;
+        /* 裝飾細線 */
+        .tech-line {
+            width: 150px;
+            height: 1px;
             background: var(--tech-cyan);
-            animation: scan-line 3s infinite cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 0 10px var(--tech-cyan);
+            margin-top: 10px;
+            opacity: 0.6;
         }
 
-        /* 動畫邏輯：柔和呼吸 */
-        @keyframes pulse-glow {
-            from {
-                filter: drop-shadow(0 0 5px rgba(0, 210, 255, 0.2));
-                letter-spacing: 0.25em;
-            }
-            to {
-                filter: drop-shadow(0 0 25px rgba(0, 210, 255, 0.6));
-                letter-spacing: 0.28em; /* 極微小的展開感 */
-            }
+        @keyframes soft-glow {
+            from { filter: drop-shadow(0 0 5px rgba(0, 210, 255, 0.2)); }
+            to { filter: drop-shadow(0 0 20px rgba(0, 210, 255, 0.5)); }
         }
-
-        @keyframes scan-line {
-            0% { left: -100%; }
-            50%, 100% { left: 100%; }
-        }
-
     </style>
 </head>
 <body>
 
-    <div class="ambient-light"></div>
+    <div id="nav_placeholder"></div>
+
     <canvas id="canvas-bg"></canvas>
 
-    <div class="raingod-container">
+    <section class="hero-section">
         <h1 class="raingod-title">RAINGOD</h1>
-        <div class="loading-bar"></div>
-    </div>
+        <div class="tech-line"></div>
+    </section>
 
     <script>
+        // --- 1. 導覽列抓取邏輯 (保留並修復) ---
+        fetch('menu.html')
+            .then(res => {
+                if (!res.ok) throw new Error('Network response was not ok');
+                return res.text();
+            })
+            .then(html => {
+                document.getElementById('nav_placeholder').innerHTML = html;
+            })
+            .catch(() => {
+                console.log("偵測到本地開啟或讀取失敗，改用備份選單...");
+                // 這裡可以視需求加入備份選單文字
+            });
+
+        // --- 2. 緩慢數位流背景 ---
         const canvas = document.getElementById('canvas-bg');
         const ctx = canvas.getContext('2d');
 
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
 
-        const alphabet = "01010189ABCDEF"; // 減少複雜字元
-        const fontSize = 18;
+        const alphabet = "01"; // 使用 01 更純粹，不雜亂
+        const fontSize = 20;
         const columns = canvas.width / fontSize;
-        const rainDrops = Array.from({ length: Math.floor(columns) }).fill(0);
+        const drops = Array.from({ length: Math.floor(columns) }).fill(1);
 
         function draw() {
-            ctx.fillStyle = "rgba(5, 5, 5, 0.1)"; // 較慢的覆蓋速度，增加流動感
+            ctx.fillStyle = "rgba(5, 5, 5, 0.1)"; 
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            ctx.fillStyle = "rgba(0, 210, 255, 0.15)"; // 降低文字亮度
+            ctx.fillStyle = "rgba(0, 210, 255, 0.2)";
             ctx.font = fontSize + "px monospace";
 
-            for (let i = 0; i < rainDrops.length; i++) {
+            for (let i = 0; i < drops.length; i++) {
                 const text = alphabet.charAt(Math.floor(Math.random() * alphabet.length));
-                ctx.fillText(text, i * fontSize, rainDrops[i] * fontSize);
+                ctx.fillText(text, i * fontSize, drops[i] * fontSize);
 
-                // 讓下落更緩慢
-                if (rainDrops[i] * fontSize > canvas.height && Math.random() > 0.99) {
-                    rainDrops[i] = 0;
+                if (drops[i] * fontSize > canvas.height && Math.random() > 0.98) {
+                    drops[i] = 0;
                 }
-                rainDrops[i] += 0.5; // 速度減半
+                drops[i] += 0.4; // 極慢速下落
             }
         }
 
-        // 降低幀率，減輕眼睛負擔
-        setInterval(draw, 50);
-
-        window.addEventListener('resize', () => {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-        });
+        setInterval(draw, 40);
     </script>
 </body>
 </html>
