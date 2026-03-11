@@ -1,37 +1,56 @@
 document.addEventListener("DOMContentLoaded", function() {
-    // 1. 強力注入 Favicon
-    const iconPath = "p4.png";
-    const v = new Date().getTime(); // 每次刷新都產生新版本號
-    
-    // 移除舊的 icon 標籤
-    const oldIcons = document.querySelectorAll("link[rel*='icon']");
-    oldIcons.forEach(el => el.remove());
+    // --- 1. 自動路徑與 Icon 處理 ---
+    const iconName = "p4.png";
+    // 取得當前網址路徑層級，確保在子資料夾也能找到根目錄的圖片
+    const isLocal = window.location.protocol === 'file:';
+    const rootPath = isLocal ? "" : "/"; 
+    const fullIconPath = rootPath + iconName + "?v=" + new Date().getTime();
 
-    // 建立新的 icon 標籤
-    const link = document.createElement('link');
-    link.type = 'image/png';
-    link.rel = 'shortcut icon'; // 為了相容舊版瀏覽器
-    link.href = `${iconPath}?v=${v}`;
-    document.getElementsByTagName('head')[0].appendChild(link);
+    // 建立 Favicon 連結
+    function setFavicon(url) {
+        let link = document.querySelector("link[rel*='icon']");
+        if (!link) {
+            link = document.createElement('link');
+            document.head.appendChild(link);
+        }
+        link.type = 'image/png';
+        link.rel = 'shortcut icon';
+        link.href = url;
+        
+        // 為了某些瀏覽器，再補一個標準版
+        let link2 = document.querySelector("link[rel='icon']");
+        if (!link2) {
+            link2 = document.createElement('link');
+            document.head.appendChild(link2);
+        }
+        link2.type = 'image/png';
+        link2.rel = 'icon';
+        link2.href = url;
+    }
 
-    // 額外增加一個標準 rel="icon"
-    const link2 = document.createElement('link');
-    link2.type = 'image/png';
-    link2.rel = 'icon';
-    link2.href = `${iconPath}?v=${v}`;
-    document.getElementsByTagName('head')[0].appendChild(link2);
+    setFavicon(fullIconPath);
 
-    // 2. 載入 FontAwesome
-    const fa = document.createElement('link');
-    fa.rel = 'stylesheet';
-    fa.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css';
-    document.head.appendChild(fa);
+    // --- 2. 自動載入 FontAwesome ---
+    if (!document.querySelector('link[href*="font-awesome"]')) {
+        const fa = document.createElement('link');
+        fa.rel = 'stylesheet';
+        fa.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css';
+        document.head.appendChild(fa);
+    }
 
-    // 3. 注入選單
+    // --- 3. 注入選單 ---
     const container = document.getElementById('nav_bar');
     if (container) {
-        fetch('menu.html')
-            .then(res => res.text())
-            .then(data => { container.innerHTML = data; });
+        fetch(rootPath + 'menu.html')
+            .then(res => {
+                if (!res.ok) throw new Error();
+                return res.text();
+            })
+            .then(data => { 
+                container.innerHTML = data; 
+            })
+            .catch(() => {
+                console.warn("無法取得 menu.html，請檢查路徑或伺服器環境。");
+            });
     }
 });
