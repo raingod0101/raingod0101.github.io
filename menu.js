@@ -1,36 +1,20 @@
 document.addEventListener("DOMContentLoaded", function() {
-    // --- 1. 自動路徑與 Icon 處理 ---
-    const iconName = "p4.png";
-    // 取得當前網址路徑層級，確保在子資料夾也能找到根目錄的圖片
-    const isLocal = window.location.protocol === 'file:';
-    const rootPath = isLocal ? "" : "/"; 
-    const fullIconPath = rootPath + iconName + "?v=" + new Date().getTime();
+    // 1. 強制設定 Favicon，使用絕對路徑指向你的 GitHub 網域
+    const iconUrl = "https://raingod0101.github.io/p4.png";
+    const version = new Date().getTime();
+    
+    // 移除現有的所有 icon 標籤
+    const existingIcons = document.querySelectorAll("link[rel*='icon']");
+    existingIcons.forEach(el => el.remove());
 
-    // 建立 Favicon 連結
-    function setFavicon(url) {
-        let link = document.querySelector("link[rel*='icon']");
-        if (!link) {
-            link = document.createElement('link');
-            document.head.appendChild(link);
-        }
-        link.type = 'image/png';
-        link.rel = 'shortcut icon';
-        link.href = url;
-        
-        // 為了某些瀏覽器，再補一個標準版
-        let link2 = document.querySelector("link[rel='icon']");
-        if (!link2) {
-            link2 = document.createElement('link');
-            document.head.appendChild(link2);
-        }
-        link2.type = 'image/png';
-        link2.rel = 'icon';
-        link2.href = url;
-    }
+    // 建立新的 icon 連結
+    const link = document.createElement('link');
+    link.type = 'image/png';
+    link.rel = 'icon';
+    link.href = `${iconUrl}?v=${version}`;
+    document.head.appendChild(link);
 
-    setFavicon(fullIconPath);
-
-    // --- 2. 自動載入 FontAwesome ---
+    // 2. 載入 FontAwesome
     if (!document.querySelector('link[href*="font-awesome"]')) {
         const fa = document.createElement('link');
         fa.rel = 'stylesheet';
@@ -38,19 +22,14 @@ document.addEventListener("DOMContentLoaded", function() {
         document.head.appendChild(fa);
     }
 
-    // --- 3. 注入選單 ---
+    // 3. 注入選單 (menu.html 同樣建議放在根目錄)
     const container = document.getElementById('nav_bar');
     if (container) {
-        fetch(rootPath + 'menu.html')
-            .then(res => {
-                if (!res.ok) throw new Error();
-                return res.text();
-            })
+        fetch('https://raingod0101.github.io/menu.html')
+            .then(res => res.text())
             .then(data => { 
                 container.innerHTML = data; 
             })
-            .catch(() => {
-                console.warn("無法取得 menu.html，請檢查路徑或伺服器環境。");
-            });
+            .catch(err => console.error("選單載入失敗:", err));
     }
 });
