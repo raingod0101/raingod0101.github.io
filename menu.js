@@ -1,27 +1,12 @@
 document.addEventListener("DOMContentLoaded", function() {
     const baseUrl = "https://raingod0101.github.io/";
-    const v = new Date().getTime(); // 防止快取的版本號
+    const v = new Date().getTime();
 
-    // 1. 強力注入 Favicon (分頁圖示)
-    function injectFavicon() {
-        // 移除舊的
-        const links = document.querySelectorAll("link[rel*='icon']");
-        links.forEach(l => l.remove());
-
-        // 加入新的
-        const link = document.createElement('link');
-        link.type = 'image/png';
-        link.rel = 'shortcut icon';
-        link.href = `${baseUrl}p4.png?v=${v}`;
-        document.head.appendChild(link);
-
-        const link2 = document.createElement('link');
-        link2.type = 'image/png';
-        link2.rel = 'icon';
-        link2.href = `${baseUrl}p4.png?v=${v}`;
-        document.head.appendChild(link2);
-    }
-    injectFavicon();
+    // 1. 強力 Favicon 注入
+    const link = document.createElement('link');
+    link.rel = 'icon';
+    link.href = `${baseUrl}p4.png?v=${v}`;
+    document.head.appendChild(link);
 
     // 2. 載入 FontAwesome
     const fa = document.createElement('link');
@@ -29,14 +14,11 @@ document.addEventListener("DOMContentLoaded", function() {
     fa.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css';
     document.head.appendChild(fa);
 
-    // 3. 注入選單
-    const container = document.getElementById('nav_bar');
+    // 3. 注入選單 (相容多種 ID)
+    const container = document.getElementById('nav_bar') || document.getElementById('nav_placeholder');
     if (container) {
         fetch(`${baseUrl}menu.html`)
             .then(res => res.text())
-            .then(data => { 
-                container.innerHTML = data; 
-            })
-            .catch(err => console.error("選單載入失敗", err));
+            .then(data => { container.innerHTML = data; });
     }
 });
