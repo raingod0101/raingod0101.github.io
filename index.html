@@ -3,101 +3,138 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Raingod | Lab</title>
-    <link rel="stylesheet" href="menu.css">
+    <title>Raingod | Lab | Blue Rain</title>
     <style>
         :root {
-            --tech-cyan: #00d2ff;
-            --bg-black: #050505;
+            --sky-blue: #d1e9ff;    /* 淺天藍背景 */
+            --deep-blue: #1e3a5f;   /* 深藍色文字 */
+            --rain-blue: #5d8aa8;   /* 雨滴藍 */
+            --glass-white: rgba(255, 255, 255, 0.25);
         }
 
         body, html {
             margin: 0; padding: 0;
-            background-color: var(--bg-black);
-            color: #fff;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: linear-gradient(135deg, #e3f2fd 0%, var(--sky-blue) 100%);
+            color: var(--deep-blue);
+            font-family: 'Inter', -apple-system, sans-serif;
             height: 100vh;
             overflow: hidden;
         }
 
-        /* 柔和數位背景 */
+        /* 讓雨絲 Canvas 稍微帶點模糊感，增加雨天的濕潤氣息 */
         #canvas-bg {
             position: fixed;
             top: 0; left: 0;
             z-index: 1;
-            filter: blur(1.5px);
-            opacity: 0.3;
+            filter: blur(0.5px);
         }
 
-        /* 主畫面居中內容 */
         .hero-section {
             height: 100vh;
             display: flex;
-            flex-direction: column;
             justify-content: center;
             align-items: center;
             position: relative;
             z-index: 10;
         }
 
+        /* 標題區域：增加毛玻璃質感，模擬窗戶霧氣 */
+        .title-container {
+            padding: 3rem 5rem;
+            background: var(--glass-white);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            box-shadow: 0 8px 32px rgba(30, 58, 95, 0.05);
+            text-align: center;
+        }
+
         .raingod-title {
-            font-size: clamp(3rem, 12vw, 7rem);
+            font-size: clamp(2.5rem, 8vw, 5.5rem);
             font-weight: 800;
             text-transform: uppercase;
-            letter-spacing: 0.3em;
-            background: linear-gradient(to bottom, #fff 40%, var(--tech-cyan));
+            letter-spacing: 0.5em;
+            margin: 0;
+            background: linear-gradient(to bottom, var(--deep-blue), #4a90e2);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            animation: soft-glow 4s ease-in-out infinite alternate;
         }
 
         .tech-line {
-            width: 150px; height: 1px;
-            background: var(--tech-cyan);
-            box-shadow: 0 0 10px var(--tech-cyan);
-            margin-top: 10px; opacity: 0.6;
-        }
-
-        @keyframes soft-glow {
-            from { filter: drop-shadow(0 0 5px rgba(0, 210, 255, 0.2)); }
-            to { filter: drop-shadow(0 0 20px rgba(0, 210, 255, 0.5)); }
+            width: 80px; height: 1px;
+            background: var(--deep-blue);
+            margin: 2rem auto 0;
+            opacity: 0.3;
         }
     </style>
 </head>
 <body>
 
-    <div id="nav_bar"></div>
-
     <canvas id="canvas-bg"></canvas>
 
     <section class="hero-section">
-        <h1 class="raingod-title">RAINGOD</h1>
-        <div class="tech-line"></div>
+        <div class="title-container">
+            <h1 class="raingod-title">RAINGOD</h1>
+            <div class="tech-line"></div>
+        </div>
     </section>
 
-    <script src="menu.js"></script>
-
     <script>
-        // --- 數位流背景邏輯 (保持不變) ---
         const canvas = document.getElementById('canvas-bg');
         const ctx = canvas.getContext('2d');
-        function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+        
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
         window.addEventListener('resize', resize);
         resize();
-        const alphabet = "01"; const fontSize = 20;
-        const columns = canvas.width / fontSize;
-        const drops = Array.from({ length: Math.floor(columns) }).fill(1);
-        function draw() {
-            ctx.fillStyle = "rgba(5, 5, 5, 0.1)"; ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.fillStyle = "rgba(0, 210, 255, 0.2)"; ctx.font = fontSize + "px monospace";
-            for (let i = 0; i < drops.length; i++) {
-                const text = alphabet.charAt(Math.floor(Math.random() * alphabet.length));
-                ctx.fillText(text, i * fontSize, drops[i] * fontSize);
-                if (drops[i] * fontSize > canvas.height && Math.random() > 0.98) { drops[i] = 0; }
-                drops[i] += 0.4;
+
+        const rainCount = 100;
+        const rains = [];
+
+        class Rain {
+            constructor() {
+                this.init();
+            }
+            init() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height - canvas.height;
+                this.length = Math.random() * 30 + 20; // 增長的雨絲更清晰
+                this.speed = Math.random() * 10 + 10;  // 穩定中速
+                this.opacity = Math.random() * 0.4 + 0.3; // 較高透明度確保藍色顯現
+            }
+            draw() {
+                ctx.beginPath();
+                ctx.strokeStyle = `rgba(93, 138, 168, ${this.opacity})`; // 使用雨滴藍
+                ctx.lineWidth = 1.5;
+                ctx.lineCap = 'round';
+                ctx.moveTo(this.x, this.y);
+                ctx.lineTo(this.x, this.y + this.length);
+                ctx.stroke();
+            }
+            update() {
+                this.y += this.speed;
+                if (this.y > canvas.height) this.init();
+                this.draw();
             }
         }
-        setInterval(draw, 40);
+
+        for (let i = 0; i < rainCount; i++) {
+            rains.push(new Rain());
+        }
+
+        function animate() {
+            // 使用淺色刷掉背景，保留適度殘影
+            ctx.fillStyle = "rgba(209, 233, 255, 0.5)"; 
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            rains.forEach(r => r.update());
+            requestAnimationFrame(animate);
+        }
+
+        animate();
     </script>
 </body>
 </html>
