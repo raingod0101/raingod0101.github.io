@@ -39,30 +39,31 @@ document.addEventListener("DOMContentLoaded", function() {
                 const bgColor = window.getComputedStyle(document.body).backgroundColor;
                 const rgb = bgColor.match(/\d+/g);
                 
-                if (rgb) {
-                    // 計算亮度 (YIQ 公式: 亮度 = (R*299 + G*587 + B*114) / 1000)
-                    const brightness = (rgb[0] * 299 + rgb[1] * 587 + rgb[2] * 114) / 1000;
-                    const navElement = container.querySelector('.glass-nav');
-                    
-                    if (navElement) {
-                        if (brightness < 125) { 
-                            // 背景很暗時 (如你的黑色 Index)
-                            navElement.style.setProperty('background', 'rgba(0, 0, 0, 0.6)', 'important');
-                            navElement.style.setProperty('border-bottom', '1px solid rgba(255, 255, 255, 0.1)', 'important');
-                            
-                            // 強制將導覽列文字變白，防止黑底黑字
-                            container.querySelectorAll('.nav-item, .brand, .brand span').forEach(el => {
-                                el.style.setProperty('color', '#ffffff', 'important');
-                            });
-                        } else {
-                            // 背景很亮時 (如白色背景網站)
-                            navElement.style.setProperty('background', 'rgba(255, 255, 255, 0.8)', 'important');
-                            container.querySelectorAll('.nav-item, .brand').forEach(el => {
-                                el.style.setProperty('color', '#3b3b3b', 'important');
-                            });
-                        }
-                    }
-                }
+                // ... 前面程式碼不變 ...
+if (rgb) {
+    const brightness = (rgb[0] * 299 + rgb[1] * 587 + rgb[2] * 114) / 1000;
+    const navElement = container.querySelector('.glass-nav');
+    
+    if (navElement) {
+        // 將判斷標準從 125 提高到 170
+        // 這樣綠色 (149) 就會落入「深色模式」，看起來就不會灰灰的
+        if (brightness < 170) { 
+            // 深色/鮮豔色模式：黑底白字
+            navElement.style.setProperty('background', 'rgba(0, 0, 0, 0.5)', 'important');
+            navElement.style.setProperty('border-bottom', '1px solid rgba(255, 255, 255, 0.1)', 'important');
+            container.querySelectorAll('.nav-item, .brand, .brand span').forEach(el => {
+                el.style.setProperty('color', '#ffffff', 'important');
+            });
+        } else {
+            // 純亮色模式 (如全白)：白底黑字
+            navElement.style.setProperty('background', 'rgba(255, 255, 255, 0.8)', 'important');
+            container.querySelectorAll('.nav-item, .brand').forEach(el => {
+                el.style.setProperty('color', '#3b3b3b', 'important');
+            });
+        }
+    }
+}
+// ... 後面程式碼不變 ...
             });
     }
 });
