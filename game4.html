@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Ultra Arena</title>
+
+<style>
+body{
+margin:0;
+overflow:hidden;
+background:#0f0f0f;
+color:white;
+font-family:sans-serif;
+}
+
+#ui{
+position:absolute;
+top:10px;
+left:10px;
+}
+
+#levelup{
+position:absolute;
+top:50%;
+left:50%;
+transform:translate(-50%,-50%);
+background:#222;
+padding:20px;
+border:2px solid white;
+display:none;
+}
+
+#joystick{
+position:absolute;
+bottom:120px;
+left:120px;
+width:120px;
+height:120px;
+border-radius:50%;
+background:rgba(255,255,255,0.1);
+}
+
+#stick{
+position:absolute;
+width:50px;
+height:50px;
+border-radius:50%;
+background:white;
+left:35px;
+top:35px;
+}
+button{
+margin:6px;
+padding:10px;
+}
+</style>
+
+</head>
+<body>
+
+<canvas id="game"></canvas>
+
+<div id="ui">
+<div id="hp"></div>
+<div id="level"></div>
+<div id="wave"></div>
+<div id="daily"></div>
+<button onclick="gacha()">🎁抽獎</button>
+</div>
+
+<div id="levelup"></div>
+
+<div id="joystick">
+<div id="stick"></div>
+</div>
+
+<script>
+
+const canvas=document.getElementById("game")
+const ctx=canvas.getContext("2d")
+
+canvas.width=innerWidth
+canvas.height=innerHeight
+
+const WORLD=4000
+
+let camera={x:0,y:0}
+
+let player={
+x:0,
+y:0,
+r:18,
+speed:4,
+hp:100,
+maxhp:100,
+attack:10,
+xp:0,
+level:1,
+lifesteal:0,
+double:false,
+magnet:0
+}
+
+let enemies=[]
+let bullets=[]
+let loot=[]
+
+let wave=1
+
+let joystick={x:0,y:0,active:false}
+
+const joy=document.getElementById("joystick")
+const stick=document.getElementById("stick")
+
+joy.addEventListener("pointerdown",()=>joystick.active=true)
+
+addEventListener("pointerup",()=>{
+joystick.active=false
+joystick.x=0
+joystick.y=0
+stick.style.left="35px"
+stick.style.top="35px"
+})
+
+addEventListener("pointermove",e=>{
+
+if(!joystick.active)return
+
+let rect=joy.getBoundingClientRect()
+
+let x=e.clientX-rect.left-60
+let y=e.clientY-rect.top-60
+
+let d=Math.hypot(x,y)
+
+if(d>50){
+
+x/=d
+y/=d
+
+x*=50
+y*=50
+
+}
+
+joystick.x=x/50
+joystick.y=y/50
+
+stick.style.left=(x+60-25)+"px"
+stick.style.top=(y+60-25)+"px"
+
+})
+
+const SKILLS=[
+
+{name:"Attack +5",apply:p=>p.attack+=5},
+
+{name:"Speed +1",apply:p=>p.speed+=1},
+
+{name:"Max HP +30",apply:p=>{
+p.maxhp+=30
+p.hp+=30
+}},
+
+{name:"Life Steal",apply:p=>p.lifesteal+=0.05},
+
+{name:"Double Shot",apply:p=>p.double=true},
+
+{name:"Magnet",apply:p=>p.magnet=200}
+
+]
+
+function levelUp(){
+
+let box=document.getElementById("levelup")
+
+box.innerHTML="<h2>升級選技能</h2>"
+
+let choices=[]
+
+while(choices.length<3){
+
+let s=SKILLS[Math.floor(Math.random()*SKILLS.length)]
+
+if(!choices.includes(s))
+choices.push(s)
+
+}
+
+for(let s of choices){
+
+let b=document.createElement("button")
+
+b.innerText=s.name
+
+b.onclick=()=>{
+
+s.apply(player)
+
+box.style.display="none"
+
+}
+
+box.appendChild(b)
+
+}
+
+box.style.display="block"
+
+}
+
+function spawnEnemy(){
+
+let a=Math.random()*Math.PI*2
+let d=700+Math.random()*300
+
+let x=player.x+Math.cos(a)*d
+let y=player.y+Math.sin(a)*d
+
+let type=Math.random()
+
+let e={x,y}
+
+if(type<0.5){
+
+e.hp=40
+e.maxhp=40
+e.speed=1.5
+e.r=14
+e.type="normal"
+
+}
+else if(type<0.8){
+
+e.hp=25
+e.maxhp=25
+e.speed=3
+e.r=12
+e.type="fast"
+
+}
+else{
+
+e.hp=120
+e.maxhp=120
+e.speed=0.8
+e.r=26
+e.type="tank"
+
+}
+
+enemies.push(e)
+
+}
+
+function spawnWave(){
+
+for(let i=0;i<wave*6;i++)
+spawnEnemy()
+
+}
+
+spawnWave()
+
+function shoot(){
+
+let closest=null
+let dist=999999
+
+for(let e of enemies){
+
+let d=Math.hypot(e.x-player.x,e.y-player.y)
+
+if(d<dist){
+dist=d
+closest=e
+}
+
+}
+
+if(closest && dist<600){
+
+let a=Math.atan2(
+closest.y-player.y,
+closest.x-player.x
+)
+
+bullets.push({
+x:player.x,
+y:player.y,
+vx:Math.cos(a)*8,
+vy:Math.sin(a)*8,
+dmg:player.attack
+})
+
+if(player.double){
+
+bullets.push({
+x:player.x,
+y:player.y,
+vx:Math.cos(a+0.2)*8,
+vy:Math.sin(a+0.2)*8,
+dmg:player.attack
+})
+
+}
+
+}
+
+}
+
+setInterval(shoot,350)
+
+function update(){
+
+player.x+=joystick.x*player.speed
+player.y+=joystick.y*player.speed
+
+player.x=Math.max(-WORLD,Math.min(WORLD,player.x))
+player.y=Math.max(-WORLD,Math.min(WORLD,player.y))
+
+for(let b of bullets){
+
+b.x+=b.vx
+b.y+=b.vy
+
+}
+
+for(let e of enemies){
+
+let a=Math.atan2(player.y-e.y,player.x-e.x)
+
+e.x+=Math.cos(a)*e.speed
+e.y+=Math.sin(a)*e.speed
+
+if(Math.hypot(e.x-player.x,e.y-player.y)<e.r+player.r){
+
+player.hp-=0.3
+
+}
+
+}
+
+for(let b of bullets){
+
+for(let e of enemies){
+
+if(Math.hypot(b.x-e.x,b.y-e.y)<e.r){
+
+e.hp-=b.dmg
+
+if(player.lifesteal)
+player.hp+=b.dmg*player.lifesteal
+
+b.dead=true
+
+}
+
+}
+
+}
+
+bullets=bullets.filter(b=>!b.dead)
+
+for(let e of enemies){
+
+if(e.hp<=0){
+
+loot.push({x:e.x,y:e.y})
+
+e.dead=true
+
+}
+
+}
+
+enemies=enemies.filter(e=>!e.dead)
+
+for(let l of loot){
+
+let d=Math.hypot(l.x-player.x,l.y-player.y)
+
+if(player.magnet && d<player.magnet){
+
+l.x+=(player.x-l.x)*0.1
+l.y+=(player.y-l.y)*0.1
+
+}
+
+if(d<player.r){
+
+player.xp+=10
+l.dead=true
+
+}
+
+}
+
+loot=loot.filter(l=>!l.dead)
+
+if(player.xp>=player.level*60){
+
+player.xp=0
+player.level++
+levelUp()
+
+}
+
+if(enemies.length==0){
+
+wave++
+spawnWave()
+
+}
+
+camera.x=player.x-canvas.width/2
+camera.y=player.y-canvas.height/2
+
+save()
+
+}
+
+function draw(){
+
+ctx.fillStyle="#0f0f0f"
+ctx.fillRect(0,0,canvas.width,canvas.height)
+
+ctx.save()
+
+ctx.translate(-camera.x,-camera.y)
+
+ctx.strokeStyle="#333"
+ctx.strokeRect(-WORLD,-WORLD,WORLD*2,WORLD*2)
+
+ctx.fillStyle="cyan"
+
+ctx.beginPath()
+ctx.arc(player.x,player.y,player.r,0,Math.PI*2)
+ctx.fill()
+
+for(let e of enemies){
+
+if(e.type=="fast")ctx.fillStyle="orange"
+else if(e.type=="tank")ctx.fillStyle="purple"
+else ctx.fillStyle="red"
+
+ctx.beginPath()
+ctx.arc(e.x,e.y,e.r,0,Math.PI*2)
+ctx.fill()
+
+ctx.fillStyle="black"
+ctx.fillRect(e.x-20,e.y-e.r-12,40,5)
+
+ctx.fillStyle="lime"
+ctx.fillRect(e.x-20,e.y-e.r-12,40*(e.hp/e.maxhp),5)
+
+}
+
+ctx.fillStyle="yellow"
+
+for(let b of bullets){
+
+ctx.beginPath()
+ctx.arc(b.x,b.y,4,0,Math.PI*2)
+ctx.fill()
+
+}
+
+ctx.fillStyle="lime"
+
+for(let l of loot){
+
+ctx.beginPath()
+ctx.arc(l.x,l.y,6,0,Math.PI*2)
+ctx.fill()
+
+}
+
+ctx.restore()
+
+document.getElementById("hp").innerText="HP "+Math.floor(player.hp)+"/"+player.maxhp
+document.getElementById("level").innerText="Level "+player.level
+document.getElementById("wave").innerText="Wave "+wave
+document.getElementById("daily").innerText="Daily: Kill 100 enemies"
+
+}
+
+function loop(){
+
+update()
+draw()
+
+requestAnimationFrame(loop)
+
+}
+
+function gacha(){
+
+const items=["Legend Sword","Epic Armor","Coins","Rare Ring"]
+
+let r=items[Math.floor(Math.random()*items.length)]
+
+alert("抽到: "+r)
+
+}
+
+function save(){
+
+localStorage.setItem("ultraSave",JSON.stringify(player))
+
+}
+
+function load(){
+
+let s=localStorage.getItem("ultraSave")
+
+if(s)player=JSON.parse(s)
+
+}
+
+load()
+
+loop()
+
+</script>
+
+</body>
+</html>
