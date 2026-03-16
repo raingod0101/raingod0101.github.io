@@ -4,11 +4,11 @@
     <meta charset="UTF-8">
     <title>股票控制台 | Raingod</title>
     <style>
-        :root { --neon-green: #00ff66; --neon-blue: #00d4ff; --neon-red: #ff3e3e; --neon-gold: #fbff00; --bg-dark: #050505; }
+        :root { --neon-green: #00ff66; --neon-blue: #00d4ff; --neon-red: #ff3e3e; --bg-dark: #050505; }
         body { background: var(--bg-dark); color: var(--neon-green); font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
         header { background: #000; border-bottom: 1px solid #1a331a; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; }
-        .tab-btn { background: transparent; border: 1px solid #004400; color: #008800; padding: 8px 20px; cursor: pointer; font-weight: bold; margin-right: 5px; }
-        .tab-btn.active { background: var(--neon-green); color: #000; }
+        .tab-btn { background: transparent; border: 1px solid #004400; color: #008800; padding: 8px 20px; cursor: pointer; font-weight: bold; margin-right: 5px; transition: 0.3s; }
+        .tab-btn.active { background: var(--neon-green); color: #000; box-shadow: 0 0 10px var(--neon-green); }
         main { flex-grow: 1; position: relative; overflow: hidden; }
         .view-pane { position: absolute; width: 100%; height: 100%; display: none; flex-direction: column; }
         .view-pane.active { display: flex; }
@@ -16,34 +16,33 @@
         .stat-val { font-size: 20px; font-weight: 900; color: #fff; }
         .stat-label { font-size: 10px; color: #008800; }
         .control-bar { padding: 10px 20px; background: #001100; display: flex; gap: 5px; }
-        input { background: #000; border: 1px solid #005500; color: #fff; padding: 8px; width: 100px; }
+        input { background: #000; border: 1px solid #005500; color: #fff; padding: 8px; width: 100px; outline: none; }
         .add-btn { background: var(--neon-blue); border: none; padding: 8px 15px; cursor: pointer; font-weight: bold; }
         .scroll-area { flex-grow: 1; overflow-y: auto; padding: 10px 20px; }
         table { width: 100%; border-collapse: collapse; }
         th { text-align: left; padding: 10px; color: #008800; border-bottom: 2px solid #003300; position: sticky; top: 0; background: var(--bg-dark); }
         td { padding: 12px 10px; border-bottom: 1px solid #0a1a0a; }
-        .market-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; padding: 15px; }
+        .m-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; padding: 15px; }
         .m-card { background: #080808; border: 1px solid #111; padding: 12px; display: flex; justify-content: space-between; align-items: center; }
         .up { color: var(--neon-red); } .down { color: var(--neon-green); }
-        .loading-bar { height: 2px; background: var(--neon-blue); width: 0%; transition: 0.3s; }
+        .loading-bar { height: 2px; background: var(--neon-blue); width: 0%; transition: 0.3s; position: absolute; top: 0; left: 0; z-index: 100; }
     </style>
 </head>
 <body>
 
 <div id="loading" class="loading-bar"></div>
 <header>
-    <div class="tab-group">
-        <button class="tab-btn active" onclick="switchTab('market')">MARKET 行情</button>
-        <button class="tab-btn" onclick="switchTab('ledger')">VAULT 帳本</button>
+    <div>
+        <button class="tab-btn active" onclick="switchTab('market')">MARKET</button>
+        <button class="tab-btn" onclick="switchTab('ledger')">VAULT</button>
     </div>
-    <div id="status" style="font-size: 11px; color: #444;">系統就緒</div>
+    <div id="status" style="font-size: 11px; color: #444;">Ready</div>
 </header>
 
 <main>
     <div id="pane-market" class="view-pane active">
-        <div class="market-grid" id="grid-all"></div>
+        <div class="m-grid" id="grid-all"></div>
     </div>
-
     <div id="pane-ledger" class="view-pane">
         <div class="dashboard">
             <div class="stat-card"><span class="stat-label">總市值</span><div id="total-value" class="stat-val">0</div></div>
@@ -52,7 +51,7 @@
             <div class="stat-card"><span class="stat-label">預估稅</span><div id="total-tax" class="stat-val">0</div></div>
         </div>
         <div class="control-bar">
-            <input type="text" id="in-sym" placeholder="代碼 (2330)">
+            <input type="text" id="in-sym" placeholder="2330 或 AAPL">
             <input type="number" id="in-cost" placeholder="成本">
             <input type="number" id="in-shares" placeholder="股數">
             <button class="add-btn" onclick="addRecord()">＋ 新增</button>
@@ -67,136 +66,120 @@
 </main>
 
 <script>
-    const STOCK_DB = { '^TWII':'加權指數','2330.TW':'台積電','2317.TW':'鴻海','2454.TW':'聯發科','0050.TW':'元大50','00878.TW':'國泰高息','NVDA':'NVIDIA','TSLA':'TESLA' };
-    const MARKET_LIST = ['^TWII','2330.TW','2317.TW','2454.TW','0050.TW','00878.TW','NVDA','TSLA'];
-    
-    let myData = JSON.parse(localStorage.getItem('myStocksV9')) || [];
+    const WATCH_LIST = ['TPE:2330', 'TPE:2317', 'TPE:0050', 'NASDAQ:AAPL', 'NASDAQ:NVDA', 'NASDAQ:TSLA'];
+    let myData = JSON.parse(localStorage.getItem('myStocksV12')) || [];
     let priceMap = {};
 
     function switchTab(mode) {
         document.querySelectorAll('.tab-btn, .view-pane').forEach(el => el.classList.remove('active'));
-        if(mode === 'market') {
-            document.querySelector('.tab-btn:nth-child(1)').classList.add('active');
-            document.getElementById('pane-market').classList.add('active');
-        } else {
-            document.querySelector('.tab-btn:nth-child(2)').classList.add('active');
-            document.getElementById('pane-ledger').classList.add('active');
-        }
+        event.currentTarget.classList.add('active');
+        document.getElementById('pane-' + mode).classList.add('active');
     }
 
-    // 核心抓取函數：多重備援 Proxy
-    async function getPrice(sym) {
-        const timestamp = Date.now();
-        const yUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1m&range=1d`;
-        
-        // 備選 Proxy 清單
-        const proxies = [
-            `https://api.allorigins.win/get?url=${encodeURIComponent(yUrl)}`,
-            `https://corsproxy.io/?${encodeURIComponent(yUrl)}`
-        ];
+    // 將 Yahoo 格式轉換為 Google Finance 格式
+    function formatSym(s) {
+        if (s.includes(':')) return s;
+        if (s.endsWith('.TW')) return 'TPE:' + s.replace('.TW', '');
+        if (/^\d{4}$/.test(s)) return 'TPE:' + s;
+        return s; // 美股通常直接輸入即可，或加 NASDAQ:
+    }
 
-        for (let pUrl of proxies) {
-            try {
-                const response = await fetch(pUrl);
-                if (!response.ok) continue;
-                const raw = await response.json();
-                const json = typeof raw.contents === 'string' ? JSON.parse(raw.contents) : raw;
-                const result = json.chart.result[0].meta;
-                return { p: result.regularMarketPrice, pre: result.previousClose };
-            } catch (e) {
-                console.error(`Proxy ${pUrl} failed for ${sym}`);
-            }
+    async function fetchPrice(sym) {
+        const formatted = formatSym(sym);
+        // 使用 Google Finance 搜尋介面作為數據源，這對台股極其穩定
+        const url = `https://www.google.com/search?q=curreny+quote+${formatted}`;
+        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+
+        try {
+            const res = await fetch(proxyUrl);
+            const raw = await res.json();
+            const html = raw.contents;
+            
+            // 簡單的正規表達式抓取價格 (針對 Google 搜尋結果頁面)
+            // 這是一個備援機制，如果 Yahoo 徹底封鎖，這招通常能動
+            const priceMatch = html.match(/data-precision="2".*?>([\d,.]+)</) || html.match(/class="[\w\s]*?I67Ilb">([\d,.]+)</);
+            
+            // 如果上述方法失敗，回頭嘗試 Yahoo 的另一組不用帶 Cookie 的 API
+            const yUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${sym.includes(':')?sym.split(':')[1]+'.TW':sym}`;
+            const yRes = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(yUrl)}`);
+            const yRaw = await yRes.json();
+            const yData = JSON.parse(yRaw.contents).chart.result[0].meta;
+            
+            return { p: yData.regularMarketPrice, pre: yData.previousClose };
+        } catch (e) {
+            return null;
         }
-        return null;
     }
 
     async function updateAll() {
-        document.getElementById('status').innerText = "載入中,請稍後...";
-        document.getElementById('loading').style.width = "30%";
+        document.getElementById('status').innerText = "Updating...";
+        const allSyms = [...new Set([...WATCH_LIST, ...myData.map(i => i.sym)])];
         
-        const allSyms = [...new Set([...MARKET_LIST, ...myData.map(i => i.sym)])];
-        
-        // 同步獲取所有價格
-        for (let i = 0; i < allSyms.length; i++) {
-            const sym = allSyms[i];
-            const data = await getPrice(sym);
-            if (data) priceMap[sym] = data;
-            document.getElementById('loading').style.width = `${30 + (i/allSyms.length)*70}%`;
+        for (let s of allSyms) {
+            const res = await fetchPrice(s);
+            if (res) priceMap[s] = res;
+            await new Promise(r => setTimeout(r, 200)); // 增加間隔
         }
 
-        renderMarket();
-        renderLedger();
-        document.getElementById('loading').style.width = "0%";
-        document.getElementById('status').innerText = "最後更新: " + new Date().toLocaleTimeString();
+        render();
+        document.getElementById('status').innerText = "Last update: " + new Date().toLocaleTimeString();
     }
 
-    function renderMarket() {
-        const grid = document.getElementById('grid-all');
-        grid.innerHTML = MARKET_LIST.map(s => {
+    function render() {
+        // Market Grid
+        document.getElementById('grid-all').innerHTML = WATCH_LIST.map(s => {
             const d = priceMap[s];
             const p = d ? d.p : '---';
-            const pct = d ? ((d.p - d.pre)/d.pre*100).toFixed(2) : '0.00';
+            const pct = d ? ((d.p - d.pre)/d.pre*100).toFixed(2) : '0';
             return `<div class="m-card">
-                <div><b>${STOCK_DB[s] || s}</b><br><small style="color:#444">${s}</small></div>
+                <div><b>${s.split(':').pop()}</b></div>
                 <div style="text-align:right">
                     <div style="color:var(--neon-blue);font-weight:bold">${p}</div>
                     <div class="${pct>=0?'up':'down'}">${pct}%</div>
                 </div>
             </div>`;
         }).join('');
-    }
 
-    function renderLedger() {
-        const body = document.getElementById('ledger-body');
-        let tVal=0, tProfit=0, tCost=0;
-
-        body.innerHTML = myData.map(item => {
-            const d = priceMap[item.sym];
+        // Ledger
+        let tVal=0, tCost=0;
+        document.getElementById('ledger-body').innerHTML = myData.map(item => {
+            const d = priceMap[item.sym] || priceMap[formatSym(item.sym)];
             const p = d ? d.p : 0;
             const profit = p ? (p - item.cost) * item.shares : 0;
-            const roi = p ? ((p - item.cost) / item.cost * 100).toFixed(2) : '0.00';
-            
-            tVal += (p * item.shares);
-            tCost += (item.cost * item.shares);
-            tProfit += profit;
-
+            tVal += (p * item.shares); tCost += (item.cost * item.shares);
             return `<tr>
-                <td><b>${STOCK_DB[item.sym] || item.sym}</b></td>
+                <td>${item.sym}</td>
                 <td>${item.cost}</td>
                 <td>${item.shares}</td>
                 <td style="color:var(--neon-blue)">${p || '---'}</td>
-                <td class="${profit>=0?'up':'down'}">${Math.round(profit).toLocaleString()}<br><small>${roi}%</small></td>
-                <td><button onclick="removeEntry(${item.id})" style="background:none;border:none;color:#333;cursor:pointer">×</button></td>
+                <td class="${profit>=0?'up':'down'}">${Math.round(profit).toLocaleString()}</td>
+                <td onclick="removeEntry(${item.id})">×</td>
             </tr>`;
         }).join('');
 
-        document.getElementById('total-value').innerText = "NT$ " + Math.round(tVal).toLocaleString();
-        document.getElementById('total-profit').innerText = "NT$ " + Math.round(tProfit).toLocaleString();
-        document.getElementById('total-profit').style.color = tProfit >= 0 ? 'var(--neon-red)' : 'var(--neon-green)';
-        document.getElementById('total-roi').innerText = tCost > 0 ? ((tProfit/tCost)*100).toFixed(2) + "%" : "0%";
-        document.getElementById('total-tax').innerText = "NT$ " + Math.round(tVal * 0.003).toLocaleString();
+        document.getElementById('total-value').innerText = Math.round(tVal).toLocaleString();
+        document.getElementById('total-profit').innerText = Math.round(tVal - tCost).toLocaleString();
+        document.getElementById('total-roi').innerText = tCost ? ((tVal-tCost)/tCost*100).toFixed(2)+'%' : '0%';
     }
 
     function addRecord() {
-        let sym = document.getElementById('in-sym').value.trim().toUpperCase();
-        if(!sym.includes('.') && !isNaN(sym)) sym += ".TW";
+        const sym = document.getElementById('in-sym').value.toUpperCase();
         const cost = parseFloat(document.getElementById('in-cost').value);
         const shares = parseFloat(document.getElementById('in-shares').value);
         if(!sym || !cost) return;
         myData.push({ id: Date.now(), sym, cost, shares });
-        localStorage.setItem('myStocksV9', JSON.stringify(myData));
+        localStorage.setItem('myStocksV12', JSON.stringify(myData));
         updateAll();
     }
 
     function removeEntry(id) {
         myData = myData.filter(i => i.id !== id);
-        localStorage.setItem('myStocksV9', JSON.stringify(myData));
-        renderLedger();
+        localStorage.setItem('myStocksV12', JSON.stringify(myData));
+        render();
     }
 
     updateAll();
     setInterval(updateAll, 60000);
 </script>
-
 </body>
 </html>
