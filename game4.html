@@ -1,528 +1,1428 @@
+
 <!DOCTYPE html>
-<html>
+<html lang="zh-TW">
 <head>
-<meta charset="utf-8">
-<title>Ultra Arena</title>
-
-<style>
-body{
-margin:0;
-overflow:hidden;
-background:#0f0f0f;
-color:white;
-font-family:sans-serif;
-}
-
-#ui{
-position:absolute;
-top:10px;
-left:10px;
-}
-
-#levelup{
-position:absolute;
-top:50%;
-left:50%;
-transform:translate(-50%,-50%);
-background:#222;
-padding:20px;
-border:2px solid white;
-display:none;
-}
-
-#joystick{
-position:absolute;
-bottom:120px;
-left:120px;
-width:120px;
-height:120px;
-border-radius:50%;
-background:rgba(255,255,255,0.1);
-}
-
-#stick{
-position:absolute;
-width:50px;
-height:50px;
-border-radius:50%;
-background:white;
-left:35px;
-top:35px;
-}
-button{
-margin:6px;
-padding:10px;
-}
-</style>
-
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAINGOD | LAB - 噠噠特攻 超完整版</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; overflow: hidden; background: #00050a; font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; color: #fff; }
+        #game-container { position: relative; width: 100vw; height: 100vh; }
+        canvas { position: absolute; top: 0; left: 0; display: block; }
+        .glass-panel {
+            background: rgba(0, 210, 255, 0.06);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(0, 210, 255, 0.25);
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+        }
+        #lobby-container {
+            position: absolute; width: 100%; height: 100%;
+            display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+            z-index: 100; overflow-y: auto; padding: 16px;
+        }
+        .title { font-size: 2.2rem; color: #00d2ff; text-shadow: 0 0 24px #00d2ff; margin-bottom: 8px; }
+        .resource-bar { font-size: 1rem; color: #ffd700; margin-bottom: 12px; }
+        .resource-bar span { margin-right: 16px; }
+        .lobby-section { width: 100%; max-width: 680px; margin-bottom: 12px; }
+        .lobby-section h3 { color: #00d2ff; margin: 0 0 6px 0; font-size: 1rem; }
+        #equipment-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+        .equip-slot { min-height: 58px; padding: 6px; font-size: 0.8rem; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        .equip-slot.quality-W { border-left: 3px solid #aaa; }
+        .equip-slot.quality-G { border-left: 3px solid #0f0; }
+        .equip-slot.quality-B { border-left: 3px solid #0af; }
+        .equip-slot.quality-P { border-left: 3px solid #a0a; }
+        .equip-slot.quality-Y { border-left: 3px solid #ff0; }
+        .equip-slot.quality-R { border-left: 3px solid #f44; }
+        .equip-slot.quality-SS { border-left: 3px solid #f8f; }
+        #upgrade-list, #tech-list { max-height: 180px; overflow-y: auto; padding: 4px; }
+        .talent-row, .skill-row { padding: 6px 8px; margin: 3px 0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; }
+        .main-btn {
+            padding: 12px 40px; font-size: 1.2rem; color: #000; background: #00d2ff;
+            border: none; border-radius: 50px; cursor: pointer; font-weight: bold;
+            box-shadow: 0 0 20px rgba(0,210,255,0.5); transition: 0.25s; margin-top: 10px;
+        }
+        .main-btn:hover { transform: scale(1.04); box-shadow: 0 0 32px rgba(0,210,255,0.75); }
+        .main-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        .main-btn.small { padding: 6px 14px; font-size: 0.85rem; margin-top: 4px; }
+        #battle-hud { position: absolute; top: 0; left: 0; width: 100%; pointer-events: none; display: none; z-index: 50; padding: 12px; box-sizing: border-box; }
+        #battle-hud .clickable { pointer-events: auto; }
+        .xp-bar-bg { width: 100%; max-width: 400px; height: 8px; background: rgba(255,255,255,0.12); border-radius: 4px; overflow: hidden; }
+        #xp-bar-fill { width: 0%; height: 100%; background: linear-gradient(90deg, #00d2ff, #00ffcc); transition: width 0.2s; }
+        .stat-text { color: #fff; font-size: 0.9rem; margin-top: 4px; }
+        .hp-bar-bg { width: 180px; height: 10px; background: rgba(0,0,0,0.6); border-radius: 5px; overflow: hidden; border: 1px solid #00d2ff; }
+        #hp-bar-fill { width: 100%; height: 100%; background: linear-gradient(90deg,#c00,#f84); transition: width 0.15s; }
+        #skill-strip { margin-top: 6px; font-size: 0.75rem; color: rgba(255,255,255,0.85); max-width: 420px; }
+        #levelup-modal, #evo-modal, #pause-panel {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.88); z-index: 200;
+            display: none; align-items: center; justify-content: center; pointer-events: auto;
+        }
+        #levelup-modal.show, #evo-modal.show, #pause-panel.show { display: flex; }
+        .modal-panel {
+            background: linear-gradient(180deg, rgba(0,35,55,0.96), rgba(0,18,35,0.98));
+            border: 2px solid #00d2ff; border-radius: 16px; padding: 20px; max-width: 460px; width: 92%;
+        }
+        .modal-panel h2 { color: #00d2ff; margin-top: 0; font-size: 1.2rem; }
+        .choice-btn {
+            display: block; width: 100%; padding: 10px 12px; margin: 6px 0; text-align: left;
+            background: rgba(0,210,255,0.12); border: 1px solid #00d2ff; border-radius: 8px;
+            color: #fff; cursor: pointer; font-size: 0.95rem; transition: 0.2s;
+        }
+        .choice-btn:hover { background: rgba(0,210,255,0.28); }
+        .choice-btn.evo { border-color: #ff0; background: rgba(255,255,0,0.12); color: #ffd700; }
+        #gameover-panel { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 150; align-items: center; justify-content: center; }
+        #gameover-panel.show { display: flex; flex-direction: column; }
+        #gameover-panel h2 { color: #f44; }
+        #gameover-panel .reward { color: #ffd700; font-size: 1.15rem; margin: 8px 0; }
+        .evo-table { font-size: 0.7rem; color: rgba(255,255,255,0.8); margin-top: 4px; max-height: 120px; overflow-y: auto; }
+        .evo-table td { padding: 2px 6px; }
+    </style>
 </head>
 <body>
+<div id="game-container">
+    <canvas id="bg-canvas"></canvas>
+    <canvas id="main-canvas"></canvas>
 
-<canvas id="game"></canvas>
+    <div id="lobby-container">
+        <div class="title">RAINGOD | LAB — 超完整版</div>
+        <div class="resource-bar">
+            <span>💰 <span id="lobby-gold">0</span></span>
+            <span>💎 <span id="lobby-stone">0</span></span>
+        </div>
+        <div class="lobby-section">
+            <h3>每日登入獎勵</h3>
+            <div id="daily-panel" class="glass-panel" style="padding:8px;"></div>
+        </div>
+        <div class="lobby-section">
+            <h3>裝備 (6 部位) 白→綠→藍→紫→黃→紅→SS</h3>
+            <div id="equipment-grid" class="glass-panel" style="padding:8px;"></div>
+            <button class="main-btn small" onclick="GameEngine.openEquipmentBox()">開箱 50💰</button>
+            <button class="main-btn small" onclick="GameEngine.divineForge()">神鑄 (紅→SS 同部位)</button>
+        </div>
+        <div class="lobby-section">
+            <h3>天賦 (金幣+進化石)</h3>
+            <div id="upgrade-list" class="glass-panel"></div>
+        </div>
+        <div class="lobby-section">
+            <h3>科技配件 (強化特定技能)</h3>
+            <div id="tech-list" class="glass-panel"></div>
+        </div>
+        <div class="lobby-section">
+            <h3>特工</h3>
+            <div id="agent-list" class="glass-panel" style="padding:8px;"></div>
+        </div>
+        <div class="lobby-section">
+            <h3>造型 Skin</h3>
+            <div id="skin-list" class="glass-panel" style="padding:8px;"></div>
+        </div>
+        <div class="lobby-section">
+            <h3>寵物抽獎（抽到加入圖鑑，可裝備一隻出戰）</h3>
+            <div id="pet-gacha" class="glass-panel" style="padding:8px;"></div>
+            <div id="pet-owned" class="glass-panel" style="padding:8px; margin-top:6px;"></div>
+        </div>
+        <div class="lobby-section">
+            <h3>關卡 (通關解鎖下一關，進度會儲存)</h3>
+            <div id="stage-list" class="glass-panel" style="padding:8px;"></div>
+        </div>
+        <div class="lobby-section">
+            <h3>EVO 對照表 · 技能每局從 Lv1 疊加至 5 星+EVO</h3>
+            <div id="evo-table" class="glass-panel evo-table"></div>
+        </div>
+    </div>
 
-<div id="ui">
-<div id="hp"></div>
-<div id="level"></div>
-<div id="wave"></div>
-<div id="daily"></div>
-<button onclick="gacha()">🎁抽獎</button>
-</div>
+    <div id="battle-hud">
+        <div class="stat-text" style="margin-bottom:4px;">關卡 <span id="stage-title">1. 荒原</span></div>
+        <div class="hp-bar-bg clickable"><div id="hp-bar-fill" style="width:100%"></div></div>
+        <div class="xp-bar-bg"><div id="xp-bar-fill"></div></div>
+        <div class="stat-text">Lv.<span id="player-lv">1</span> 殺敵 <span id="kill-count">0</span> 時間 <span id="timer">0</span>s 主動<span id="active-count">0</span>/6 被動<span id="passive-count">0</span>/6</div>
+        <div id="alert-banner" class="stat-text" style="color:#ffea00;text-shadow:0 0 10px #ffea00;min-height:18px;"></div>
+        <div id="skill-strip"></div>
+    </div>
 
-<div id="levelup"></div>
-
-<div id="joystick">
-<div id="stick"></div>
+    <div id="levelup-modal"><div class="modal-panel"><h2>升級！選一項</h2><div id="levelup-choices"></div></div></div>
+    <div id="evo-modal"><div class="modal-panel"><h2>✨ 超武進化 EVO</h2><div id="evo-choices"></div></div></div>
+    <div id="pause-panel"><div class="modal-panel"><h2>暫停 (ESC 繼續)</h2><button class="main-btn" onclick="GameEngine.togglePause()">繼續</button></div></div>
+    <div id="gameover-panel"><h2>戰鬥結束</h2><div class="reward" id="gameover-reward"></div><button class="main-btn" onclick="location.reload()">返回大廳</button></div>
 </div>
 
 <script>
+/**
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * RAINGOD | LAB — 噠噠特攻 超完整腳本 (Ultra Complete Script)
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * 模組: 存檔 | 輸入 | 常數 | 技能表 | 裝備 | 特工寵物 | 科技配件 | 實體類 | 戰鬥邏輯 | 引擎
+ * ═══════════════════════════════════════════════════════════════════════════════
+ */
+(function() {
+'use strict';
 
-const canvas=document.getElementById("game")
-const ctx=canvas.getContext("2d")
+// ─── 常數 ─────────────────────────────────────────────────────────────────────
+const QUALITY = { W:0, G:1, B:2, P:3, Y:4, R:5, SS:6 };
+const QUALITY_NAMES = ['白','綠','藍','紫','黃','紅','SS'];
+const EQUIP_SLOTS = ['weapon','clothes','necklace','belt','gloves','shoes'];
+const MAP_RADIUS = 3200;
+const MAX_STAGES = 18;
+const SKINS = {
+    classic: { name:'經典藍', color:'#00d2ff', outline:'rgba(0,255,255,0.7)', glow:'#00d2ff' },
+    neon:    { name:'霓虹綠', color:'#00ff88', outline:'rgba(200,255,200,0.9)', glow:'#00ff88' },
+    crimson: { name:'深紅殺陣', color:'#ff3366', outline:'rgba(255,200,200,0.9)', glow:'#ff3366' },
+    void:    { name:'虛空紫', color:'#a855ff', outline:'rgba(230,200,255,0.9)', glow:'#a855ff' }
+};
+const STAGES = [
+    { name: '1. 荒原', spawnCd: 85, bossHp: 800, bossAt: 55 },
+    { name: '2. 廢墟', spawnCd: 72, bossHp: 1100, bossAt: 50 },
+    { name: '3. 暗巷', spawnCd: 65, bossHp: 1500, bossAt: 48 },
+    { name: '4. 工廠', spawnCd: 58, bossHp: 2000, bossAt: 45 },
+    { name: '5. 實驗室', spawnCd: 52, bossHp: 2600, bossAt: 42 },
+    { name: '6. 深淵', spawnCd: 46, bossHp: 3300, bossAt: 40 },
+    { name: '7. 虛空', spawnCd: 42, bossHp: 4100, bossAt: 38 },
+    { name: '8. 裂隙', spawnCd: 38, bossHp: 5000, bossAt: 36 },
+    { name: '9. 終焉', spawnCd: 34, bossHp: 6200, bossAt: 34 },
+    { name: '10. 創世', spawnCd: 30, bossHp: 7500, bossAt: 32 },
+    { name: '11. 星輝', spawnCd: 26, bossHp: 9500, bossAt: 30 },
+    { name: '12. 究極', spawnCd: 22, bossHp: 12000, bossAt: 28 },
+    { name: '13. 混沌邊境', spawnCd: 22, bossHp: 15000, bossAt: 30 },
+    { name: '14. 黑洞外環', spawnCd: 20, bossHp: 18500, bossAt: 32 },
+    { name: '15. 星核走廊', spawnCd: 20, bossHp: 22000, bossAt: 34 },
+    { name: '16. 失控矩陣', spawnCd: 18, bossHp: 26000, bossAt: 36 },
+    { name: '17. 深度侵蝕', spawnCd: 18, bossHp: 31000, bossAt: 38 },
+    { name: '18. 神滅終局', spawnCd: 16, bossHp: 38000, bossAt: 40 }
+];
+const EVO_LIST = [
+    ['苦無','經驗書','幽靈手裏劍'], ['足球','跑鞋','量子球'], ['無人機A','無人機B','毀滅者'],
+    ['閃電','能量塊','狂雷電池'], ['守護者','外骨骼臂','捍衛者'], ['力場','飲料','壓制領域'],
+    ['磚塊','血瓶','鐵啞鈴'], ['棒球棍','血瓶','露希爾'], ['左輪','攻擊力','死神'],
+    ['追光者','減傷','永恆之光'], ['破壞之力','攻擊力','黯滅新星'],
+    ['烈焰噴射','攻擊力','地獄火柱'], ['寒霜冰環','減傷','絕對零域'], ['隕星轟炸','經驗書','星落審判']
+];
 
-canvas.width=innerWidth
-canvas.height=innerHeight
+// ─── 主動技能 (id, 名稱, 對應被動, 超武名) ─────────────────────────────────────
+const ACTIVE_SKILLS = {
+    kunai:       { name:'苦無',           passiveEvo:'expBook',    evoName:'幽靈手裏劍' },
+    football:    { name:'足球',           passiveEvo:'runShoe',    evoName:'量子球' },
+    droneA:      { name:'無人機 A',       passiveEvo:'droneB',     evoName:'毀滅者' },
+    droneB:      { name:'無人機 B',       passiveEvo:'droneA',     evoName:'毀滅者' },
+    lightning:   { name:'閃電發射器',    passiveEvo:'energyBlock', evoName:'狂雷電池' },
+    guardian:    { name:'守護者',         passiveEvo:'exoskeleton',evoName:'捍衛者' },
+    forcefield:  { name:'力場發生器',    passiveEvo:'drink',       evoName:'壓制領域' },
+    brick:       { name:'磚塊',           passiveEvo:'bloodVial',   evoName:'鐵啞鈴' },
+    baseball:    { name:'棒球棍',        passiveEvo:'bloodVial',   evoName:'露希爾' },
+    revolver:    { name:'左輪',          passiveEvo:'atk',         evoName:'死神' },
+    lightchaser: { name:'追光者',        passiveEvo:'dmgReduct',   evoName:'永恆之光' },
+    destruction: { name:'破壞之力',      passiveEvo:'atk',         evoName:'黯滅新星' },
+    flamethrower:{ name:'烈焰噴射',     passiveEvo:'atk',         evoName:'地獄火柱' },
+    iceRing:     { name:'寒霜冰環',      passiveEvo:'dmgReduct',   evoName:'絕對零域' },
+    meteor:      { name:'隕星轟炸',      passiveEvo:'expBook',     evoName:'星落審判' }
+};
+const PASSIVE_SKILLS = {
+    expBook:'經驗書', runShoe:'跑鞋', energyBlock:'能量塊', exoskeleton:'外骨骼臂',
+    drink:'飲料', bloodVial:'血瓶', atk:'攻擊力', dmgReduct:'減傷', magnet:'磁鐵',
+    droneB:'無人機 B', droneA:'無人機 A'
+};
 
-const WORLD=4000
+// ─── 存檔系統 ─────────────────────────────────────────────────────────────────
+const SaveSystem = {
+    currentData: {
+        resources: { gold:0, evolutionStone:0 },
+        talents: { ATK:0, HP:0, SPD:0, REC:0 },
+        equipment: { weapon:null, clothes:null, necklace:null, belt:null, gloves:null, shoes:null },
+        agentId: null, petId: null,
+        techParts: [],
+        unlockedStage: 1,
+        ownedPets: {}, petShards: {},
+        lastDaily: '',
+        skinId: 'classic',
+        version: '7.0.0'
+    },
+    init() {
+        try {
+            const s = localStorage.getItem('RAINGOD_SAVE');
+            if (s) this.currentData = { ...this.currentData, ...JSON.parse(s) };
+        } catch(e) {}
+        if (!Array.isArray(this.currentData.techParts)) this.currentData.techParts = [];
+        if (typeof this.currentData.unlockedStage !== 'number') this.currentData.unlockedStage = 1;
+        if (typeof this.currentData.ownedPets !== 'object') this.currentData.ownedPets = {};
+        if (typeof this.currentData.petShards !== 'object') this.currentData.petShards = {};
+        this.save();
+    },
+    save() { localStorage.setItem('RAINGOD_SAVE', JSON.stringify(this.currentData)); }
+};
 
-let camera={x:0,y:0}
+// ─── 輸入 ─────────────────────────────────────────────────────────────────────
+const Input = {
+    keys: {},
+    mouseX: 0,
+    mouseY: 0,
+    mouseActive: false,
+    init() {
+        window.onkeydown = e => { this.keys[e.key.toLowerCase()] = true; if (e.key === 'Escape') GameEngine.togglePause(); };
+        window.onkeyup   = e => { this.keys[e.key.toLowerCase()] = false; };
+        window.addEventListener('mousemove', e => {
+            this.mouseX = e.clientX;
+            this.mouseY = e.clientY;
+            this.mouseActive = true;
+        });
+        window.addEventListener('mouseleave', () => {
+            this.mouseActive = false;
+        });
+    }
+};
 
-let player={
-x:0,
-y:0,
-r:18,
-speed:4,
-hp:100,
-maxhp:100,
-attack:10,
-xp:0,
-level:1,
-lifesteal:0,
-double:false,
-magnet:0
+// ─── 裝備 ─────────────────────────────────────────────────────────────────────
+function rollEquipment(slot, qualityTier) {
+    const q = QUALITY_NAMES[qualityTier] || '白';
+    return { slot, quality: qualityTier, name: (slot + '-' + q), atk: qualityTier * 2, hp: qualityTier * 5 };
 }
 
-let enemies=[]
-let bullets=[]
-let loot=[]
+// ─── 特工 資料 ──────────────────────────────────────────────────────────────────
+const AGENTS = { king: { name:'金 King', atk:5, crit:0.1 }, willy: { name:'威利 Willy', def:8, hp:30 } };
 
-let wave=1
+// ─── 寵物池 (抽獎用) rarity: N R SR SS，權重愈低愈難抽 ───────────────────────────
+const PET_POOL = [
+    { id:'spark', name:'小火花', rarity:'N', dmg:4, weight:40 },
+    { id:'slime', name:'史萊姆', rarity:'N', dmg:3, hp:15, weight:38 },
+    { id:'bat', name:'小蝙蝠', rarity:'N', dmg:5, weight:35 },
+    { id:'mushroom', name:'蘑菇精', rarity:'N', dmg:4, rec:1, weight:35 },
+    { id:'ghost', name:'幽靈', rarity:'N', dmg:6, weight:32 },
+    { id:'wolf', name:'幼狼', rarity:'R', dmg:10, weight:18 },
+    { id:'eagle', name:'獵鷹', rarity:'R', dmg:12, weight:16 },
+    { id:'dragon', name:'小龍', rarity:'R', dmg:14, weight:14 },
+    { id:'phoenix', name:'鳳凰雛', rarity:'R', dmg:11, rec:2, weight:15 },
+    { id:'tiger', name:'雷虎', rarity:'R', dmg:13, weight:14 },
+    { id:'murica', name:'助戰鳥 Murica', rarity:'SR', dmg:22, weight:6 },
+    { id:'void', name:'虛空獸', rarity:'SR', dmg:20, weight:5 },
+    { id:'angel', name:'小天使', rarity:'SR', dmg:18, rec:4, hp:25, weight:6 },
+    { id:'demon', name:'小惡魔', rarity:'SR', dmg:24, weight:4 },
+    { id:'star', name:'星輝龍', rarity:'SS', dmg:35, rec:3, hp:40, weight:1 },
+    { id:'creator', name:'創世之靈', rarity:'SS', dmg:40, weight:0.5 }
+];
+const PET_BY_ID = {};
+PET_POOL.forEach(p => { PET_BY_ID[p.id] = p; });
+const RARITY_ORDER = { N:0, R:1, SR:2, SS:3 };
+const RARITY_NAME = { N:'普通', R:'稀有', SR:'超稀有', SS:'星輝' };
+const GACHA_COST_SINGLE = 200;
+const GACHA_COST_TEN = 2000;
+const SHARDS_TO_SUMMON = 30;
 
-let joystick={x:0,y:0,active:false}
+// ─── 背景 (純色，不跟隨鏡頭) ───────────────────────────────────────────────────
+const Background = {
+    ctx: null,
+    init(ctx) { this.ctx = ctx; },
+    draw() {
+        if (!this.ctx) return;
+        this.ctx.fillStyle = '#00050a';
+        this.ctx.fillRect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
+    }
+};
 
-const joy=document.getElementById("joystick")
-const stick=document.getElementById("stick")
-
-joy.addEventListener("pointerdown",()=>joystick.active=true)
-
-addEventListener("pointerup",()=>{
-joystick.active=false
-joystick.x=0
-joystick.y=0
-stick.style.left="35px"
-stick.style.top="35px"
-})
-
-addEventListener("pointermove",e=>{
-
-if(!joystick.active)return
-
-let rect=joy.getBoundingClientRect()
-
-let x=e.clientX-rect.left-60
-let y=e.clientY-rect.top-60
-
-let d=Math.hypot(x,y)
-
-if(d>50){
-
-x/=d
-y/=d
-
-x*=50
-y*=50
-
+// ─── 經驗球 (菱形高級造型) ─────────────────────────────────────────────────────
+class ExpOrb {
+    constructor(x, y, value = 10) { this.x = x; this.y = y; this.value = value; this.r = 6; }
+    draw(ctx, cam) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.fillStyle = '#00ffcc';
+        ctx.strokeStyle = 'rgba(0,255,200,0.6)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        for (let i = 0; i < 4; i++) {
+            const a = Math.PI/2 * i - Math.PI/4;
+            const x = Math.cos(a) * this.r, y = Math.sin(a) * this.r;
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+    }
 }
 
-joystick.x=x/50
-joystick.y=y/50
-
-stick.style.left=(x+60-25)+"px"
-stick.style.top=(y+60-25)+"px"
-
-})
-
-const SKILLS=[
-
-{name:"Attack +5",apply:p=>p.attack+=5},
-
-{name:"Speed +1",apply:p=>p.speed+=1},
-
-{name:"Max HP +30",apply:p=>{
-p.maxhp+=30
-p.hp+=30
-}},
-
-{name:"Life Steal",apply:p=>p.lifesteal+=0.05},
-
-{name:"Double Shot",apply:p=>p.double=true},
-
-{name:"Magnet",apply:p=>p.magnet=200}
-
-]
-
-function levelUp(){
-
-let box=document.getElementById("levelup")
-
-box.innerHTML="<h2>升級選技能</h2>"
-
-let choices=[]
-
-while(choices.length<3){
-
-let s=SKILLS[Math.floor(Math.random()*SKILLS.length)]
-
-if(!choices.includes(s))
-choices.push(s)
-
+// ─── 投射物 (鎖敵、造型：刀型/六角/菱形，無圓形) ──────────────────────────────
+class Projectile {
+    constructor(x, y, vx, vy, dmg, color, opts = {}) {
+        this.x = x; this.y = y; this.vx = vx; this.vy = vy;
+        this.dmg = dmg; this.color = color || '#00d2ff'; this.isDead = false;
+        this.homing = opts.homing || false; this.r = opts.r || 5; this.life = opts.life || 400;
+        this.bounceLeft = opts.bounce !== undefined ? opts.bounce : 0;
+        this.shape = opts.shape || 'diamond';
+        this.skillId = opts.skillId || null;
+        this.lockTarget = opts.lockTarget || null;
+    }
+    update(dt, player, enemies) {
+        this.x += this.vx * dt; this.y += this.vy * dt;
+        this.life--;
+        if (this.life <= 0) { this.isDead = true; return; }
+        if (this.homing) {
+            let t = this.lockTarget && !this.lockTarget.isDead ? this.lockTarget : null;
+            if (!t && enemies.length) {
+                let best = null, bestD = 1e9;
+                for (const e of enemies) {
+                    if (e.isDead) continue;
+                    const d = Math.hypot(e.x - this.x, e.y - this.y);
+                    if (d < bestD) { bestD = d; best = e; }
+                }
+                t = best;
+            }
+            if (t) {
+                const ang = Math.atan2(t.y - this.y, t.x - this.x);
+                const sp = Math.max(Math.hypot(this.vx, this.vy) * 1.06, 14);
+                this.vx = Math.cos(ang) * sp;
+                this.vy = Math.sin(ang) * sp;
+            }
+        }
+        if (this.bounceLeft > 0) {
+            const dist = Math.hypot(this.x - player.x, this.y - player.y);
+            if (dist > MAP_RADIUS) {
+                const ang = Math.atan2(this.y - player.y, this.x - player.x);
+                this.vx = -Math.cos(ang) * Math.hypot(this.vx, this.vy);
+                this.vy = -Math.sin(ang) * Math.hypot(this.vx, this.vy);
+                this.bounceLeft--;
+            }
+        }
+        for (const e of enemies) {
+            if (e.isDead) continue;
+            if (Math.hypot(this.x - e.x, this.y - e.y) < e.r + this.r) {
+                e.hp -= this.dmg;
+                this.isDead = true;
+                return;
+            }
+        }
+        if (Math.abs(this.x - player.x) > 5000 || Math.abs(this.y - player.y) > 5000) this.isDead = true;
+    }
+    draw(ctx, cam) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(Math.atan2(this.vy, this.vx));
+        // 通用拖尾
+        const speed = Math.hypot(this.vx, this.vy);
+        if (speed > 0.1) {
+            const tailLen = Math.min(40, speed * 2.2);
+            ctx.strokeStyle = this.color;
+            ctx.lineWidth = Math.max(1, this.r * 0.4);
+            ctx.globalAlpha = 0.35;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(-tailLen, 0);
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+        }
+        const r = this.r;
+        if (this.shape === 'blade') {
+            ctx.fillStyle = this.color;
+            ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.moveTo(r * 2, 0);
+            ctx.lineTo(-r * 1.2, r * 0.8);
+            ctx.lineTo(-r * 0.6, 0);
+            ctx.lineTo(-r * 1.2, -r * 0.8);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+        } else if (this.shape === 'hex') {
+            const grad = ctx.createRadialGradient(0, 0, r*0.2, 0, 0, r*1.1);
+            grad.addColorStop(0, '#ffffff');
+            grad.addColorStop(0.25, this.color);
+            grad.addColorStop(1, '#000000');
+            ctx.fillStyle = grad;
+            ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            for (let i = 0; i < 6; i++) {
+                const a = Math.PI/3 * i;
+                const x = Math.cos(a) * r, y = Math.sin(a) * r;
+                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+        } else if (this.shape === 'lightning') {
+            ctx.strokeStyle = this.color;
+            ctx.lineWidth = 2.5;
+            ctx.shadowColor = this.color;
+            ctx.shadowBlur = 6;
+            ctx.beginPath();
+            ctx.moveTo(r, 0);
+            ctx.lineTo(-r*0.5, r*0.5);
+            ctx.lineTo(0, 0);
+            ctx.lineTo(-r*0.5, -r*0.5);
+            ctx.lineTo(-r, 0);
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+        } else {
+            const grad = ctx.createRadialGradient(0, 0, r*0.1, 0, 0, r*1.0);
+            grad.addColorStop(0, '#ffffff');
+            grad.addColorStop(0.3, this.color);
+            grad.addColorStop(1, '#000000');
+            ctx.fillStyle = grad;
+            ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(r, 0);
+            ctx.lineTo(0, r);
+            ctx.lineTo(-r, 0);
+            ctx.lineTo(0, -r);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+        }
+        ctx.restore();
+    }
 }
 
-for(let s of choices){
-
-let b=document.createElement("button")
-
-b.innerText=s.name
-
-b.onclick=()=>{
-
-s.apply(player)
-
-box.style.display="none"
-
+// ─── 敵人 (MELEE / SHOOTER / FAST / TANK / FLY / ELITE) ─────────────────────────
+class Enemy {
+    constructor(x, y, type = 'MELEE', stageIndex = 1, timeFactor = 1) {
+        this.x = x; this.y = y;
+        const stats = {
+            MELEE:  { r:22, hp:90,  speed:2.1, dmg:0.7,  exp:10, color:'#4b9b4b', eye:'#fff' },
+            SHOOTER:{ r:20, hp:70,  speed:1.1, dmg:0.5,  exp:13, color:'#b95cff', eye:'#ffea00' },
+            FAST:   { r:18, hp:65,  speed:3.4, dmg:0.55, exp:9,  color:'#2acbff', eye:'#fff' },
+            TANK:   { r:30, hp:210, speed:0.95,dmg:1.2,  exp:26, color:'#6d4c41', eye:'#ffbba0' },
+            FLY:    { r:18, hp:80,  speed:2.6, dmg:0.7,  exp:14, color:'#f06292', eye:'#fff' },
+            ELITE:  { r:30, hp:320, speed:2.3, dmg:1.5,  exp:40, color:'#ff9100', eye:'#fff' }
+        };
+        const s = stats[type] || stats.MELEE;
+        const stageMul = 1 + (stageIndex - 1) * 0.22;
+        const timeMul = 1 + (timeFactor * 0.35);
+        this.r = s.r;
+        this.hp = s.hp * stageMul * timeMul;
+        this.maxHp = this.hp;
+        this.speed = s.speed * (1 + (stageIndex - 1) * 0.03);
+        this.dmg = s.dmg * stageMul * (1 + timeFactor * 0.2);
+        this.expValue = Math.round(s.exp * stageMul * (0.8 + timeFactor * 0.4));
+        this.color = s.color;
+        this.eyeColor = s.eye;
+        this.type = type;
+        this.isDead = false;
+    }
+    update(dt, player) {
+        const ang = Math.atan2(player.y - this.y, player.x - this.x);
+        this.x += Math.cos(ang) * this.speed * dt;
+        this.y += Math.sin(ang) * this.speed * dt;
+        if (Math.hypot(player.x - this.x, player.y - this.y) < player.r + this.r + 8)
+            player.takeDamage(this.dmg * dt);
+    }
+    draw(ctx, cam) {
+        const barW = this.r * 2.4, barH = 4;
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(this.x - barW/2, this.y - this.r - barH - 6, barW, barH);
+        ctx.fillStyle = this.hp > this.maxHp * 0.5 ? '#9ccc65' : this.hp > this.maxHp * 0.25 ? '#ffca28' : '#ef5350';
+        ctx.fillRect(this.x - barW/2, this.y - this.r - barH - 6, barW * (this.hp / this.maxHp), barH);
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        // 身體裝甲
+        const grad = ctx.createRadialGradient(0, -this.r*0.3, this.r*0.2, 0, 0, this.r*1.2);
+        grad.addColorStop(0, '#ffffff');
+        grad.addColorStop(0.25, this.color);
+        grad.addColorStop(1, '#000000');
+        ctx.fillStyle = grad;
+        ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, this.r * 1.1, this.r * 0.9, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        // 裝甲分段
+        ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(-this.r * 0.9, -this.r * 0.1);
+        ctx.lineTo(this.r * 0.9, -this.r * 0.1);
+        ctx.moveTo(-this.r * 0.7, this.r * 0.25);
+        ctx.lineTo(this.r * 0.7, this.r * 0.25);
+        ctx.stroke();
+        // 側邊尖刺 / 翅膀
+        ctx.lineWidth = 2;
+        if (this.type === 'TANK' || this.type === 'ELITE') {
+            ctx.strokeStyle = '#ffcc80';
+            ctx.beginPath();
+            ctx.moveTo(-this.r * 0.6, -this.r * 0.4);
+            ctx.lineTo(-this.r * 1.1, -this.r * 1.0);
+            ctx.moveTo(this.r * 0.6, -this.r * 0.4);
+            ctx.lineTo(this.r * 1.1, -this.r * 1.0);
+            ctx.stroke();
+        } else if (this.type === 'FLY') {
+            ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+            ctx.beginPath();
+            ctx.moveTo(-this.r * 0.2, -this.r * 0.2);
+            ctx.quadraticCurveTo(-this.r * 1.0, -this.r * 0.4, -this.r * 1.4, 0);
+            ctx.moveTo(this.r * 0.2, -this.r * 0.2);
+            ctx.quadraticCurveTo(this.r * 1.0, -this.r * 0.4, this.r * 1.4, 0);
+            ctx.stroke();
+        }
+        // 能量核心裂縫
+        ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(0, -this.r * 0.7);
+        ctx.lineTo(0, this.r * 0.7);
+        ctx.moveTo(-this.r * 0.4, -this.r * 0.3);
+        ctx.lineTo(-this.r * 0.1, this.r * 0.4);
+        ctx.moveTo(this.r * 0.4, -this.r * 0.3);
+        ctx.lineTo(this.r * 0.1, this.r * 0.4);
+        ctx.stroke();
+        // 精英外光圈
+        if (this.type === 'ELITE') {
+            ctx.strokeStyle = 'rgba(255,145,0,0.7)';
+            ctx.lineWidth = 3;
+            ctx.shadowColor = '#ff9100';
+            ctx.shadowBlur = 14;
+            ctx.beginPath();
+            ctx.arc(0, 0, this.r * 1.5, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+        }
+        ctx.restore();
+    }
 }
 
-box.appendChild(b)
-
+// ─── BOSS (血量依關卡) ────────────────────────────────────────────────────────
+class Boss {
+    constructor(x, y, hp = 900) {
+        this.x = x; this.y = y; this.r = 52;
+        this.hp = hp; this.maxHp = hp; this.speed = 1.2; this.isDead = false;
+        this.color = '#c00';
+        this.skillTimer = 0;
+    }
+    update(dt, player, projectiles) {
+        const ang = Math.atan2(player.y - this.y, player.x - this.x);
+        this.x += Math.cos(ang) * this.speed * dt;
+        this.y += Math.sin(ang) * this.speed * dt;
+        if (Math.hypot(player.x - this.x, player.y - this.y) < player.r + this.r)
+            player.takeDamage(1.8 * dt);
+        this.skillTimer += dt;
+        if (this.skillTimer > 90) {
+            this.skillTimer = 0;
+            const roll = Math.random();
+            if (roll < 0.4) {
+                // 放射彈幕
+                const count = 26;
+                for (let i = 0; i < count; i++) {
+                    const a = Math.PI*2*i/count;
+                    const sp = 8;
+                    projectiles.push(new Projectile(this.x, this.y, Math.cos(a)*sp, Math.sin(a)*sp, 14, '#ff8a65', {
+                        r: 6, shape:'hex', skillId:'boss_burst', life:260
+                    }));
+                }
+                GameEngine.showAlert('BOSS：放射彈幕！');
+            } else if (roll < 0.75) {
+                // 狙擊線
+                const a = Math.atan2(player.y - this.y, player.x - this.x);
+                const sp = 14;
+                for (let i = -2; i <= 2; i++) {
+                    const off = a + i*0.04;
+                    projectiles.push(new Projectile(this.x, this.y, Math.cos(off)*sp, Math.sin(off)*sp, 22, '#ffeb3b', {
+                        r: 7, shape:'lightning', skillId:'boss_laser', life:320
+                    }));
+                }
+                GameEngine.showAlert('BOSS：能量狙擊！');
+            } else {
+                // 追蹤火雨
+                for (let i = 0; i < 8; i++) {
+                    const baseAng = Math.random()*Math.PI*2;
+                    const sp = 9;
+                    projectiles.push(new Projectile(this.x, this.y, Math.cos(baseAng)*sp, Math.sin(baseAng)*sp, 18, '#ff7043', {
+                        r: 8, shape:'diamond', homing:true, skillId:'boss_fire', life:360
+                    }));
+                }
+                GameEngine.showAlert('BOSS：追蹤火雨！');
+            }
+        }
+    }
+    draw(ctx, cam) {
+        const barW = this.r * 2, barH = 6;
+        ctx.fillStyle = 'rgba(0,0,0,0.8)';
+        ctx.fillRect(this.x - barW/2, this.y - this.r - barH - 10, barW, barH);
+        ctx.fillStyle = this.hp > this.maxHp * 0.5 ? '#c5e1a5' : this.hp > this.maxHp * 0.25 ? '#ffe082' : '#ef9a9a';
+        ctx.fillRect(this.x - barW/2, this.y - this.r - barH - 10, barW * (this.hp / this.maxHp), barH);
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        const outerGrad = ctx.createRadialGradient(0, -this.r*0.2, this.r*0.4, 0, 0, this.r*1.5);
+        outerGrad.addColorStop(0, '#ffe0b2');
+        outerGrad.addColorStop(0.35, '#ff6e40');
+        outerGrad.addColorStop(1, '#1b0000');
+        ctx.fillStyle = outerGrad;
+        ctx.strokeStyle = '#ffb74d';
+        ctx.lineWidth = 4;
+        ctx.shadowColor = '#ff6d00';
+        ctx.shadowBlur = 20;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, this.r * 1.25, this.r * 1.05, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        // 裝甲裂痕核心
+        ctx.strokeStyle = '#ffcc80';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-this.r * 0.9, -this.r * 0.2);
+        ctx.lineTo(this.r * 0.9, -this.r * 0.2);
+        ctx.moveTo(-this.r * 0.6, 0);
+        ctx.lineTo(this.r * 0.6, 0);
+        ctx.moveTo(0, -this.r * 0.9);
+        ctx.lineTo(0, this.r * 0.9);
+        ctx.stroke();
+        ctx.fillStyle = '#fff3e0';
+        ctx.beginPath();
+        ctx.arc(0, 0, this.r * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+        // 外圍魔法陣
+        ctx.strokeStyle = 'rgba(255,110,64,0.9)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 0, this.r * 1.7, 0, Math.PI * 2);
+        ctx.stroke();
+        for (let i = 0; i < 6; i++) {
+            const ang = (Math.PI * 2 / 6) * i;
+            const x = Math.cos(ang) * this.r * 1.7;
+            const y = Math.sin(ang) * this.r * 1.7;
+            ctx.beginPath();
+            ctx.arc(x, y, this.r * 0.14, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+        ctx.shadowBlur = 0;
+        ctx.restore();
+    }
 }
 
-box.style.display="block"
-
+// ─── 玩家 (高級刀鋒造型，永遠畫面中央) ────────────────────────────────────────
+class Player {
+    constructor() { this.reset(); }
+    reset() {
+        this.x = 0; this.y = 0;
+        this.hp = 100; this.maxHp = 100; this.xp = 0; this.xpToNext = 100; this.lv = 1;
+        this.speed = 4; this.r = 20; this.magnetDist = 160;
+        this.applyTalents(); this.applyEquipment(); this.applyAgentPet();
+    }
+    applyTalents() {
+        const t = SaveSystem.currentData.talents;
+        this.maxHp += (t.HP || 0) * 22;
+        this.hp = this.maxHp;
+        this.speed += (t.SPD || 0) * 0.5;
+        this.regenPerSec = (t.REC || 0) * 2;
+    }
+    applyEquipment() {
+        let atk = 0, hp = 0;
+        for (const s of EQUIP_SLOTS) {
+            const e = SaveSystem.currentData.equipment[s];
+            if (e) { atk += e.atk || 0; hp += e.hp || 0; }
+        }
+        this.maxHp += hp; this.hp = Math.min(this.hp, this.maxHp);
+        this.equipAtk = atk;
+    }
+    applyAgentPet() {
+        const ag = AGENTS[SaveSystem.currentData.agentId];
+        const petId = SaveSystem.currentData.petId;
+        const owned = SaveSystem.currentData.ownedPets || {};
+        const pet = (petId && owned[petId] && PET_BY_ID[petId]) ? PET_BY_ID[petId] : null;
+        if (ag) { this.equipAtk = (this.equipAtk || 0) + ag.atk; this.maxHp += ag.hp || 0; this.critRate = ag.crit || 0; }
+        else this.critRate = 0;
+        this.petDmg = pet ? (pet.dmg || 0) : 0;
+        if (pet) {
+            this.maxHp += pet.hp || 0;
+            this.hp = Math.min(this.hp, this.maxHp);
+            this.regenPerSec = (this.regenPerSec || 0) + (pet.rec || 0);
+        }
+    }
+    update(dt) {
+        let dx = 0, dy = 0;
+        if (Input.keys['w']) dy -= 1;
+        if (Input.keys['s']) dy += 1;
+        if (Input.keys['a']) dx -= 1;
+        if (Input.keys['d']) dx += 1;
+        if (Input.mouseActive) {
+            const cx = window.innerWidth / 2;
+            const cy = window.innerHeight / 2;
+            const vx = Input.mouseX - cx;
+            const vy = Input.mouseY - cy;
+            const dist = Math.hypot(vx, vy);
+            if (dist > 40) {
+                dx += vx / dist;
+                dy += vy / dist;
+            }
+        }
+        const len = Math.hypot(dx, dy);
+        if (len > 0) {
+            const sp = this.speed * dt;
+            this.x += dx / len * sp;
+            this.y += dy / len * sp;
+        }
+        const dist = Math.hypot(this.x, this.y);
+        if (dist > MAP_RADIUS) {
+            this.x *= MAP_RADIUS / dist;
+            this.y *= MAP_RADIUS / dist;
+        }
+        if (this.regenPerSec) this.hp = Math.min(this.maxHp, this.hp + this.regenPerSec * dt / 60);
+    }
+    takeDamage(amt) {
+        const def = (SaveSystem.currentData.talents && SaveSystem.currentData.agentId === 'willy') ? 0.85 : 1;
+        this.hp = Math.max(0, this.hp - amt * def);
+        if (this.hp <= 0) GameEngine.gameOver();
+    }
+    addXp(value) {
+        this.xp += value;
+        if (this.xp >= this.xpToNext) {
+            this.xp -= this.xpToNext;
+            this.lv++;
+            this.xpToNext = Math.floor(100 + this.lv * 22);
+            GameEngine.queueLevelUp();
+        }
+    }
+    draw(ctx, cam) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        const skinConf = SKINS[SaveSystem.currentData.skinId] || SKINS.classic;
+        ctx.fillStyle = skinConf.color;
+        ctx.strokeStyle = skinConf.outline;
+        ctx.lineWidth = 2.5;
+        ctx.shadowColor = skinConf.glow;
+        ctx.shadowBlur = 14;
+        ctx.beginPath();
+        ctx.moveTo(0, -22);
+        ctx.lineTo(18, 8);
+        ctx.lineTo(8, 22);
+        ctx.lineTo(-8, 22);
+        ctx.lineTo(-18, 8);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.restore();
+    }
 }
 
-function spawnEnemy(){
+// ─── 局內技能 (6 主動 + 6 被動，每局重置、可升級疊加) ───────────────────────────
+const BattleSkills = {
+    active: [], passive: [], maxActive: 6, maxPassive: 6,
+    addActive(id) {
+        const ex = this.active.find(a => a.id === id);
+        if (ex) { if (ex.stars < 5) ex.stars++; return true; }
+        if (this.active.length >= this.maxActive) return false;
+        this.active.push({ id, stars: 1, evo: false });
+        return true;
+    },
+    addPassive(id) {
+        if (this.passive.some(p => p.id === id)) return;
+        if (this.passive.length >= this.maxPassive) return;
+        this.passive.push({ id });
+    },
+    hasPassive(id) { return this.passive.some(p => p.id === id); },
+    getActive(id) { return this.active.find(a => a.id === id); },
+    canEvo(activeId) {
+        const a = this.getActive(activeId);
+        if (!a || a.stars < 5 || a.evo) return null;
+        const conf = ACTIVE_SKILLS[activeId];
+        if (!conf || !this.hasPassive(conf.passiveEvo)) return null;
+        return conf.evoName;
+    },
+    doEvo(activeId) { const a = this.getActive(activeId); if (a) a.evo = true; },
+    reset() { this.active = []; this.passive = []; }
+};
 
-let a=Math.random()*Math.PI*2
-let d=700+Math.random()*300
-
-let x=player.x+Math.cos(a)*d
-let y=player.y+Math.sin(a)*d
-
-let type=Math.random()
-
-let e={x,y}
-
-if(type<0.5){
-
-e.hp=40
-e.maxhp=40
-e.speed=1.5
-e.r=14
-e.type="normal"
-
-}
-else if(type<0.8){
-
-e.hp=25
-e.maxhp=25
-e.speed=3
-e.r=12
-e.type="fast"
-
-}
-else{
-
-e.hp=120
-e.maxhp=120
-e.speed=0.8
-e.r=26
-e.type="tank"
-
+// ─── 科技配件加成 (技能 id → 傷害倍率) ────────────────────────────────────────
+function getTechMultiplier(skillId) {
+    const parts = SaveSystem.currentData.techParts || [];
+    if (parts.includes('drone') && (skillId === 'droneA' || skillId === 'droneB')) return 1.3;
+    if (parts.includes('football') && skillId === 'football') return 1.3;
+    if (parts.includes('lightning') && skillId === 'lightning') return 1.25;
+    if (parts.includes('guardian') && skillId === 'guardian') return 1.2;
+    return 1;
 }
 
-enemies.push(e)
+// ─── 武器發射邏輯 ─────────────────────────────────────────────────────────────
+function fireWeapon(skillId, player, projectiles, enemies, stats) {
+    const a = BattleSkills.getActive(skillId);
+    if (!a) return;
+    const baseDmg = 24 + a.stars * 9 + (stats.atk || 0) + (player.equipAtk || 0);
+    const dmg = baseDmg * (a.evo ? 2.2 : 1) * getTechMultiplier(skillId);
+    const crit = (player.critRate || 0) > Math.random() ? 1.5 : 1;
+    const finalDmg = dmg * crit;
+    const spd = 10 + (stats.range ? 2 : 0);
 
+    if (skillId === 'kunai') {
+        const count = a.evo ? 3 : 1;
+        const sorted = [...enemies].filter(e => !e.isDead).sort((a, b) =>
+            Math.hypot(a.x - player.x, a.y - player.y) - Math.hypot(b.x - player.x, b.y - player.y));
+        for (let i = 0; i < count; i++) {
+            const target = sorted[i] || null;
+            const ang = target ? Math.atan2(target.y - player.y, target.x - player.x) : (Math.PI * 2 * i / Math.max(count, 1));
+            const proj = new Projectile(player.x, player.y, Math.cos(ang)*spd, Math.sin(ang)*spd, finalDmg, a.evo ? '#00ffcc' : '#00d2ff', {
+                homing: true, r: a.evo ? 8 : 6, shape: 'blade', lockTarget: target || undefined, skillId
+            });
+            projectiles.push(proj);
+        }
+        return;
+    }
+    if (skillId === 'football') {
+        const ang = (Date.now() / 200 + projectiles.length) % (Math.PI * 2);
+        projectiles.push(new Projectile(player.x, player.y, Math.cos(ang)*(spd*0.85), Math.sin(ang)*(spd*0.85), finalDmg, '#0f8', { bounce: 6, r: a.evo ? 14 : 9, shape: 'hex', skillId }));
+        return;
+    }
+    if (skillId === 'lightning' || skillId === 'revolver' || skillId === 'destruction') {
+        const sorted = [...enemies].filter(e => !e.isDead).sort((a, b) =>
+            Math.hypot(a.x - player.x, a.y - player.y) - Math.hypot(b.x - player.x, b.y - player.y));
+        const target = sorted[0];
+        const ang = target ? Math.atan2(target.y - player.y, target.x - player.x) : Math.random() * Math.PI * 2;
+        const shape = skillId === 'lightning' ? 'lightning' : 'diamond';
+        projectiles.push(new Projectile(player.x, player.y, Math.cos(ang)*spd*1.15, Math.sin(ang)*spd*1.15, finalDmg, skillId === 'lightning' ? '#ff0' : '#f80', { shape, r: 6, skillId }));
+        return;
+    }
+    if (skillId === 'droneA' || skillId === 'droneB') {
+        const orbit = (Date.now() / 180 + BattleSkills.active.filter(x=>x.id===skillId).length) % (Math.PI*2);
+        const radius = 75 + (a.evo ? 45 : 0);
+        const ox = player.x + Math.cos(orbit) * radius, oy = player.y + Math.sin(orbit) * radius;
+        const sorted = [...enemies].filter(e => !e.isDead).sort((a, b) =>
+            Math.hypot(a.x - ox, a.y - oy) - Math.hypot(b.x - ox, b.y - oy));
+        const target = sorted[0];
+        const ang = target ? Math.atan2(target.y - oy, target.x - ox) : Math.random() * Math.PI * 2;
+        projectiles.push(new Projectile(ox, oy, Math.cos(ang)*spd, Math.sin(ang)*spd, finalDmg, '#0af', { homing: a.evo, shape: 'diamond', lockTarget: target || undefined, skillId }));
+        return;
+    }
+    if (skillId === 'flamethrower') {
+        const cone = a.evo ? 140 : 90;
+        const baseAng = Math.atan2(player.y, player.x);
+        const count = a.evo ? 9 : 6;
+        for (let i = 0; i < count; i++) {
+            const ang = baseAng - cone*Math.PI/180/2 + (cone*Math.PI/180) * (i/(count-1));
+            const sp2 = spd * 0.8 + i*0.4;
+            projectiles.push(new Projectile(player.x, player.y, Math.cos(ang)*sp2, Math.sin(ang)*sp2, finalDmg*0.6, '#ff7043', {
+                r: 7, shape:'diamond', skillId, life:260
+            }));
+        }
+        return;
+    }
+    if (skillId === 'iceRing') {
+        const ringCount = a.evo ? 24 : 16;
+        const radius = 90 + a.stars*4;
+        for (let i = 0; i < ringCount; i++) {
+            const ang = (Math.PI*2/ringCount)*i;
+            const vx = Math.cos(ang)*(spd*0.4);
+            const vy = Math.sin(ang)*(spd*0.4);
+            const px = player.x + Math.cos(ang)*radius;
+            const py = player.y + Math.sin(ang)*radius;
+            projectiles.push(new Projectile(px, py, vx, vy, finalDmg*0.8, '#80deea', {
+                r: 6, shape:'hex', skillId, life:420
+            }));
+        }
+        return;
+    }
+    if (skillId === 'meteor') {
+        const dropCount = a.evo ? 5 : 3;
+        for (let i = 0; i < dropCount; i++) {
+            const target = enemies[Math.floor(Math.random()*enemies.length)] || null;
+            const baseX = target ? target.x : player.x + (Math.random()-0.5)*400;
+            const baseY = target ? target.y : player.y + (Math.random()-0.5)*400;
+            const startX = baseX + (Math.random()-0.5)*120;
+            const startY = baseY - 480 - Math.random()*160;
+            const ang = Math.atan2(baseY - startY, baseX - startX);
+            const sp2 = spd * 1.1;
+            projectiles.push(new Projectile(startX, startY, Math.cos(ang)*sp2, Math.sin(ang)*sp2, finalDmg*1.6, '#ffca28', {
+                r: 10, shape:'diamond', skillId, life:520
+            }));
+        }
+        return;
+    }
+    if (['guardian','forcefield','brick','baseball','lightchaser'].includes(skillId)) {
+        const ang = (Date.now() / 280 + projectiles.length * 0.5) % (Math.PI * 2);
+        projectiles.push(new Projectile(player.x + Math.cos(ang)*55, player.y + Math.sin(ang)*55, Math.cos(ang)*spd, Math.sin(ang)*spd, finalDmg, '#a0a', { r: a.evo ? 11 : 6, shape: 'diamond', skillId }));
+        return;
+    }
+    const ang = Math.random() * Math.PI * 2;
+    projectiles.push(new Projectile(player.x, player.y, Math.cos(ang)*spd, Math.sin(ang)*spd, finalDmg, '#00d2ff', { shape: 'diamond', skillId }));
 }
 
-function spawnWave(){
-
-for(let i=0;i<wave*6;i++)
-spawnEnemy()
-
+// ─── 寵物攻擊 (每 N 幀對最近敵人造成傷害) ─────────────────────────────────────
+function updatePetDamage(player, enemies, dt) {
+    if (!player.petDmg || !enemies.length) return;
+    GameEngine._petTimer = (GameEngine._petTimer || 0) + dt;
+    if (GameEngine._petTimer < 45) return;
+    GameEngine._petTimer = 0;
+    let t = null, bestD = 1e9;
+    for (const e of enemies) {
+        if (e.isDead) continue;
+        const d = Math.hypot(e.x - player.x, e.y - player.y);
+        if (d < bestD) { bestD = d; t = e; }
+    }
+    if (t) t.hp -= player.petDmg;
 }
 
-spawnWave()
-
-function shoot(){
-
-let closest=null
-let dist=999999
-
-for(let e of enemies){
-
-let d=Math.hypot(e.x-player.x,e.y-player.y)
-
-if(d<dist){
-dist=d
-closest=e
-}
-
-}
-
-if(closest && dist<600){
-
-let a=Math.atan2(
-closest.y-player.y,
-closest.x-player.x
-)
-
-bullets.push({
-x:player.x,
-y:player.y,
-vx:Math.cos(a)*8,
-vy:Math.sin(a)*8,
-dmg:player.attack
-})
-
-if(player.double){
-
-bullets.push({
-x:player.x,
-y:player.y,
-vx:Math.cos(a+0.2)*8,
-vy:Math.sin(a+0.2)*8,
-dmg:player.attack
-})
-
-}
-
-}
-
-}
-
-setInterval(shoot,350)
-
-function update(){
-
-player.x+=joystick.x*player.speed
-player.y+=joystick.y*player.speed
-
-player.x=Math.max(-WORLD,Math.min(WORLD,player.x))
-player.y=Math.max(-WORLD,Math.min(WORLD,player.y))
-
-for(let b of bullets){
-
-b.x+=b.vx
-b.y+=b.vy
-
-}
-
-for(let e of enemies){
-
-let a=Math.atan2(player.y-e.y,player.x-e.x)
-
-e.x+=Math.cos(a)*e.speed
-e.y+=Math.sin(a)*e.speed
-
-if(Math.hypot(e.x-player.x,e.y-player.y)<e.r+player.r){
-
-player.hp-=0.3
-
-}
-
-}
-
-for(let b of bullets){
-
-for(let e of enemies){
-
-if(Math.hypot(b.x-e.x,b.y-e.y)<e.r){
-
-e.hp-=b.dmg
-
-if(player.lifesteal)
-player.hp+=b.dmg*player.lifesteal
-
-b.dead=true
-
-}
-
-}
-
-}
-
-bullets=bullets.filter(b=>!b.dead)
-
-for(let e of enemies){
-
-if(e.hp<=0){
-
-loot.push({x:e.x,y:e.y})
-
-e.dead=true
-
-}
-
-}
-
-enemies=enemies.filter(e=>!e.dead)
-
-for(let l of loot){
-
-let d=Math.hypot(l.x-player.x,l.y-player.y)
-
-if(player.magnet && d<player.magnet){
-
-l.x+=(player.x-l.x)*0.1
-l.y+=(player.y-l.y)*0.1
-
-}
-
-if(d<player.r){
-
-player.xp+=10
-l.dead=true
-
-}
-
-}
-
-loot=loot.filter(l=>!l.dead)
-
-if(player.xp>=player.level*60){
-
-player.xp=0
-player.level++
-levelUp()
-
-}
-
-if(enemies.length==0){
-
-wave++
-spawnWave()
-
-}
-
-camera.x=player.x-canvas.width/2
-camera.y=player.y-canvas.height/2
-
-save()
-
-}
-
-function draw(){
-
-ctx.fillStyle="#0f0f0f"
-ctx.fillRect(0,0,canvas.width,canvas.height)
-
-ctx.save()
-
-ctx.translate(-camera.x,-camera.y)
-
-ctx.strokeStyle="#333"
-ctx.strokeRect(-WORLD,-WORLD,WORLD*2,WORLD*2)
-
-ctx.fillStyle="cyan"
-
-ctx.beginPath()
-ctx.arc(player.x,player.y,player.r,0,Math.PI*2)
-ctx.fill()
-
-for(let e of enemies){
-
-if(e.type=="fast")ctx.fillStyle="orange"
-else if(e.type=="tank")ctx.fillStyle="purple"
-else ctx.fillStyle="red"
-
-ctx.beginPath()
-ctx.arc(e.x,e.y,e.r,0,Math.PI*2)
-ctx.fill()
-
-ctx.fillStyle="black"
-ctx.fillRect(e.x-20,e.y-e.r-12,40,5)
-
-ctx.fillStyle="lime"
-ctx.fillRect(e.x-20,e.y-e.r-12,40*(e.hp/e.maxhp),5)
-
-}
-
-ctx.fillStyle="yellow"
-
-for(let b of bullets){
-
-ctx.beginPath()
-ctx.arc(b.x,b.y,4,0,Math.PI*2)
-ctx.fill()
-
-}
-
-ctx.fillStyle="lime"
-
-for(let l of loot){
-
-ctx.beginPath()
-ctx.arc(l.x,l.y,6,0,Math.PI*2)
-ctx.fill()
-
-}
-
-ctx.restore()
-
-document.getElementById("hp").innerText="HP "+Math.floor(player.hp)+"/"+player.maxhp
-document.getElementById("level").innerText="Level "+player.level
-document.getElementById("wave").innerText="Wave "+wave
-document.getElementById("daily").innerText="Daily: Kill 100 enemies"
-
-}
-
-function loop(){
-
-update()
-draw()
-
-requestAnimationFrame(loop)
-
-}
-
-function gacha(){
-
-const items=["Legend Sword","Epic Armor","Coins","Rare Ring"]
-
-let r=items[Math.floor(Math.random()*items.length)]
-
-alert("抽到: "+r)
-
-}
-
-function save(){
-
-localStorage.setItem("ultraSave",JSON.stringify(player))
-
-}
-
-function load(){
-
-let s=localStorage.getItem("ultraSave")
-
-if(s)player=JSON.parse(s)
-
-}
-
-load()
-
-loop()
-
+// ═══════════════════════════════════════════════════════════════════════════════
+// 遊戲引擎
+// ═══════════════════════════════════════════════════════════════════════════════
+window.GameEngine = {
+    state: 'LOBBY', canvas: null, ctx: null, bgCtx: null,
+    player: null, enemies: [], projectiles: [], expOrbs: [], bosses: [],
+    kills: 0, timer: 0, spawnTimer: 0, shootTimers: {}, lastTime: 0,
+    pendingLevelUp: false, levelUpQueue: 0, pendingEvo: null, paused: false,
+    currentStage: 1,
+
+    init() {
+        SaveSystem.init();
+        Input.init();
+        this.canvas = document.getElementById('main-canvas');
+        this.ctx = this.canvas.getContext('2d');
+        const bg = document.getElementById('bg-canvas');
+        this.bgCtx = bg.getContext('2d');
+        this.resize();
+        window.onresize = () => this.resize();
+        this.player = new Player();
+        this.renderLobby();
+        Background.init(this.bgCtx);
+    },
+    resize() {
+        this.canvas.width = this.bgCtx.canvas.width = window.innerWidth;
+        this.canvas.height = this.bgCtx.canvas.height = window.innerHeight;
+        if (this.state === 'BATTLE' && this.player) Background.init(this.bgCtx);
+    },
+    startBattle(stageIndex) {
+        stageIndex = Math.min(Math.max(1, stageIndex || 1), MAX_STAGES);
+        this.currentStage = stageIndex;
+        const stage = STAGES[stageIndex - 1] || STAGES[0];
+        document.getElementById('lobby-container').style.display = 'none';
+        document.getElementById('battle-hud').style.display = 'block';
+        document.getElementById('stage-title').textContent = stage.name;
+        BattleSkills.reset();
+        this.player = new Player();
+        this.player.x = 0; this.player.y = 0;
+        this.enemies = []; this.projectiles = []; this.expOrbs = []; this.bosses = [];
+        this.kills = 0; this.timer = 0; this.spawnTimer = 0; this.shootTimers = {};
+        this.state = 'BATTLE'; this.pendingLevelUp = false; this.levelUpQueue = 0; this.pendingEvo = null; this.paused = false;
+        this._lastBossSpawn = 0; this._petTimer = 0; this._stageConfig = stage;
+        this.lastTime = performance.now();
+        BattleSkills.addActive('kunai');
+        requestAnimationFrame(t => this.loop(t));
+    },
+    loop(now) {
+        if (this.state !== 'BATTLE') return;
+        const dt = Math.min((now - this.lastTime) / 1000 * 60, 5);
+        this.lastTime = now;
+        if (!this.paused) this.update(dt);
+        this.render();
+        requestAnimationFrame(t => this.loop(t));
+    },
+    togglePause() {
+        this.paused = !this.paused;
+        document.getElementById('pause-panel').classList.toggle('show', this.paused);
+    },
+    update(dt) {
+        if (this.pendingLevelUp || this.pendingEvo) return;
+        this.timer += dt / 60;
+        this.player.update(dt);
+
+        const cam = { x: this.player.x, y: this.player.y };
+        for (let i = this.expOrbs.length - 1; i >= 0; i--) {
+            const o = this.expOrbs[i];
+            const dist = Math.hypot(this.player.x - o.x, this.player.y - o.y);
+            const magnet = this.player.magnetDist + (BattleSkills.hasPassive('magnet') ? 90 : 0);
+            if (dist < magnet) {
+                this.player.addXp(o.value);
+                this.expOrbs.splice(i, 1);
+            }
+        }
+
+        const stage = this._stageConfig || STAGES[0];
+        this.spawnTimer += dt;
+        const baseCd = (stage.spawnCd || 75);
+        if (this.spawnTimer > baseCd) {
+            this.spawnTimer = 0;
+            const tFactor = Math.min(1.8, this.timer / 50);
+            const waveRoll = Math.random();
+            if (waveRoll < 0.22 + tFactor*0.08) {
+                // 小型怪潮
+                GameEngine.showAlert('怪潮來襲！');
+                const pack = 10 + Math.floor(tFactor*6);
+                for (let i = 0; i < pack; i++) {
+                    const ang = Math.random() * Math.PI * 2;
+                    const dist = 420 + Math.random() * 260;
+                    const r = Math.random();
+                    let type = 'MELEE';
+                    if (r < 0.2) type = 'FAST';
+                    else if (r < 0.35) type = 'FLY';
+                    this.enemies.push(new Enemy(
+                        this.player.x + Math.cos(ang)*dist,
+                        this.player.y + Math.sin(ang)*dist,
+                        type,
+                        this.currentStage,
+                        tFactor
+                    ));
+                }
+            } else {
+                const ang = Math.random() * Math.PI * 2;
+                const dist = 380 + Math.random() * 220;
+                const r = Math.random();
+                const tFactor2 = Math.min(1.8, this.timer / 50);
+                let type = 'MELEE';
+                if (r < 0.18) type = 'SHOOTER';
+                else if (r < 0.36) type = 'FAST';
+                else if (r < 0.52) type = 'TANK';
+                else if (r < 0.7) type = 'FLY';
+                if (Math.random() < 0.07 + this.currentStage * 0.01 + tFactor2 * 0.05) type = 'ELITE';
+                this.enemies.push(new Enemy(
+                    this.player.x + Math.cos(ang)*dist,
+                    this.player.y + Math.sin(ang)*dist,
+                    type,
+                    this.currentStage,
+                    tFactor2
+                ));
+            }
+        }
+
+        const bossInterval = stage.bossAt || 60;
+        const lastBoss = Math.floor(this.timer / bossInterval) * bossInterval;
+        if (this.timer >= bossInterval && this.timer - lastBoss < dt/60 + 0.6 && this.bosses.length === 0 && (this._lastBossSpawn || 0) < lastBoss) {
+            this._lastBossSpawn = lastBoss;
+            const ang = Math.random() * Math.PI * 2;
+            this.bosses.push(new Boss(this.player.x + Math.cos(ang)*480, this.player.y + Math.sin(ang)*480, stage.bossHp || 900));
+        }
+
+        const stats = {
+            atk: BattleSkills.hasPassive('atk') ? 18 : 0,
+            cdReduct: BattleSkills.hasPassive('energyBlock') ? 10 : 0,
+            range: BattleSkills.hasPassive('atk') ? 1 : 0
+        };
+        for (const a of BattleSkills.active) {
+            this.shootTimers[a.id] = (this.shootTimers[a.id] || 0) + dt;
+            const cd = (a.evo ? 22 : 32) - stats.cdReduct;
+            if (this.shootTimers[a.id] >= cd) {
+                fireWeapon(a.id, this.player, this.projectiles, this.enemies, stats);
+                this.shootTimers[a.id] = 0;
+            }
+        }
+
+        updatePetDamage(this.player, this.enemies, dt);
+
+        const allEnemies = [...this.enemies, ...this.bosses];
+        for (const e of this.enemies) e.update(dt, this.player);
+        for (const b of this.bosses) b.update(dt, this.player, this.projectiles);
+
+        for (let i = this.enemies.length - 1; i >= 0; i--) {
+            const e = this.enemies[i];
+            if (e.hp <= 0) {
+                e.isDead = true;
+                this.kills++;
+                this.player.addXp(e.expValue);
+                this.expOrbs.push(new ExpOrb(e.x, e.y, e.expValue));
+                this.enemies.splice(i, 1);
+            }
+        }
+        for (let i = this.bosses.length - 1; i >= 0; i--) {
+            const b = this.bosses[i];
+            if (b.hp <= 0) {
+                b.isDead = true;
+                this.kills += 15;
+                this.expOrbs.push(new ExpOrb(b.x, b.y, 120));
+                this.bosses.splice(i, 1);
+                const d = SaveSystem.currentData;
+                if (this.currentStage >= d.unlockedStage && d.unlockedStage < MAX_STAGES) {
+                    d.unlockedStage = this.currentStage + 1;
+                    SaveSystem.save();
+                }
+                this.trySpawnEvoChest();
+                if (this.pendingEvo) this.showEvoModal();
+            }
+        }
+
+        for (let i = this.projectiles.length - 1; i >= 0; i--) {
+            const p = this.projectiles[i];
+            p.update(dt, this.player, allEnemies);
+            if (p.isDead) this.projectiles.splice(i, 1);
+        }
+
+        document.getElementById('kill-count').textContent = this.kills;
+        document.getElementById('timer').textContent = Math.floor(this.timer);
+        document.getElementById('player-lv').textContent = this.player.lv;
+        document.getElementById('xp-bar-fill').style.width = (this.player.xp / this.player.xpToNext * 100) + '%';
+        document.getElementById('hp-bar-fill').style.width = (this.player.hp / this.player.maxHp * 100) + '%';
+        document.getElementById('active-count').textContent = BattleSkills.active.length;
+        document.getElementById('passive-count').textContent = BattleSkills.passive.length;
+        const strip = BattleSkills.active.map(a => ACTIVE_SKILLS[a.id]?.name + ' Lv.' + a.stars + (a.evo?' EVO':'')).join(' | ') + ' || ' + BattleSkills.passive.map(p => PASSIVE_SKILLS[p.id]).join(', ');
+        document.getElementById('skill-strip').textContent = strip || '(本局技能可疊加升級)';
+    },
+    queueLevelUp() {
+        this.levelUpQueue++;
+        if (!this.pendingLevelUp) this.processLevelUpQueue();
+    },
+    processLevelUpQueue() {
+        if (this.levelUpQueue <= 0) return;
+        this.levelUpQueue--;
+        this.showLevelUp();
+    },
+    trySpawnEvoChest() {
+        for (const a of BattleSkills.active) {
+            const evoName = BattleSkills.canEvo(a.id);
+            if (evoName) { this.pendingEvo = { activeId: a.id, evoName }; return; }
+        }
+    },
+    showLevelUp() {
+        this.pendingLevelUp = true;
+        const activeIds = Object.keys(ACTIVE_SKILLS);
+        const passiveIds = Object.keys(PASSIVE_SKILLS).filter(k => !BattleSkills.passive.some(p => p.id === k));
+        const pool = [...activeIds, ...passiveIds];
+        const choices = [];
+        for (let i = 0; i < 3; i++) {
+            const id = pool[Math.floor(Math.random() * pool.length)];
+            const isActive = !!ACTIVE_SKILLS[id];
+            const name = isActive ? ACTIVE_SKILLS[id].name : (PASSIVE_SKILLS[id] || id);
+            const cur = isActive ? BattleSkills.getActive(id) : null;
+            const sub = isActive && cur ? ' (現 Lv.' + cur.stars + '，選了+1 星)' : (isActive ? ' (主動)' : ' (被動)');
+            choices.push({ id, name, isActive, sub });
+        }
+        const modal = document.getElementById('levelup-modal');
+        const box = document.getElementById('levelup-choices');
+        box.innerHTML = '<p style="color:rgba(255,255,255,0.8);font-size:0.85rem;margin-bottom:8px;">同技能可重複取得，疊加至 Lv.5 再配被動可 EVO（本局有效）</p>';
+        choices.forEach(c => {
+            const btn = document.createElement('button');
+            btn.className = 'choice-btn';
+            btn.textContent = c.name + (c.sub || (c.isActive ? ' (主動)' : ' (被動)'));
+            btn.onclick = () => {
+                if (c.isActive) BattleSkills.addActive(c.id);
+                else BattleSkills.addPassive(c.id);
+                modal.classList.remove('show');
+                this.pendingLevelUp = false;
+                const evoName = c.isActive ? BattleSkills.canEvo(c.id) : null;
+                if (evoName) { this.pendingEvo = { activeId: c.id, evoName }; this.showEvoModal(); }
+                else {
+                    for (const a of BattleSkills.active) {
+                        const ev = BattleSkills.canEvo(a.id);
+                        if (ev) { this.pendingEvo = { activeId: a.id, evoName: ev }; this.showEvoModal(); break; }
+                    }
+                }
+                if (this.levelUpQueue > 0) setTimeout(() => this.processLevelUpQueue(), 100);
+            };
+            box.appendChild(btn);
+        });
+        modal.classList.add('show');
+    },
+    showEvoModal() {
+        if (!this.pendingEvo) return;
+        const { activeId, evoName } = this.pendingEvo;
+        const modal = document.getElementById('evo-modal');
+        const box = document.getElementById('evo-choices');
+        box.innerHTML = '';
+        const btn = document.createElement('button');
+        btn.className = 'choice-btn evo';
+        btn.textContent = '✨ ' + evoName;
+        btn.onclick = () => {
+            BattleSkills.doEvo(activeId);
+            modal.classList.remove('show');
+            this.pendingEvo = null;
+        };
+        box.appendChild(btn);
+        modal.classList.add('show');
+    },
+    render() {
+        Background.draw();
+        const cam = { x: this.player ? this.player.x : 0, y: this.player ? this.player.y : 0 };
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        if (!this.player) return;
+        this.ctx.save();
+        this.ctx.translate(this.canvas.width/2 - cam.x, this.canvas.height/2 - cam.y);
+        this.expOrbs.forEach(o => o.draw(this.ctx, cam));
+        this.enemies.forEach(e => e.draw(this.ctx, cam));
+        this.bosses.forEach(b => b.draw(this.ctx, cam));
+        this.projectiles.forEach(p => p.draw(this.ctx, cam));
+        this.player.draw(this.ctx, cam);
+        this.ctx.restore();
+    },
+    gameOver() {
+        this.state = 'GAMEOVER';
+        const gold = this.kills * 2 + Math.floor(this.timer) * 2;
+        SaveSystem.currentData.resources.gold += gold;
+        SaveSystem.currentData.resources.evolutionStone = (SaveSystem.currentData.resources.evolutionStone || 0) + Math.floor(this.kills / 15);
+        SaveSystem.save();
+        document.getElementById('gameover-reward').textContent = '金幣 +' + gold + ' | 進化石 +' + Math.floor(this.kills/15) + '（已自動儲存，返回大廳繼續）';
+        document.getElementById('gameover-panel').classList.add('show');
+    },
+    showAlert(text) {
+        const el = document.getElementById('alert-banner');
+        if (!el) return;
+        el.textContent = text || '';
+        el.style.opacity = '1';
+        clearTimeout(this._alertTimer);
+        this._alertTimer = setTimeout(() => {
+            el.style.opacity = '0';
+        }, 1800);
+    },
+    renderLobby() {
+        document.getElementById('lobby-gold').textContent = SaveSystem.currentData.resources.gold;
+        document.getElementById('lobby-stone').textContent = SaveSystem.currentData.resources.evolutionStone || 0;
+        const dailyDiv = document.getElementById('daily-panel');
+        if (dailyDiv) {
+            const todayStr = new Date().toISOString().slice(0, 10);
+            const lastDaily = SaveSystem.currentData.lastDaily || '';
+            const claimed = lastDaily === todayStr;
+            let inner = '<div class="talent-row">';
+            if (claimed) {
+                inner += '<span>今日每日登入獎勵已領取</span><span style="font-size:0.8rem;color:rgba(255,255,255,0.7);">明天再來！</span>';
+            } else {
+                inner += '<span>每日登入：金幣 300 ・進化石 3</span><button class="main-btn small" onclick="GameEngine.claimDaily()">領取</button>';
+            }
+            inner += '</div>';
+            dailyDiv.innerHTML = inner;
+        }
+        const grid = document.getElementById('equipment-grid');
+        grid.innerHTML = '';
+        const slotNames = { weapon:'武器', clothes:'衣服', necklace:'項鍊', belt:'腰帶', gloves:'手套', shoes:'鞋子' };
+        EQUIP_SLOTS.forEach(slot => {
+            const eq = SaveSystem.currentData.equipment[slot];
+            const div = document.createElement('div');
+            div.className = 'glass-panel equip-slot' + (eq ? ' quality-' + ['W','G','B','P','Y','R','SS'][eq.quality] : '');
+            div.innerHTML = eq ? (slotNames[slot] + '<br><small>' + eq.name + '</small>') : (slotNames[slot] + '<br><small>空</small>');
+            grid.appendChild(div);
+        });
+        const list = document.getElementById('upgrade-list');
+        list.innerHTML = '';
+        [{ id:'ATK', name:'攻擊', cost:100, stone:1 }, { id:'HP', name:'血量', cost:100, stone:1 }, { id:'SPD', name:'速度', cost:150, stone:1 }, { id:'REC', name:'恢復', cost:120, stone:1 }].forEach(t => {
+            const lv = SaveSystem.currentData.talents[t.id] || 0;
+            const cost = t.cost + lv * 50;
+            const stone = t.stone + Math.floor(lv / 2);
+            const card = document.createElement('div');
+            card.className = 'talent-row glass-panel';
+            card.innerHTML = '<span>' + t.name + ' Lv.' + lv + '</span><button class="main-btn small" onclick="GameEngine.buyTalent(\'' + t.id + '\',' + cost + ',' + stone + ')">' + cost + '💰 ' + stone + '💎</button>';
+            list.appendChild(card);
+        });
+        const techList = document.getElementById('tech-list');
+        techList.innerHTML = '';
+        const techOpts = [{ id:'drone', name:'無人機+30%', cost:80 }, { id:'football', name:'足球+30%', cost:80 }, { id:'lightning', name:'閃電+25%', cost:70 }, { id:'guardian', name:'守護者+20%', cost:60 }];
+        techOpts.forEach(t => {
+            const has = (SaveSystem.currentData.techParts || []).includes(t.id);
+            const div = document.createElement('div');
+            div.className = 'talent-row glass-panel';
+            div.innerHTML = '<span>' + t.name + '</span>' + (has ? '<span>已裝備</span>' : '<button class="main-btn small" onclick="GameEngine.buyTech(\'' + t.id + '\',' + t.cost + ')">' + t.cost + '💰</button>');
+            techList.appendChild(div);
+        });
+        const agentList = document.getElementById('agent-list');
+        agentList.innerHTML = '';
+        const agentRow = document.createElement('div');
+        agentRow.className = 'talent-row';
+        agentRow.innerHTML = '<span>選擇特工</span>';
+        Object.keys(AGENTS).forEach(k => {
+            agentRow.innerHTML += '<button class="main-btn small" onclick="GameEngine.setAgentPet(\'agentId\',\'' + k + '\')">' + AGENTS[k].name + (SaveSystem.currentData.agentId === k ? ' ✓' : '') + '</button>';
+        });
+        agentList.appendChild(agentRow);
+        const skinList = document.getElementById('skin-list');
+        if (skinList) {
+            skinList.innerHTML = '';
+            const currentSkin = SaveSystem.currentData.skinId || 'classic';
+            Object.keys(SKINS).forEach(id => {
+                const s = SKINS[id];
+                const btn = document.createElement('button');
+                btn.className = 'main-btn small';
+                btn.style.marginRight = '6px';
+                btn.style.marginBottom = '6px';
+                btn.textContent = s.name + (currentSkin === id ? ' ✓' : '');
+                btn.onclick = () => GameEngine.setSkin(id);
+                skinList.appendChild(btn);
+            });
+        }
+        const gachaDiv = document.getElementById('pet-gacha');
+        gachaDiv.innerHTML = '<div class="talent-row"><span>單抽 ' + GACHA_COST_SINGLE + '💰</span><button class="main-btn small" onclick="GameEngine.petGacha(1)">抽 1 次</button></div>' +
+            '<div class="talent-row"><span>10 連抽 ' + GACHA_COST_TEN + '💰（保底 R 以上）</span><button class="main-btn small" onclick="GameEngine.petGacha(10)">抽 10 次</button></div>';
+        const ownedDiv = document.getElementById('pet-owned');
+        const owned = SaveSystem.currentData.ownedPets || {};
+        const equipId = SaveSystem.currentData.petId;
+        let ownedHtml = '<div style="margin-bottom:6px;">出戰寵物: <strong>' + (equipId && PET_BY_ID[equipId] ? PET_BY_ID[equipId].name + ' [' + RARITY_NAME[PET_BY_ID[equipId].rarity] + ']' : '無') + '</strong></div>';
+        const ownedIds = Object.keys(owned).filter(k => owned[k]);
+        if (ownedIds.length === 0) ownedHtml += '<p style="color:rgba(255,255,255,0.7);font-size:0.85rem;">尚未擁有寵物，去抽獎吧！</p>';
+        else {
+            ownedIds.forEach(id => {
+                const p = PET_BY_ID[id];
+                if (!p) return;
+                ownedHtml += '<button class="main-btn small" style="margin:4px 6px 4px 0;" onclick="GameEngine.setAgentPet(\'petId\',\'' + id + '\')">' + p.name + ' [' + RARITY_NAME[p.rarity] + ']' + (equipId === id ? ' ✓' : '') + '</button>';
+            });
+        }
+        ownedDiv.innerHTML = ownedHtml;
+        const evoDiv = document.getElementById('evo-table');
+        evoDiv.innerHTML = '<table><tr><td>主動</td><td>被動</td><td>超武</td></tr>' + EVO_LIST.map(r => '<tr><td>' + r[0] + '</td><td>' + r[1] + '</td><td>' + r[2] + '</td></tr>').join('') + '</table>';
+        const stageList = document.getElementById('stage-list');
+        stageList.innerHTML = '';
+        const unlocked = Math.min(SaveSystem.currentData.unlockedStage || 1, MAX_STAGES);
+        for (let i = 1; i <= MAX_STAGES; i++) {
+            const st = STAGES[i - 1];
+            const locked = i > unlocked;
+            const btn = document.createElement('button');
+            btn.className = 'main-btn small';
+            btn.style.marginRight = '6px';
+            btn.style.marginBottom = '6px';
+            btn.textContent = st.name + (locked ? ' 🔒' : '');
+            btn.disabled = locked;
+            btn.onclick = () => GameEngine.startBattle(i);
+            stageList.appendChild(btn);
+        }
+    },
+    buyTalent(id, cost, stone) {
+        const d = SaveSystem.currentData;
+        if (d.resources.gold >= cost && (d.resources.evolutionStone || 0) >= stone) {
+            d.resources.gold -= cost;
+            d.resources.evolutionStone = (d.resources.evolutionStone || 0) - stone;
+            d.talents[id] = (d.talents[id] || 0) + 1;
+            SaveSystem.save();
+            this.renderLobby();
+        } else alert('金幣或進化石不足');
+    },
+    buyTech(id, cost) {
+        const d = SaveSystem.currentData;
+        if (d.resources.gold < cost) { alert('金幣不足'); return; }
+        if ((d.techParts || []).includes(id)) return;
+        d.resources.gold -= cost;
+        d.techParts = d.techParts || [];
+        d.techParts.push(id);
+        SaveSystem.save();
+        this.renderLobby();
+    },
+    claimDaily() {
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const d = SaveSystem.currentData;
+        if (d.lastDaily === todayStr) return;
+        d.lastDaily = todayStr;
+        d.resources.gold += 300;
+        d.resources.evolutionStone = (d.resources.evolutionStone || 0) + 3;
+        SaveSystem.save();
+        this.renderLobby();
+        alert('每日登入獎勵：金幣 +300 ・進化石 +3');
+    },
+    setAgentPet(key, value) {
+        SaveSystem.currentData[key] = value;
+        SaveSystem.save();
+        this.renderLobby();
+    },
+    setSkin(id) {
+        if (!SKINS[id]) return;
+        SaveSystem.currentData.skinId = id;
+        SaveSystem.save();
+        this.renderLobby();
+    },
+    openEquipmentBox() {
+        const d = SaveSystem.currentData;
+        if (d.resources.gold < 50) { alert('金幣不足'); return; }
+        d.resources.gold -= 50;
+        const slot = EQUIP_SLOTS[Math.floor(Math.random() * EQUIP_SLOTS.length)];
+        const qualityTier = Math.min(QUALITY.R, Math.floor(Math.random() * 4) + Math.floor(Math.random() * 2));
+        d.equipment[slot] = rollEquipment(slot, qualityTier);
+        SaveSystem.save();
+        this.renderLobby();
+        alert('獲得: ' + d.equipment[slot].name);
+    },
+    divineForge() {
+        const d = SaveSystem.currentData;
+        for (const slot of EQUIP_SLOTS) {
+            const eq = d.equipment[slot];
+            if (eq && eq.quality === QUALITY.R) {
+                d.equipment[slot] = { ...eq, quality: QUALITY.SS, name: slot + '-SS', atk: (eq.atk || 0) + 4, hp: (eq.hp || 0) + 10 };
+                SaveSystem.save();
+                this.renderLobby();
+                alert('神鑄成功: ' + slot + ' → SS');
+                return;
+            }
+        }
+        alert('需紅裝才能神鑄 (同部位)');
+    }
+};
+
+window.onload = () => GameEngine.init();
+})();
 </script>
-
 </body>
 </html>
