@@ -1,10 +1,9 @@
-
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>game | RAINGOD</title>
+    <title>RAINGOD | LAB - 噠噠特攻 超完整版</title>
     <style>
         * { box-sizing: border-box; }
         body { margin: 0; overflow: hidden; background: #00050a; font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; color: #fff; }
@@ -80,57 +79,65 @@
     </style>
 </head>
 <body>
-    <link rel="stylesheet" href="menu.css">
-
-<div id="nav_bar"></div>
-
-<script src="menu.js"></script>
 <div id="game-container">
     <canvas id="bg-canvas"></canvas>
     <canvas id="main-canvas"></canvas>
 
     <div id="lobby-container">
-        <div class="title">game | RAINGOD</div>
+        <div class="title">RAINGOD | LAB — 超完整版</div>
         <div class="resource-bar">
             <span>💰 <span id="lobby-gold">0</span></span>
             <span>💎 <span id="lobby-stone">0</span></span>
         </div>
-        <div class="lobby-section">
+        <div id="lobby-nav" style="display:flex; justify-content:center; margin-bottom:12px;">
+            <button class="main-btn small" onclick="GameEngine.showSection('daily')">每日</button>
+            <button class="main-btn small" onclick="GameEngine.showSection('equip')">裝備</button>
+            <button class="main-btn small" onclick="GameEngine.showSection('talents')">天賦</button>
+            <button class="main-btn small" onclick="GameEngine.showSection('tech')">科技</button>
+            <button class="main-btn small" onclick="GameEngine.showSection('agents')">特工</button>
+            <button class="main-btn small" onclick="GameEngine.showSection('skins')">造型</button>
+            <button class="main-btn small" onclick="GameEngine.showSection('pets')">寵物</button>
+            <button class="main-btn small" onclick="GameEngine.showSection('stages')">關卡</button>
+            <button class="main-btn small" onclick="GameEngine.showSection('evo')">EVO</button>
+        </div>
+        <div id="section-daily" class="lobby-section">
             <h3>每日登入獎勵</h3>
             <div id="daily-panel" class="glass-panel" style="padding:8px;"></div>
         </div>
-        <div class="lobby-section">
+        <div id="section-equip" class="lobby-section" style="display:none;">
             <h3>裝備 (6 部位) 白→綠→藍→紫→黃→紅→SS</h3>
             <div id="equipment-grid" class="glass-panel" style="padding:8px;"></div>
             <button class="main-btn small" onclick="GameEngine.openEquipmentBox()">開箱 50💰</button>
             <button class="main-btn small" onclick="GameEngine.divineForge()">神鑄 (紅→SS 同部位)</button>
         </div>
-        <div class="lobby-section">
+        <div id="section-talents" class="lobby-section" style="display:none;">
             <h3>天賦 (金幣+進化石)</h3>
             <div id="upgrade-list" class="glass-panel"></div>
         </div>
-        <div class="lobby-section">
+        <div id="section-tech" class="lobby-section" style="display:none;">
             <h3>科技配件 (強化特定技能)</h3>
             <div id="tech-list" class="glass-panel"></div>
         </div>
-        <div class="lobby-section">
+        <div id="section-agents" class="lobby-section" style="display:none;">
             <h3>特工</h3>
             <div id="agent-list" class="glass-panel" style="padding:8px;"></div>
         </div>
-        <div class="lobby-section">
+        <div id="section-skins" class="lobby-section" style="display:none;">
             <h3>造型 Skin</h3>
+            <div id="skin-gacha" class="glass-panel" style="padding:8px; margin-bottom:6px;"></div>
             <div id="skin-list" class="glass-panel" style="padding:8px;"></div>
+            <div id="skin-owned" class="glass-panel" style="padding:8px; margin-top:6px;"></div>
         </div>
-        <div class="lobby-section">
+        <div id="section-pets" class="lobby-section" style="display:none;">
             <h3>寵物抽獎（抽到加入圖鑑，可裝備一隻出戰）</h3>
             <div id="pet-gacha" class="glass-panel" style="padding:8px;"></div>
             <div id="pet-owned" class="glass-panel" style="padding:8px; margin-top:6px;"></div>
         </div>
-        <div class="lobby-section">
+        <div id="section-stages" class="lobby-section" style="display:none;">
             <h3>關卡 (通關解鎖下一關，進度會儲存)</h3>
             <div id="stage-list" class="glass-panel" style="padding:8px;"></div>
         </div>
-        <div class="lobby-section">
+        <div id="section-evo" class="lobby-section" style="display:none;">
             <h3>EVO 對照表 · 技能每局從 Lv1 疊加至 5 星+EVO</h3>
             <div id="evo-table" class="glass-panel evo-table"></div>
         </div>
@@ -148,7 +155,7 @@
     <div id="levelup-modal"><div class="modal-panel"><h2>升級！選一項</h2><div id="levelup-choices"></div></div></div>
     <div id="evo-modal"><div class="modal-panel"><h2>✨ 超武進化 EVO</h2><div id="evo-choices"></div></div></div>
     <div id="pause-panel"><div class="modal-panel"><h2>暫停 (ESC 繼續)</h2><button class="main-btn" onclick="GameEngine.togglePause()">繼續</button></div></div>
-    <div id="gameover-panel"><h2>戰鬥結束</h2><div class="reward" id="gameover-reward"></div><button class="main-btn" onclick="location.reload()">返回大廳</button></div>
+    <div id="gameover-panel"><h2 id="gameover-title">戰鬥結束</h2><div class="reward" id="gameover-reward"></div><button class="main-btn" id="gameover-btn" onclick="location.reload()">返回大廳</button></div>
 </div>
 
 <script>
@@ -169,11 +176,17 @@ const EQUIP_SLOTS = ['weapon','clothes','necklace','belt','gloves','shoes'];
 const MAP_RADIUS = 3200;
 const MAX_STAGES = 18;
 const SKINS = {
-    classic: { name:'經典藍', color:'#00d2ff', outline:'rgba(0,255,255,0.7)', glow:'#00d2ff' },
-    neon:    { name:'霓虹綠', color:'#00ff88', outline:'rgba(200,255,200,0.9)', glow:'#00ff88' },
-    crimson: { name:'深紅殺陣', color:'#ff3366', outline:'rgba(255,200,200,0.9)', glow:'#ff3366' },
-    void:    { name:'虛空紫', color:'#a855ff', outline:'rgba(230,200,255,0.9)', glow:'#a855ff' }
+    classic: { name:'經典藍', color:'#00d2ff', outline:'rgba(0,255,255,0.7)', glow:'#00d2ff', rarity:'N' },
+    neon:    { name:'霓虹綠', color:'#00ff88', outline:'rgba(200,255,200,0.9)', glow:'#00ff88', rarity:'R' },
+    crimson: { name:'深紅殺陣', color:'#ff3366', outline:'rgba(255,200,200,0.9)', glow:'#ff3366', rarity:'R' },
+    void:    { name:'虛空紫', color:'#a855ff', outline:'rgba(230,200,255,0.9)', glow:'#a855ff', rarity:'SR' },
+    nebula:  { name:'星雲幻彩', color:'#7c4dff', outline:'rgba(150,80,255,0.9)', glow:'#c27cff', rarity:'SR' },
+    ember:   { name:'熔岩覺醒', color:'#ff5722', outline:'rgba(255,87,34,0.9)', glow:'#ff8a50', rarity:'R' },
+    chrome:  { name:'鉻合金', color:'#cfd8dc', outline:'rgba(255,255,255,0.7)', glow:'#90a4ae', rarity:'SR' }
 };
+const SKIN_GACHA_COST_SINGLE = 350;
+const SKIN_GACHA_COST_TEN = 3000;
+const SKIN_GACHA_RARITY = { N: 0.6, R: 0.25, SR: 0.12, SS: 0.03 };
 const STAGES = [
     { name: '1. 荒原', spawnCd: 85, bossHp: 800, bossAt: 55 },
     { name: '2. 廢墟', spawnCd: 72, bossHp: 1100, bossAt: 50 },
@@ -195,39 +208,39 @@ const STAGES = [
     { name: '18. 神滅終局', spawnCd: 16, bossHp: 38000, bossAt: 40 }
 ];
 const EVO_LIST = [
-    ['苦無','經驗書','幽靈手裏劍'], ['足球','跑鞋','量子球'], ['無人機A','無人機B','毀滅者'],
-    ['閃電','能量塊','狂雷電池'], ['守護者','外骨骼臂','捍衛者'], ['力場','飲料','壓制領域'],
-    ['磚塊','血瓶','鐵啞鈴'], ['棒球棍','血瓶','露希爾'], ['左輪','攻擊力','死神'],
-    ['追光者','減傷','永恆之光'], ['破壞之力','攻擊力','黯滅新星'],
-    ['烈焰噴射','攻擊力','地獄火柱'], ['寒霜冰環','減傷','絕對零域'], ['隕星轟炸','經驗書','星落審判'],
-    ['雷區陣列','能量塊','超導雷獄'], ['旋風斬','跑鞋','颶風亂舞'], ['黑洞奇點','減傷','終焉奇點']
+    ['流光飛刃','能量書','幻影風刃'], ['量子球','速度鞋','星巡球'], ['守護機甲','戰鬥陀螺','終極守護者'],
+    ['電磁脈衝','能量方塊','雷霆震爆'], ['能量護盾','外骨骼','鋼鐵法環'], ['磁力場','飲料','壓制地帶'],
+    ['重擊方塊','健身指南','巨磚猛擊'], ['震盪棍','強力彈頭','破天槌'], ['旋轉炮','強力彈頭','暗影暴擊'],
+    ['追光導彈','護甲','星光狂襲'], ['終焉震波','護甲','黯滅裂痕'], ['熾焰噴射','高爆燃料','地獄噴泉'],
+    ['寒霜環','能量方塊','凜冬暴旋'], ['隕石衝擊','能量書','流星審判'], ['雷域','能量方塊','超導雷獄'],
+    ['風暴斬','速度鞋','颶風亂舞'], ['奇點','護甲','終焉奇點']
 ];
 
 // ─── 主動技能 (id, 名稱, 對應被動, 超武名) ─────────────────────────────────────
 const ACTIVE_SKILLS = {
-    kunai:        { name:'苦無',           passiveEvo:'expBook',    evoName:'幽靈手裏劍' },
-    football:     { name:'足球',           passiveEvo:'runShoe',    evoName:'量子球' },
-    droneA:       { name:'無人機 A',       passiveEvo:'droneB',     evoName:'毀滅者' },
-    droneB:       { name:'無人機 B',       passiveEvo:'droneA',     evoName:'毀滅者' },
-    lightning:    { name:'閃電發射器',    passiveEvo:'energyBlock', evoName:'狂雷電池' },
-    guardian:     { name:'守護者',         passiveEvo:'exoskeleton',evoName:'捍衛者' },
-    forcefield:   { name:'力場發生器',    passiveEvo:'drink',       evoName:'壓制領域' },
-    brick:        { name:'磚塊',           passiveEvo:'bloodVial',   evoName:'鐵啞鈴' },
-    baseball:     { name:'棒球棍',        passiveEvo:'bloodVial',   evoName:'露希爾' },
-    revolver:     { name:'左輪',          passiveEvo:'atk',         evoName:'死神' },
-    lightchaser:  { name:'追光者',        passiveEvo:'dmgReduct',   evoName:'永恆之光' },
-    destruction:  { name:'破壞之力',      passiveEvo:'atk',         evoName:'黯滅新星' },
-    flamethrower: { name:'烈焰噴射',     passiveEvo:'atk',         evoName:'地獄火柱' },
-    iceRing:      { name:'寒霜冰環',      passiveEvo:'dmgReduct',   evoName:'絕對零域' },
-    meteor:       { name:'隕星轟炸',      passiveEvo:'expBook',     evoName:'星落審判' },
-    thunderField: { name:'雷區陣列',      passiveEvo:'energyBlock', evoName:'超導雷獄' },
-    whirlwind:    { name:'旋風斬',        passiveEvo:'runShoe',    evoName:'颶風亂舞' },
-    singularity:  { name:'黑洞奇點',      passiveEvo:'dmgReduct',   evoName:'終焉奇點' }
+    kunai:        { name:'流光飛刃',   passiveEvo:'expBook',    evoName:'幻影風刃' },
+    football:     { name:'量子球',     passiveEvo:'runShoe',    evoName:'星巡球' },
+    droneA:       { name:'守護機甲',   passiveEvo:'droneB',     evoName:'終極守護者' },
+    droneB:       { name:'戰鬥陀螺',   passiveEvo:'droneA',     evoName:'終極守護者' },
+    lightning:    { name:'電磁脈衝',   passiveEvo:'energyBlock', evoName:'雷霆震爆' },
+    guardian:     { name:'能量護盾',   passiveEvo:'exoskeleton',evoName:'鋼鐵法環' },
+    forcefield:   { name:'磁力場',     passiveEvo:'drink',       evoName:'壓制地帶' },
+    brick:        { name:'重擊方塊',   passiveEvo:'bloodVial',   evoName:'巨磚猛擊' },
+    baseball:     { name:'震盪棍',     passiveEvo:'bloodVial',   evoName:'破天槌' },
+    revolver:     { name:'旋轉炮',     passiveEvo:'atk',         evoName:'暗影暴擊' },
+    lightchaser:  { name:'追光導彈',   passiveEvo:'dmgReduct',   evoName:'星光狂襲' },
+    destruction:  { name:'終焉震波',   passiveEvo:'atk',         evoName:'黯滅裂痕' },
+    flamethrower: { name:'熾焰噴射',   passiveEvo:'atk',         evoName:'地獄噴泉' },
+    iceRing:      { name:'寒霜環',     passiveEvo:'dmgReduct',   evoName:'凜冬暴旋' },
+    meteor:       { name:'隕石衝擊',   passiveEvo:'expBook',     evoName:'流星審判' },
+    thunderField: { name:'雷域',       passiveEvo:'energyBlock', evoName:'超導雷獄' },
+    whirlwind:    { name:'風暴斬',     passiveEvo:'runShoe',    evoName:'颶風亂舞' },
+    singularity:  { name:'奇點',       passiveEvo:'dmgReduct',   evoName:'終焉奇點' }
 };
 const PASSIVE_SKILLS = {
-    expBook:'經驗書', runShoe:'跑鞋', energyBlock:'能量塊', exoskeleton:'外骨骼臂',
-    drink:'飲料', bloodVial:'血瓶', atk:'攻擊力', dmgReduct:'減傷', magnet:'磁鐵',
-    droneB:'無人機 B', droneA:'無人機 A'
+    expBook:'能量書', runShoe:'速度鞋', energyBlock:'能量方塊', exoskeleton:'外骨骼',
+    drink:'飲料', bloodVial:'健身指南', atk:'強力彈頭', dmgReduct:'護甲', magnet:'磁鐵',
+    droneB:'戰鬥陀螺', droneA:'守護機甲', coinBox:'金幣箱'
 };
 
 // ─── 存檔系統 ─────────────────────────────────────────────────────────────────
@@ -239,6 +252,7 @@ const SaveSystem = {
         agentId: null, petId: null,
         techParts: [],
         unlockedStage: 1,
+        unlockedSkins: ['classic'],
         ownedPets: {}, petShards: {},
         lastDaily: '',
         skinId: 'classic',
@@ -253,6 +267,8 @@ const SaveSystem = {
         if (typeof this.currentData.unlockedStage !== 'number') this.currentData.unlockedStage = 1;
         if (typeof this.currentData.ownedPets !== 'object') this.currentData.ownedPets = {};
         if (typeof this.currentData.petShards !== 'object') this.currentData.petShards = {};
+        if (!Array.isArray(this.currentData.unlockedSkins)) this.currentData.unlockedSkins = ['classic'];
+        if (!this.currentData.unlockedSkins.includes('classic')) this.currentData.unlockedSkins.push('classic');
         this.save();
     },
     save() { localStorage.setItem('RAINGOD_SAVE', JSON.stringify(this.currentData)); }
@@ -264,6 +280,7 @@ const Input = {
     mouseX: 0,
     mouseY: 0,
     mouseActive: false,
+    joystick: { active:false, id:null, baseX: 90, baseY: 0, x:0, y:0, dx:0, dy:0, maxRadius: 90 },
     init() {
         window.onkeydown = e => { this.keys[e.key.toLowerCase()] = true; if (e.key === 'Escape') GameEngine.togglePause(); };
         window.onkeyup   = e => { this.keys[e.key.toLowerCase()] = false; };
@@ -275,6 +292,71 @@ const Input = {
         window.addEventListener('mouseleave', () => {
             this.mouseActive = false;
         });
+
+        // 更新搖桿位置
+        const updateJoystickPos = () => {
+            this.joystick.baseY = window.innerHeight - 100;
+        };
+        window.addEventListener('resize', updateJoystickPos);
+        updateJoystickPos();
+
+        // 虛擬搖桿 (手機觸控) - 左下角固定
+        const handleTouchStart = (e) => {
+            const t = e.changedTouches[0];
+            if (!t) return;
+            
+            // 搖桿固定在左下角
+            const joyX = 90, joyY = window.innerHeight - 100;
+            const dist = Math.hypot(t.clientX - joyX, t.clientY - joyY);
+            
+            // 只有在搖桿區域內(半徑140)觸碰才激活
+            if (dist > 140) return;
+            
+            this.joystick.active = true;
+            this.joystick.id = t.identifier;
+            this.joystick.baseX = joyX;
+            this.joystick.baseY = joyY;
+            this.joystick.x = t.clientX;
+            this.joystick.y = t.clientY;
+            this.joystick.dx = 0;
+            this.joystick.dy = 0;
+            this.mouseActive = false;
+            e.preventDefault();
+        };
+        const handleTouchMove = (e) => {
+            if (!this.joystick.active) return;
+            for (const t of e.changedTouches) {
+                if (t.identifier !== this.joystick.id) continue;
+                this.joystick.x = t.clientX;
+                this.joystick.y = t.clientY;
+                const vx = t.clientX - this.joystick.baseX;
+                const vy = t.clientY - this.joystick.baseY;
+                const dist = Math.hypot(vx, vy);
+                const max = this.joystick.maxRadius;
+                const clamped = Math.min(dist, max);
+                const nx = dist ? vx / dist : 0;
+                const ny = dist ? vy / dist : 0;
+                this.joystick.dx = nx * (clamped / max);
+                this.joystick.dy = ny * (clamped / max);
+                e.preventDefault();
+                break;
+            }
+        };
+        const handleTouchEnd = (e) => {
+            if (!this.joystick.active) return;
+            for (const t of e.changedTouches) {
+                if (t.identifier !== this.joystick.id) continue;
+                this.joystick.active = false;
+                this.joystick.id = null;
+                this.joystick.dx = 0;
+                this.joystick.dy = 0;
+                break;
+            }
+        };
+        window.addEventListener('touchstart', handleTouchStart, { passive: false });
+        window.addEventListener('touchmove', handleTouchMove, { passive: false });
+        window.addEventListener('touchend', handleTouchEnd, { passive: false });
+        window.addEventListener('touchcancel', handleTouchEnd, { passive: false });
     }
 };
 
@@ -316,11 +398,31 @@ const SHARDS_TO_SUMMON = 30;
 
 // ─── 背景 (純色，不跟隨鏡頭) ───────────────────────────────────────────────────
 const Background = {
-    ctx: null,
-    init(ctx) { this.ctx = ctx; },
+    ctx: null, stage: 1,
+    init(ctx, stage = 1) { this.ctx = ctx; this.stage = stage; },
     draw() {
         if (!this.ctx) return;
-        this.ctx.fillStyle = '#00050a';
+        const colors = [
+            '#00050a', // 1
+            '#0a0a1a', // 2
+            '#1a0a0a', // 3
+            '#0a1a0a', // 4
+            '#1a1a0a', // 5
+            '#0a0a2a', // 6
+            '#2a0a0a', // 7
+            '#0a2a0a', // 8
+            '#2a2a0a', // 9
+            '#0a0a3a', // 10
+            '#3a0a0a', // 11
+            '#0a3a0a', // 12
+            '#3a3a0a', // 13
+            '#0a0a4a', // 14
+            '#4a0a0a', // 15
+            '#0a4a0a', // 16
+            '#4a4a0a', // 17
+            '#0a0a5a'  // 18
+        ];
+        this.ctx.fillStyle = colors[this.stage - 1] || '#00050a';
         this.ctx.fillRect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
     }
 };
@@ -392,7 +494,12 @@ class Projectile {
         for (const e of enemies) {
             if (e.isDead) continue;
             if (Math.hypot(this.x - e.x, this.y - e.y) < e.r + this.r) {
-                e.hp -= this.dmg;
+                let dmg = this.dmg;
+                if (e instanceof Boss && e.shield) dmg *= 0.5;
+                e.hp -= dmg;
+                GameEngine.spawnParticles(this.x, this.y, this.color, 10, 2);
+                if (e instanceof Boss) GameEngine.shake(4, 0.15);
+                else GameEngine.shake(2, 0.08);
                 this.isDead = true;
                 return;
             }
@@ -521,68 +628,71 @@ class Enemy {
         ctx.fillRect(this.x - barW/2, this.y - this.r - barH - 6, barW * (this.hp / this.maxHp), barH);
         ctx.save();
         ctx.translate(this.x, this.y);
-        // 身體裝甲
-        const grad = ctx.createRadialGradient(0, -this.r*0.3, this.r*0.2, 0, 0, this.r*1.2);
-        grad.addColorStop(0, '#ffffff');
-        grad.addColorStop(0.25, this.color);
-        grad.addColorStop(1, '#000000');
-        ctx.fillStyle = grad;
-        ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.ellipse(0, 0, this.r * 1.1, this.r * 0.9, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-        // 裝甲分段
-        ctx.strokeStyle = 'rgba(0,0,0,0.55)';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(-this.r * 0.9, -this.r * 0.1);
-        ctx.lineTo(this.r * 0.9, -this.r * 0.1);
-        ctx.moveTo(-this.r * 0.7, this.r * 0.25);
-        ctx.lineTo(this.r * 0.7, this.r * 0.25);
-        ctx.stroke();
-        // 側邊尖刺 / 翅膀
-        ctx.lineWidth = 2;
-        if (this.type === 'TANK' || this.type === 'ELITE') {
-            ctx.strokeStyle = '#ffcc80';
+        
+        // 純色幾何圖形小怪
+        ctx.fillStyle = this.color;
+        
+        if (this.type === 'MELEE') {
+            // 正方形 - 近戰
+            ctx.fillRect(-this.r, -this.r, this.r*2, this.r*2);
+        } else if (this.type === 'SHOOTER') {
+            // 五邊形 - 遠程
             ctx.beginPath();
-            ctx.moveTo(-this.r * 0.6, -this.r * 0.4);
-            ctx.lineTo(-this.r * 1.1, -this.r * 1.0);
-            ctx.moveTo(this.r * 0.6, -this.r * 0.4);
-            ctx.lineTo(this.r * 1.1, -this.r * 1.0);
-            ctx.stroke();
+            for (let i = 0; i < 5; i++) {
+                const a = (Math.PI*2/5)*i - Math.PI/2;
+                const x = Math.cos(a) * this.r;
+                const y = Math.sin(a) * this.r;
+                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            }
+            ctx.closePath();
+            ctx.fill();
+        } else if (this.type === 'FAST') {
+            // 等邊三角形 - 快速
+            ctx.beginPath();
+            for (let i = 0; i < 3; i++) {
+                const a = (Math.PI*2/3)*i - Math.PI/2;
+                const x = Math.cos(a) * this.r;
+                const y = Math.sin(a) * this.r;
+                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            }
+            ctx.closePath();
+            ctx.fill();
+        } else if (this.type === 'TANK') {
+            // 八邊形 - 坦克
+            ctx.beginPath();
+            for (let i = 0; i < 8; i++) {
+                const a = (Math.PI*2/8)*i;
+                const x = Math.cos(a) * this.r;
+                const y = Math.sin(a) * this.r;
+                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            }
+            ctx.closePath();
+            ctx.fill();
         } else if (this.type === 'FLY') {
-            ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+            // 六邊形 - 飛行
             ctx.beginPath();
-            ctx.moveTo(-this.r * 0.2, -this.r * 0.2);
-            ctx.quadraticCurveTo(-this.r * 1.0, -this.r * 0.4, -this.r * 1.4, 0);
-            ctx.moveTo(this.r * 0.2, -this.r * 0.2);
-            ctx.quadraticCurveTo(this.r * 1.0, -this.r * 0.4, this.r * 1.4, 0);
-            ctx.stroke();
-        }
-        // 能量核心裂縫
-        ctx.strokeStyle = 'rgba(255,255,255,0.35)';
-        ctx.lineWidth = 1.2;
-        ctx.beginPath();
-        ctx.moveTo(0, -this.r * 0.7);
-        ctx.lineTo(0, this.r * 0.7);
-        ctx.moveTo(-this.r * 0.4, -this.r * 0.3);
-        ctx.lineTo(-this.r * 0.1, this.r * 0.4);
-        ctx.moveTo(this.r * 0.4, -this.r * 0.3);
-        ctx.lineTo(this.r * 0.1, this.r * 0.4);
-        ctx.stroke();
-        // 精英外光圈
-        if (this.type === 'ELITE') {
-            ctx.strokeStyle = 'rgba(255,145,0,0.7)';
-            ctx.lineWidth = 3;
-            ctx.shadowColor = '#ff9100';
-            ctx.shadowBlur = 14;
+            for (let i = 0; i < 6; i++) {
+                const a = (Math.PI*2/6)*i;
+                const x = Math.cos(a) * this.r;
+                const y = Math.sin(a) * this.r;
+                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            }
+            ctx.closePath();
+            ctx.fill();
+        } else {
+            // ELITE - 星形
             ctx.beginPath();
-            ctx.arc(0, 0, this.r * 1.5, 0, Math.PI * 2);
-            ctx.stroke();
-            ctx.shadowBlur = 0;
+            for (let i = 0; i < 10; i++) {
+                const a = (Math.PI*2/10)*i;
+                const r = i%2 === 0 ? this.r*1.3 : this.r*0.5;
+                const x = Math.cos(a) * r;
+                const y = Math.sin(a) * r;
+                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            }
+            ctx.closePath();
+            ctx.fill();
         }
+        
         ctx.restore();
     }
 }
@@ -591,52 +701,71 @@ class Enemy {
 class Boss {
     constructor(x, y, hp = 900, index = 1) {
         this.x = x; this.y = y; this.r = 52;
-        this.hp = hp; this.maxHp = hp; this.speed = 1.2; this.isDead = false;
+        const stageMul = 1 + (index - 1) * 0.28;
+        this.maxHp = hp * stageMul * 1.4;
+        this.hp = this.maxHp;
+        this.speed = 1.4 + (index - 1) * 0.05;
+        this.baseDmg = 3.6 + (index - 1) * 0.35;
+        this.isDead = false;
         this.index = index;
         this.skillTimer = 0;
+        this.shield = true;
+        this.shieldTime = 120; // frames
     }
     update(dt, player, projectiles) {
+        if (this.shieldTime > 0) {
+            this.shieldTime -= dt;
+            if (this.shieldTime <= 0) this.shield = false;
+        }
         const ang = Math.atan2(player.y - this.y, player.x - this.x);
         this.x += Math.cos(ang) * this.speed * dt;
         this.y += Math.sin(ang) * this.speed * dt;
         if (Math.hypot(player.x - this.x, player.y - this.y) < player.r + this.r)
-            player.takeDamage(1.8 * dt);
+            player.takeDamage(this.baseDmg * dt);
         this.skillTimer += dt;
-        if (this.skillTimer > 90) {
+        const skillInterval = Math.max(40, 85 - (this.index - 1) * 4);
+        if (this.skillTimer > skillInterval) {
             this.skillTimer = 0;
             const roll = Math.random();
+            const baseDmg = 18 + this.index * 1.4;
             if (roll < 0.4) {
                 // 放射彈幕
                 const count = 26;
                 for (let i = 0; i < count; i++) {
                     const a = Math.PI*2*i/count;
-                    const sp = 8;
-                    projectiles.push(new Projectile(this.x, this.y, Math.cos(a)*sp, Math.sin(a)*sp, 14, '#ff8a65', {
+                    const sp = 8 + this.index * 0.2;
+                    projectiles.push(new Projectile(this.x, this.y, Math.cos(a)*sp, Math.sin(a)*sp, baseDmg, '#ff8a65', {
                         r: 6, shape:'hex', skillId:'boss_burst', life:260
                     }));
                 }
                 GameEngine.showAlert('BOSS：放射彈幕！');
+                GameEngine.shake(5, 0.2);
+                GameEngine.spawnParticles(this.x, this.y, '#ff8a65', 18, 3);
             } else if (roll < 0.75) {
                 // 狙擊線
                 const a = Math.atan2(player.y - this.y, player.x - this.x);
-                const sp = 14;
+                const sp = 14 + this.index * 0.3;
                 for (let i = -2; i <= 2; i++) {
                     const off = a + i*0.04;
-                    projectiles.push(new Projectile(this.x, this.y, Math.cos(off)*sp, Math.sin(off)*sp, 22, '#ffeb3b', {
+                    projectiles.push(new Projectile(this.x, this.y, Math.cos(off)*sp, Math.sin(off)*sp, baseDmg * 1.2, '#ffeb3b', {
                         r: 7, shape:'lightning', skillId:'boss_laser', life:320
                     }));
                 }
                 GameEngine.showAlert('BOSS：能量狙擊！');
+                GameEngine.shake(5, 0.2);
+                GameEngine.spawnParticles(this.x, this.y, '#ffeb3b', 14, 3);
             } else {
                 // 追蹤火雨
                 for (let i = 0; i < 8; i++) {
                     const baseAng = Math.random()*Math.PI*2;
-                    const sp = 9;
-                    projectiles.push(new Projectile(this.x, this.y, Math.cos(baseAng)*sp, Math.sin(baseAng)*sp, 18, '#ff7043', {
+                    const sp = 9 + this.index * 0.25;
+                    projectiles.push(new Projectile(this.x, this.y, Math.cos(baseAng)*sp, Math.sin(baseAng)*sp, baseDmg * 1.1, '#ff7043', {
                         r: 8, shape:'diamond', homing:true, skillId:'boss_fire', life:360
                     }));
                 }
                 GameEngine.showAlert('BOSS：追蹤火雨！');
+                GameEngine.shake(5, 0.2);
+                GameEngine.spawnParticles(this.x, this.y, '#ff7043', 16, 3);
             }
         }
     }
@@ -699,6 +828,15 @@ class Boss {
             ctx.arc(x, y, this.r * 0.14, 0, Math.PI * 2);
             ctx.stroke();
         }
+        // 護盾特效
+        if (this.shield) {
+            const alpha = Math.max(0, Math.min(1, this.shieldTime / 120));
+            ctx.strokeStyle = `rgba(80,220,255,${alpha})`;
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.arc(0, 0, this.r * 2.2, 0, Math.PI * 2);
+            ctx.stroke();
+        }
         ctx.shadowBlur = 0;
         ctx.restore();
     }
@@ -711,7 +849,7 @@ class Player {
         this.x = 0; this.y = 0;
         this.hp = 100; this.maxHp = 100; this.xp = 0; this.xpToNext = 100; this.lv = 1;
         this.speed = 4; this.r = 20; this.magnetDist = 160;
-        this.noHitTimer = 9999; // 以 60fps 為基準的幀計時
+        this.regenTimer = 0;
         this.applyTalents(); this.applyEquipment(); this.applyAgentPet();
     }
     applyTalents() {
@@ -746,11 +884,31 @@ class Player {
     }
     update(dt) {
         let dx = 0, dy = 0;
+        // 鍵盤移動
         if (Input.keys['w']) dy -= 1;
         if (Input.keys['s']) dy += 1;
         if (Input.keys['a']) dx -= 1;
         if (Input.keys['d']) dx += 1;
-        if (Input.mouseActive) {
+        // 搖桿 / 手把移動（中心在搖桿）
+        if (navigator.getGamepads) {
+            const gp = navigator.getGamepads()[0];
+            if (gp) {
+                const ax = gp.axes[0] || 0;
+                const ay = gp.axes[1] || 0;
+                const deadZone = 0.2;
+                if (Math.abs(ax) > deadZone || Math.abs(ay) > deadZone) {
+                    dx += ax;
+                    dy += ay;
+                }
+            }
+        }
+        // 手機虛擬搖桿
+        if (Input.joystick && Input.joystick.active) {
+            dx += Input.joystick.dx;
+            dy += Input.joystick.dy;
+        }
+        // 滑鼠指向移動（只有在沒有搖桿輸入時才啟用）
+        if (!Input.joystick.active && Input.mouseActive && dx === 0 && dy === 0) {
             const cx = window.innerWidth / 2;
             const cy = window.innerHeight / 2;
             const vx = Input.mouseX - cx;
@@ -773,17 +931,16 @@ class Player {
             this.y *= MAP_RADIUS / dist;
         }
         if (this.regenPerSec) this.hp = Math.min(this.maxHp, this.hp + this.regenPerSec * dt / 60);
-        // 脫戰回血：一段時間沒受傷開始回
-        this.noHitTimer += dt;
-        if (this.noHitTimer > 180) { // 約 3 秒未受傷
-            const healPerSec = this.maxHp * 0.012; // 每秒回 1.2% 最大生命
-            this.hp = Math.min(this.maxHp, this.hp + healPerSec * dt / 60);
+        this.regenTimer += dt;
+        if (this.regenTimer > 180) { // 3 seconds no damage
+            this.hp = Math.min(this.maxHp, this.hp + this.maxHp * 0.012 * (dt / 60));
         }
     }
     takeDamage(amt) {
         const def = (SaveSystem.currentData.talents && SaveSystem.currentData.agentId === 'willy') ? 0.85 : 1;
         this.hp = Math.max(0, this.hp - amt * def);
-        this.noHitTimer = 0;
+        this.regenTimer = 0; // reset out-of-combat regen
+        GameEngine.shake(3, 0.12);
         if (this.hp <= 0) GameEngine.gameOver();
     }
     addXp(value) {
@@ -1032,10 +1189,12 @@ window.GameEngine = {
     state: 'LOBBY', canvas: null, ctx: null, bgCtx: null,
     player: null, enemies: [], projectiles: [], expOrbs: [], bosses: [],
     hitFx: [],
+    particles: [],
     kills: 0, timer: 0, spawnTimer: 0, shootTimers: {}, lastTime: 0,
     pendingLevelUp: false, levelUpQueue: 0, pendingEvo: null, paused: false,
     currentStage: 1,
     swarmCount: 0,
+    shakeTime: 0, shakeDuration: 0, shakeMagnitude: 0,
 
     init() {
         SaveSystem.init();
@@ -1048,12 +1207,13 @@ window.GameEngine = {
         window.onresize = () => this.resize();
         this.player = new Player();
         this.renderLobby();
-        Background.init(this.bgCtx);
+        this.showSection('daily');
+        Background.init(this.bgCtx, stageIndex);
     },
     resize() {
         this.canvas.width = this.bgCtx.canvas.width = window.innerWidth;
         this.canvas.height = this.bgCtx.canvas.height = window.innerHeight;
-        if (this.state === 'BATTLE' && this.player) Background.init(this.bgCtx);
+        if (this.state === 'BATTLE' && this.player) Background.init(this.bgCtx, this.currentStage);
     },
     startBattle(stageIndex) {
         stageIndex = Math.min(Math.max(1, stageIndex || 1), MAX_STAGES);
@@ -1068,7 +1228,7 @@ window.GameEngine = {
         this.enemies = []; this.projectiles = []; this.expOrbs = []; this.bosses = [];
         this.kills = 0; this.timer = 0; this.spawnTimer = 0; this.shootTimers = {};
         this.state = 'BATTLE'; this.pendingLevelUp = false; this.levelUpQueue = 0; this.pendingEvo = null; this.paused = false;
-        this._lastBossSpawn = 0; this._petTimer = 0; this._stageConfig = stage; this.swarmCount = 0;
+        this._lastBossSpawn = 0; this._petTimer = 0; this._stageConfig = stage; this.swarmCount = 0; this._wave2 = false; this._wave4 = false;
         this.lastTime = performance.now();
         BattleSkills.addActive('kunai');
         requestAnimationFrame(t => this.loop(t));
@@ -1085,8 +1245,39 @@ window.GameEngine = {
         this.paused = !this.paused;
         document.getElementById('pause-panel').classList.toggle('show', this.paused);
     },
+    shake(intensity = 6, duration = 0.25) {
+        this.shakeMagnitude = Math.max(this.shakeMagnitude || 0, intensity);
+        this.shakeDuration = Math.max(this.shakeDuration || 0, duration);
+        this.shakeTime = Math.max(this.shakeTime || 0, duration);
+    },
+    spawnParticles(x, y, color, count = 12, size = 2) {
+        for (let i = 0; i < count; i++) {
+            const ang = Math.random() * Math.PI * 2;
+            const speed = 1.5 + Math.random() * 2.5;
+            this.particles.push({
+                x, y,
+                vx: Math.cos(ang) * speed,
+                vy: Math.sin(ang) * speed,
+                life: 0.6 + Math.random() * 0.4,
+                maxLife: 0.6 + Math.random() * 0.4,
+                color,
+                size: size * (0.7 + Math.random() * 0.6)
+            });
+        }
+    },
     update(dt) {
         if (this.pendingLevelUp || this.pendingEvo) return;
+
+        // 鏡頭震動與粒子特效更新
+        if (this.shakeTime > 0) this.shakeTime = Math.max(0, this.shakeTime - dt / 60);
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+            const p = this.particles[i];
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+            p.life -= dt / 60;
+            if (p.life <= 0) this.particles.splice(i, 1);
+        }
+
         this.timer += dt / 60;
         this.player.update(dt);
 
@@ -1133,11 +1324,35 @@ window.GameEngine = {
                 const dist = 380 + Math.random() * 220;
                 const r = Math.random();
                 const tFactor2 = Math.min(1.8, this.timer / 50);
+                const minute = Math.floor(this.timer / 60);
                 let type = 'MELEE';
-                if (r < 0.18) type = 'SHOOTER';
-                else if (r < 0.36) type = 'FAST';
-                else if (r < 0.52) type = 'TANK';
-                else if (r < 0.7) type = 'FLY';
+                // Monster pool changes every minute
+                const poolIndex = minute % 4;
+                if (poolIndex === 0) { // Melee heavy
+                    if (r < 0.5) type = 'MELEE';
+                    else if (r < 0.65) type = 'TANK';
+                    else if (r < 0.8) type = 'FAST';
+                    else if (r < 0.9) type = 'FLY';
+                    else type = 'SHOOTER';
+                } else if (poolIndex === 1) { // Shooter heavy
+                    if (r < 0.5) type = 'SHOOTER';
+                    else if (r < 0.65) type = 'FAST';
+                    else if (r < 0.8) type = 'FLY';
+                    else if (r < 0.9) type = 'MELEE';
+                    else type = 'TANK';
+                } else if (poolIndex === 2) { // Tank heavy
+                    if (r < 0.5) type = 'TANK';
+                    else if (r < 0.65) type = 'MELEE';
+                    else if (r < 0.8) type = 'FLY';
+                    else if (r < 0.9) type = 'SHOOTER';
+                    else type = 'FAST';
+                } else { // Fly heavy
+                    if (r < 0.5) type = 'FLY';
+                    else if (r < 0.65) type = 'FAST';
+                    else if (r < 0.8) type = 'SHOOTER';
+                    else if (r < 0.9) type = 'MELEE';
+                    else type = 'TANK';
+                }
                 if (Math.random() < 0.07 + this.currentStage * 0.01 + tFactor2 * 0.05) type = 'ELITE';
                 this.enemies.push(new Enemy(
                     this.player.x + Math.cos(ang)*dist,
@@ -1145,6 +1360,50 @@ window.GameEngine = {
                     type,
                     this.currentStage,
                     tFactor2
+                ));
+            }
+        }
+
+        // Crazy waves at 2 and 4 min
+        if (this.timer > 120 && this.timer < 125 && !this._wave2) {
+            this._wave2 = true;
+            GameEngine.showAlert('🚨 瘋狂波次來襲！');
+            const pack = 20 + Math.floor(this.timer / 10);
+            for (let i = 0; i < pack; i++) {
+                const ang = Math.random() * Math.PI * 2;
+                const dist = 420 + Math.random() * 260;
+                const r = Math.random();
+                let type = 'MELEE';
+                if (r < 0.25) type = 'FAST';
+                else if (r < 0.5) type = 'FLY';
+                else if (r < 0.75) type = 'TANK';
+                this.enemies.push(new Enemy(
+                    this.player.x + Math.cos(ang)*dist,
+                    this.player.y + Math.sin(ang)*dist,
+                    type,
+                    this.currentStage,
+                    Math.min(1.8, this.timer / 50)
+                ));
+            }
+        }
+        if (this.timer > 240 && this.timer < 245 && !this._wave4) {
+            this._wave4 = true;
+            GameEngine.showAlert('🚨 最終瘋狂波次！');
+            const pack = 30 + Math.floor(this.timer / 10);
+            for (let i = 0; i < pack; i++) {
+                const ang = Math.random() * Math.PI * 2;
+                const dist = 420 + Math.random() * 260;
+                const r = Math.random();
+                let type = 'ELITE';
+                if (r < 0.3) type = 'TANK';
+                else if (r < 0.6) type = 'FLY';
+                else if (r < 0.9) type = 'SHOOTER';
+                this.enemies.push(new Enemy(
+                    this.player.x + Math.cos(ang)*dist,
+                    this.player.y + Math.sin(ang)*dist,
+                    type,
+                    this.currentStage,
+                    Math.min(1.8, this.timer / 50)
                 ));
             }
         }
@@ -1206,6 +1465,8 @@ window.GameEngine = {
                 }
                 this.trySpawnEvoChest();
                 if (this.pendingEvo) this.showEvoModal();
+                this.stageClear();
+                return; // stop the update loop once stage is cleared
             }
         }
 
@@ -1309,7 +1570,10 @@ window.GameEngine = {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         if (!this.player) return;
         this.ctx.save();
-        this.ctx.translate(this.canvas.width/2 - cam.x, this.canvas.height/2 - cam.y);
+        const shake = (this.shakeTime > 0 && this.shakeDuration > 0) ? this.shakeMagnitude * (this.shakeTime / this.shakeDuration) : 0;
+        const shakeX = (Math.random() * 2 - 1) * shake;
+        const shakeY = (Math.random() * 2 - 1) * shake;
+        this.ctx.translate(this.canvas.width/2 - cam.x + shakeX, this.canvas.height/2 - cam.y + shakeY);
         this.expOrbs.forEach(o => o.draw(this.ctx, cam));
         this.enemies.forEach(e => e.draw(this.ctx, cam));
         this.bosses.forEach(b => b.draw(this.ctx, cam));
@@ -1330,17 +1594,80 @@ window.GameEngine = {
             this.ctx.fill();
             this.ctx.restore();
         }
+        // 粒子特效
+        for (const p of this.particles) {
+            const alpha = Math.max(0, Math.min(1, p.life / p.maxLife));
+            this.ctx.save();
+            this.ctx.globalAlpha = alpha;
+            this.ctx.fillStyle = p.color;
+            this.ctx.beginPath();
+            this.ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+            this.ctx.fill();
+            this.ctx.restore();
+        }
         this.player.draw(this.ctx, cam);
+        this.ctx.restore();
+        this.drawJoystick();
+    },
+    drawJoystick() {
+        const j = Input.joystick;
+        this.ctx.save();
+        
+        // 動態位置：活動時跟著手指，否則在左下角
+        const displayX = j.active ? j.baseX : 90;
+        const displayY = j.active ? j.baseY : window.innerHeight - 100;
+        
+        // 背景圓圈
+        this.ctx.globalAlpha = 0.2;
+        this.ctx.fillStyle = '#00d2ff';
+        this.ctx.beginPath();
+        this.ctx.arc(displayX, displayY, j.maxRadius, 0, Math.PI*2);
+        this.ctx.fill();
+        
+        // 搖桿球
+        this.ctx.globalAlpha = 0.6;
+        const ballX = displayX + (j.active ? (j.x - j.baseX) : 0);
+        const ballY = displayY + (j.active ? (j.y - j.baseY) : 0);
+        this.ctx.beginPath();
+        this.ctx.arc(ballX, ballY, 28, 0, Math.PI*2);
+        this.ctx.fill();
+        
         this.ctx.restore();
     },
     gameOver() {
         this.state = 'GAMEOVER';
         const gold = this.kills * 2 + Math.floor(this.timer) * 2;
+        const stone = Math.floor(this.kills / 15);
         SaveSystem.currentData.resources.gold += gold;
-        SaveSystem.currentData.resources.evolutionStone = (SaveSystem.currentData.resources.evolutionStone || 0) + Math.floor(this.kills / 15);
+        SaveSystem.currentData.resources.evolutionStone = (SaveSystem.currentData.resources.evolutionStone || 0) + stone;
         SaveSystem.save();
-        document.getElementById('gameover-reward').textContent = '金幣 +' + gold + ' | 進化石 +' + Math.floor(this.kills/15) + '（已自動儲存，返回大廳繼續）';
+        document.getElementById('gameover-title').textContent = '戰鬥失敗';
+        document.getElementById('gameover-reward').textContent = '金幣 +' + gold + ' | 進化石 +' + stone + '（已自動儲存）';
+        const btn = document.getElementById('gameover-btn');
+        btn.textContent = '返回大廳';
+        btn.onclick = () => location.reload();
         document.getElementById('gameover-panel').classList.add('show');
+    },
+    stageClear() {
+        this.state = 'CLEAR';
+        const gold = this.kills * 2 + Math.floor(this.timer) * 2 + (this.currentStage * 20);
+        const stone = Math.floor(this.kills / 15) + 1;
+        SaveSystem.currentData.resources.gold += gold;
+        SaveSystem.currentData.resources.evolutionStone = (SaveSystem.currentData.resources.evolutionStone || 0) + stone;
+        SaveSystem.save();
+        document.getElementById('gameover-title').textContent = '通關成功！';
+        document.getElementById('gameover-reward').textContent = '獎勵：金幣 +' + gold + ' | 進化石 +' + stone + '（已自動儲存）';
+        const btn = document.getElementById('gameover-btn');
+        btn.textContent = '返回大廳';
+        btn.onclick = () => this.returnToLobby();
+        document.getElementById('gameover-panel').classList.add('show');
+    },
+    returnToLobby() {
+        this.state = 'LOBBY';
+        document.getElementById('battle-hud').style.display = 'none';
+        document.getElementById('lobby-container').style.display = 'flex';
+        document.getElementById('gameover-panel').classList.remove('show');
+        this.renderLobby();
     },
     showAlert(text) {
         const el = document.getElementById('alert-banner');
@@ -1409,21 +1736,37 @@ window.GameEngine = {
             agentRow.innerHTML += '<button class="main-btn small" onclick="GameEngine.setAgentPet(\'agentId\',\'' + k + '\')">' + AGENTS[k].name + (SaveSystem.currentData.agentId === k ? ' ✓' : '') + '</button>';
         });
         agentList.appendChild(agentRow);
+        const unlockedSkins = SaveSystem.currentData.unlockedSkins || ['classic'];
+        const currentSkin = SaveSystem.currentData.skinId || 'classic';
+
+        const skinGachaDiv = document.getElementById('skin-gacha');
+        if (skinGachaDiv) {
+            skinGachaDiv.innerHTML = '<div class="talent-row"><span>抽取造型：' + SKIN_GACHA_COST_SINGLE + '💰</span><button class="main-btn small" onclick="GameEngine.skinGacha(1)">抽 1 次</button></div>' +
+                '<div class="talent-row"><span>10 連抽：' + SKIN_GACHA_COST_TEN + '💰</span><button class="main-btn small" onclick="GameEngine.skinGacha(10)">抽 10 次</button></div>';
+        }
+
         const skinList = document.getElementById('skin-list');
         if (skinList) {
             skinList.innerHTML = '';
-            const currentSkin = SaveSystem.currentData.skinId || 'classic';
             Object.keys(SKINS).forEach(id => {
                 const s = SKINS[id];
+                const owned = unlockedSkins.includes(id);
                 const btn = document.createElement('button');
                 btn.className = 'main-btn small';
                 btn.style.marginRight = '6px';
                 btn.style.marginBottom = '6px';
-                btn.textContent = s.name + (currentSkin === id ? ' ✓' : '');
-                btn.onclick = () => GameEngine.setSkin(id);
+                btn.textContent = s.name + (currentSkin === id ? ' ✓' : '') + (owned ? '' : ' 🔒');
+                if (owned) btn.onclick = () => GameEngine.setSkin(id);
+                else btn.onclick = () => alert('此造型需透過抽獎解鎖。');
                 skinList.appendChild(btn);
             });
         }
+
+        const skinOwned = document.getElementById('skin-owned');
+        if (skinOwned) {
+            skinOwned.innerHTML = '<div style="font-size:0.9rem;color:rgba(255,255,255,0.8);">已解鎖：' + unlockedSkins.length + ' / ' + Object.keys(SKINS).length + ' 個造型</div>';
+        }
+
         const gachaDiv = document.getElementById('pet-gacha');
         gachaDiv.innerHTML = '<div class="talent-row"><span>單抽 ' + GACHA_COST_SINGLE + '💰</span><button class="main-btn small" onclick="GameEngine.petGacha(1)">抽 1 次</button></div>' +
             '<div class="talent-row"><span>10 連抽 ' + GACHA_COST_TEN + '💰（保底 R 以上）</span><button class="main-btn small" onclick="GameEngine.petGacha(10)">抽 10 次</button></div>';
@@ -1458,6 +1801,13 @@ window.GameEngine = {
             btn.onclick = () => GameEngine.startBattle(i);
             stageList.appendChild(btn);
         }
+    },
+    showSection(section) {
+        const sections = ['daily', 'equip', 'talents', 'tech', 'agents', 'skins', 'pets', 'stages', 'evo'];
+        sections.forEach(s => {
+            const el = document.getElementById('section-' + s);
+            if (el) el.style.display = s === section ? 'block' : 'none';
+        });
     },
     buyTalent(id, cost, stone) {
         const d = SaveSystem.currentData;
@@ -1497,9 +1847,53 @@ window.GameEngine = {
     },
     setSkin(id) {
         if (!SKINS[id]) return;
+        const unlocked = SaveSystem.currentData.unlockedSkins || ['classic'];
+        if (!unlocked.includes(id)) { alert('尚未解鎖此造型，請先抽獎。'); return; }
         SaveSystem.currentData.skinId = id;
         SaveSystem.save();
         this.renderLobby();
+    },
+    skinGacha(count = 1) {
+        const d = SaveSystem.currentData;
+        const cost = count === 10 ? SKIN_GACHA_COST_TEN : SKIN_GACHA_COST_SINGLE;
+        if (d.resources.gold < cost) { alert('金幣不足'); return; }
+        d.resources.gold -= cost;
+        d.unlockedSkins = d.unlockedSkins || ['classic'];
+        const locked = Object.keys(SKINS).filter(id => !d.unlockedSkins.includes(id));
+        const got = [];
+        // 10連保底一個新造型
+        if (count >= 10 && locked.length) {
+            const pick = locked[Math.floor(Math.random() * locked.length)];
+            d.unlockedSkins.push(pick);
+            got.push(pick);
+            locked.splice(locked.indexOf(pick), 1);
+        }
+        for (let i = 0; i < count - got.length; i++) {
+            const pool = locked.length ? locked : Object.keys(SKINS);
+            const pick = this.pickSkinFromPool(pool);
+            if (!d.unlockedSkins.includes(pick)) {
+                d.unlockedSkins.push(pick);
+                got.push(pick);
+                const idx = locked.indexOf(pick);
+                if (idx >= 0) locked.splice(idx, 1);
+            } else if (!got.length) {
+                got.push(pick);
+            }
+        }
+        SaveSystem.save();
+        this.renderLobby();
+        const names = got.map(id => SKINS[id]?.name || id).join('、');
+        alert('抽到：' + names);
+    },
+    pickSkinFromPool(pool) {
+        const weights = { N: 60, R: 30, SR: 9, SS: 1 };
+        const weighted = [];
+        pool.forEach(id => {
+            const r = SKINS[id]?.rarity || 'N';
+            const w = weights[r] || 10;
+            for (let i = 0; i < w; i++) weighted.push(id);
+        });
+        return weighted[Math.floor(Math.random() * weighted.length)];
     },
     openEquipmentBox() {
         const d = SaveSystem.currentData;
