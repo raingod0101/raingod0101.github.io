@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <title>RAINGOD | THE OVERLOAD LAB V2</title>
+    <title>爆炸 | RAINGOD</title>
     <style>
         :root { --neon: #00f2ff; --pink: #ff007b; --gold: #ffcc00; --bg: #050508; }
         body { margin: 0; overflow: hidden; background: var(--bg); font-family: 'Consolas', monospace; cursor: crosshair; user-select: none; }
@@ -29,7 +29,6 @@
         #combo-wrap { position: absolute; bottom: 40px; right: 40px; text-align: right; }
         .combo-n { font-size: 100px; color: #fff; line-height: 0.8; font-style: italic; text-shadow: 0 0 30px var(--neon); }
 
-        /* 特效控制 */
         .shaking { animation: shake 0.1s infinite; }
         @keyframes shake { 0%{transform:translate(2px,2px)} 50%{transform:translate(-2px,-2px)} 100%{transform:translate(0,0)} }
     </style>
@@ -53,7 +52,7 @@
         <button id="shop-trigger">UPGRADE SHOP</button>
 
         <div id="combo-wrap">
-            <div class="label" id="overload-text" style="color:var(--pink)">NORMAL MODE</div>
+            <div class="label" style="color:var(--neon)">STREAK COMBO</div>
             <div class="combo-n" id="combo-display">0</div>
         </div>
     </div>
@@ -68,7 +67,6 @@
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
         
-        // --- 核心數據狀態 ---
         let gameData = {
             money: 0,
             upgrades: {
@@ -79,23 +77,40 @@
             }
         };
 
-        // --- 儲存與讀取 (修正邏輯) ---
+        const SECRET_SALT = "RAINGOD_SECURE_V3_CLEAN";
+
+        function generateChecksum(data) {
+            let str = JSON.stringify(data) + SECRET_SALT;
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                hash = ((hash << 5) - hash) + str.charCodeAt(i);
+                hash |= 0; 
+            }
+            return hash.toString(16);
+        }
+
         function saveGame() {
-            localStorage.setItem('raingod_save_v2', JSON.stringify(gameData));
+            const container = { payload: gameData, check: generateChecksum(gameData) };
+            const secureBlob = btoa(encodeURIComponent(JSON.stringify(container)));
+            localStorage.setItem('raingod_secure_clean', secureBlob);
         }
 
         function loadGame() {
-            const raw = localStorage.getItem('raingod_save_v2');
-            if (raw) {
-                const parsed = JSON.parse(raw);
-                // 深度合併，避免結構損壞
-                gameData.money = parsed.money || 0;
-                for (let key in parsed.upgrades) {
-                    if (gameData.upgrades[key]) {
-                        gameData.upgrades[key].lv = parsed.upgrades[key].lv;
+            const raw = localStorage.getItem('raingod_secure_clean');
+            if (!raw) return refreshUI();
+            try {
+                const decoded = JSON.parse(decodeURIComponent(atob(raw)));
+                if (generateChecksum(decoded.payload) === decoded.check) {
+                    gameData.money = decoded.payload.money || 0;
+                    for (let key in decoded.payload.upgrades) {
+                        if (gameData.upgrades[key]) gameData.upgrades[key].lv = decoded.payload.upgrades[key].lv;
                     }
+                } else {
+                    alert("⚠️ 存檔校驗失敗，數據已重置。");
+                    gameData.money = 0;
+                    saveGame();
                 }
-            }
+            } catch (e) { console.warn("New Game Started."); }
             refreshUI();
         }
 
@@ -104,9 +119,8 @@
             document.getElementById('damage-display').innerText = gameData.upgrades.damage.lv;
         }
 
-        // --- 遊戲引擎變數 ---
         let width, height, combo = 0, isMouseDown = false;
-        let cubes = [], particles = [], coins = [], floaters = [], beams = [];
+        let cubes = [], particles = [], floaters = [];
         const COLORS = { blue: '#00f2ff', pink: '#ff007b', gold: '#ffcc00' };
 
         function init() {
@@ -116,7 +130,6 @@
         }
         window.onresize = init;
 
-        // --- 實體類別 ---
         class Cube {
             constructor(isBoss = false) {
                 this.x = Math.random() * width;
@@ -128,6 +141,7 @@
                 this.color = this.isBoss ? COLORS.gold : COLORS.blue;
                 this.vx = (Math.random() - 0.5) * 3;
                 this.vy = (Math.random() - 0.5) * 3;
+                this.dead = false;
             }
             draw() {
                 ctx.strokeStyle = this.color;
@@ -150,20 +164,19 @@
                 let reward = (this.isBoss ? 100 : 10) * gameData.upgrades.speed.lv;
                 gameData.money += reward;
                 saveGame(); refreshUI();
-                
                 spawnEffect(this.x, this.y, this.color, 25);
                 spawnText(this.x, this.y, `+$${reward}`, this.color);
                 triggerShake();
 
-                // 連鎖反應
                 let range = 120 + (gameData.upgrades.range.lv * 15);
                 cubes.forEach(c => {
-                    if (c !== this && Math.hypot(this.x - c.x, this.y - c.y) < range) {
+                    if (c !== this && !c.dead && Math.hypot(this.x - c.x, this.y - c.y) < range) {
                         setTimeout(() => c.takeDamage(gameData.upgrades.damage.lv), 100);
                     }
                 });
             }
             takeDamage(dmg) {
+                if(this.dead) return;
                 this.hp -= dmg;
                 if (this.hp <= 0) {
                     this.dead = true;
@@ -172,7 +185,6 @@
             }
         }
 
-        // --- 輔助功能 ---
         function spawnEffect(x, y, color, count) {
             for(let i=0; i<count; i++) {
                 particles.push({ x, y, vx:(Math.random()-0.5)*12, vy:(Math.random()-0.5)*12, life:1, color });
@@ -186,7 +198,6 @@
             setTimeout(() => document.body.classList.remove('shaking'), 100);
         }
 
-        // --- 商店系統 ---
         function toggleShop() {
             const win = document.getElementById('shop-window');
             win.style.display = win.style.display === 'block' ? 'none' : 'block';
@@ -202,10 +213,7 @@
                 const cost = Math.floor(up.cost * Math.pow(up.mult, up.lv - 1));
                 container.innerHTML += `
                     <div class="upgrade-card">
-                        <div>
-                            <p class="up-name">${up.name} (LV.${up.lv})</p>
-                            <p class="up-desc">${up.desc}</p>
-                        </div>
+                        <div><p class="up-name">${up.name} (LV.${up.lv})</p><p class="up-desc">${up.desc}</p></div>
                         <button class="btn-buy" onclick="buyUpgrade('${key}', ${cost})" ${gameData.money < cost ? 'disabled' : ''}>$${cost}</button>
                     </div>
                 `;
@@ -216,43 +224,19 @@
             if (gameData.money >= cost) {
                 gameData.money -= cost;
                 gameData.upgrades[key].lv++;
-                saveGame();
-                refreshUI();
-                renderShop();
+                saveGame(); refreshUI(); renderShop();
             }
         }
 
-        // --- 遊戲循環 ---
         function loop() {
-            ctx.fillStyle = 'rgba(5, 5, 8, 0.25)';
+            ctx.fillStyle = 'rgba(5, 5, 8, 0.3)';
             ctx.fillRect(0, 0, width, height);
-
-            // 更新 Combo 顯示
             document.getElementById('combo-display').innerText = combo;
-            if (combo > 50) {
-                document.getElementById('overload-text').innerText = "OVERLOAD ACTIVE!";
-                if (Math.random() < 0.15 && cubes.length > 0) {
-                    let target = cubes[Math.floor(Math.random()*cubes.length)];
-                    beams.push({ x1:width/2, y1:height, x2:target.x, y2:target.y, life:1 });
-                    target.takeDamage(10);
-                }
-            } else {
-                document.getElementById('overload-text').innerText = "NORMAL MODE";
-            }
 
-            // 處理雷射
-            beams = beams.filter(b => (b.life -= 0.1) > 0);
-            beams.forEach(b => {
-                ctx.strokeStyle = COLORS.pink; ctx.lineWidth = 15 * b.life;
-                ctx.beginPath(); ctx.moveTo(b.x1, b.y1); ctx.lineTo(b.x2, b.y2); ctx.stroke();
-            });
-
-            // 處理方塊
             if (cubes.length < 20) cubes.push(new Cube());
             cubes = cubes.filter(c => !c.dead);
             cubes.forEach(c => { c.update(); c.draw(); });
 
-            // 處理粒子
             particles = particles.filter(p => (p.life -= 0.02) > 0);
             particles.forEach(p => {
                 p.x += p.vx; p.y += p.vy;
@@ -260,7 +244,6 @@
                 ctx.fillRect(p.x, p.y, 4, 4);
             });
 
-            // 處理文字
             floaters = floaters.filter(f => (f.life -= 0.02) > 0);
             floaters.forEach(f => {
                 f.y += f.vy; ctx.fillStyle = f.color; ctx.globalAlpha = f.life;
@@ -271,25 +254,19 @@
             requestAnimationFrame(loop);
         }
 
-        // --- 輸入控制 ---
-        canvas.addEventListener('mousedown', (e) => {
-            isMouseDown = true;
-            processHit(e.clientX, e.clientY);
-        });
+        canvas.addEventListener('mousedown', (e) => { isMouseDown = true; processHit(e.clientX, e.clientY); });
         window.addEventListener('mouseup', () => isMouseDown = false);
-        canvas.addEventListener('mousemove', (e) => {
-            if (isMouseDown && Math.random() < 0.3) processHit(e.clientX, e.clientY);
-        });
+        canvas.addEventListener('mousemove', (e) => { if (isMouseDown && Math.random() < 0.4) processHit(e.clientX, e.clientY); });
 
         function processHit(ex, ey) {
             let hit = false;
             cubes.forEach(c => {
-                if (Math.hypot(ex - c.x, ey - c.y) < c.size + 10) {
+                if (Math.hypot(ex - c.x, ey - c.y) < c.size + 15) {
                     c.takeDamage(gameData.upgrades.damage.lv);
                     hit = true;
                 }
             });
-            if (!hit && !isMouseDown) combo = 0; // 只有單點沒點到會斷 Combo，連打不斷
+            if (!hit && !isMouseDown) combo = 0;
         }
 
         init();
