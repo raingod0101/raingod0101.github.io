@@ -1,74 +1,136 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-TW">
 <head>
-    <title>Neon Snake | Raingod</title>
-    <link rel="stylesheet" href="menu.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Raingod Access Portal</title>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
-        body { background: #050505; color: white; text-align: center; overflow: hidden; }
-        .game-wrapper { position: relative; display: inline-block; margin-top: 20px; border: 2px solid #007aff; border-radius: 20px; padding: 5px; box-shadow: 0 0 50px rgba(0,122,255,0.3); }
-        canvas { background: #000; border-radius: 15px; display: block; }
-        .ui-overlay { position: absolute; top: 10px; width: 100%; display: flex; justify-content: space-around; font-family: monospace; font-size: 1.2rem; pointer-events: none; }
+        :root {
+            --neon-green: #00ff41;
+            --bg-dark: #0a0a0a;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--neon-green);
+            font-family: 'Courier New', monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            text-shadow: 0 0 5px var(--neon-green);
+        }
+
+        #user-card {
+            border: 1px solid var(--neon-green);
+            padding: 20px;
+            margin-top: 20px;
+            display: none; /* 登入後才顯示 */
+            text-align: center;
+            background: rgba(0, 255, 65, 0.1);
+            box-shadow: 0 0 20px rgba(0, 255, 65, 0.2);
+        }
+
+        #user-card img {
+            border-radius: 50%;
+            border: 2px solid var(--neon-green);
+            width: 80px;
+            margin-bottom: 10px;
+        }
+
+        .status-text {
+            font-size: 0.8rem;
+            margin-bottom: 20px;
+            letter-spacing: 2px;
+        }
+
+        /* 自定義登入按鈕容器 */
+        #login-btn-wrapper {
+            border: 1px solid var(--neon-green);
+            padding: 10px;
+        }
     </style>
 </head>
 <body>
-    <div id="nav_bar"></div>
-    <div class="game-wrapper">
-        <div class="ui-overlay">
-            <div>SCORE: <span id="score">0</span></div>
-            <div>HIGH: <span id="high">0</span></div>
+
+    <div class="status-text">SYSTEM STATUS: RESTRICTED ACCESS</div>
+    <h1>IDENTIFY YOURSELF</h1>
+
+    <div id="login-btn-wrapper">
+        <div id="g_id_onload"
+             data-client_id="YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com"
+             data-callback="handleCredentialResponse"
+             data-auto_prompt="false">
         </div>
-        <canvas id="snakeCanvas" width="400" height="400"></canvas>
+        <div class="g_id_signin"
+             data-type="standard"
+             data-size="large"
+             data-theme="dark"
+             data-text="signin_with"
+             data-shape="rectangular"
+             data-logo_alignment="left">
+        </div>
     </div>
-    <script src="loadMenu.js"></script>
+
+    <div id="user-card">
+        <img id="user-pic" src="" alt="User profile">
+        <h3 id="user-name"></h3>
+        <p id="user-email"></p>
+        <button onclick="logout()" style="background:transparent; color:red; border:1px solid red; cursor:pointer;">DISCONNECT</button>
+    </div>
+
     <script>
-        const canvas = document.getElementById('snakeCanvas'), ctx = canvas.getContext('2d');
-        let snake = [{x:10, y:10}], food = {x:5, y:5}, dx = 0, dy = 0, score = 0, hi = localStorage.getItem('s_hi')||0;
-        document.getElementById('high').innerText = hi;
+        // 解析 Google 傳回的 JWT Token (前端解碼)
+        function parseJwt(token) {
+            var base64Url = token.split('.')[1];
+            var base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            var jsonPayload = decodeURIComponent(window.atob(base64).split('').map(function(c) {
+                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+            }).join(''));
 
-        function main() {
-            setTimeout(function onTick() {
-                update(); draw(); main();
-            }, 130); // 速度放慢至 130ms，更有操控感
+            return JSON.parse(jsonPayload);
         }
 
-        function update() {
-            if (dx===0 && dy===0) return;
-            const head = {x: snake[0].x + dx, y: snake[0].y + dy};
-            if (head.x<0||head.x>19||head.y<0||head.y>19||snake.some(s=>s.x===head.x&&s.y===head.y)) return reset();
-            snake.unshift(head);
-            if (head.x===food.x && head.y===food.y) {
-                score+=10; document.getElementById('score').innerText = score;
-                food = {x:Math.floor(Math.random()*20), y:Math.floor(Math.random()*20)};
-            } else snake.pop();
+        // 登入成功的回調函數
+        function handleCredentialResponse(response) {
+            console.log("Encoded JWT ID token: " + response.credential);
+            
+            // 解碼取得使用者資料
+            const userData = parseJwt(response.credential);
+            console.log(userData);
+
+            // 更新 UI
+            document.getElementById('login-btn-wrapper').style.display = 'none';
+            document.getElementById('user-card').style.display = 'block';
+            
+            document.getElementById('user-name').innerText = `USER: ${userData.name}`;
+            document.getElementById('user-email').innerText = `ID: ${userData.email}`;
+            document.getElementById('user-pic').src = userData.picture;
+            
+            // 你可以把資料存在 localStorage，讓頁面重整後依然保持登入
+            localStorage.setItem('raingod_user', JSON.stringify(userData));
         }
 
-        function draw() {
-            ctx.fillStyle = 'black'; ctx.fillRect(0,0,400,400);
-            // 繪製食物 (發光紅心)
-            ctx.shadowBlur = 15; ctx.shadowColor = '#ff3b30'; ctx.fillStyle = '#ff3b30';
-            ctx.beginPath(); ctx.arc(food.x*20+10, food.y*20+10, 7, 0, Math.PI*2); ctx.fill();
-            // 繪製蛇 (漸層藍)
-            snake.forEach((s, i) => {
-                ctx.shadowBlur = i===0 ? 20 : 5; ctx.shadowColor = '#007aff';
-                ctx.fillStyle = i===0 ? '#ffffff' : '#007aff';
-                ctx.beginPath(); ctx.roundRect(s.x*20+2, s.y*20+2, 16, 16, 5); ctx.fill();
-            });
-            ctx.shadowBlur = 0;
+        function logout() {
+            localStorage.removeItem('raingod_user');
+            location.reload(); // 簡單暴力地重整頁面來登出
         }
 
-        function reset() {
-            if(score > hi) localStorage.setItem('s_hi', score);
-            alert("Game Over! Score: " + score);
-            location.reload();
-        }
-
-        window.onkeydown = e => {
-            if(e.key==='ArrowUp'&&dy!==1){dx=0;dy=-1}
-            if(e.key==='ArrowDown'&&dy!==-1){dx=0;dy=1}
-            if(e.key==='ArrowLeft'&&dx!==1){dx=-1;dy=0}
-            if(e.key==='ArrowRight'&&dx!==-1){dx=1;dy=0}
+        // 頁面載入時檢查是否已登入
+        window.onload = function() {
+            const savedUser = localStorage.getItem('raingod_user');
+            if (savedUser) {
+                const userData = JSON.parse(savedUser);
+                document.getElementById('login-btn-wrapper').style.display = 'none';
+                document.getElementById('user-card').style.display = 'block';
+                document.getElementById('user-name').innerText = `USER: ${userData.name}`;
+                document.getElementById('user-email').innerText = `ID: ${userData.email}`;
+                document.getElementById('user-pic').src = userData.picture;
+            }
         };
-        main();
     </script>
 </body>
 </html>
