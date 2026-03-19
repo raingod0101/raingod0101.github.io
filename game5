@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>RAINGOD | THE OVERLOAD LAB V2</title>
+    <style>
+        :root { --neon: #00f2ff; --pink: #ff007b; --gold: #ffcc00; --bg: #050508; }
+        body { margin: 0; overflow: hidden; background: var(--bg); font-family: 'Consolas', monospace; cursor: crosshair; user-select: none; }
+        canvas { display: block; }
+
+        /* UI Overlay */
+        #hud { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; padding: 25px; box-sizing: border-box; }
+        .stat-group { display: flex; gap: 15px; pointer-events: auto; }
+        .panel { background: rgba(0, 0, 0, 0.85); border: 1px solid #333; border-left: 5px solid var(--neon); padding: 12px 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .label { color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 2px; }
+        .value { color: #fff; font-size: 28px; font-weight: 900; }
+        
+        #shop-trigger { position: absolute; right: 25px; top: 25px; padding: 15px 35px; background: var(--pink); color: #fff; border: none; font-weight: 900; cursor: pointer; pointer-events: auto; transition: 0.2s; box-shadow: 0 0 20px rgba(255, 0, 123, 0.4); }
+        #shop-trigger:hover { transform: scale(1.05) rotate(-2deg); filter: brightness(1.2); }
+
+        #shop-window { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 420px; background: #111; border: 2px solid var(--neon); padding: 25px; display: none; pointer-events: auto; z-index: 100; }
+        .upgrade-card { background: #1a1a1a; margin-bottom: 12px; padding: 15px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #333; transition: 0.2s; }
+        .upgrade-card:hover { border-color: var(--neon); background: #222; }
+        .up-name { color: var(--neon); font-size: 16px; font-weight: bold; margin: 0; }
+        .up-desc { color: #777; font-size: 11px; margin: 4px 0 0 0; }
+        .btn-buy { background: var(--gold); border: none; padding: 8px 15px; font-weight: 900; cursor: pointer; border-radius: 3px; min-width: 80px; }
+        .btn-buy:disabled { background: #444; color: #888; cursor: not-allowed; }
+
+        #combo-wrap { position: absolute; bottom: 40px; right: 40px; text-align: right; }
+        .combo-n { font-size: 100px; color: #fff; line-height: 0.8; font-style: italic; text-shadow: 0 0 30px var(--neon); }
+
+        /* 特效控制 */
+        .shaking { animation: shake 0.1s infinite; }
+        @keyframes shake { 0%{transform:translate(2px,2px)} 50%{transform:translate(-2px,-2px)} 100%{transform:translate(0,0)} }
+    </style>
+</head>
+<body>
+
+    <canvas id="canvas"></canvas>
+
+    <div id="hud">
+        <div class="stat-group">
+            <div class="panel">
+                <div class="label">CREDITS</div>
+                <div class="value">$ <span id="money-display">0</span></div>
+            </div>
+            <div class="panel" style="border-left-color: var(--pink);">
+                <div class="label">DMG LV</div>
+                <div class="value"># <span id="damage-display">1</span></div>
+            </div>
+        </div>
+
+        <button id="shop-trigger">UPGRADE SHOP</button>
+
+        <div id="combo-wrap">
+            <div class="label" id="overload-text" style="color:var(--pink)">NORMAL MODE</div>
+            <div class="combo-n" id="combo-display">0</div>
+        </div>
+    </div>
+
+    <div id="shop-window">
+        <h2 style="color:#fff; margin:0 0 20px 0; border-bottom: 2px solid var(--neon); padding-bottom:10px;">SYSTEM ENHANCEMENT</h2>
+        <div id="shop-content"></div>
+        <button onclick="toggleShop()" style="width:100%; margin-top:15px; padding:12px; background:#333; color:#fff; border:none; cursor:pointer; font-weight:bold;">EXIT TERMINAL</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // --- 核心數據狀態 ---
+        let gameData = {
+            money: 0,
+            upgrades: {
+                damage: { lv: 1, cost: 50, mult: 1.5, name: "強化點擊", desc: "提升每次點擊的破壞力" },
+                range: { lv: 1, cost: 100, mult: 1.7, name: "連鎖半徑", desc: "爆炸波及範圍更廣" },
+                luck: { lv: 1, cost: 200, mult: 2.2, name: "稀有掃描", desc: "更高機率出現黃金方塊" },
+                speed: { lv: 1, cost: 150, mult: 1.6, name: "金幣倍率", desc: "獲取更多虛擬幣獎勵" }
+            }
+        };
+
+        // --- 儲存與讀取 (修正邏輯) ---
+        function saveGame() {
+            localStorage.setItem('raingod_save_v2', JSON.stringify(gameData));
+        }
+
+        function loadGame() {
+            const raw = localStorage.getItem('raingod_save_v2');
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                // 深度合併，避免結構損壞
+                gameData.money = parsed.money || 0;
+                for (let key in parsed.upgrades) {
+                    if (gameData.upgrades[key]) {
+                        gameData.upgrades[key].lv = parsed.upgrades[key].lv;
+                    }
+                }
+            }
+            refreshUI();
+        }
+
+        function refreshUI() {
+            document.getElementById('money-display').innerText = Math.floor(gameData.money);
+            document.getElementById('damage-display').innerText = gameData.upgrades.damage.lv;
+        }
+
+        // --- 遊戲引擎變數 ---
+        let width, height, combo = 0, isMouseDown = false;
+        let cubes = [], particles = [], coins = [], floaters = [], beams = [];
+        const COLORS = { blue: '#00f2ff', pink: '#ff007b', gold: '#ffcc00' };
+
+        function init() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            loadGame();
+        }
+        window.onresize = init;
+
+        // --- 實體類別 ---
+        class Cube {
+            constructor(isBoss = false) {
+                this.x = Math.random() * width;
+                this.y = Math.random() * height;
+                this.isBoss = isBoss || (Math.random() < 0.05 + (gameData.upgrades.luck.lv * 0.01));
+                this.size = this.isBoss ? 60 : 30;
+                this.hp = this.isBoss ? 10 : 1;
+                this.maxHp = this.hp;
+                this.color = this.isBoss ? COLORS.gold : COLORS.blue;
+                this.vx = (Math.random() - 0.5) * 3;
+                this.vy = (Math.random() - 0.5) * 3;
+            }
+            draw() {
+                ctx.strokeStyle = this.color;
+                ctx.lineWidth = 3;
+                ctx.shadowBlur = 15; ctx.shadowColor = this.color;
+                ctx.strokeRect(this.x - this.size/2, this.y - this.size/2, this.size, this.size);
+                if (this.hp < this.maxHp) {
+                    ctx.fillStyle = '#333'; ctx.fillRect(this.x-20, this.y-this.size, 40, 5);
+                    ctx.fillStyle = this.color; ctx.fillRect(this.x-20, this.y-this.size, (this.hp/this.maxHp)*40, 5);
+                }
+                ctx.shadowBlur = 0;
+            }
+            update() {
+                this.x += this.vx; this.y += this.vy;
+                if(this.x < 0 || this.x > width) this.vx *= -1;
+                if(this.y < 0 || this.y > height) this.vy *= -1;
+            }
+            explode() {
+                combo++;
+                let reward = (this.isBoss ? 100 : 10) * gameData.upgrades.speed.lv;
+                gameData.money += reward;
+                saveGame(); refreshUI();
+                
+                spawnEffect(this.x, this.y, this.color, 25);
+                spawnText(this.x, this.y, `+$${reward}`, this.color);
+                triggerShake();
+
+                // 連鎖反應
+                let range = 120 + (gameData.upgrades.range.lv * 15);
+                cubes.forEach(c => {
+                    if (c !== this && Math.hypot(this.x - c.x, this.y - c.y) < range) {
+                        setTimeout(() => c.takeDamage(gameData.upgrades.damage.lv), 100);
+                    }
+                });
+            }
+            takeDamage(dmg) {
+                this.hp -= dmg;
+                if (this.hp <= 0) {
+                    this.dead = true;
+                    this.explode();
+                }
+            }
+        }
+
+        // --- 輔助功能 ---
+        function spawnEffect(x, y, color, count) {
+            for(let i=0; i<count; i++) {
+                particles.push({ x, y, vx:(Math.random()-0.5)*12, vy:(Math.random()-0.5)*12, life:1, color });
+            }
+        }
+        function spawnText(x, y, txt, color) {
+            floaters.push({ x, y, txt, color, life:1, vy:-2 });
+        }
+        function triggerShake() {
+            document.body.classList.add('shaking');
+            setTimeout(() => document.body.classList.remove('shaking'), 100);
+        }
+
+        // --- 商店系統 ---
+        function toggleShop() {
+            const win = document.getElementById('shop-window');
+            win.style.display = win.style.display === 'block' ? 'none' : 'block';
+            if (win.style.display === 'block') renderShop();
+        }
+        document.getElementById('shop-trigger').onclick = toggleShop;
+
+        function renderShop() {
+            const container = document.getElementById('shop-content');
+            container.innerHTML = '';
+            for (let key in gameData.upgrades) {
+                const up = gameData.upgrades[key];
+                const cost = Math.floor(up.cost * Math.pow(up.mult, up.lv - 1));
+                container.innerHTML += `
+                    <div class="upgrade-card">
+                        <div>
+                            <p class="up-name">${up.name} (LV.${up.lv})</p>
+                            <p class="up-desc">${up.desc}</p>
+                        </div>
+                        <button class="btn-buy" onclick="buyUpgrade('${key}', ${cost})" ${gameData.money < cost ? 'disabled' : ''}>$${cost}</button>
+                    </div>
+                `;
+            }
+        }
+
+        window.buyUpgrade = (key, cost) => {
+            if (gameData.money >= cost) {
+                gameData.money -= cost;
+                gameData.upgrades[key].lv++;
+                saveGame();
+                refreshUI();
+                renderShop();
+            }
+        }
+
+        // --- 遊戲循環 ---
+        function loop() {
+            ctx.fillStyle = 'rgba(5, 5, 8, 0.25)';
+            ctx.fillRect(0, 0, width, height);
+
+            // 更新 Combo 顯示
+            document.getElementById('combo-display').innerText = combo;
+            if (combo > 50) {
+                document.getElementById('overload-text').innerText = "OVERLOAD ACTIVE!";
+                if (Math.random() < 0.15 && cubes.length > 0) {
+                    let target = cubes[Math.floor(Math.random()*cubes.length)];
+                    beams.push({ x1:width/2, y1:height, x2:target.x, y2:target.y, life:1 });
+                    target.takeDamage(10);
+                }
+            } else {
+                document.getElementById('overload-text').innerText = "NORMAL MODE";
+            }
+
+            // 處理雷射
+            beams = beams.filter(b => (b.life -= 0.1) > 0);
+            beams.forEach(b => {
+                ctx.strokeStyle = COLORS.pink; ctx.lineWidth = 15 * b.life;
+                ctx.beginPath(); ctx.moveTo(b.x1, b.y1); ctx.lineTo(b.x2, b.y2); ctx.stroke();
+            });
+
+            // 處理方塊
+            if (cubes.length < 20) cubes.push(new Cube());
+            cubes = cubes.filter(c => !c.dead);
+            cubes.forEach(c => { c.update(); c.draw(); });
+
+            // 處理粒子
+            particles = particles.filter(p => (p.life -= 0.02) > 0);
+            particles.forEach(p => {
+                p.x += p.vx; p.y += p.vy;
+                ctx.fillStyle = p.color; ctx.globalAlpha = p.life;
+                ctx.fillRect(p.x, p.y, 4, 4);
+            });
+
+            // 處理文字
+            floaters = floaters.filter(f => (f.life -= 0.02) > 0);
+            floaters.forEach(f => {
+                f.y += f.vy; ctx.fillStyle = f.color; ctx.globalAlpha = f.life;
+                ctx.font = 'bold 20px Consolas'; ctx.fillText(f.txt, f.x, f.y);
+            });
+
+            ctx.globalAlpha = 1;
+            requestAnimationFrame(loop);
+        }
+
+        // --- 輸入控制 ---
+        canvas.addEventListener('mousedown', (e) => {
+            isMouseDown = true;
+            processHit(e.clientX, e.clientY);
+        });
+        window.addEventListener('mouseup', () => isMouseDown = false);
+        canvas.addEventListener('mousemove', (e) => {
+            if (isMouseDown && Math.random() < 0.3) processHit(e.clientX, e.clientY);
+        });
+
+        function processHit(ex, ey) {
+            let hit = false;
+            cubes.forEach(c => {
+                if (Math.hypot(ex - c.x, ey - c.y) < c.size + 10) {
+                    c.takeDamage(gameData.upgrades.damage.lv);
+                    hit = true;
+                }
+            });
+            if (!hit && !isMouseDown) combo = 0; // 只有單點沒點到會斷 Combo，連打不斷
+        }
+
+        init();
+        loop();
+    </script>
+</body>
+</html>
