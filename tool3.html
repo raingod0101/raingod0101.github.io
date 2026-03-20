@@ -7,15 +7,13 @@
     <style>
         :root {
             --bg-color: #0d0d0d;
-            --accent-color: #00ff41; /* 經典數位雨綠色 */
+            --accent-color: #00ff41; 
             --text-color: #e0e0e0;
             --border-color: #333;
         }
 
         body, html {
-            margin: 0;
-            padding: 0;
-            height: 100%;
+            margin: 0; padding: 0; height: 100%;
             background-color: var(--bg-color);
             color: var(--text-color);
             font-family: 'Courier New', Courier, monospace;
@@ -24,7 +22,7 @@
 
         /* 頂部工具列 */
         .toolbar {
-            height: 40px;
+            height: 45px;
             background: #1a1a1a;
             display: flex;
             align-items: center;
@@ -33,19 +31,16 @@
             justify-content: space-between;
         }
 
-        .logo {
-            color: var(--accent-color);
-            font-weight: bold;
-            letter-spacing: 2px;
-        }
+        .logo { color: #FFFFFF; font-weight: bold; letter-spacing: 2px; font-size: 14px; }
+
+        .btn-group { display: flex; gap: 5px; }
 
         /* 主容器 */
         .main-container {
             display: flex;
-            height: calc(100vh - 40px);
+            height: calc(100vh - 45px);
         }
 
-        /* 編輯區架構 */
         .editor-container {
             flex: 1;
             position: relative;
@@ -53,101 +48,63 @@
             display: flex;
         }
 
-        /* 行號 */
         #line-numbers {
-            width: 40px;
-            background: #050505;
-            color: #555;
-            padding: 10px 5px;
-            text-align: right;
-            font-size: 14px;
-            line-height: 20px;
-            user-select: none;
-            border-right: 1px solid var(--border-color);
-        }
-
-        /* 輸入框與高亮層 */
-        .code-area {
-            flex: 1;
-            position: relative;
-            background: var(--bg-color);
-        }
-
-        #code-input, #code-highlight {
-            width: 100%;
-            height: 100%;
-            margin: 0;
-            padding: 10px;
-            border: none;
-            box-sizing: border-box;
-            font-family: 'Consolas', 'Monaco', monospace;
-            font-size: 14px;
-            line-height: 20px;
-            white-space: pre;
-            tab-size: 4;
-            position: absolute;
-            top: 0;
-            left: 0;
-            outline: none;
-        }
-
-        #code-input {
-            background: transparent;
-            color: transparent;
-            caret-color: var(--accent-color);
-            z-index: 2;
-            resize: none;
-        }
-
-        #code-highlight {
-            z-index: 1;
-            color: var(--text-color);
-            pointer-events: none;
+            width: 40px; background: #050505; color: #555;
+            padding: 10px 5px; text-align: right; font-size: 14px;
+            line-height: 20px; user-select: none; border-right: 1px solid var(--border-color);
             overflow: hidden;
         }
 
-        /* 預覽區 */
-        .preview-container {
-            flex: 1;
-            background: #fff;
+        .code-area { flex: 1; position: relative; background: var(--bg-color); }
+
+        #code-input, #code-highlight {
+            width: 100%; height: 100%; margin: 0; padding: 10px;
+            border: none; box-sizing: border-box;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 14px; line-height: 20px;
+            white-space: pre; tab-size: 4;
+            position: absolute; top: 0; left: 0; outline: none;
         }
 
-        iframe {
-            width: 100%;
-            height: 100%;
-            border: none;
+        #code-input {
+            background: transparent; color: transparent;
+            caret-color: var(--accent-color); z-index: 2; resize: none;
         }
+
+        #code-highlight { z-index: 1; color: var(--text-color); pointer-events: none; overflow: hidden; }
+
+        /* 預覽區 */
+        .preview-container { flex: 1; background: #fff; position: relative; }
+        iframe { width: 100%; height: 100%; border: none; }
 
         /* 按鈕樣式 */
         .btn {
-            background: transparent;
-            border: 1px solid var(--accent-color);
-            color: var(--accent-color);
-            padding: 4px 12px;
-            cursor: pointer;
-            font-size: 12px;
-            transition: all 0.3s;
+            background: transparent; border: 1px solid #444;
+            color: #FFFFFF; padding: 4px 10px; cursor: pointer;
+            font-size: 11px; transition: all 0.2s;
         }
 
-        .btn:hover {
-            background: var(--accent-color);
-            color: #000;
-        }
+        .btn:hover { background: var(--accent-color); color: #000; border-color: var(--accent-color); }
 
-        /* HTML 標籤簡單染色 */
+        /* 全螢幕狀態微調 */
+        :-webkit-full-screen .toolbar { display: flex; }
+        :fullscreen .toolbar { display: flex; }
     </style>
 </head>
 <body>
 
     <div class="toolbar">
         <div class="logo">HTML編輯器</div>
-        <div>
-            <button class="btn" onclick="clearCode()">CLEAR</button>
-            <button class="btn" onclick="downloadCode()">SAVE .HTML</button>
+        <div class="btn-group">
+            <button class="btn" onclick="importFromUrl()">輸入網址</button>
+            <button class="btn" onclick="copyAll()">複製全部</button>
+            <button class="btn" onclick="clearCode()">清除</button>
+            <button class="btn" onclick="downloadCode()">儲存html檔案</button>
+            <button class="btn" onclick="toggleFullScreen()">切換全螢幕</button>
         </div>
     </div>
 
-    <div class="main-container">
+    <div class="main-container" id="editor-main">
         <div class="editor-container">
             <div id="line-numbers">1</div>
             <div class="code-area">
@@ -167,25 +124,12 @@
         const lineNumbers = document.getElementById('line-numbers');
         const preview = document.getElementById('preview-window');
 
-        // 預設內容
-        const defaultCode = `<!DOCTYPE html>
-<html>
-<head>
-    <style>
-        body { background: #000; color: #00ff41; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        h1 { border: 2px solid #00ff41; padding: 20px; text-shadow: 0 0 10px #00ff41; }
-    </style>
-</head>
-<body>
-    <h1>SYSTEM ONLINE</h1>
-</body>
-</html>`;
-
         // 初始化
+        const defaultCode = `<!DOCTYPE html>\n<html>\n<head>\n    <style>\n        body { background: #f0f0f0; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; font-family: sans-serif; }\n        h1 { color: #333;}\n    </style>\n</head>\n<body>\n    <h1>Hello</h1>\n</body>\n</html>`;
         input.value = defaultCode;
         updateEditor();
 
-        // 監聽輸入
+        // 監聽
         input.addEventListener('input', updateEditor);
         input.addEventListener('scroll', () => {
             highlight.scrollTop = input.scrollTop;
@@ -193,41 +137,60 @@
             lineNumbers.scrollTop = input.scrollTop;
         });
 
-        // 處理 Tab 鍵
-        input.addEventListener('keydown', (e) => {
-            if (e.key === 'Tab') {
-                e.preventDefault();
-                const start = input.selectionStart;
-                const end = input.selectionEnd;
-                input.value = input.value.substring(0, start) + "    " + input.value.substring(end);
-                input.selectionStart = input.selectionEnd = start + 4;
-                updateEditor();
-            }
-        });
-
         function updateEditor() {
             const code = input.value;
-            
-            // 1. 更新預覽
+            // 更新預覽
             const previewDoc = preview.contentDocument || preview.contentWindow.document;
             previewDoc.open();
             previewDoc.write(code);
             previewDoc.close();
 
-            // 2. 更新行號
+            // 更新行號
             const lines = code.split('\n').length;
             lineNumbers.innerHTML = Array.from({length: lines}, (_, i) => i + 1).join('<br>');
 
-            // 3. 簡單語法染色 (使用正規表達式)
-            let colored = code
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-
-
-            highlight.innerHTML = colored + (code.endsWith('\n') ? ' ' : '');
+            // 轉義與顯示
+            highlight.innerHTML = code.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") + (code.endsWith('\n') ? ' ' : '');
         }
 
+        // --- 新功能函數 ---
+
+        // 1. 複製全部
+        function copyAll() {
+            input.select();
+            document.execCommand('copy');
+            const originalText = event.target.innerText;
+            setTimeout(() => { event.target.innerText = originalText; }, 1500);
+        }
+
+        // 2. 輸入網址導入 (處理 CORS 問題，部分網站可能無法直接抓取)
+        async function importFromUrl() {
+            const url = prompt("請輸入 HTML 檔案的完整網址 (需支援 CORS):", "https://example.com");
+            if (url) {
+                try {
+                    const response = await fetch(url);
+                    if (!response.ok) throw new Error("連線失敗");
+                    const text = await response.text();
+                    input.value = text;
+                    updateEditor();
+                } catch (err) {
+                    alert("導入失敗: " + err.message + "\n請確保網址正確且該網站允許跨網域存取(CORS)。");
+                }
+            }
+        }
+
+        // 3. 全螢幕切換
+        function toggleFullScreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => {
+                    alert(`無法切換全螢幕: ${err.message}`);
+                });
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        // 原有功能
         function clearCode() {
             if(confirm("確定要清空所有代碼嗎？")) {
                 input.value = "";
@@ -242,6 +205,18 @@
             a.download = "index.html";
             a.click();
         }
+
+        // Tab 鍵處理
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                const start = input.selectionStart;
+                const end = input.selectionEnd;
+                input.value = input.value.substring(0, start) + "    " + input.value.substring(end);
+                input.selectionStart = input.selectionEnd = start + 4;
+                updateEditor();
+            }
+        });
     </script>
 </body>
 </html>
