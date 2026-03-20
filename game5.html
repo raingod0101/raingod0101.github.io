@@ -4,33 +4,36 @@
     <meta charset="UTF-8">
     <title>爆炸 | RAINGOD</title>
     <style>
-        :root { --neon: #00f2ff; --pink: #ff007b; --gold: #ffcc00; --bg: #050508; }
-        body { margin: 0; overflow: hidden; background: var(--bg); font-family: 'Consolas', monospace; cursor: crosshair; user-select: none; }
+        :root { --neon: #00f2ff; --pink: #ff007b; --gold: #ffcc00; --purple: #bc13fe; --void: #1a0033; --bg: #020205; }
+        body { margin: 0; overflow: hidden; background: var(--bg); font-family: 'Segoe UI', sans-serif; cursor: crosshair; user-select: none; }
         canvas { display: block; }
 
         /* UI Overlay */
-        #hud { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; padding: 25px; box-sizing: border-box; }
-        .stat-group { display: flex; gap: 15px; pointer-events: auto; }
-        .panel { background: rgba(0, 0, 0, 0.85); border: 1px solid #333; border-left: 5px solid var(--neon); padding: 12px 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        .label { color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 2px; }
-        .value { color: #fff; font-size: 28px; font-weight: 900; }
+        #hud { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; padding: 20px; box-sizing: border-box; }
+        .stat-group { display: flex; flex-direction: column; gap: 10px; pointer-events: auto; }
+        .panel { background: rgba(0, 0, 0, 0.9); border: 1px solid #222; border-left: 4px solid var(--neon); padding: 10px 20px; box-shadow: 0 5px 15px rgba(0,0,0,0.8); }
+        .label { color: #666; font-size: 10px; text-transform: uppercase; letter-spacing: 2px; }
+        .value { color: #fff; font-size: 24px; font-weight: 900; }
         
-        #shop-trigger { position: absolute; right: 25px; top: 25px; padding: 15px 35px; background: var(--pink); color: #fff; border: none; font-weight: 900; cursor: pointer; pointer-events: auto; transition: 0.2s; box-shadow: 0 0 20px rgba(255, 0, 123, 0.4); }
-        #shop-trigger:hover { transform: scale(1.05) rotate(-2deg); filter: brightness(1.2); }
+        /* 商店按鈕 */
+        .ctrl-btn { padding: 12px 25px; background: #111; color: #fff; border: 1px solid var(--pink); cursor: pointer; pointer-events: auto; transition: 0.2s; font-weight: bold; margin-bottom: 5px; text-align: left; position: relative; overflow: hidden; }
+        .ctrl-btn:hover { background: var(--pink); color: #000; box-shadow: 0 0 20px var(--pink); }
 
-        #shop-window { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 420px; background: #111; border: 2px solid var(--neon); padding: 25px; display: none; pointer-events: auto; z-index: 100; }
-        .upgrade-card { background: #1a1a1a; margin-bottom: 12px; padding: 15px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #333; transition: 0.2s; }
-        .upgrade-card:hover { border-color: var(--neon); background: #222; }
-        .up-name { color: var(--neon); font-size: 16px; font-weight: bold; margin: 0; }
-        .up-desc { color: #777; font-size: 11px; margin: 4px 0 0 0; }
-        .btn-buy { background: var(--gold); border: none; padding: 8px 15px; font-weight: 900; cursor: pointer; border-radius: 3px; min-width: 80px; }
-        .btn-buy:disabled { background: #444; color: #888; cursor: not-allowed; }
+        #shop-window { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 480px; height: 80vh; overflow-y: auto; background: rgba(5, 5, 10, 0.98); border: 1px solid var(--neon); padding: 25px; display: none; pointer-events: auto; z-index: 100; box-shadow: 0 0 100px rgba(0,0,0,1); }
+        .upgrade-card { background: #0a0a0f; margin-bottom: 10px; padding: 15px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #222; }
+        .up-name { color: var(--neon); font-size: 14px; font-weight: bold; margin: 0; }
+        .up-desc { color: #555; font-size: 11px; margin: 4px 0 0 0; }
+        .btn-buy { background: var(--gold); border: none; padding: 8px 12px; font-weight: 900; cursor: pointer; min-width: 90px; }
+        .btn-buy:disabled { background: #222; color: #444; }
 
-        #combo-wrap { position: absolute; bottom: 40px; right: 40px; text-align: right; }
-        .combo-n { font-size: 100px; color: #fff; line-height: 0.8; font-style: italic; text-shadow: 0 0 30px var(--neon); }
+        /* 轉生 UI */
+        #prestige-alert { position: absolute; top: 20%; left: 50%; transform: translateX(-50%); text-align: center; color: var(--gold); display: none; pointer-events: auto; }
 
-        .shaking { animation: shake 0.1s infinite; }
-        @keyframes shake { 0%{transform:translate(2px,2px)} 50%{transform:translate(-2px,-2px)} 100%{transform:translate(0,0)} }
+        #combo-wrap { position: absolute; bottom: 30px; left: 30px; }
+        .combo-n { font-size: 80px; color: #fff; line-height: 0.7; font-style: italic; font-weight: 900; opacity: 0.5; }
+
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-thumb { background: var(--neon); }
     </style>
 </head>
 <body>
@@ -38,90 +41,96 @@
     <canvas id="canvas"></canvas>
 
     <div id="hud">
-        <div class="stat-group">
-            <div class="panel">
-                <div class="label">CREDITS</div>
-                <div class="value">$ <span id="money-display">0</span></div>
+        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div class="stat-group">
+                <div class="panel"><div class="label">CREDITS</div><div class="value">$ <span id="money-display">0</span></div></div>
+                <div class="panel" style="border-left-color: var(--pink);"><div class="label">POWER</div><div class="value">ATK <span id="damage-display">1</span></div></div>
+                <div class="panel" style="border-left-color: var(--gold);"><div class="label">DIVINE MULT</div><div class="value">x <span id="prestige-display">1</span></div></div>
             </div>
-            <div class="panel" style="border-left-color: var(--pink);">
-                <div class="label">DMG LV</div>
-                <div class="value"># <span id="damage-display">1</span></div>
+            <div class="stat-group">
+                <button class="ctrl-btn" onclick="toggleShop()">OPEN TERMINAL</button>
+                <button id="prestige-btn" class="ctrl-btn" style="border-color: var(--gold); display:none;" onclick="doPrestige()">DIVINE ASCENSION</button>
             </div>
         </div>
 
-        <button id="shop-trigger">UPGRADE SHOP</button>
-
         <div id="combo-wrap">
-            <div class="label" style="color:var(--neon)">STREAK COMBO</div>
+            <div class="label" style="color:var(--neon)">CHAIN STREAK</div>
             <div class="combo-n" id="combo-display">0</div>
         </div>
     </div>
 
     <div id="shop-window">
-        <h2 style="color:#fff; margin:0 0 20px 0; border-bottom: 2px solid var(--neon); padding-bottom:10px;">SYSTEM ENHANCEMENT</h2>
+        <h2 style="color:#fff; margin:0 0 15px 0; border-bottom: 1px solid var(--neon); padding-bottom:10px;">ETERNAL UPGRADES</h2>
         <div id="shop-content"></div>
-        <button onclick="toggleShop()" style="width:100%; margin-top:15px; padding:12px; background:#333; color:#fff; border:none; cursor:pointer; font-weight:bold;">EXIT TERMINAL</button>
+        <button onclick="toggleShop()" style="width:100%; margin-top:15px; padding:10px; background:#222; color:#fff; border:none; cursor:pointer;">CLOSE</button>
     </div>
 
     <script>
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
         
+        // --- 安全與數據核心 ---
+        const SALT_A = "RG_INF_99";
+        const SALT_B = "ANTI_CHEAT_ACTIVE";
+        
         let gameData = {
             money: 0,
+            totalEarned: 0,
+            prestige: 1,
             upgrades: {
-                damage: { lv: 1, cost: 50, mult: 1.5, name: "強化點擊", desc: "提升每次點擊的破壞力" },
-                range: { lv: 1, cost: 100, mult: 1.7, name: "連鎖半徑", desc: "爆炸波及範圍更廣" },
-                luck: { lv: 1, cost: 200, mult: 2.2, name: "稀有掃描", desc: "更高機率出現黃金方塊" },
-                speed: { lv: 1, cost: 150, mult: 1.6, name: "金幣倍率", desc: "獲取更多虛擬幣獎勵" }
+                damage: { lv: 1, cost: 50, mult: 1.45, name: "量子疊加點擊", desc: "每次點擊威力呈指數增長" },
+                range: { lv: 1, cost: 200, mult: 1.6, name: "虛空爆炸半徑", desc: "引發更遠距離的死亡連鎖" },
+                luck: { lv: 1, cost: 500, mult: 2.1, name: "命運干擾儀", desc: "提高神級方塊出現機率" },
+                crit: { lv: 1, cost: 1000, mult: 1.8, name: "精密拆解", desc: "增加獲得 Credits 的基礎倍率" }
             }
         };
 
-        const SECRET_SALT = "RAINGOD_SECURE_V3_CLEAN";
-
-        function generateChecksum(data) {
-            let str = JSON.stringify(data) + SECRET_SALT;
-            let hash = 0;
+        function getHash(obj) {
+            let str = JSON.stringify(obj) + SALT_A + (obj.money * 3).toString() + SALT_B;
+            let h = 0;
             for (let i = 0; i < str.length; i++) {
-                hash = ((hash << 5) - hash) + str.charCodeAt(i);
-                hash |= 0; 
+                h = ((h << 5) - h) + str.charCodeAt(i);
+                h |= 0;
             }
-            return hash.toString(16);
+            return h.toString(36);
         }
 
         function saveGame() {
-            const container = { payload: gameData, check: generateChecksum(gameData) };
-            const secureBlob = btoa(encodeURIComponent(JSON.stringify(container)));
-            localStorage.setItem('raingod_secure_clean', secureBlob);
+            const wrapper = {
+                data: gameData,
+                sig: getHash(gameData),
+                ts: Date.now()
+            };
+            localStorage.setItem('raingod_eternal_v1', btoa(unescape(encodeURIComponent(JSON.stringify(wrapper)))));
         }
 
         function loadGame() {
-            const raw = localStorage.getItem('raingod_secure_clean');
-            if (!raw) return refreshUI();
             try {
-                const decoded = JSON.parse(decodeURIComponent(atob(raw)));
-                if (generateChecksum(decoded.payload) === decoded.check) {
-                    gameData.money = decoded.payload.money || 0;
-                    for (let key in decoded.payload.upgrades) {
-                        if (gameData.upgrades[key]) gameData.upgrades[key].lv = decoded.payload.upgrades[key].lv;
-                    }
+                const raw = localStorage.getItem('raingod_eternal_v1');
+                if (!raw) return;
+                const wrapper = JSON.parse(decodeURIComponent(escape(atob(raw))));
+                if (getHash(wrapper.data) === wrapper.sig) {
+                    gameData = wrapper.data;
                 } else {
-                    alert("⚠️ 存檔校驗失敗，數據已重置。");
+                    alert("⚠️ 檢測到存檔竄改！數據已重置以維護公平性。");
                     gameData.money = 0;
                     saveGame();
                 }
-            } catch (e) { console.warn("New Game Started."); }
+            } catch (e) { console.log("New era begins."); }
             refreshUI();
         }
 
-        function refreshUI() {
-            document.getElementById('money-display').innerText = Math.floor(gameData.money);
-            document.getElementById('damage-display').innerText = gameData.upgrades.damage.lv;
-        }
+        // --- 遊戲邏輯 ---
+        const MOB_TYPES = {
+            COMMON: { color: '#00f2ff', hp: 2, reward: 10, chance: 1, size: 30 },
+            ELITE:  { color: '#ff007b', hp: 50, reward: 250, chance: 0.1, size: 45 },
+            DIVINE: { color: '#ffcc00', hp: 1000, reward: 10000, chance: 0.01, size: 60 },
+            OMEGA:  { color: '#ffffff', hp: 100000, reward: 1000000, chance: 0.001, size: 100 }
+        };
 
-        let width, height, combo = 0, isMouseDown = false;
+        let width, height, combo = 0;
         let cubes = [], particles = [], floaters = [];
-        const COLORS = { blue: '#00f2ff', pink: '#ff007b', gold: '#ffcc00' };
+        let lastClickTime = 0;
 
         function init() {
             width = canvas.width = window.innerWidth;
@@ -131,107 +140,148 @@
         window.onresize = init;
 
         class Cube {
-            constructor(isBoss = false) {
+            constructor() {
+                const rand = Math.random();
+                const luckBonus = gameData.upgrades.luck.lv * 0.002;
+                if (rand < 0.001 + luckBonus) this.type = MOB_TYPES.OMEGA;
+                else if (rand < 0.01 + luckBonus) this.type = MOB_TYPES.DIVINE;
+                else if (rand < 0.1 + luckBonus) this.type = MOB_TYPES.ELITE;
+                else this.type = MOB_TYPES.COMMON;
+
                 this.x = Math.random() * width;
                 this.y = Math.random() * height;
-                this.isBoss = isBoss || (Math.random() < 0.05 + (gameData.upgrades.luck.lv * 0.01));
-                this.size = this.isBoss ? 60 : 30;
-                this.hp = this.isBoss ? 10 : 1;
+                this.size = this.type.size;
+                
+                // 血量隨時間與強度無限成長
+                const scaling = Math.pow(1.15, gameData.upgrades.damage.lv / 5);
+                this.hp = this.type.hp * scaling * gameData.prestige;
                 this.maxHp = this.hp;
-                this.color = this.isBoss ? COLORS.gold : COLORS.blue;
-                this.vx = (Math.random() - 0.5) * 3;
-                this.vy = (Math.random() - 0.5) * 3;
+                this.color = this.type.color;
+                this.vx = (Math.random() - 0.5) * 2;
+                this.vy = (Math.random() - 0.5) * 2;
                 this.dead = false;
             }
+
             draw() {
                 ctx.strokeStyle = this.color;
-                ctx.lineWidth = 3;
-                ctx.shadowBlur = 15; ctx.shadowColor = this.color;
+                ctx.lineWidth = 2;
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = this.color;
                 ctx.strokeRect(this.x - this.size/2, this.y - this.size/2, this.size, this.size);
-                if (this.hp < this.maxHp) {
-                    ctx.fillStyle = '#333'; ctx.fillRect(this.x-20, this.y-this.size, 40, 5);
-                    ctx.fillStyle = this.color; ctx.fillRect(this.x-20, this.y-this.size, (this.hp/this.maxHp)*40, 5);
-                }
+                
+                // 血量條
+                let percent = this.hp / this.maxHp;
+                ctx.fillStyle = '#111'; ctx.fillRect(this.x - 20, this.y - this.size, 40, 4);
+                ctx.fillStyle = this.color; ctx.fillRect(this.x - 20, this.y - this.size, 40 * percent, 4);
                 ctx.shadowBlur = 0;
             }
+
             update() {
                 this.x += this.vx; this.y += this.vy;
                 if(this.x < 0 || this.x > width) this.vx *= -1;
                 if(this.y < 0 || this.y > height) this.vy *= -1;
             }
-            explode() {
-                combo++;
-                let reward = (this.isBoss ? 100 : 10) * gameData.upgrades.speed.lv;
-                gameData.money += reward;
-                saveGame(); refreshUI();
-                spawnEffect(this.x, this.y, this.color, 25);
-                spawnText(this.x, this.y, `+$${reward}`, this.color);
-                triggerShake();
 
-                let range = 120 + (gameData.upgrades.range.lv * 15);
-                cubes.forEach(c => {
-                    if (c !== this && !c.dead && Math.hypot(this.x - c.x, this.y - c.y) < range) {
-                        setTimeout(() => c.takeDamage(gameData.upgrades.damage.lv), 100);
-                    }
-                });
-            }
             takeDamage(dmg) {
-                if(this.dead) return;
+                if (this.dead) return;
                 this.hp -= dmg;
                 if (this.hp <= 0) {
                     this.dead = true;
                     this.explode();
                 }
             }
-        }
 
-        function spawnEffect(x, y, color, count) {
-            for(let i=0; i<count; i++) {
-                particles.push({ x, y, vx:(Math.random()-0.5)*12, vy:(Math.random()-0.5)*12, life:1, color });
+            explode() {
+                combo++;
+                let baseReward = this.type.reward * (1 + gameData.upgrades.crit.lv * 0.5) * gameData.prestige;
+                gameData.money += baseReward;
+                gameData.totalEarned += baseReward;
+                
+                spawnEffect(this.x, this.y, this.color, 20);
+                spawnText(this.x, this.y, `+$${Math.floor(baseReward)}`, this.color);
+                
+                // 連鎖
+                let range = 100 + (gameData.upgrades.range.lv * 15);
+                cubes.forEach(c => {
+                    if (!c.dead && Math.hypot(this.x - c.x, this.y - c.y) < range) {
+                        setTimeout(() => c.takeDamage(getAtkPower() * 0.5), 50);
+                    }
+                });
+
+                if (gameData.totalEarned > 1000000 * gameData.prestige) {
+                    document.getElementById('prestige-btn').style.display = 'block';
+                }
+                
+                saveGame();
+                refreshUI();
             }
         }
-        function spawnText(x, y, txt, color) {
-            floaters.push({ x, y, txt, color, life:1, vy:-2 });
+
+        function getAtkPower() {
+            return (Math.pow(1.5, gameData.upgrades.damage.lv - 1)) * gameData.prestige;
         }
-        function triggerShake() {
-            document.body.classList.add('shaking');
-            setTimeout(() => document.body.classList.remove('shaking'), 100);
+
+        function refreshUI() {
+            document.getElementById('money-display').innerText = Math.floor(gameData.money).toLocaleString();
+            document.getElementById('damage-display').innerText = Math.floor(getAtkPower()).toLocaleString();
+            document.getElementById('prestige-display').innerText = gameData.prestige;
+            document.getElementById('combo-display').innerText = combo;
         }
 
         function toggleShop() {
-            const win = document.getElementById('shop-window');
-            win.style.display = win.style.display === 'block' ? 'none' : 'block';
-            if (win.style.display === 'block') renderShop();
+            const s = document.getElementById('shop-window');
+            s.style.display = s.style.display === 'block' ? 'none' : 'block';
+            if(s.style.display === 'block') renderShop();
         }
-        document.getElementById('shop-trigger').onclick = toggleShop;
 
         function renderShop() {
-            const container = document.getElementById('shop-content');
-            container.innerHTML = '';
+            const cont = document.getElementById('shop-content');
+            cont.innerHTML = '';
             for (let key in gameData.upgrades) {
                 const up = gameData.upgrades[key];
                 const cost = Math.floor(up.cost * Math.pow(up.mult, up.lv - 1));
-                container.innerHTML += `
+                cont.innerHTML += `
                     <div class="upgrade-card">
                         <div><p class="up-name">${up.name} (LV.${up.lv})</p><p class="up-desc">${up.desc}</p></div>
-                        <button class="btn-buy" onclick="buyUpgrade('${key}', ${cost})" ${gameData.money < cost ? 'disabled' : ''}>$${cost}</button>
+                        <button class="btn-buy" onclick="buy('${key}', ${cost})" ${gameData.money < cost ? 'disabled' : ''}>$${cost.toLocaleString()}</button>
                     </div>
                 `;
             }
         }
 
-        window.buyUpgrade = (key, cost) => {
+        window.buy = (key, cost) => {
             if (gameData.money >= cost) {
                 gameData.money -= cost;
                 gameData.upgrades[key].lv++;
                 saveGame(); refreshUI(); renderShop();
             }
+        };
+
+        window.doPrestige = () => {
+            if (confirm("進行神性轉生？這將重置所有金幣與升級，但你的『神性倍率』將大幅提升！")) {
+                gameData.prestige += 1;
+                gameData.money = 0;
+                gameData.totalEarned = 0;
+                for(let k in gameData.upgrades) gameData.upgrades[k].lv = 1;
+                document.getElementById('prestige-btn').style.display = 'none';
+                saveGame();
+                location.reload();
+            }
+        };
+
+        function spawnEffect(x, y, color, count) {
+            for(let i=0; i<count; i++) {
+                particles.push({ x, y, vx:(Math.random()-0.5)*10, vy:(Math.random()-0.5)*10, life:1, color });
+            }
+        }
+
+        function spawnText(x, y, txt, color) {
+            floaters.push({ x, y, txt, color, life:1, vy:-2 });
         }
 
         function loop() {
-            ctx.fillStyle = 'rgba(5, 5, 8, 0.3)';
+            ctx.fillStyle = 'rgba(2, 2, 5, 0.3)';
             ctx.fillRect(0, 0, width, height);
-            document.getElementById('combo-display').innerText = combo;
 
             if (cubes.length < 20) cubes.push(new Cube());
             cubes = cubes.filter(c => !c.dead);
@@ -241,33 +291,33 @@
             particles.forEach(p => {
                 p.x += p.vx; p.y += p.vy;
                 ctx.fillStyle = p.color; ctx.globalAlpha = p.life;
-                ctx.fillRect(p.x, p.y, 4, 4);
+                ctx.fillRect(p.x, p.y, 3, 3);
             });
 
-            floaters = floaters.filter(f => (f.life -= 0.02) > 0);
+            floaters = floaters.filter(f => (f.life -= 0.015) > 0);
             floaters.forEach(f => {
                 f.y += f.vy; ctx.fillStyle = f.color; ctx.globalAlpha = f.life;
-                ctx.font = 'bold 20px Consolas'; ctx.fillText(f.txt, f.x, f.y);
+                ctx.font = 'bold 16px Arial'; ctx.fillText(f.txt, f.x, f.y);
             });
 
             ctx.globalAlpha = 1;
             requestAnimationFrame(loop);
         }
 
-        canvas.addEventListener('mousedown', (e) => { isMouseDown = true; processHit(e.clientX, e.clientY); });
-        window.addEventListener('mouseup', () => isMouseDown = false);
-        canvas.addEventListener('mousemove', (e) => { if (isMouseDown && Math.random() < 0.4) processHit(e.clientX, e.clientY); });
+        canvas.addEventListener('mousedown', (e) => {
+                const now = Date.now();
+                if (now - lastClickTime < 5) return; // 防連點外掛 (每秒最多33次)
+                lastClickTime = now;
 
-        function processHit(ex, ey) {
             let hit = false;
             cubes.forEach(c => {
-                if (Math.hypot(ex - c.x, ey - c.y) < c.size + 15) {
-                    c.takeDamage(gameData.upgrades.damage.lv);
+                if (Math.hypot(e.clientX - c.x, e.clientY - c.y) < c.size + 10) {
+                    c.takeDamage(getAtkPower());
                     hit = true;
                 }
             });
-            if (!hit && !isMouseDown) combo = 0;
-        }
+            if (!hit) combo = 0;
+        });
 
         init();
         loop();
