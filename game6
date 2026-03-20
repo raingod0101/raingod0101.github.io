@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>DIMENSION COLLAPSE: OVERLOAD</title>
+    <style>
+        body { margin: 0; background: #000; overflow: hidden; cursor: crosshair; }
+        canvas { display: block; filter: contrast(150%) brightness(120%); }
+        #overlay {
+            position: absolute; top: 10px; left: 10px; color: #fff;
+            font-family: 'Courier New', monospace; pointer-events: none;
+            background: rgba(0,0,0,0.5); padding: 10px; border-left: 5px solid #f00;
+        }
+    </style>
+</head>
+<body>
+    <div id="overlay">
+        ENTITY_COUNT: <span id="count">0</span><br>
+        POWER_LEVEL: <span id="pwr">1.0</span>e+<br>
+        STATUS: <span id="status">STABLE</span>
+    </div>
+    <canvas id="canvas"></canvas>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d', { alpha: false });
+let w, h, entities = [];
+const resize = () => { w = canvas.width = window.innerWidth; h = canvas.height = window.innerHeight; };
+window.onresize = resize;
+resize();
+
+// 高性能物件池概念：粒子系統
+class Fragment {
+    constructor(x, y, vx, vy, color, size, split) {
+        this.x = x; this.y = y;
+        this.vx = vx; this.vy = vy;
+        this.color = color;
+        this.size = size;
+        this.life = 1.0;
+        this.split = split; // 是否具備分裂能力
+    }
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.vx *= 0.99; this.vy *= 0.99; // 空氣阻力
+        this.life -= 0.015;
+        
+        // 邊界反彈增加混亂感
+        if(this.x < 0 || this.x > w) this.vx *= -1.2;
+        if(this.y < 0 || this.y > h) this.vy *= -1.2;
+    }
+}
+
+// 核心：連鎖反應生成器
+function createExplosion(x, y, color, count, isSplitter, force = 10) {
+    for(let i = 0; i < count; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = Math.random() * force;
+        entities.push(new Fragment(
+            x, y, 
+            Math.cos(angle) * speed, 
+            Math.sin(angle) * speed, 
+            color, 
+            isSplitter ? 5 : 2, 
+            isSplitter
+        ));
+    }
+}
+
+// 初始觸發
+canvas.onmousedown = (e) => {
+    const color = `hsl(${Math.random() * 360}, 100%, 60%)`;
+    createExplosion(e.clientX, e.clientY, color, 50, true, 15);
+};
+
+function loop() {
+    // 殘影極致：造成光流效果
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+    ctx.fillRect(0, 0, w, h);
+
+    const nextEntities = [];
+    
+    for(let i = 0; i < entities.length; i++) {
+        const p = entities[i];
+        p.update();
+
+        // 核心爽點：分裂邏輯 (Chain Reaction)
+        // 當大粒子壽命過半且隨機觸發，會再次爆裂
+        if(p.split && p.life < 0.5 && Math.random() > 0.98) {
+            createExplosion(p.x, p.y, p.color, 3, false, 5);
+            p.split = false; // 只分裂一次防止無限迴圈當機
+        }
+
+        if(p.life > 0) {
+            ctx.fillStyle = p.color;
+            // 螢幕亮度叠加 (Additive Blending 模擬)
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.fillRect(p.x, p.y, p.size, p.size);
+            ctx.globalCompositeOperation = 'source-over';
+            nextEntities.push(p);
+        }
+    }
+
+    entities = nextEntities;
+
+    // UI 數值
+    document.getElementById('count').innerText = entities.length;
+    document.getElementById('pwr').innerText = (entities.length * 1.5).toFixed(1);
+    if(entities.length > 2000) {
+        document.getElementById('status').innerText = 'CRITICAL';
+        document.getElementById('status').style.color = '#f00';
+    } else {
+        document.getElementById('status').innerText = 'STABLE';
+        document.getElementById('status').style.color = '#0f0';
+    }
+
+    requestAnimationFrame(loop);
+}
+
+// 自動投放系統 (讓畫面不無聊)
+setInterval(() => {
+    if(entities.length < 500) {
+        createExplosion(Math.random()*w, Math.random()*h, `hsl(${Math.random()*360}, 100%, 50%)`, 20, true, 8);
+    }
+}, 1000);
+
+loop();
+</script>
+</body>
+</html>
