@@ -1,52 +1,120 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <title>Raingod 聊天室測試</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Raingod 專業聊天室</title>
+    <style>
+        body { font-family: sans-serif; background: #f0f2f5; display: flex; flex-direction: column; align-items: center; height: 100vh; margin: 0; }
+        #auth-section { margin-top: 50px; text-align: center; }
+        #chat-section { display: none; width: 90%; max-width: 500px; background: white; height: 80vh; margin-top: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); flex-direction: column; }
+        #messages { flex: 1; overflow-y: auto; padding: 15px; border-bottom: 1px solid #ddd; }
+        .msg-item { margin-bottom: 10px; display: flex; align-items: center; }
+        .msg-item img { width: 30px; height: 30px; border-radius: 50%; margin-right: 10px; }
+        #input-area { padding: 10px; display: flex; }
+        #input-area input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 4px; }
+        #user-info { padding: 10px; font-size: 14px; background: #eee; display: flex; justify-content: space-between; align-items: center; }
+        button { cursor: pointer; background: #0084ff; color: white; border: none; padding: 8px 15px; border-radius: 4px; }
+    </style>
 </head>
 <body>
-    <h2>Raingod 雲端資料庫測試</h2>
-    
-    <input type="text" id="msgInput" placeholder="隨便打個字...">
-    <button onclick="sendToFirebase()">點我傳送到 Firebase</button>
 
-    <p>狀態：<span id="status">等待輸入...</span></p>
+    <div id="auth-section">
+        <h1>Raingod 聊天室</h1>
+        <button id="login-btn">使用 Google 帳號登入</button>
+    </div>
+
+    <div id="chat-section">
+        <div id="user-info">
+            <span id="display-name">正在載入...</span>
+            <button onclick="logout()" style="background:#ff4d4d">登出</button>
+        </div>
+        <div id="messages"></div>
+        <div id="input-area">
+            <input type="text" id="msg-input" placeholder="說點什麼吧...">
+            <button id="send-btn">傳送</button>
+        </div>
+    </div>
 
     <script type="module">
-        // 1. 引入 Firebase
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getDatabase, ref, push, set } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+        import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getDatabase, ref, push, set, onChildAdded } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-        // 2. 你的專案身分證 (記得去 Firebase 專案設定拿完整的，這裡只放關鍵部分)
+        // --- 1. 填入你的 Firebase Config ---
         const firebaseConfig = {
-            databaseURL: "https://raingod010101-default-rtdb.asia-southeast1.firebasedatabase.app/",
-            // 請在這裡補上你從 Firebase 拿到的其他資料 (apiKey, projectId 等)
             apiKey: "你的API金鑰",
-            projectId: "raingod010101",
+            authDomain: "你的專案.firebaseapp.com",
+            databaseURL: "你的資料庫網址",
+            projectId: "你的專案ID",
+            storageBucket: "...",
+            messagingSenderId: "...",
+            appId: "..."
         };
 
-        // 3. 初始化
         const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const provider = new GoogleAuthProvider();
         const db = getDatabase(app);
+        const chatRef = ref(db, 'public_chat');
 
-        // 4. 傳送函式
-        window.sendToFirebase = function() {
-            const text = document.getElementById('msgInput').value;
-            if (!text) return alert("請輸入文字");
+        let currentUser = null;
 
-            const chatRef = ref(db, 'test_message');
-            const newMessageRef = push(chatRef);
-            
-            set(newMessageRef, {
-                content: text,
-                time: new Date().toLocaleString()
-            }).then(() => {
-                document.getElementById('status').innerText = "發送成功！快去看 Firebase 後台！";
-                document.getElementById('msgInput').value = "";
-            }).catch((error) => {
-                document.getElementById('status').innerText = "失敗：" + error.message;
-            });
+        // --- 2. 登入邏輯 ---
+        document.getElementById('login-btn').onclick = () => {
+            signInWithPopup(auth, provider).catch(err => alert(err.message));
+        };
+
+        window.logout = () => signOut(auth);
+
+        // 監聽登入狀態切換 UI
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                currentUser = user;
+                document.getElementById('auth-section').style.display = 'none';
+                document.getElementById('chat-section').style.display = 'flex';
+                document.getElementById('display-name').innerText = `你好，${user.displayName}`;
+            } else {
+                currentUser = null;
+                document.getElementById('auth-section').style.display = 'block';
+                document.getElementById('chat-section').style.display = 'none';
+            }
+        });
+
+        // --- 3. 聊天邏輯 ---
+        document.getElementById('send-btn').onclick = sendMessage;
+        document.getElementById('msg-input').onkeypress = (e) => { if(e.key === 'Enter') sendMessage(); };
+
+        function sendMessage() {
+            const text = document.getElementById('msg-input').value;
+            if (text && currentUser) {
+                const newMsgRef = push(chatRef);
+                set(newMsgRef, {
+                    uid: currentUser.uid,
+                    name: currentUser.displayName,
+                    photo: currentUser.photoURL,
+                    content: text,
+                    time: Date.now()
+                });
+                document.getElementById('msg-input').value = '';
+            }
         }
+
+        // 監聽新訊息並顯示
+        onChildAdded(chatRef, (snapshot) => {
+            const data = snapshot.val();
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'msg-item';
+            msgDiv.innerHTML = `
+                <img src="${data.photo || 'https://via.placeholder.com/30'}" alt="avatar">
+                <div>
+                    <small style="color:#888; display:block;">${data.name}</small>
+                    <span>${data.content}</span>
+                </div>
+            `;
+            document.getElementById('messages').appendChild(msgDiv);
+            document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+        });
     </script>
 </body>
 </html>
