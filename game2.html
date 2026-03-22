@@ -3,229 +3,139 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Firebase 實時聊天室</title>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500&display=swap" rel="stylesheet">
+    <title>GitHub Chatroom - Firebase</title>
     <style>
-        :root {
-            --primary: #4285f4;
-            --bg-body: #f0f2f5;
-            --msg-mine: #dcf8c6;
-            --msg-others: #ffffff;
-        }
+        :root { --primary: #4285f4; --bg: #f0f2f5; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); margin: 0; display: flex; flex-direction: column; height: 100vh; }
+        
+        /* 登入介面 */
+        #auth-view { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; text-align: center; }
+        .login-card { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .btn-google { background: white; border: 1px solid #dadce0; padding: 10px 20px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 10px; font-size: 16px; transition: background 0.2s; }
+        .btn-google:hover { background: #f8f9fa; }
 
-        body {
-            font-family: 'Noto Sans TC', sans-serif;
-            background-color: var(--bg-body);
-            margin: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-        }
+        /* 聊天介面 */
+        #chat-view { display: none; flex-direction: column; height: 100%; max-width: 900px; margin: 0 auto; width: 100%; background: white; box-shadow: 0 0 10px rgba(0,0,0,0.05); }
+        header { background: var(--primary); color: white; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; }
+        #logout-btn { background: none; border: 1px solid white; color: white; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+        
+        #messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; background: #e5ddd5; }
+        .msg { max-width: 75%; padding: 10px 14px; border-radius: 10px; font-size: 15px; position: relative; box-shadow: 0 1px 1px rgba(0,0,0,0.1); }
+        .msg.mine { align-self: flex-end; background: #dcf8c6; }
+        .msg.others { align-self: flex-start; background: white; }
+        .msg-name { font-size: 11px; color: #666; margin-bottom: 3px; font-weight: bold; }
 
-        /* 登入卡片 */
-        #login-card {
-            background: white;
-            padding: 40px;
-            border-radius: 12px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-            text-align: center;
-        }
-
-        .google-btn {
-            background: white;
-            border: 1px solid #dadce0;
-            padding: 10px 20px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 16px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            transition: background 0.2s;
-        }
-        .google-btn:hover { background: #f8f9fa; }
-
-        /* 聊天主視窗 */
-        #chat-app {
-            display: none; /* 初始隱藏 */
-            width: 100%;
-            max-width: 500px;
-            height: 90vh;
-            background: #ededed;
-            flex-direction: column;
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-        }
-
-        header {
-            background: #075e54;
-            color: white;
-            padding: 15px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        #messages-container {
-            flex: 1;
-            padding: 15px;
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        /* 訊息泡泡 */
-        .msg {
-            max-width: 75%;
-            padding: 8px 12px;
-            border-radius: 8px;
-            position: relative;
-            font-size: 14px;
-            line-height: 1.5;
-            box-shadow: 0 1px 1px rgba(0,0,0,0.1);
-        }
-        .msg-name { font-weight: 500; font-size: 11px; margin-bottom: 3px; color: #555; }
-        .msg.mine { align-self: flex-end; background: var(--msg-mine); }
-        .msg.others { align-self: flex-start; background: var(--msg-others); }
-
-        /* 輸入框區塊 */
-        .input-bar {
-            background: #f0f0f0;
-            padding: 10px;
-            display: flex;
-            gap: 10px;
-        }
-        input#message-input {
-            flex: 1;
-            padding: 10px 15px;
-            border: none;
-            border-radius: 20px;
-            outline: none;
-        }
-        button#send-btn {
-            background: #075e54;
-            color: white;
-            border: none;
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            cursor: pointer;
-        }
+        .input-bar { padding: 15px; display: flex; gap: 10px; background: #f0f0f0; }
+        #msg-input { flex: 1; border: none; padding: 12px 15px; border-radius: 20px; outline: none; }
+        #send-btn { background: var(--primary); color: white; border: none; padding: 0 20px; border-radius: 20px; cursor: pointer; font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <div id="login-card">
-        <h2>歡迎加入聊天室</h2>
-        <button class="google-btn" id="login-btn">
-            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="20">
-            使用 Google 登入
-        </button>
+    <div id="auth-view">
+        <div class="login-card">
+            <h1>歡迎使用聊天室</h1>
+            <p>請先登入以開始對話</p>
+            <button class="btn-google" id="login-btn">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="18">
+                透過 Google 登入
+            </button>
+        </div>
     </div>
 
-    <div id="chat-app">
+    <div id="chat-view">
         <header>
-            <div id="user-info">載入中...</div>
-            <button id="logout-btn" style="color:white; background:none; border:none; cursor:pointer;">登出</button>
+            <span id="display-name">載入中...</span>
+            <button id="logout-btn">登出</button>
         </header>
-        <div id="messages-container"></div>
+        <div id="messages"></div>
         <div class="input-bar">
-            <input type="text" id="message-input" placeholder="輸入訊息..." autocomplete="off">
-            <button id="send-btn">➤</button>
+            <input type="text" id="msg-input" placeholder="輸入訊息..." autocomplete="off">
+            <button id="send-btn">傳送</button>
         </div>
     </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-        import { getDatabase, ref, push, set, onChildAdded, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        import { getAuth, signInWithRedirect, getRedirectResult, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getDatabase, ref, push, set, onChildAdded, serverTimestamp, query, limitToLast } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-        // 1. 重要：請填入你的 Firebase 配置
+        // --- 1. 請在此填入你的 Firebase 配置 ---
         const firebaseConfig = {
             apiKey: "你的_API_KEY",
             authDomain: "chat-73802.firebaseapp.com",
             databaseURL: "https://chat-73802-default-rtdb.firebaseio.com",
             projectId: "chat-73802",
             storageBucket: "chat-73802.appspot.com",
-            messagingSenderId: "你的_ID",
+            messagingSenderId: "你的_SENDER_ID",
             appId: "你的_APP_ID"
         };
 
-        // 初始化
         const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
+        const auth = getAuth();
         const db = getDatabase(app);
         const provider = new GoogleAuthProvider();
 
-        const loginCard = document.getElementById('login-card');
-        const chatApp = document.getElementById('chat-app');
-        const msgContainer = document.getElementById('messages-container');
-        const msgInput = document.getElementById('message-input');
-        const userInfo = document.getElementById('user-info');
+        const authView = document.getElementById('auth-view');
+        const chatView = document.getElementById('chat-view');
+        const msgList = document.getElementById('messages');
+        const msgInput = document.getElementById('msg-input');
 
-        let currentUser = null;
+        // --- 2. 處理登入邏輯 ---
+        document.getElementById('login-btn').onclick = () => signInWithRedirect(auth, provider);
+        document.getElementById('logout-btn').onclick = () => signOut(auth);
 
-        // 2. 監聽登入狀態
         onAuthStateChanged(auth, (user) => {
             if (user) {
-                currentUser = user;
-                loginCard.style.display = 'none';
-                chatApp.style.display = 'flex';
-                userInfo.innerText = user.displayName;
-                startListeningMessages();
+                authView.style.display = 'none';
+                chatView.style.display = 'flex';
+                document.getElementById('display-name').innerText = `👋 ${user.displayName}`;
+                initChat();
             } else {
-                loginCard.style.display = 'block';
-                chatApp.style.display = 'none';
-                msgContainer.innerHTML = '';
+                authView.style.display = 'flex';
+                chatView.style.display = 'none';
             }
         });
 
-        // 3. 登入與登出邏輯
-        document.getElementById('login-btn').onclick = () => signInWithPopup(auth, provider);
-        document.getElementById('logout-btn').onclick = () => signOut(auth);
+        // --- 3. 聊天功能 ---
+        function initChat() {
+            msgList.innerHTML = '';
+            const msgRef = query(ref(db, 'messages'), limitToLast(50));
+            onChildAdded(msgRef, (snap) => {
+                const data = snap.val();
+                render(data);
+            });
+        }
 
-        // 4. 發送訊息
-        function sendMessage() {
+        document.getElementById('send-btn').onclick = send;
+        msgInput.onkeypress = (e) => { if(e.key === 'Enter') send(); };
+
+        function send() {
             const text = msgInput.value.trim();
-            if (!text || !currentUser) return;
-
-            const messagesRef = ref(db, 'messages');
-            const newMessageRef = push(messagesRef);
-            set(newMessageRef, {
-                uid: currentUser.uid,
-                name: currentUser.displayName,
+            if(!text || !auth.currentUser) return;
+            const newMsg = push(ref(db, 'messages'));
+            set(newMsg, {
+                uid: auth.currentUser.uid,
+                name: auth.currentUser.displayName,
                 text: text,
-                timestamp: serverTimestamp()
+                time: serverTimestamp()
             });
             msgInput.value = '';
         }
 
-        document.getElementById('send-btn').onclick = sendMessage;
-        msgInput.onkeydown = (e) => { if (e.key === 'Enter') sendMessage(); };
-
-        // 5. 監聽新訊息 (實時顯示)
-        function startListeningMessages() {
-            const messagesRef = ref(db, 'messages');
-            onChildAdded(messagesRef, (snapshot) => {
-                const data = snapshot.val();
-                renderMessage(data);
-            });
+        function render(data) {
+            const isMine = data.uid === auth.currentUser?.uid;
+            const div = document.createElement('div');
+            div.className = `msg ${isMine ? 'mine' : 'others'}`;
+            div.innerHTML = `<div class="msg-name">${data.name}</div><div>${escape(data.text)}</div>`;
+            msgList.appendChild(div);
+            msgList.scrollTop = msgList.scrollHeight;
         }
 
-        function renderMessage(data) {
-            const isMine = data.uid === currentUser.uid;
-            const msgDiv = document.createElement('div');
-            msgDiv.className = `msg ${isMine ? 'mine' : 'others'}`;
-            msgDiv.innerHTML = `
-                <div class="msg-name">${isMine ? '我' : data.name}</div>
-                <div class="msg-text">${data.text}</div>
-            `;
-            msgContainer.appendChild(msgDiv);
-            // 自動捲動到底部
-            msgContainer.scrollTop = msgContainer.scrollHeight;
+        function escape(s) {
+            let t = document.createElement('p');
+            t.textContent = s;
+            return t.innerHTML;
         }
     </script>
 </body>
