@@ -1,51 +1,254 @@
 <!DOCTYPE html>
-<html>
-
+<html lang="zh-TW">
 <head>
-</head>
-
-<body>
-    <h1>打字練習</h1>
-    <h2 id="say"></h2>
-    <h2 id="say1"></h2>
-    <h2 id="say2"></h2>
-    <h2 id="say3"></h2>
-    <h2 id="say4"></h2>
-    <script>
-        var correct = 0
-        var incorrect = 0
-        const word = "abcdefghijklmnopqrstuvwxyz";
-        let le = "";
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>3D 宇宙尋寶 | Raingod</title>
+    <style>
+        * { touch-action: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+        html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; position: fixed; background: #fff; font-family: sans-serif; }
         
-        let total = 0;
-
-        function newLetter() {
-            le = word[Math.floor(Math.random() * 26)];
-            document.getElementById("say").innerText = le;
-            document.getElementById("say1").innerText = "";
+        #ui {
+            position: absolute; top: 20px; left: 20px; font-size: 20px; font-weight: bold;
+            z-index: 100; background: rgba(255,255,255,0.9); padding: 10px 20px; 
+            border: 3px solid #000; border-radius: 50px;
         }
 
-        // 產生第一個字母
-        newLetter();
+        /* 手機專用搖桿視覺 */
+        #joy-base {
+            position: absolute; bottom: 50px; left: 50px; width: 100px; height: 100px;
+            background: rgba(0,0,0,0.05); border: 2px solid rgba(0,0,0,0.1);
+            border-radius: 50%; z-index: 90; display: none;
+        }
+        #joy-stick {
+            position: absolute; top: 30px; left: 30px; width: 40px; height: 40px;
+            background: rgba(0,0,0,0.4); border-radius: 50%;
+        }
 
-        document.body.addEventListener("keypress", function (an) {
-            let ke = an.key;
+        #jump-btn {
+            position: absolute; bottom: 50px; right: 40px; width: 85px; height: 85px;
+            background: #000; color: #fff; border-radius: 50%;
+            display: none; justify-content: center; align-items: center;
+            font-size: 18px; font-weight: bold; z-index: 100;
+        }
 
-            if (ke === le) {
-                document.getElementById("say1").innerText = "correct";
-                correct += 1
-                newLetter(); // 正確就換下一題
-            } else {
-                document.getElementById("say1").innerText = "incorrect";
-                incorrect += 1
+        #overlay {
+            position: absolute; width: 100%; height: 100%; background: #fff;
+            display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 200;
+        }
+        button { padding: 20px 50px; font-size: 24px; background: #000; color: #fff; border: none; border-radius: 50px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <div id="overlay">
+        <h1 style="margin-bottom:10px;">🚀 宇宙跑酷 (全相容版)</h1>
+        <p style="margin-bottom:20px; color: #666; text-align: center;">電腦：WASD + 滑鼠轉向 + 空白鍵<br>手機：左手移動 + 右手轉向 + JUMP</p>
+        <button id="start-btn">開始遊戲</button>
+    </div>
+
+    <div id="ui">💎 寶藏: <span id="score">0</span> / 20</div>
+    
+    <div id="joy-base"><div id="joy-stick"></div></div>
+    <div id="jump-btn">JUMP</div>
+
+    <script type="importmap">
+        { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+
+        let scene, camera, renderer, player;
+        let score = 0, prevTime = performance.now();
+        let moveInput = { x: 0, y: 0 }, velocityY = 0;
+        let jumpCount = 0, theta = 0, phi = Math.PI / 2.5;
+        const platforms = [], targets = [];
+        const keys = { w: false, a: false, s: false, d: false };
+
+        // 偵測是否為觸控裝置
+        const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+
+        // --- 點擊開始 ---
+        document.getElementById('start-btn').onclick = (e) => {
+            document.getElementById('overlay').style.display = 'none';
+            if (!isTouch) document.body.requestPointerLock(); // 電腦版鎖定滑鼠
+            if (isTouch) {
+                document.getElementById('joy-base').style.display = 'block';
+                document.getElementById('jump-btn').style.display = 'flex';
             }
-            document.getElementById("say2").innerText = `答對${correct}`;
-            document.getElementById("say3").innerText = `答錯${incorrect}`;
+            init();
+            animate();
+        };
 
-            total++;
-            document.getElementById("say4").innerText = `正確率: ${(correct / total * 100).toFixed(2)} %`;
-        });
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xffffff);
+            scene.fog = new THREE.Fog(0xffffff, 10, 500);
+            
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1500);
+            
+            player = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.4, 1.2), new THREE.MeshPhongMaterial({ color: 0x222222 }));
+            player.position.set(0, 10, 0);
+            scene.add(player);
+
+            scene.add(new THREE.AmbientLight(0xaaaaaa));
+            const light = new THREE.DirectionalLight(0xffffff, 0.8);
+            light.position.set(20, 50, 20);
+            scene.add(light);
+
+            createMap();
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            document.body.appendChild(renderer.domElement);
+
+            // 事件監聽
+            window.addEventListener('resize', onResize);
+            if (!isTouch) {
+                window.addEventListener('keydown', (e) => handleKey(e.code, true));
+                window.addEventListener('keyup', (e) => handleKey(e.code, false));
+                window.addEventListener('mousemove', handleMouseMove);
+            } else {
+                initTouchControls();
+            }
+        }
+
+        function createMap() {
+            const addP = (x,y,z,w,d) => {
+                const m = new THREE.Mesh(new THREE.BoxGeometry(w,1,d), new THREE.MeshPhongMaterial({color:0xeeeeee}));
+                m.position.set(x,y,z);
+                scene.add(m);
+                const edge = new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry), new THREE.LineBasicMaterial({ color: 0x000000 }));
+                m.add(edge);
+                platforms.push({x, y:y+0.5, z, w, d});
+            };
+            addP(0, -1, 0, 40, 40); // 起點
+            for(let i=0; i<200; i++) {
+                let rx = (Math.random()-0.5)*600, rz = (Math.random()-0.5)*600, ry = Math.random()*80;
+                addP(rx, ry, rz, 15, 15);
+                if(i < 20) {
+                    const t = new THREE.Mesh(new THREE.OctahedronGeometry(1.5), new THREE.MeshPhongMaterial({color:0xffd700}));
+                    t.position.set(rx, ry+3, rz);
+                    scene.add(t);
+                    targets.push(t);
+                }
+            }
+        }
+
+        // --- 電腦控制 ---
+        function handleKey(code, isDown) {
+            if (code === 'KeyW') keys.w = isDown;
+            if (code === 'KeyS') keys.s = isDown;
+            if (code === 'KeyA') keys.a = isDown;
+            if (code === 'KeyD') keys.d = isDown;
+            if (code === 'Space' && isDown) handleJump();
+        }
+        function handleMouseMove(e) {
+            if (document.pointerLockElement === document.body) {
+                theta -= e.movementX * 0.003;
+                phi = Math.max(0.2, Math.min(Math.PI - 0.4, phi - e.movementY * 0.003));
+            }
+        }
+
+        // --- 手機控制 ---
+        let joyTouchId = null;
+        function initTouchControls() {
+            const stick = document.getElementById('joy-stick');
+            const base = document.getElementById('joy-base');
+            
+            document.addEventListener('touchstart', (e) => {
+                for (let t of e.changedTouches) {
+                    const rect = base.getBoundingClientRect();
+                    const dx = t.clientX - (rect.left + 50);
+                    const dy = t.clientY - (rect.top + 50);
+                    if (Math.sqrt(dx*dx + dy*dy) < 80) joyTouchId = t.identifier;
+                }
+            });
+
+            document.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                for (let t of e.changedTouches) {
+                    if (t.identifier === joyTouchId) {
+                        const rect = base.getBoundingClientRect();
+                        let dx = t.clientX - (rect.left + 50);
+                        let dy = t.clientY - (rect.top + 50);
+                        const dist = Math.min(Math.sqrt(dx*dx + dy*dy), 40);
+                        const angle = Math.atan2(dy, dx);
+                        stick.style.transform = `translate(${Math.cos(angle)*dist}px, ${Math.sin(angle)*dist}px)`;
+                        moveInput.x = (Math.cos(angle)*dist)/40; moveInput.y = -(Math.sin(angle)*dist)/40;
+                    } else if (t.clientX > window.innerWidth / 2) {
+                        theta -= (t.clientX - (t.lastX || t.clientX)) * 0.007;
+                        phi = Math.max(0.2, Math.min(Math.PI - 0.4, phi - (t.clientY - (t.lastY || t.clientY)) * 0.007));
+                    }
+                    t.lastX = t.clientX; t.lastY = t.clientY;
+                }
+            }, {passive: false});
+
+            document.addEventListener('touchend', (e) => {
+                for (let t of e.changedTouches) {
+                    if (t.identifier === joyTouchId) {
+                        joyTouchId = null;
+                        stick.style.transform = `translate(0px, 0px)`;
+                        moveInput = { x: 0, y: 0 };
+                    }
+                }
+            });
+
+            document.getElementById('jump-btn').addEventListener('touchstart', (e) => {
+                e.preventDefault(); handleJump();
+            });
+        }
+
+        function handleJump() {
+            if (jumpCount < 2) { velocityY = 18; jumpCount++; }
+        }
+
+        function onResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const time = performance.now();
+            const delta = Math.min((time - prevTime)/1000, 0.1);
+            prevTime = time;
+
+            velocityY -= 42 * delta;
+            player.position.y += velocityY * delta;
+
+            const fwd = new THREE.Vector3(Math.sin(theta), 0, Math.cos(theta)).negate();
+            const rit = new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0), fwd).negate();
+            
+            let mx = moveInput.x, my = moveInput.y;
+            if (keys.w) my = 1; if (keys.s) my = -1;
+            if (keys.a) mx = -1; if (keys.d) mx = 1;
+
+            player.position.addScaledVector(fwd, my * 45 * delta);
+            player.position.addScaledVector(rit, mx * 45 * delta);
+
+            for(let p of platforms) {
+                if(Math.abs(player.position.x - p.x) < p.w/2+0.7 && Math.abs(player.position.z - p.z) < p.d/2+0.7) {
+                    if(player.position.y - 0.7 <= p.y && player.position.y - 0.7 > p.y - 2.5 && velocityY <= 0) {
+                        player.position.y = p.y + 0.7; velocityY = 0; jumpCount = 0;
+                    }
+                }
+            }
+
+            camera.position.set(player.position.x + 18*Math.sin(phi)*Math.sin(theta), player.position.y + 15*Math.cos(phi), player.position.z + 18*Math.sin(phi)*Math.cos(theta));
+            camera.lookAt(player.position);
+
+            targets.forEach((t, i) => {
+                t.rotation.y += 0.05;
+                if(player.position.distanceTo(t.position) < 3.5) { scene.remove(t); targets.splice(i,1); score++; document.getElementById('score').innerText = score; }
+            });
+
+            if(player.position.y < -80) { player.position.set(0, 10, 0); velocityY = 0; }
+            renderer.render(scene, camera);
+        }
     </script>
 </body>
-
 </html>
