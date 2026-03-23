@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>房號聊天室</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 20px; max-width: 600px; margin: auto; background-color: #f4f7f6; }
+        #app { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        #chat-box { border: 1px solid #eee; height: 400px; overflow-y: auto; padding: 15px; margin-bottom: 15px; background: #fafafa; border-radius: 8px; display: flex; flex-direction: column; }
+        .msg { margin-bottom: 10px; padding: 8px 12px; border-radius: 15px; width: fit-content; max-width: 80%; }
+        .my-msg { background: #007bff; color: white; align-self: flex-end; }
+        .other-msg { background: #e9e9eb; color: #333; align-self: flex-start; }
+        .msg b { display: block; font-size: 0.75em; margin-bottom: 3px; opacity: 0.8; }
+        input { padding: 12px; margin: 5px 0; width: 100%; box-sizing: border-box; border: 1px solid #ddd; border-radius: 8px; outline: none; }
+        button { padding: 12px; width: 100%; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 8px; font-weight: bold; transition: 0.3s; }
+        button:hover { background: #0056b3; }
+        .hidden { display: none; }
+        .room-header { border-bottom: 2px solid #007bff; padding-bottom: 10px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }
+    </style>
+</head>
+<body>
+
+<div id="app">
+    <div id="login-area">
+        <h2 style="text-align: center;">進入聊天室</h2>
+        <input type="text" id="input-room" placeholder="輸入房號 (例如: Room101)">
+        <input type="text" id="input-nickname" placeholder="你的暱稱">
+        <button onclick="joinRoom()">開始聊天</button>
+    </div>
+
+    <div id="chat-area" class="hidden">
+        <div class="room-header">
+            <div>房號: <b id="display-room"></b></div>
+            <div>暱稱: <input type="text" id="change-nickname" style="width: 80px; padding: 4px;" onchange="updateNickname(this.value)"></div>
+        </div>
+        <div id="chat-box"></div>
+        <div style="display: flex; gap: 5px;">
+            <input type="text" id="msg-input" placeholder="說點什麼..." onkeypress="if(event.key==='Enter') sendMsg()">
+            <button onclick="sendMsg()" style="width: 80px;">傳送</button>
+        </div>
+        <button onclick="leaveRoom()" style="background: #ccc; margin-top: 10px; color: #333;">切換房間 / 離開</button>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getDatabase, ref, set, push, onValue, remove, onDisconnect, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+    // --- 1. 使用你提供的設定值 ---
+    const firebaseConfig = {
+        apiKey: "AIzaSyDHb0o6ahdNnvlL3-QQy_yRO_mg4XMqtJk",
+        authDomain: "chat-73802.firebaseapp.com",
+        databaseURL: "https://chat-73802-default-rtdb.firebaseio.com",
+        projectId: "chat-73802",
+        storageBucket: "chat-73802.firebasestorage.app",
+        messagingSenderId: "274628413625",
+        appId: "1:274628413625:web:77499e0bdeab18104bf368",
+        measurementId: "G-BP7YV746WV"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    // 生成裝置唯一的 ID
+    let deviceId = localStorage.getItem('chat_device_uuid');
+    if (!deviceId) {
+        deviceId = 'device_' + Math.random().toString(36).substr(2, 9);
+        localStorage.setItem('chat_device_uuid', deviceId);
+    }
+
+    let currentRoomId = null;
+    let currentNickname = "";
+
+    // 進入房間
+    window.joinRoom = function() {
+        const roomId = document.getElementById('input-room').value.trim();
+        const nickname = document.getElementById('input-nickname').value.trim() || "匿名使用者";
+
+        if (!roomId) return alert("請輸入房號！");
+
+        currentRoomId = roomId;
+        currentNickname = nickname;
+
+        // 1. 登記使用者進入房間 (一機一人)
+        const userRef = ref(db, `rooms/${roomId}/activeUsers/${deviceId}`);
+        set(userRef, nickname);
+        onDisconnect(userRef).remove(); // 斷線自動離開
+
+        // 2. 切換 UI
+        document.getElementById('login-area').classList.add('hidden');
+        document.getElementById('chat-area').classList.remove('hidden');
+        document.getElementById('display-room').innerText = roomId;
+        document.getElementById('change-nickname').value = nickname;
+
+        listenMessages(roomId);
+    };
+
+    // 監聽訊息
+    function listenMessages(roomId) {
+        const msgRef = ref(db, `rooms/${roomId}/messages`);
+        onValue(msgRef, (snapshot) => {
+            const chatBox = document.getElementById('chat-box');
+            chatBox.innerHTML = "";
+            snapshot.forEach((child) => {
+                const data = child.val();
+                const isMe = data.senderId === deviceId;
+                const div = document.createElement('div');
+                div.className = `msg ${isMe ? 'my-msg' : 'other-msg'}`;
+                div.innerHTML = `<b>${data.nickname}</b>${data.text}`;
+                chatBox.appendChild(div);
+            });
+            chatBox.scrollTop = chatBox.scrollHeight;
+        });
+    }
+
+    // 傳送訊息
+    window.sendMsg = function() {
+        const input = document.getElementById('msg-input');
+        if (!input.value.trim()) return;
+
+        const msgRef = ref(db, `rooms/${currentRoomId}/messages`);
+        push(msgRef, {
+            senderId: deviceId,
+            nickname: currentNickname,
+            text: input.value,
+            timestamp: serverTimestamp()
+        });
+        input.value = "";
+    };
+
+    // 更改暱稱
+    window.updateNickname = function(val) {
+        if (!val) return;
+        currentNickname = val;
+        set(ref(db, `rooms/${currentRoomId}/activeUsers/${deviceId}`), val);
+    };
+
+    // 離開房間
+    window.leaveRoom = function() {
+        remove(ref(db, `rooms/${currentRoomId}/activeUsers/${deviceId}`));
+        location.reload();
+    };
+</script>
+
+</body>
+</html>
