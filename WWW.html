@@ -3,50 +3,68 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>房號聊天室 (支援圖片)</title>
+    <title>房號聊天室 - 左右氣泡版</title>
     <style>
-        :root { --primary: #007aff; --bg: #f2f2f7; }
-        body { font-family: sans-serif; background: var(--bg); margin: 0; display: flex; justify-content: center; height: 100vh; }
-        #app { width: 100%; max-width: 450px; background: white; display: flex; flex-direction: column; shadow: 0 0 20px rgba(0,0,0,0.1); }
+        :root { --me-bg: #007aff; --other-bg: #e9e9eb; --text-white: #ffffff; --text-black: #000000; }
+        body { font-family: -apple-system, sans-serif; background: #f2f2f7; margin: 0; display: flex; justify-content: center; height: 100vh; }
+        #app { width: 100%; max-width: 500px; background: white; display: flex; flex-direction: column; box-shadow: 0 0 20px rgba(0,0,0,0.1); }
         .hidden { display: none !important; }
         
-        /* 聊天區 */
-        #chat-box { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 10px; background: #f9f9fb; }
-        .msg { padding: 10px; border-radius: 15px; max-width: 80%; word-wrap: break-word; }
-        .msg.me { align-self: flex-end; background: var(--primary); color: white; }
-        .msg.other { align-self: flex-start; background: #eee; color: #000; }
-        .msg img { max-width: 100%; border-radius: 10px; margin-top: 5px; cursor: pointer; }
-        .msg-name { font-size: 11px; opacity: 0.7; margin-bottom: 3px; }
+        /* 頂部欄 */
+        .header { padding: 15px; background: #fff; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; z-index: 10; }
+        
+        /* 聊天區域 */
+        #chat-box { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 15px; background: #ffffff; }
+        
+        /* 訊息氣泡核心邏輯 */
+        .msg-wrapper { display: flex; flex-direction: column; width: 100%; }
+        .msg-wrapper.me { align-items: flex-end; } /* 我發的：靠右 */
+        .msg-wrapper.other { align-items: flex-start; } /* 別人發的：靠左 */
 
-        /* 輸入區 */
-        .input-area { padding: 10px; border-top: 1px solid #ddd; display: flex; gap: 8px; align-items: center; }
-        input[type="text"] { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 20px; outline: none; }
-        .btn-icon { background: #eee; border: none; border-radius: 50%; width: 40px; height: 40px; cursor: pointer; font-size: 20px; }
-        .btn-send { background: var(--primary); color: white; border: none; padding: 10px 15px; border-radius: 20px; cursor: pointer; }
+        .msg-name { font-size: 11px; color: #8e8e93; margin-bottom: 3px; padding: 0 5px; }
+        
+        .bubble { padding: 10px 14px; border-radius: 18px; max-width: 75%; font-size: 15px; line-height: 1.4; word-wrap: break-word; }
+        
+        /* 我的氣泡樣式 */
+        .me .bubble { background: var(--me-bg); color: var(--text-white); border-bottom-right-radius: 4px; }
+        
+        /* 別人的氣泡樣式 */
+        .other .bubble { background: var(--other-bg); color: var(--text-black); border-bottom-left-radius: 4px; }
+
+        /* 圖片樣式 */
+        .bubble img { max-width: 100%; border-radius: 10px; display: block; margin-top: 2px; cursor: pointer; }
+
+        /* 下方輸入區 */
+        .input-area { padding: 10px 15px; border-top: 1px solid #eee; display: flex; gap: 10px; align-items: center; background: #fff; }
+        #msg-input { flex: 1; padding: 10px 15px; border: 1px solid #ddd; border-radius: 20px; outline: none; font-size: 16px; }
+        .btn-circle { background: #f0f0f0; border: none; border-radius: 50%; width: 40px; height: 40px; cursor: pointer; font-size: 20px; display: flex; align-items: center; justify-content: center; }
+        .btn-send { background: var(--me-bg); color: white; border: none; padding: 8px 16px; border-radius: 20px; font-weight: bold; cursor: pointer; }
     </style>
 </head>
 <body>
 
 <div id="app">
-    <div id="login-view" style="padding: 20px;">
-        <h2>🚪 進入房間</h2>
-        <input type="text" id="room-input" placeholder="房號">
-        <input type="text" id="nick-input" placeholder="暱稱">
-        <button onclick="handleJoin()" style="width:100%; padding:10px; margin-top:10px; background:var(--primary); color:white; border:none; border-radius:5px;">進入</button>
+    <div id="login-view" style="padding: 40px 20px; text-align: center;">
+        <h2 style="margin-bottom: 30px;">💬 房號聊天室</h2>
+        <input type="text" id="room-input" placeholder="請輸入房號 (例: A123)" style="width: 80%; padding: 12px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 8px;">
+        <input type="text" id="nick-input" placeholder="您的暱稱" style="width: 80%; padding: 12px; margin-bottom: 20px; border: 1px solid #ddd; border-radius: 8px;">
+        <button onclick="handleJoin()" style="width: 85%; padding: 12px; background: var(--me-bg); color: white; border: none; border-radius: 8px; font-weight: bold;">進入房間</button>
     </div>
 
     <div id="chat-view" class="hidden" style="display:flex; flex-direction:column; height:100%;">
-        <div style="padding:10px; background:#fff; border-bottom:1px solid #eee; display:flex; justify-content:space-between;">
-            <b id="room-title"></b>
-            <button onclick="destroyRoom()" id="owner-btn" class="hidden" style="color:red; border:none; background:none; cursor:pointer;">銷毀</button>
+        <div class="header">
+            <b id="room-title">房號</b>
+            <div style="display: flex; gap: 10px;">
+                <button id="owner-btn" class="hidden" onclick="destroyRoom()" style="color:red; background:none; border:none; cursor:pointer; font-size:14px;">銷毀房間</button>
+                <button onclick="location.reload()" style="background:none; border:none; color:#8e8e93; cursor:pointer;">離開</button>
+            </div>
         </div>
         
         <div id="chat-box"></div>
 
         <div class="input-area">
             <input type="file" id="img-input" class="hidden" accept="image/*" onchange="sendImage(this)">
-            <button class="btn-icon" onclick="document.getElementById('img-input').click()">📷</button>
-            
+            <button class="btn-circle" onclick="document.getElementById('img-input').click()">📷</button>
             <input type="text" id="msg-input" placeholder="輸入訊息..." onkeypress="if(event.key==='Enter') doSend()">
             <button class="btn-send" onclick="doSend()">傳送</button>
         </div>
@@ -57,7 +75,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { getDatabase, ref, set, push, onValue, remove, onDisconnect, serverTimestamp, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-    // --- 請確保這裡是你自己的 Config ---
+    // --- 使用你提供的 Firebase Config ---
     const firebaseConfig = {
         apiKey: "AIzaSyDHb0o6ahdNnvlL3-QQy_yRO_mg4XMqtJk",
         authDomain: "chat-73802.firebaseapp.com",
@@ -78,13 +96,15 @@
 
     window.handleJoin = async function() {
         roomID = document.getElementById('room-input').value.trim().toUpperCase();
-        myName = document.getElementById('nick-input').value.trim();
-        if(!roomID || !myName) return alert("請填寫完整");
+        myName = document.getElementById('nick-input').value.trim() || "匿名";
+        if(!roomID) return alert("請輸入房號");
 
         const roomRef = ref(db, `rooms/${roomID}`);
         const snap = await get(roomRef);
+        
+        // 若房不存在，設為房主
         if(!snap.exists()) await set(ref(db, `rooms/${roomID}/meta`), { owner: uid });
-
+        
         const metaSnap = await get(ref(db, `rooms/${roomID}/meta`));
         if(metaSnap.val()?.owner === uid) document.getElementById('owner-btn').classList.remove('hidden');
 
@@ -103,18 +123,30 @@
             box.innerHTML = "";
             snap.forEach(child => {
                 const d = child.val();
-                const div = document.createElement('div');
-                div.className = `msg ${d.uid === uid ? 'me' : 'other'}`;
+                const isMe = d.uid === uid;
+                
+                const wrapper = document.createElement('div');
+                wrapper.className = `msg-wrapper ${isMe ? 'me' : 'other'}`;
+                
                 let content = d.type === 'image' ? `<img src="${d.text}" onclick="window.open(this.src)">` : d.text;
-                div.innerHTML = `<div class="msg-name">${d.name}</div>${content}`;
-                box.appendChild(div);
+                
+                wrapper.innerHTML = `
+                    <div class="msg-name">${d.name}</div>
+                    <div class="bubble">${content}</div>
+                `;
+                box.appendChild(wrapper);
             });
             box.scrollTop = box.scrollHeight;
         });
-        onValue(ref(db, `rooms/${roomID}/meta`), (s) => { if(!s.exists()) location.reload(); });
+
+        onValue(ref(db, `rooms/${roomID}/meta`), (s) => { 
+            if(!s.exists() && roomID !== "") {
+                alert("房間已被銷毀");
+                location.reload();
+            }
+        });
     }
 
-    // 傳送文字
     window.doSend = function() {
         const inp = document.getElementById('msg-input');
         if(!inp.value.trim()) return;
@@ -124,11 +156,10 @@
         inp.value = "";
     };
 
-    // 傳送圖片 (Base64)
     window.sendImage = function(input) {
         const file = input.files[0];
         if (!file) return;
-        if (file.size > 500000) return alert("圖片太大囉！請選擇小於 500KB 的圖片。");
+        if (file.size > 800000) return alert("圖片太大囉 (限800KB以下)");
 
         const reader = new FileReader();
         reader.onload = function(e) {
@@ -137,11 +168,11 @@
             });
         };
         reader.readAsDataURL(file);
-        input.value = ""; // 清空，讓下次選同一張也能觸發
+        input.value = "";
     };
 
     window.destroyRoom = function() {
-        if(confirm("確定銷毀？")) remove(ref(db, `rooms/${roomID}`));
+        if(confirm("確定銷毀房間嗎？所有紀錄將永久清空。")) remove(ref(db, `rooms/${roomID}`));
     };
 </script>
 </body>
