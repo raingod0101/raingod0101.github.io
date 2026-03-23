@@ -3,65 +3,83 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>私密房號聊天室</title>
+    <title>聊天室 | Raingod</title>
     <style>
-        :root { --primary: #007aff; --danger: #ff3b30; --bg: #f2f2f7; }
-        body { font-family: -apple-system, sans-serif; background: var(--bg); margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        #app { width: 95%; max-width: 450px; background: white; height: 90vh; border-radius: 20px; shadow: 0 10px 25px rgba(0,0,0,0.1); display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,0.1); }
-        
-        /* 登入介面 */
-        .view { padding: 30px; display: flex; flex-direction: column; gap: 15px; }
+        :root { --me-bg: #007aff; --other-bg: #e9e9eb; --danger: #ff3b30; }
+        body { font-family: -apple-system, sans-serif; background: #f2f2f7; margin: 0; display: flex; justify-content: center; height: 100vh; overflow: hidden; }
+        #app { width: 100%; max-width: 500px; background: white; display: flex; flex-direction: column; box-shadow: 0 0 20px rgba(0,0,0,0.1); height: 100vh; }
         .hidden { display: none !important; }
         
-        /* 聊天室頂部 */
-        .header { background: #fff; padding: 15px 20px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
-        .header-info h3 { margin: 0; font-size: 18px; color: #333; }
-        
-        /* 訊息區 */
-        #chat-box { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; background: #f9f9fb; }
-        .msg { padding: 10px 15px; border-radius: 18px; max-width: 75%; font-size: 15px; line-height: 1.4; position: relative; }
-        .msg.me { align-self: flex-end; background: var(--primary); color: white; border-bottom-right-radius: 4px; }
-        .msg.other { align-self: flex-start; background: #e9e9eb; color: #000; border-bottom-left-radius: 4px; }
-        .msg-name { font-size: 11px; margin-bottom: 3px; opacity: 0.7; font-weight: bold; }
+        /* 頂部導覽 */
+        .header { padding: 15px; background: #fff; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
+        .header b { font-size: 18px; color: #333; }
 
-        /* 輸入區 */
-        .input-area { padding: 15px; background: white; border-top: 1px solid #eee; display: flex; gap: 10px; }
-        input { padding: 12px; border: 1px solid #ddd; border-radius: 10px; font-size: 16px; outline: none; }
-        input:focus { border-color: var(--primary); }
-        button { padding: 12px; border: none; border-radius: 10px; cursor: pointer; font-weight: bold; transition: 0.2s; }
-        .btn-send { background: var(--primary); color: white; flex-shrink: 0; width: 70px; }
-        .btn-join { background: var(--primary); color: white; width: 100%; margin-top: 10px; }
-        .btn-danger { background: var(--danger); color: white; font-size: 12px; padding: 5px 10px; }
+        /* 聊天區域 */
+        #chat-box { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 15px; background: #fff; }
+        
+        /* 訊息氣泡核心 */
+        .msg-wrapper { display: flex; flex-direction: column; width: 100%; }
+        .msg-wrapper.me { align-items: flex-end; }
+        .msg-wrapper.other { align-items: flex-start; }
+        .msg-name { font-size: 11px; color: #8e8e93; margin-bottom: 3px; padding: 0 5px; }
+        
+        .bubble { padding: 10px 14px; border-radius: 18px; max-width: 80%; font-size: 15px; line-height: 1.4; word-wrap: break-word; position: relative; }
+        .me .bubble { background: var(--me-bg); color: white; border-bottom-right-radius: 4px; }
+        .other .bubble { background: var(--other-bg); color: black; border-bottom-left-radius: 4px; }
+        
+        /* 圖片樣式 */
+        .bubble img { max-width: 100%; border-radius: 10px; display: block; cursor: zoom-in; margin-top: 2px; }
+
+        /* 輸入區域 */
+        .input-area { padding: 10px 15px; border-top: 1px solid #eee; display: flex; gap: 10px; align-items: center; background: #fff; }
+        #msg-input { flex: 1; padding: 10px 15px; border: 1px solid #ddd; border-radius: 20px; outline: none; font-size: 16px; }
+        .btn-circle { background: #f0f0f0; border: none; border-radius: 50%; width: 42px; height: 42px; cursor: pointer; font-size: 20px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .btn-send { background: var(--me-bg); color: white; border: none; padding: 8px 18px; border-radius: 20px; font-weight: bold; cursor: pointer; flex-shrink: 0; }
+
+        /* 大圖檢視器 (Lightbox) */
+        #photo-modal { display: none; position: fixed; z-index: 1000; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); justify-content: center; align-items: center; }
+        #modal-img { max-width: 98%; max-height: 98%; object-fit: contain; cursor: zoom-out; }
+
+        /* 進度提示 */
+        #loading-toast { position: fixed; top: 20%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); color: white; padding: 12px 24px; border-radius: 10px; z-index: 2000; display: none; }
     </style>
 </head>
 <body>
+<link rel="stylesheet" href="menu.css">
+
+<div id="nav_bar"></div>
+
+<script src="menu.js"></script>
+<div id="loading-toast">檔案處理中，請稍候...</div>
+
+<div id="photo-modal" onclick="this.style.display='none'">
+    <img id="modal-img">
+</div>
 
 <div id="app">
-    <div id="login-view" class="view">
-        <h2 style="margin-top:0">🚪 進入聊天室</h2>
-        <label>房號 (英文數字)</label>
-        <input type="text" id="room-input" placeholder="例如: SECRET99">
-        <label>您的暱稱</label>
-        <input type="text" id="nick-input" placeholder="例如: 王小明">
-        <button class="btn-join" onclick="handleJoin()">進入 / 創建房間</button>
+    <div id="login-view" style="padding: 50px 20px; text-align: center; flex: 1;">
+        <h2 style="margin-bottom: 40px;">Raingod聊天室</h2>
+        <input type="text" id="room-input" placeholder="輸入房號 (例: SECRET)" style="width: 85%; padding: 15px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 12px; font-size: 16px;">
+        <input type="text" id="nick-input" placeholder="您的暱稱" style="width: 85%; padding: 15px; margin-bottom: 30px; border: 1px solid #ddd; border-radius: 12px; font-size: 16px;">
+        <button onclick="handleJoin()" style="width: 90%; padding: 15px; background: var(--me-bg); color: white; border: none; border-radius: 12px; font-weight: bold; font-size: 16px;">進入 / 建立房間</button>
     </div>
 
-    <div id="chat-view" class="view hidden" style="padding:0; height:100%;">
+    <div id="chat-view" class="hidden" style="display:flex; flex-direction:column; height:100%;">
         <div class="header">
-            <div class="header-info">
-                <h3 id="room-title">房間</h3>
-                <input type="text" id="rename-input" style="width:80px; font-size:12px; padding:3px; margin:0;" onchange="updateNickname(this.value)" title="點擊修改暱稱">
-            </div>
-            <div style="display:flex; gap:5px;">
-                <button id="owner-btn" class="btn-danger hidden" onclick="destroyRoom()">銷毀</button>
-                <button onclick="location.reload()" style="font-size:12px; padding:5px 10px;">離開</button>
+            <b id="room-title">房號</b>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <input type="text" id="rename-input" style="width:70px; font-size:12px; border:1px solid #eee; border-radius:5px;" onchange="updateNickname(this.value)">
+                <button id="owner-btn" class="hidden" onclick="destroyRoom()" style="color:var(--danger); background:none; border:none; cursor:pointer; font-weight:bold;">銷毀</button>
+                <button onclick="location.reload()" style="background:none; border:none; color:#8e8e93; cursor:pointer;">離開</button>
             </div>
         </div>
-
+        
         <div id="chat-box"></div>
 
         <div class="input-area">
-            <input type="text" id="msg-input" style="flex:1" placeholder="輸入訊息..." onkeypress="if(event.key==='Enter') doSend()">
+            <input type="file" id="img-input" class="hidden" accept="image/*" onchange="sendLargeImage(this)">
+            <button class="btn-circle" onclick="document.getElementById('img-input').click()">📷</button>
+            <input type="text" id="msg-input" placeholder="輸入訊息..." onkeypress="if(event.key==='Enter') doSend()">
             <button class="btn-send" onclick="doSend()">傳送</button>
         </div>
     </div>
@@ -69,7 +87,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getDatabase, ref, set, push, onValue, remove, onDisconnect, serverTimestamp, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+    import { getDatabase, ref, set, push, onValue, remove, onDisconnect, serverTimestamp, get, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
     // --- Firebase 配置 ---
     const firebaseConfig = {
@@ -86,102 +104,116 @@
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
-    // 取得裝置唯一 ID (一機一人)
+    // 唯一裝置 ID (一機一人)
     let uid = localStorage.getItem('chat_uid') || 'u' + Math.random().toString(36).substr(2, 7);
     localStorage.setItem('chat_uid', uid);
+    let roomID = ""; let myName = "";
 
-    let roomID = "";
-    let myName = "";
-
-    // 1. 進入房間
     window.handleJoin = async function() {
-        const rIn = document.getElementById('room-input').value.trim().toUpperCase();
-        const nIn = document.getElementById('nick-input').value.trim();
-        
-        if(!rIn || !nIn) return alert("請填寫房號與暱稱");
-        roomID = rIn;
-        myName = nIn;
+        roomID = document.getElementById('room-input').value.trim().toUpperCase();
+        myName = document.getElementById('nick-input').value.trim() || "匿名";
+        if(!roomID) return alert("請輸入房號");
 
         const roomRef = ref(db, `rooms/${roomID}`);
         const snap = await get(roomRef);
-
-        // 如果房間沒人，第一個進去的是房主
-        if(!snap.exists()) {
-            await set(ref(db, `rooms/${roomID}/meta`), { owner: uid });
-        }
-
-        // 檢查房主權限
+        
+        // 房不存在，設為房主
+        if(!snap.exists()) await set(ref(db, `rooms/${roomID}/meta`), { owner: uid });
+        
         const metaSnap = await get(ref(db, `rooms/${roomID}/meta`));
-        if(metaSnap.val()?.owner === uid) {
-            document.getElementById('owner-btn').classList.remove('hidden');
-        }
+        if(metaSnap.val()?.owner === uid) document.getElementById('owner-btn').classList.remove('hidden');
 
-        // 登入狀態與斷線自動移除
-        const myUserRef = ref(db, `rooms/${roomID}/users/${uid}`);
-        set(myUserRef, { name: myName });
-        onDisconnect(myUserRef).remove();
+        // 登入狀態與自動清理
+        const userRef = ref(db, `rooms/${roomID}/users/${uid}`);
+        set(userRef, { name: myName });
+        onDisconnect(userRef).remove();
 
-        // UI 換頁
         document.getElementById('login-view').classList.add('hidden');
         document.getElementById('chat-view').classList.remove('hidden');
-        document.getElementById('room-title').innerText = "房號: " + roomID;
+        document.getElementById('room-title').innerText = roomID;
         document.getElementById('rename-input').value = myName;
-
         startChat();
-    }
+    };
 
-    // 2. 開始監聽
     function startChat() {
-        // 監聽訊息 (自動限制最新 100 條，防止存太多)
         onValue(ref(db, `rooms/${roomID}/msgs`), (snap) => {
             const box = document.getElementById('chat-box');
             box.innerHTML = "";
             snap.forEach(child => {
                 const d = child.val();
-                const div = document.createElement('div');
-                div.className = `msg ${d.uid === uid ? 'me' : 'other'}`;
-                div.innerHTML = `<div class="msg-name">${d.name}</div>${d.text}`;
-                box.appendChild(div);
+                const isMe = d.uid === uid;
+                const wrapper = document.createElement('div');
+                wrapper.className = `msg-wrapper ${isMe ? 'me' : 'other'}`;
+                
+                let content = d.type === 'image' 
+                    ? `<img src="${d.text}" onclick="openViewer('${child.key}')" id="img-${child.key}">` 
+                    : d.text;
+                
+                wrapper.innerHTML = `
+                    <div class="msg-name">${d.name}</div>
+                    <div class="bubble">${content}</div>
+                `;
+                box.appendChild(wrapper);
             });
             box.scrollTop = box.scrollHeight;
         });
 
-        // 監聽房間是否被銷毀
-        onValue(ref(db, `rooms/${roomID}/meta`), (snap) => {
-            if(!snap.exists() && roomID !== "") {
-                alert("房間已被銷毀！");
+        onValue(ref(db, `rooms/${roomID}/meta`), (s) => { 
+            if(!s.exists() && roomID !== "") {
+                alert("房間已被銷毀");
                 location.reload();
             }
         });
     }
 
-    // 3. 傳送訊息
+    // 文字傳送
     window.doSend = function() {
         const inp = document.getElementById('msg-input');
         if(!inp.value.trim()) return;
         push(ref(db, `rooms/${roomID}/msgs`), {
-            uid: uid,
-            name: myName,
-            text: inp.value,
-            ts: serverTimestamp()
+            uid, name: myName, text: inp.value, type: 'text', ts: serverTimestamp()
         });
         inp.value = "";
-    }
+    };
 
-    // 4. 修改暱稱
+    // 10MB 原圖傳送 (Base64)
+    window.sendLargeImage = function(input) {
+        const file = input.files[0];
+        if (!file) return;
+        if (file.size > 10 * 1024 * 1024) return alert("檔案太大囉 (限制10MB內)");
+
+        document.getElementById('loading-toast').style.display = 'block';
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            push(ref(db, `rooms/${roomID}/msgs`), {
+                uid, name: myName, text: e.target.result, type: 'image', ts: serverTimestamp()
+            }).then(() => {
+                document.getElementById('loading-toast').style.display = 'none';
+            });
+        };
+        reader.readAsDataURL(file);
+        input.value = "";
+    };
+
+    // 查看大圖
+    window.openViewer = function(key) {
+        const src = document.getElementById('img-' + key).src;
+        document.getElementById('modal-img').src = src;
+        document.getElementById('photo-modal').style.display = 'flex';
+    };
+
+    // 修改暱稱
     window.updateNickname = function(val) {
         if(!val.trim()) return;
         myName = val;
-        set(ref(db, `rooms/${roomID}/users/${uid}/name`), val);
-    }
+        update(ref(db, `rooms/${roomID}/users/${uid}`), { name: val });
+    };
 
-    // 5. 銷毀房間 (房主權限)
+    // 銷毀房間
     window.destroyRoom = function() {
-        if(confirm("確定要銷毀房號 " + roomID + " 嗎？所有紀錄將清空。")) {
-            remove(ref(db, `rooms/${roomID}`));
-        }
-    }
+        if(confirm("確定銷毀房間？所有紀錄將清空。")) remove(ref(db, `rooms/${roomID}`));
+    };
 </script>
-
 </body>
 </html>
