@@ -3,36 +3,41 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Raingod Chat | 核心加密版</title>
+    <title>Raingod Chat | 銷毀解鎖版</title>
     <style>
-        :root { --me-bg: #007aff; --other-bg: #e9e9eb; --header-h: 60px; }
+        :root { --me-bg: #007aff; --other-bg: #e9e9eb; --danger: #ff3b30; }
         body { font-family: -apple-system, sans-serif; background: #f2f2f7; margin: 0; display: flex; justify-content: center; height: 100vh; overflow: hidden; }
-        #app { width: 100%; max-width: 500px; background: white; display: flex; flex-direction: column; height: 100vh; }
+        #app { width: 100%; max-width: 500px; background: white; display: flex; flex-direction: column; box-shadow: 0 0 20px rgba(0,0,0,0.1); height: 100vh; }
         .hidden { display: none !important; }
-        .header { height: var(--header-h); padding: 0 15px; background: #fff; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
-        #chat-box { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 10px; background: #fff; }
+        .header { height: 60px; padding: 0 15px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+        #chat-box { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 10px; }
         .bubble { padding: 10px 14px; border-radius: 18px; font-size: 15px; max-width: 80%; word-wrap: break-word; }
         .me { align-self: flex-end; background: var(--me-bg); color: white; border-bottom-right-radius: 4px; }
         .other { align-self: flex-start; background: var(--other-bg); color: black; border-bottom-left-radius: 4px; }
         .input-area { padding: 10px 15px 30px; border-top: 1px solid #eee; display: flex; gap: 8px; background: #fff; }
-        input[type="text"], input[type="password"] { padding: 12px; border: 1px solid #ddd; border-radius: 10px; }
+        input { padding: 12px; border: 1px solid #ddd; border-radius: 10px; font-size: 16px; width: 100%; box-sizing: border-box; }
+        .btn-main { background: var(--me-bg); color: white; border: none; border-radius: 10px; padding: 12px; font-weight: bold; cursor: pointer; width: 100%; }
     </style>
 </head>
 <body>
 <div id="app">
-    <div id="login-view" style="padding: 40px 25px; text-align: center;">
-        <h2 style="color: var(--me-bg);">Raingod</h2>
-        <input type="text" id="room-input" placeholder="房號" style="width:100%; margin-bottom:10px;">
-        <input type="text" id="nick-input" placeholder="暱稱" style="width:100%; margin-bottom:10px;">
-        <input type="password" id="admin-pass" placeholder="管理員密碼 (創多房用)" style="width:100%; margin-bottom:20px;">
-        <button onclick="handleJoin()" style="width:100%; padding:15px; background:var(--me-bg); color:white; border:none; border-radius:10px; font-weight:bold;">進入/建立房間</button>
-        <p id="status" style="font-size:12px; color:red; margin-top:10px;"></p>
+    <div id="login-view" style="padding: 40px 25px; text-align: center; flex: 1; display: flex; flex-direction: column; justify-content: center;">
+        <h2 style="color: var(--me-bg); margin-bottom: 5px;">Raingod</h2>
+        <p style="color: #999; font-size: 13px; margin-bottom: 30px;">一機一房 (銷毀舊房即可再創)</p>
+        <input type="text" id="room-input" placeholder="房號" style="margin-bottom:10px;">
+        <input type="text" id="nick-input" placeholder="暱稱" style="margin-bottom:10px;">
+        <input type="password" id="admin-pass" placeholder="管理員密碼 (選填)" style="margin-bottom:20px;">
+        <button onclick="handleJoin()" class="btn-main">進入 / 建立</button>
+        <p id="status" style="color: var(--danger); font-size: 12px; margin-top: 15px;"></p>
     </div>
 
     <div id="chat-view" class="hidden" style="display:flex; flex-direction:column; height:100%;">
         <div class="header">
             <b id="room-title"></b>
-            <button onclick="location.reload()" style="border:none; background:none; color:#999;">結束</button>
+            <div>
+                <button id="del-btn" class="hidden" onclick="destroyRoom()" style="color:var(--danger); border:none; background:none; font-weight:bold; margin-right:10px;">銷毀</button>
+                <button onclick="location.reload()" style="color:#999; border:none; background:none;">退出</button>
+            </div>
         </div>
         <div id="chat-box"></div>
         <div class="input-area">
@@ -44,14 +49,13 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getDatabase, ref, set, push, onValue, get, query, limitToLast } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+    import { getDatabase, ref, set, push, onValue, remove, get, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyDHb0o6ahdNnvlL3-QQy_yRO_mg4XMqtJk",
         authDomain: "chat-73802.firebaseapp.com",
         databaseURL: "https://chat-73802-default-rtdb.firebaseio.com",
-        projectId: "chat-73802",
-        storageBucket: "chat-73802.firebasestorage.app"
+        projectId: "chat-73802"
     };
 
     const app = initializeApp(firebaseConfig);
@@ -64,42 +68,43 @@
 
     window.handleJoin = async function() {
         roomID = document.getElementById('room-input').value.trim().toUpperCase();
-        myName = document.getElementById('nick-input').value.trim() || "匿名";
+        myName = document.getElementById('nick-input').value.trim() || "User";
         const pass = document.getElementById('admin-pass').value;
-        const status = document.getElementById('status');
-
         if(!roomID) return;
 
         const roomRef = ref(db, `rooms/${roomID}`);
         const snap = await get(roomRef);
 
         if(!snap.exists()) {
-            // 檢查是否已經創過房 (本地檢查防君子)
-            const hasCreated = localStorage.getItem('has_created_room');
-            const isFirstRoom = !hasCreated;
-
             try {
-                await set(ref(db, `rooms/${roomID}/meta`), {
-                    owner: uid,
-                    admin_key: pass, // 交給後端 Rules 比對
-                    is_first_room: isFirstRoom
-                });
-                if(!pass) localStorage.setItem('has_created_room', roomID);
+                // 1. 同步嘗試在 owners 佔位
+                await set(ref(db, `owners/${uid}`), roomID);
+                // 2. 建立房間
+                await set(ref(db, `rooms/${roomID}/meta`), { owner: uid, admin_key: pass });
             } catch (e) {
-                status.innerText = "權限不足：你已創過房間或密碼錯誤！";
+                // 如果失敗，檢查是否是因為已經在別房佔位
+                const ownerSnap = await get(ref(db, `owners/${uid}`));
+                if(ownerSnap.exists() && !pass) {
+                    document.getElementById('status').innerText = `你已擁有房號: ${ownerSnap.val()}，請先銷毀。`;
+                } else {
+                    document.getElementById('status').innerText = "密碼錯誤或系統攔截。";
+                }
                 return;
             }
         }
 
+        // 成功進入
+        const metaSnap = await get(ref(db, `rooms/${roomID}/meta`));
+        if(metaSnap.val()?.owner === uid) document.getElementById('del-btn').classList.remove('hidden');
+
         document.getElementById('login-view').classList.add('hidden');
         document.getElementById('chat-view').classList.remove('hidden');
-        document.getElementById('room-title').innerText = "房號: " + roomID;
+        document.getElementById('room-title').innerText = roomID;
         startChat();
     };
 
     function startChat() {
-        const q = query(ref(db, `rooms/${roomID}/msgs`), limitToLast(50));
-        onValue(q, (snap) => {
+        onValue(ref(db, `rooms/${roomID}/msgs`), (snap) => {
             const box = document.getElementById('chat-box');
             box.innerHTML = "";
             snap.forEach(c => {
@@ -111,15 +116,22 @@
             });
             box.scrollTop = box.scrollHeight;
         });
+        onValue(ref(db, `rooms/${roomID}/meta`), s => { if(!s.exists()) location.reload(); });
     }
 
-    window.doSend = function() {
+    window.doSend = () => {
         const inp = document.getElementById('msg-input');
         if(!inp.value) return;
-        push(ref(db, `rooms/${roomID}/msgs`), {
-            uid, name: myName, text: inp.value, ts: Date.now()
-        });
+        push(ref(db, `rooms/${roomID}/msgs`), { uid, name: myName, text: inp.value });
         inp.value = "";
+    };
+
+    window.destroyRoom = async () => {
+        if(confirm("確定銷毀房間？銷毀後即可重新創房。")) {
+            await remove(ref(db, `rooms/${roomID}`));
+            await remove(ref(db, `owners/${uid}`)); // 解除佔位紀錄
+            location.reload();
+        }
     };
 </script>
 </body>
