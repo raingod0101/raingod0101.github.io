@@ -3,81 +3,77 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Raingod Chat | Secure Admin</title>
+    <title>Raingod Chat | 安全加密版</title>
     <style>
         :root { --me-bg: #007aff; --other-bg: #e9e9eb; --danger: #ff3b30; --header-h: 60px; }
         body { font-family: -apple-system, sans-serif; background: #f2f2f7; margin: 0; display: flex; justify-content: center; height: 100vh; overflow: hidden; }
         #app { width: 100%; max-width: 500px; background: white; display: flex; flex-direction: column; box-shadow: 0 0 20px rgba(0,0,0,0.1); height: 100vh; }
-        
-        /* 導覽列優化：往上移動並固定 */
-        .header { height: var(--header-h); padding: 0 15px; background: #fff; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; z-index: 100; flex-shrink: 0; }
-        .header b { font-size: 18px; color: #333; }
         .hidden { display: none !important; }
+        
+        /* 導覽列優化：往上移動 */
+        .header { height: var(--header-h); padding: 0 15px; background: #fff; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; z-index: 100; flex-shrink: 0; }
+        .header b { font-size: 18px; color: #000; letter-spacing: 1px; }
 
         #chat-box { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 12px; background: #fff; }
         
-        /* 訊息樣式 */
-        .date-divider { text-align: center; font-size: 11px; color: #bbb; margin: 15px 0; font-weight: bold; }
-        .msg-wrapper { display: flex; flex-direction: column; width: 100%; margin-bottom: 2px; }
+        /* 訊息氣泡與日期 */
+        .date-divider { text-align: center; font-size: 11px; color: #aaa; margin: 10px 0; font-weight: bold; }
+        .msg-wrapper { display: flex; flex-direction: column; width: 100%; }
         .msg-wrapper.me { align-items: flex-end; }
         .msg-wrapper.other { align-items: flex-start; }
-        .msg-name { font-size: 11px; color: #8e8e93; margin-bottom: 2px; padding: 0 5px; }
+        .msg-name { font-size: 11px; color: #8e8e93; margin-bottom: 2px; padding: 0 8px; }
         
         .bubble-container { display: flex; align-items: flex-end; gap: 5px; max-width: 85%; }
         .me .bubble-container { flex-direction: row-reverse; }
 
-        .bubble { padding: 10px 14px; border-radius: 18px; font-size: 15px; line-height: 1.4; word-wrap: break-word; box-shadow: 0 1px 1px rgba(0,0,0,0.05); }
+        .bubble { padding: 10px 14px; border-radius: 18px; font-size: 15px; line-height: 1.4; word-wrap: break-word; }
         .me .bubble { background: var(--me-bg); color: white; border-bottom-right-radius: 4px; }
         .other .bubble { background: var(--other-bg); color: black; border-bottom-left-radius: 4px; }
         
-        .time-tag { font-size: 9px; color: #bbb; min-width: 32px; text-align: right; }
-        .read-status { font-size: 9px; color: var(--me-bg); font-weight: bold; }
+        .time-info { font-size: 9px; color: #bbb; display: flex; flex-direction: column; align-items: flex-end; min-width: 35px; }
+        .read-status { color: var(--me-bg); font-weight: bold; margin-bottom: 2px; }
 
-        .bubble img { max-width: 100%; border-radius: 10px; display: block; cursor: zoom-in; }
+        .bubble img { max-width: 100%; border-radius: 12px; display: block; cursor: zoom-in; }
 
-        /* 輸入區域 */
-        .input-area { padding: 10px 15px 30px; border-top: 1px solid #eee; display: flex; gap: 8px; align-items: center; background: #fff; }
+        /* 輸入區 */
+        .input-area { padding: 10px 15px 30px; border-top: 1px solid #eee; display: flex; gap: 8px; align-items: center; background: #fff; flex-shrink: 0; }
         #msg-input { flex: 1; padding: 12px 16px; border: 1px solid #ddd; border-radius: 20px; outline: none; font-size: 16px; }
-        .btn-circle { background: #f0f0f0; border: none; border-radius: 50%; width: 42px; height: 42px; cursor: pointer; font-size: 20px; flex-shrink: 0; }
+        .btn-icon { background: #f0f0f0; border: none; border-radius: 50%; width: 42px; height: 42px; cursor: pointer; font-size: 20px; }
         .btn-send { background: var(--me-bg); color: white; border: none; padding: 10px 20px; border-radius: 20px; font-weight: bold; cursor: pointer; }
 
-        /* 大圖與載入 */
         #photo-modal { display: none; position: fixed; z-index: 1000; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); justify-content: center; align-items: center; }
-        #modal-img { max-width: 98%; max-height: 98%; object-fit: contain; }
-        #loading-toast { position: fixed; top: 40%; background: rgba(0,0,0,0.8); color: white; padding: 12px 25px; border-radius: 20px; z-index: 2000; display: none; }
+        #modal-img { max-width: 98%; max-height: 98%; }
+        #loading-toast { position: fixed; top: 40%; background: rgba(0,0,0,0.8); color: white; padding: 12px 25px; border-radius: 25px; z-index: 1100; display: none; }
     </style>
 </head>
 <body>
 
-<div id="loading-toast">傳送中...</div>
+<div id="loading-toast">處理中...</div>
 <div id="photo-modal" onclick="this.style.display='none'"><img id="modal-img"></div>
 
 <div id="app">
-    <div id="login-view" style="padding: 40px 25px; text-align: center; flex: 1; display: flex; flex-direction: column; justify-content: center;">
-        <h1 style="color: var(--me-bg); font-size: 36px; margin-bottom: 5px;">Raingod</h1>
-        <p style="color: #888; margin-bottom: 40px;">私密對話 | 10MB 原圖 | 管理員特權</p>
-        <input type="text" id="room-input" placeholder="輸入房號" style="width: 100%; padding: 16px; margin-bottom: 12px; border: 1px solid #ddd; border-radius: 12px; box-sizing: border-box; font-size: 16px;">
-        <input type="text" id="nick-input" placeholder="您的暱稱" style="width: 100%; padding: 16px; margin-bottom: 30px; border: 1px solid #ddd; border-radius: 12px; box-sizing: border-box; font-size: 16px;">
-        <button onclick="handleJoin()" style="width: 100%; padding: 16px; background: var(--me-bg); color: white; border: none; border-radius: 12px; font-weight: bold; font-size: 18px; cursor: pointer;">進入房間</button>
-        <p id="display-uid" style="font-size: 11px; color: #ccc; margin-top: 30px; font-family: monospace;"></p>
+    <div id="login-view" style="padding: 40px 20px; text-align: center; flex: 1; display: flex; flex-direction: column; justify-content: center;">
+        <h2 style="font-size: 32px; color: var(--me-bg); margin-bottom: 40px;">Raingod</h2>
+        <input type="text" id="room-input" placeholder="房號 (例: SECRET)" style="width: 100%; padding: 15px; margin-bottom: 12px; border: 1px solid #ddd; border-radius: 12px; box-sizing: border-box;">
+        <input type="text" id="nick-input" placeholder="您的暱稱" style="width: 100%; padding: 15px; margin-bottom: 12px; border: 1px solid #ddd; border-radius: 12px; box-sizing: border-box;">
+        <input type="password" id="admin-pass" placeholder="管理員密碼 (創房必填)" style="width: 100%; padding: 15px; margin-bottom: 30px; border: 1px solid #ddd; border-radius: 12px; box-sizing: border-box; background: #fffef0;">
+        <button onclick="handleJoin()" style="width: 100%; padding: 16px; background: var(--me-bg); color: white; border: none; border-radius: 12px; font-weight: bold; font-size: 18px; cursor: pointer;">進入聊天室</button>
     </div>
 
     <div id="chat-view" class="hidden" style="display:flex; flex-direction:column; height:100%;">
         <div class="header">
             <b id="room-title">ROOM</b>
             <div style="display: flex; gap: 8px; align-items: center;">
-                <input type="text" id="rename-box" style="width:60px; font-size:11px; border:1px solid #eee;" onchange="updateName(this.value)">
-                <button id="owner-btn" class="hidden" onclick="destroyRoom()" style="color:var(--danger); border:none; background:none; font-weight:bold; font-size:12px;">銷毀</button>
-                <button onclick="location.reload()" style="color:#aaa; border:none; background:none; font-size:12px;">退出</button>
+                <input type="text" id="rename-box" style="width:50px; font-size:10px; border:1px solid #ddd;" onchange="updateName(this.value)">
+                <button id="owner-btn" class="hidden" onclick="destroyRoom()" style="color:var(--danger); border:none; background:none; font-weight:bold; font-size:13px;">銷毀</button>
+                <button onclick="location.reload()" style="color:#aaa; border:none; background:none; font-size:13px;">退出</button>
             </div>
         </div>
-        
         <div id="chat-box"></div>
-
         <div class="input-area">
             <input type="file" id="img-input" class="hidden" accept="image/*" onchange="sendImg(this)">
-            <button class="btn-circle" onclick="document.getElementById('img-input').click()">📷</button>
-            <input type="text" id="msg-input" placeholder="輸入訊息..." onkeypress="if(event.key==='Enter') doSend()">
+            <button class="btn-icon" onclick="document.getElementById('img-input').click()">📷</button>
+            <input type="text" id="msg-input" placeholder="新訊息..." onkeypress="if(event.key==='Enter') doSend()">
             <button class="btn-send" onclick="doSend()">傳送</button>
         </div>
     </div>
@@ -85,77 +81,72 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getDatabase, ref, set, push, onValue, remove, onDisconnect, serverTimestamp, get, update, query, limitToLast } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+    import { getDatabase, ref, set, push, onValue, remove, onDisconnect, get, update, query, limitToLast, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
+    // --- Firebase 配置 ---
     const firebaseConfig = {
         apiKey: "AIzaSyDHb0o6ahdNnvlL3-QQy_yRO_mg4XMqtJk",
         authDomain: "chat-73802.firebaseapp.com",
         databaseURL: "https://chat-73802-default-rtdb.firebaseio.com",
         projectId: "chat-73802",
-        storageBucket: "chat-73802.firebasestorage.app",
-        messagingSenderId: "274628413625",
-        appId: "1:274628413625:web:77499e0bdeab18104bf368",
-        measurementId: "G-BP7YV746WV"
+        storageBucket: "chat-73802.firebasestorage.app"
     };
 
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
-    // 🚩 管理員 ID 修改處 (將此處改為你看到的 DEVICE ID) 🚩
-    const MY_ADMIN_ID = "u6g07qsm"; 
-
+    // 唯一的裝置 ID
     let uid = localStorage.getItem('chat_uid') || 'u' + Math.random().toString(36).substr(2, 7);
     localStorage.setItem('chat_uid', uid);
-    document.getElementById('display-uid').innerText = "DEVICE ID: " + uid;
 
     let roomID = ""; let myName = ""; let lastTime = 0;
 
     window.handleJoin = async function() {
         roomID = document.getElementById('room-input').value.trim().toUpperCase();
         myName = document.getElementById('nick-input').value.trim() || "User";
+        const inputPass = document.getElementById('admin-pass').value;
+
         if(!roomID) return alert("請輸入房號");
 
         const roomRef = ref(db, `rooms/${roomID}`);
-        
-        // 1. 創房限制判斷 (管理員跳過)
-        if(uid !== MY_ADMIN_ID) {
-            const allRooms = await get(ref(db, `rooms`));
-            if(allRooms.exists()) {
-                const data = allRooms.val();
-                for(let r in data) {
-                    if(data[r].meta?.owner === uid && r !== roomID) {
-                        return alert("你已經在別處創房了: " + r + "\n普通用戶限創一房。");
-                    }
-                }
+        const snap = await get(roomRef);
+
+        // 如果房間不存在 -> 嘗試創房
+        if(!snap.exists()) {
+            try {
+                // 創房時帶上密碼，Firebase Rules 會檢查
+                await set(ref(db, `rooms/${roomID}/meta`), { 
+                    owner: uid, 
+                    admin_key: inputPass 
+                });
+            } catch (e) {
+                return alert("創房失敗！密碼錯誤或你已被禁止創多房。");
             }
         }
 
-        const snap = await get(roomRef);
-        // 2. 建立新房
-        if(!snap.exists()) {
-            await set(ref(db, `rooms/${roomID}/meta`), { owner: uid, created: Date.now() });
+        // 成功進入後，檢查是否為房主
+        const metaSnap = await get(ref(db, `rooms/${roomID}/meta`));
+        if(metaSnap.val()?.owner === uid) {
+            document.getElementById('owner-btn').classList.remove('hidden');
         }
 
-        // 3. 檢查是否為房主顯示銷毀鈕
-        const meta = (await get(ref(db, `rooms/${roomID}/meta`))).val();
-        if(meta?.owner === uid) document.getElementById('owner-btn').classList.remove('hidden');
-
+        // 登入
         set(ref(db, `rooms/${roomID}/users/${uid}`), { name: myName });
         onDisconnect(ref(db, `rooms/${roomID}/users/${uid}`)).remove();
 
         document.getElementById('login-view').classList.add('hidden');
         document.getElementById('chat-view').classList.remove('hidden');
-        document.getElementById('room-title').innerText = "房號: " + roomID;
+        document.getElementById('room-title').innerText = roomID;
         document.getElementById('rename-box').value = myName;
         startChat();
     };
 
     function startChat() {
         const q = query(ref(db, `rooms/${roomID}/msgs`), limitToLast(50));
-        let lastD = "";
+        let lastDate = "";
         onValue(q, (snap) => {
             const box = document.getElementById('chat-box');
-            box.innerHTML = ""; lastD = "";
+            box.innerHTML = ""; lastDate = "";
             snap.forEach(c => {
                 const d = c.val();
                 const isMe = d.uid === uid;
@@ -163,25 +154,16 @@
                 const dStr = dt.toLocaleDateString();
                 const tStr = dt.getHours().toString().padStart(2,'0') + ":" + dt.getMinutes().toString().padStart(2,'0');
 
-                if(dStr !== lastD) {
+                if(dStr !== lastDate) {
                     const div = document.createElement('div');
                     div.className = "date-divider"; div.innerText = dStr;
-                    box.appendChild(div); lastD = dStr;
+                    box.appendChild(div); lastDate = dStr;
                 }
 
                 const wrap = document.createElement('div');
                 wrap.className = `msg-wrapper ${isMe ? 'me' : 'other'}`;
-                let con = d.type === 'image' ? `<img src="${d.text}" onclick="openImg('${c.key}')" id="img-${c.key}">` : d.text;
-                wrap.innerHTML = `
-                    <div class="msg-name">${d.name}</div>
-                    <div class="bubble-container">
-                        <div class="bubble">${con}</div>
-                        <div class="time-info" style="display:flex; flex-direction:column; align-items:flex-end;">
-                            ${isMe ? '<span class="read-status">已讀</span>' : ''}
-                            <span class="time-tag">${tStr}</span>
-                        </div>
-                    </div>
-                `;
+                let con = d.type === 'image' ? `<img src="${d.text}" onclick="showImg('${c.key}')" id="img-${c.key}">` : d.text;
+                wrap.innerHTML = `<div class="msg-name">${d.name}</div><div class="bubble-container"><div class="bubble">${con}</div><div class="time-info">${isMe?'<span class="read-status">已讀</span>':''}<span>${tStr}</span></div></div>`;
                 box.appendChild(wrap);
             });
             box.scrollTop = box.scrollHeight;
@@ -189,15 +171,15 @@
         onValue(ref(db, `rooms/${roomID}/meta`), s => { if(!s.exists()) location.reload(); });
     }
 
-    async function safeSend(payload) {
-        // 3秒冷卻 (管理員除外)
-        if(uid !== MY_ADMIN_ID && Date.now() - lastTime < 3000) return alert("冷卻中 (3s)");
+    async function sendCore(payload) {
+        // 3秒冷卻
+        if(Date.now() - lastTime < 3000) return alert("冷卻中 (3s)");
         lastTime = Date.now();
         
         const mRef = ref(db, `rooms/${roomID}/msgs`);
         await push(mRef, payload);
         
-        // 50條限制：獲取當前所有訊息並刪除多餘的
+        // 50條清理
         const s = await get(mRef);
         if(s.exists()){
             const keys = Object.keys(s.val()).sort();
@@ -208,7 +190,7 @@
     window.doSend = () => {
         const i = document.getElementById('msg-input');
         if(!i.value.trim()) return;
-        safeSend({ uid, name: myName, text: i.value, type: 'text', ts: Date.now() });
+        sendCore({ uid, name: myName, text: i.value, type: 'text', ts: Date.now() });
         i.value = "";
     };
 
@@ -218,20 +200,20 @@
         document.getElementById('loading-toast').style.display = 'block';
         const r = new FileReader();
         r.onload = (e) => {
-            safeSend({ uid, name: myName, text: e.target.result, type: 'image', ts: Date.now() })
-            .then(() => document.getElementById('loading-toast').style.display = 'none');
+            sendCore({ uid, name: myName, text: e.target.result, type: 'image', ts: Date.now() })
+            .then(() => document.getElementById('loading-toast').style.display='none');
         };
         r.readAsDataURL(f);
         inp.value = "";
     };
 
-    window.openImg = (k) => {
+    window.showImg = (k) => {
         document.getElementById('modal-img').src = document.getElementById('img-'+k).src;
         document.getElementById('photo-modal').style.display = 'flex';
     };
 
-    window.updateName = (v) => { if(v.trim()) update(ref(db, `rooms/${roomID}/users/${uid}`), {name:v}); };
-    window.destroyRoom = () => { if(confirm("確定銷毀？")) remove(ref(db, `rooms/${roomID}`)); };
+    window.updateName = (v) => { if(v.trim()) update(ref(db, `rooms/${roomID}/users/${uid}`), {name: v}); };
+    window.destroyRoom = () => { if(confirm("確定銷毀房間？")) remove(ref(db, `rooms/${roomID}`)); };
 </script>
 </body>
 </html>
