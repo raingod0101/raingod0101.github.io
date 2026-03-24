@@ -3,30 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Raingod Chat | 智慧進入版</title>
+    <title>Raingod Chat | 穩定版</title>
     <style>
         :root { --me-bg: #007aff; --other-bg: #e9e9eb; --danger: #ff3b30; }
         body { font-family: -apple-system, sans-serif; background: #f2f2f7; margin: 0; display: flex; justify-content: center; height: 100vh; }
         #app { width: 100%; max-width: 500px; background: white; display: flex; flex-direction: column; box-shadow: 0 0 20px rgba(0,0,0,0.1); height: 100vh; }
         .hidden { display: none !important; }
-        .header { height: 60px; padding: 0 15px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
-        #chat-box { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 10px; }
-        .bubble { padding: 10px 14px; border-radius: 18px; max-width: 80%; word-wrap: break-word; }
+        .header { height: 60px; padding: 0 15px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+        #chat-box { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 10px; background: #fff; }
+        .bubble { padding: 10px 14px; border-radius: 18px; max-width: 80%; word-wrap: break-word; font-size: 15px; }
         .me { align-self: flex-end; background: var(--me-bg); color: white; border-bottom-right-radius: 4px; }
         .other { align-self: flex-start; background: var(--other-bg); color: black; border-bottom-left-radius: 4px; }
-        .input-area { padding: 10px 15px 30px; border-top: 1px solid #eee; display: flex; gap: 8px; }
+        .input-area { padding: 10px 15px 30px; border-top: 1px solid #eee; display: flex; gap: 8px; background: #fff; }
         input { padding: 12px; border: 1px solid #ddd; border-radius: 10px; font-size: 16px; width: 100%; box-sizing: border-box; }
         .btn-main { background: var(--me-bg); color: white; border: none; border-radius: 10px; padding: 12px; font-weight: bold; cursor: pointer; }
     </style>
 </head>
 <body>
 <div id="app">
-    <div id="login-view" style="padding: 40px 25px; text-align: center;">
+    <div id="login-view" style="padding: 40px 25px; text-align: center; flex:1; display:flex; flex-direction:column; justify-content:center;">
         <h2 style="color: var(--me-bg);">Raingod</h2>
-        <input type="text" id="room-input" placeholder="輸入房號" style="margin-bottom:10px;">
+        <input type="text" id="room-input" placeholder="房號 (例: A01)" style="margin-bottom:10px;">
         <input type="text" id="nick-input" placeholder="暱稱" style="margin-bottom:10px;">
-        <input type="password" id="admin-pass" placeholder="管理員密碼 (創多房用)" style="margin-bottom:20px;">
-        <button onclick="handleJoin()" class="btn-main" style="width:100%;">進入聊天室</button>
+        <input type="password" id="admin-pass" placeholder="管理員密碼 (創多房才要填)" style="margin-bottom:20px;">
+        <button onclick="handleJoin()" class="btn-main">進入 / 建立房間</button>
         <p id="status" style="color: var(--danger); font-size: 12px; margin-top: 15px;"></p>
     </div>
 
@@ -34,14 +34,14 @@
         <div class="header">
             <b id="room-title"></b>
             <div>
-                <button id="del-btn" class="hidden" onclick="destroyRoom()" style="color:var(--danger); border:none; background:none; font-weight:bold; margin-right:10px;">銷毀房間</button>
+                <button id="del-btn" class="hidden" onclick="destroyRoom()" style="color:var(--danger); border:none; background:none; font-weight:bold; margin-right:10px;">銷毀</button>
                 <button onclick="location.reload()" style="color:#999; border:none; background:none;">退出</button>
             </div>
         </div>
         <div id="chat-box"></div>
         <div class="input-area">
-            <input type="text" id="msg-input" placeholder="輸入訊息..." style="flex:1;">
-            <button onclick="doSend()" class="btn-main">傳送</button>
+            <input type="text" id="msg-input" placeholder="傳訊息..." style="flex:1;">
+            <button onclick="doSend()" style="background:var(--me-bg); color:white; border:none; border-radius:10px; padding:0 15px;">傳送</button>
         </div>
     </div>
 </div>
@@ -72,40 +72,46 @@
         const status = document.getElementById('status');
         if(!roomID) return;
 
-        // 【關鍵邏輯】：先看這個房號存不存在
+        // 1. 直接看這個房號存不存在
         const roomRef = ref(db, `rooms/${roomID}`);
         const snap = await get(roomRef);
 
         if (snap.exists()) {
-            // 房號已存在：直接進入
+            // 房號已存在：直接進去
             enterRoom();
         } else {
             // 房號不存在：嘗試創房
+            // 先看這台裝置有沒有在別房佔位 (預防沒密碼卻想創二房)
+            const ownerSnap = await get(ref(db, `owners/${uid}`));
+            
+            // 如果你已經有佔位紀錄，且密碼不對，就擋掉
+            if(ownerSnap.exists() && pass !== "你的超級密碼") {
+                status.innerText = `你已創過房間: ${ownerSnap.val()}，請先銷毀。`;
+                return;
+            }
+
             try {
-                // 先檢查是否已經佔用其他房 (管理員除外)
-                const ownerSnap = await get(ref(db, `owners/${uid}`));
-                if(ownerSnap.exists() && pass !== "你的超級密碼") {
-                    status.innerText = `你已擁有房號: ${ownerSnap.val()}，請先銷毀它。`;
-                    return;
-                }
-                
-                // 創房：建立 meta 同時在 owners 佔位
-                await set(ref(db, `owners/${uid}`), roomID);
+                // 創房：建立房間 meta 數據
                 await set(ref(db, `rooms/${roomID}/meta`), { owner: uid, admin_key: pass });
+                // 成功創房後，才去 owners 佔位（避免沒創成卻佔位）
+                await set(ref(db, `owners/${uid}`), roomID);
                 enterRoom();
             } catch (e) {
-                status.innerText = "創房失敗！請檢查密碼或是否已創房。";
+                status.innerText = "創房失敗！密碼錯誤或權限遭攔截。";
             }
         }
     };
 
     async function enterRoom() {
+        // 抓取房間 meta 看看我是不是房主
         const metaSnap = await get(ref(db, `rooms/${roomID}/meta`));
-        if(metaSnap.val()?.owner === uid) document.getElementById('del-btn').classList.remove('hidden');
+        if(metaSnap.val()?.owner === uid) {
+            document.getElementById('del-btn').classList.remove('hidden');
+        }
 
         document.getElementById('login-view').classList.add('hidden');
         document.getElementById('chat-view').classList.remove('hidden');
-        document.getElementById('room-title').innerText = roomID;
+        document.getElementById('room-title').innerText = "房號: " + roomID;
         startChat();
     }
 
@@ -122,7 +128,7 @@
             });
             box.scrollTop = box.scrollHeight;
         });
-        // 監聽房間是否被房主刪除
+        // 監聽房主是否刪房
         onValue(ref(db, `rooms/${roomID}/meta`), s => { if(!s.exists()) location.reload(); });
     }
 
@@ -134,7 +140,7 @@
     };
 
     window.destroyRoom = async () => {
-        if(confirm("確定銷毀房間？銷毀後即可再創。")) {
+        if(confirm("確定銷毀房間？銷毀後你將可以重新創立房間。")) {
             await remove(ref(db, `rooms/${roomID}`));
             await remove(ref(db, `owners/${uid}`));
             location.reload();
