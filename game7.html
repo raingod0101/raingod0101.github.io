@@ -2,41 +2,76 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Solo Chess Pro - 連勝挑戰</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none">
+    <title>單人棋 | Raingod</title>
     <style>
-        :root { --sq-l: #ebecd0; --sq-d: #779556; --highlight: rgba(255, 255, 0, 0.5); }
-        body { background: #121212; color: #fff; display: flex; flex-direction: column; align-items: center; font-family: sans-serif; margin: 0; padding-top: 20px; }
-        .stat-bar { font-size: 24px; margin-bottom: 20px; font-weight: bold; color: #fbd38d; }
-        #board { display: grid; grid-template-columns: repeat(8, min(11vw, 60px)); grid-template-rows: repeat(8, min(11vw, 60px)); border: 5px solid #444; }
-        .cell { display: flex; justify-content: center; align-items: center; font-size: min(8vw, 40px); cursor: pointer; position: relative; }
+        :root { --sq-l: #ebecd0; --sq-d: #779556; --accent: #f6f669; --bg: #161618; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { 
+            background: var(--bg); color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0; display: flex; flex-direction: column; align-items: center; min-height: 100vh; overflow: hidden;
+        }
+        
+        /* 啟動遮罩層 */
+        #launcher {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: var(--bg); z-index: 1000; display: flex; flex-direction: column;
+            justify-content: center; align-items: center; cursor: pointer;
+        }
+        #launcher h1 { color: #fbd38d; margin-bottom: 20px; }
+        .start-hint { font-size: 18px; color: #fff; background: #34c759; padding: 15px 30px; border-radius: 12px; font-weight: bold; }
+
+        .header { width: 100%; max-width: 500px; padding: 15px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+        .stat-bar { font-size: 22px; font-weight: bold; color: #fbd38d; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+        .controls { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+        
+        button { 
+            padding: 10px 16px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; 
+            background: #3a3a3c; color: white; transition: transform 0.1s, background 0.2s; font-size: 14px;
+        }
+        button:active { transform: scale(0.95); }
+        button.primary { background: #34c759; }
+        button.hint-btn { background: #ff9500; }
+
+        #game-container { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; width: 100%; }
+        #board { 
+            display: grid; grid-template-columns: repeat(8, min(12vw, 60px)); grid-template-rows: repeat(8, min(12vw, 60px));
+            border: 6px solid #2c2c2e; border-radius: 4px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        
+        .cell { display: flex; justify-content: center; align-items: center; font-size: min(9vw, 45px); cursor: pointer; position: relative; }
         .light { background: var(--sq-l); }
         .dark { background: var(--sq-d); }
-        .selected { background: #f6f669 !important; }
-        .hint-dot::after { content: ''; width: 30%; height: 30%; background: rgba(0,0,0,0.1); border-radius: 50%; position: absolute; }
-        .piece { color: #000; z-index: 5; user-select: none; }
-        .cap-dot { position: absolute; bottom: 2px; right: 2px; font-size: 10px; background: red; color: white; border-radius: 50%; width: 15px; height: 15px; display: flex; justify-content: center; align-items: center; }
-        .controls { margin-top: 20px; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
-        button { padding: 12px 20px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; background: #333; color: white; transition: 0.2s; }
-        button:hover { background: #555; }
-        button.new-game { background: #48bb78; }
-        button.hint-btn { background: #ed8936; }
-        #log { margin-top: 15px; color: #cbd5e0; font-size: 14px; min-height: 1.2em; }
+        .selected { background: var(--accent) !important; }
+        .can-eat::after { content: ''; width: 35%; height: 35%; background: rgba(0,0,0,0.15); border-radius: 50%; position: absolute; }
+        
+        .piece { color: #000; z-index: 5; user-select: none; pointer-events: none; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.3)); }
+        .cap-badge { position: absolute; top: 2px; left: 2px; font-size: 10px; background: #ff3b30; color: white; border-radius: 4px; padding: 1px 4px; font-weight: bold; z-index: 10; }
+
+        #log { margin-top: 15px; color: #8e8e93; font-size: 14px; text-align: center; padding: 0 20px; min-height: 1.5em; }
+
+        :fullscreen body { background: #000; }
     </style>
 </head>
 <body>
 
-    <div class="stat-bar">🔥 當前連勝: <span id="win-count">0</span></div>
-    
-    <div id="board"></div>
+    <div id="launcher" onclick="launchGame()">
+        <h1>Solo Chess Ultra</h1>
+        <div class="start-hint">點擊進入遊戲</div>
+    </div>
 
-    <div id="log">準備好挑戰下一關了嗎？</div>
+    <div class="header">
+        <div class="stat-bar">🔥 連勝次數: <span id="win-count">0</span></div>
+        <div class="controls">
+            <button class="primary" onclick="startNewGame()">新對局</button>
+            <button onclick="undo()">悔一步</button>
+            <button class="hint-btn" onclick="getHint()">提示</button>
+        </div>
+    </div>
 
-    <div class="controls">
-        <button class="new-game" onclick="startNewGame()">下一局</button>
-        <button onclick="undo()">悔棋</button>
-        <button class="hint-btn" onclick="getHint()">AI 提示</button>
-        <button onclick="resetLevel()">重玩</button>
+    <div id="game-container">
+        <div id="board"></div>
+        <div id="log"></div>
     </div>
 
 <script>
@@ -48,7 +83,30 @@ const PIECES = {
     'N': { s: '♞', long: false, d: [[2,1],[2,-1],[-2,1],[-2,-1],[1,2],[1,-2],[-1,2],[-1,-2]] }
 };
 
-let state = { grid: [], history: [], wins: 0, selected: null, initial: null };
+let savedWins = localStorage.getItem('soloChessWins') ? parseInt(localStorage.getItem('soloChessWins')) : 0;
+let state = { grid: [], history: [], wins: savedWins, selected: null, initial: null };
+
+// 核心啟動函數
+function launchGame() {
+    // 請求全螢幕
+    const docEl = document.documentElement;
+    if (docEl.requestFullscreen) {
+        docEl.requestFullscreen();
+    } else if (docEl.webkitRequestFullscreen) { /* Safari */
+        docEl.webkitRequestFullscreen();
+    }
+
+    // 隱藏啟動層
+    document.getElementById('launcher').style.display = 'none';
+    
+    // 開始第一局
+    startNewGame();
+}
+
+function updateWinUI() {
+    document.getElementById('win-count').innerText = state.wins;
+    localStorage.setItem('soloChessWins', state.wins);
+}
 
 function getMoves(r, c, grid) {
     const p = grid[r][c];
@@ -90,7 +148,6 @@ function generate(num) {
         let kr = Math.floor(Math.random()*8), kc = Math.floor(Math.random()*8);
         grid[kr][kc] = { type: 'K', caps: 0 };
         let pList = [{r: kr, c: kc}];
-        
         for (let i = 0; i < num - 1; i++) {
             let success = false;
             let shuffled = [...pList].sort(() => Math.random() - 0.5);
@@ -127,19 +184,19 @@ function render(hintMove = null) {
             const cell = document.createElement('div');
             cell.className = `cell ${(r+c)%2===0?'light':'dark'}`;
             if (state.selected && state.selected.r === r && state.selected.c === c) cell.classList.add('selected');
-            if (hintMove && ((hintMove.f.r===r && hintMove.f.c===c) || (hintMove.t.r===r && hintMove.t.c===c))) cell.style.boxShadow = "inset 0 0 15px orange";
-            
+            if (hintMove && ((hintMove.f.r===r && hintMove.f.c===c) || (hintMove.t.r===r && hintMove.t.c===c))) {
+                cell.style.boxShadow = "inset 0 0 12px #ff9500";
+            }
             const moves = state.selected ? getMoves(state.selected.r, state.selected.c, state.grid) : [];
-            if (moves.some(m => m.r === r && m.c === c)) cell.classList.add('hint-dot');
-
+            if (moves.some(m => m.r === r && m.c === c)) cell.classList.add('can-eat');
             if (p) {
                 const pEl = document.createElement('div');
                 pEl.className = 'piece'; pEl.innerText = PIECES[p.type].s;
                 cell.appendChild(pEl);
                 if (p.caps > 0) {
-                    const cap = document.createElement('div');
-                    cap.className = 'cap-dot'; cap.innerText = p.caps;
-                    cell.appendChild(cap);
+                    const badge = document.createElement('div');
+                    badge.className = 'cap-badge'; badge.innerText = p.caps;
+                    cell.appendChild(badge);
                 }
             }
             cell.onclick = () => handleCellClick(r, c);
@@ -171,14 +228,14 @@ function checkGameState() {
     const pieces = state.grid.flat().filter(x=>x);
     if (pieces.length === 1 && pieces[0].type === 'K') {
         state.wins++;
-        document.getElementById('win-count').innerText = state.wins;
-        document.getElementById('log').innerText = "🏆 太強了！正在載入下一關...";
+        updateWinUI();
+        document.getElementById('log').innerText = "過關!   載入中...";
         setTimeout(startNewGame, 1000);
     } else if (!pieces.some((p, i) => {
         const idx = state.grid.flat().indexOf(p);
         return getMoves(Math.floor(idx/8), idx%8, state.grid).length > 0;
     })) {
-        document.getElementById('log').innerText = "💀 沒有可移動的步數了。";
+        document.getElementById('log').innerText = "點擊「悔一步」。";
     }
 }
 
@@ -187,15 +244,16 @@ function startNewGame() {
     state.initial = JSON.stringify(state.grid);
     state.history = [];
     state.selected = null;
-    document.getElementById('log').innerText = "新棋局已就緒！";
+    document.getElementById('log').innerText = "";
+    updateWinUI();
     render();
 }
 
 function undo() { if(state.history.length > 0) { state.grid = JSON.parse(state.history.pop()); render(); } }
-function resetLevel() { state.grid = JSON.parse(state.initial); state.history = []; render(); }
-function getHint() { const sol = solve(state.grid); if(sol) render(sol[0]); }
+function getHint() { const sol = solve(state.grid); if(sol && sol.length > 0) render(sol[0]); }
 
-startNewGame();
+// 頁面載入時先更新一次連勝數字
+updateWinUI();
 </script>
 </body>
 </html>
