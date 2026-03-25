@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Raingod Pro | 終極修正版</title>
+    <title>Raingod Chat | 智慧進入版</title>
     <style>
         :root { --me-bg: #007aff; --other-bg: #e9e9eb; --danger: #ff3b30; }
         body { font-family: -apple-system, sans-serif; background: #f2f2f7; margin: 0; display: flex; justify-content: center; height: 100vh; overflow: hidden; }
@@ -22,7 +22,7 @@
         .info-tag { font-size: 9px; color: #aaa; display: flex; flex-direction: column; min-width: 45px; }
         .me .info-tag { align-items: flex-end; }
         .input-area { padding: 10px 15px 30px; border-top: 1px solid #eee; display: flex; gap: 8px; align-items: center; }
-        input[type="text"], input[type="password"] { padding: 12px; border: 1px solid #ddd; border-radius: 10px; width: 100%; box-sizing: border-box; }
+        input { padding: 12px; border: 1px solid #ddd; border-radius: 10px; width: 100%; box-sizing: border-box; }
     </style>
 </head>
 <body>
@@ -30,10 +30,10 @@
 <div id="app">
     <div id="login-view" style="padding: 40px 25px; text-align: center; flex: 1; display: flex; flex-direction: column; justify-content: center;">
         <h2 style="color: var(--me-bg);">Raingod Pro</h2>
-        <input type="text" id="room-input" placeholder="房號" style="margin-bottom:10px;">
-        <input type="text" id="nick-input" placeholder="暱稱" style="margin-bottom:10px;">
-        <input type="password" id="admin-pass" placeholder="管理員密碼 (創多房用)">
-        <button onclick="handleJoin()" style="margin-top:20px; padding:15px; background:var(--me-bg); color:white; border:none; border-radius:10px; font-weight:bold; cursor:pointer;">進入/建立房間</button>
+        <input type="text" id="room-input" placeholder="房號">
+        <input type="text" id="nick-input" placeholder="暱稱" style="margin: 10px 0;">
+        <input type="password" id="admin-pass" placeholder="管理員密碼">
+        <button onclick="handleJoin()" style="margin-top:20px; padding:15px; background:var(--me-bg); color:white; border:none; border-radius:10px; font-weight:bold; cursor:pointer;">進入房間</button>
         <p id="status" style="color:red; font-size:12px; margin-top:10px;"></p>
     </div>
 
@@ -67,28 +67,33 @@
     localStorage.setItem('chat_uid', uid);
 
     let roomID = ""; let myName = "";
-    let msgLog = []; // 用於 30秒10則 限制
+    let msgLog = [];
 
     window.handleJoin = async function() {
         roomID = document.getElementById('room-input').value.trim().toUpperCase();
         myName = document.getElementById('nick-input').value.trim() || "User";
         const pass = document.getElementById('admin-pass').value;
+        const status = document.getElementById('status');
         if(!roomID) return;
 
+        // 【第一步】先檢查房間是否存在
         const roomRef = ref(db, `rooms/${roomID}`);
         const roomSnap = await get(roomRef);
 
         if (roomSnap.exists()) {
+            // 房號存在 -> 直接放行進入
             enterUI();
         } else {
-            // 創房邏輯：檢查佔位
+            // 房號不存在 -> 進入創房邏輯
             const ownerSnap = await get(ref(db, `owners/${uid}`));
-            if(ownerSnap.exists() && pass !== "你的超級密碼") {
-                document.getElementById('status').innerText = `你已創過房: ${ownerSnap.val()}，請先銷毀。`;
+            
+            // 如果你手上有別的房，且密碼不對
+            if (ownerSnap.exists() && pass !== "你的超級密碼") {
+                status.innerText = `你已擁有房號: ${ownerSnap.val()}，請先銷毀。`;
                 return;
             }
 
-            // 原子性寫入：同時創房 + 佔位
+            // 執行「原子性寫入」：同時創房 + 佔位
             const updates = {};
             updates[`/rooms/${roomID}/meta`] = { owner: uid, admin_key: pass };
             updates[`/owners/${uid}`] = roomID;
@@ -97,7 +102,7 @@
                 await update(ref(db), updates);
                 enterUI();
             } catch (e) {
-                document.getElementById('status').innerText = "創房失敗：權限遭攔截。";
+                status.innerText = "創房失敗：權限遭攔截。";
             }
         }
     };
@@ -105,9 +110,8 @@
     function enterUI() {
         document.getElementById('login-view').classList.add('hidden');
         document.getElementById('chat-view').classList.remove('hidden');
-        document.getElementById('room-title').innerText = roomID;
+        document.getElementById('room-title').innerText = "房號: " + roomID;
         
-        // 在線人數註冊
         const userRef = ref(db, `rooms/${roomID}/users/${uid}`);
         set(userRef, true);
         onDisconnect(userRef).remove();
@@ -120,9 +124,7 @@
         msgLog = msgLog.filter(t => now - t < 30000);
         if (msgLog.length >= 10) return alert("太快了！30秒內限10則。");
         msgLog.push(now);
-
-        const newMsgRef = push(ref(db, `rooms/${roomID}/msgs`));
-        await set(newMsgRef, { ...payload, uid, name: myName, ts: serverTimestamp() });
+        push(ref(db, `rooms/${roomID}/msgs`), { ...payload, uid, name: myName, ts: serverTimestamp() });
     }
 
     window.doSend = () => {
@@ -146,8 +148,10 @@
     };
 
     function startChat() {
-        let onlineCount = 0;
-        onValue(ref(db, `rooms/${roomID}/users`), s => onlineCount = s.size || 1);
+        onValue(ref(db, `rooms/${roomID}/users`), s => {
+            window.onlineCount = s.size || 1;
+        });
+
         onValue(ref(db, `rooms/${roomID}/meta`), s => {
             if(!s.exists()) location.reload();
             if(s.val()?.owner === uid) document.getElementById('del-btn').classList.remove('hidden');
@@ -168,7 +172,7 @@
                     <div class="bubble-group">
                         <div class="bubble" onclick="${isMe ? `recallMsg('${c.key}')` : ''}">${html}</div>
                         <div class="info-tag">
-                            ${isMe ? `<span style="color:#007aff; font-weight:bold;">已讀 ${onlineCount-1}</span>` : ''}
+                            ${isMe ? `<span style="color:#007aff; font-weight:bold;">已讀 ${window.onlineCount-1}</span>` : ''}
                             <span>${time}</span>
                         </div>
                     </div>`;
