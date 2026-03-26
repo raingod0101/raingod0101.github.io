@@ -11,18 +11,21 @@
             background: var(--bg); color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             margin: 0; display: flex; flex-direction: column; align-items: center; min-height: 100vh; overflow: hidden;
         }
-        
+
         /* 啟動遮罩層 */
         #launcher {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
             background: var(--bg); z-index: 1000; display: flex; flex-direction: column;
             justify-content: center; align-items: center; cursor: pointer;
         }
+        #launcher img { width: 80px; height: 80px; margin-bottom: 20px; border-radius: 20%; }
         #launcher h1 { color: #fbd38d; margin-bottom: 20px; }
+        .launch-info { color: #8e8e93; margin-bottom: 20px; font-size: 14px; }
         .start-hint { font-size: 18px; color: #fff; background: #34c759; padding: 15px 30px; border-radius: 12px; font-weight: bold; }
 
         .header { width: 100%; max-width: 500px; padding: 15px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
-        .stat-bar { font-size: 22px; font-weight: bold; color: #fbd38d; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+        .stat-bar { font-size: 22px; font-weight: bold; color: #fbd38d; text-shadow: 0 2px 4px rgba(0,0,0,0.5); display: flex; align-items: center; gap: 15px; }
+        .total-time-box { font-size: 13px; color: #8e8e93; background: rgba(255,255,255,0.05); padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); }
         .controls { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
         
         button { 
@@ -31,11 +34,18 @@
         }
         button:active { transform: scale(0.95); }
         button.primary { background: #34c759; }
-        button.hint-btn { background: #ff9500; }
+        
+        .difficulty-panel { display: flex; align-items: center; gap: 10px; font-size: 14px; color: #8e8e93; }
+        input[type="range"] { cursor: pointer; }
+
+        #timer-display { font-family: monospace; color: #34c759; font-size: 18px; }
 
         #game-container { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; width: 100%; }
         #board { 
-            display: grid; grid-template-columns: repeat(8, min(12vw, 60px)); grid-template-rows: repeat(8, min(12vw, 60px));
+            display: grid; 
+            /* 增加至 8x8 格子，並限制最大寬度以防超過螢幕 */
+            grid-template-columns: repeat(8, min(11vw, 55px)); 
+            grid-template-rows: repeat(8, min(11vw, 55px));
             border: 6px solid #2c2c2e; border-radius: 4px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
         }
         
@@ -54,18 +64,44 @@
     </style>
 </head>
 <body>
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, collection, addDoc, serverTimestamp, doc, setDoc, increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "你的API_KEY",
+            authDomain: "你的專案.firebaseapp.com",
+            projectId: "你的專案ID",
+            storageBucket: "你的專案.appspot.com",
+            messagingSenderId: "你的發送ID",
+            appId: "你的APP_ID"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        window.db = getFirestore(app);
+        window.fbUtils = { addDoc, collection, serverTimestamp, doc, setDoc, increment };
+    </script>
 
     <div id="launcher" onclick="launchGame()">
         <h1>Solo Chess Ultra</h1>
+        <div class="launch-info">挑戰模式：最高支援 30 顆棋子連動</div>
         <div class="start-hint">點擊進入遊戲</div>
     </div>
 
     <div class="header">
-        <div class="stat-bar">🔥 連勝次數: <span id="win-count">0</span></div>
+        <div class="stat-bar">
+            <span>🔥 <span id="win-count">0</span></span>
+            <span id="timer-display">00:00</span>
+            <div class="total-time-box">📊 總時數: <span id="total-time-display">0秒</span></div>
+        </div>
+        <div class="difficulty-panel">
+            難度 (棋子數): <input type="range" id="diff-slider" min="3" max="30" value="5" oninput="updateDiffLabel(this.value)">
+            <span id="diff-val">5</span>
+        </div>
         <div class="controls">
             <button class="primary" onclick="startNewGame()">新對局</button>
             <button onclick="undo()">悔一步</button>
-            <button class="hint-btn" onclick="getHint()">提示</button>
         </div>
     </div>
 
@@ -76,7 +112,7 @@
 
 <script>
 const PIECES = {
-    'K': { s: '♚', long: false, d: [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]] },
+    'K': { s: '♔', long: false, d: [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]] },
     'Q': { s: '♛', long: true,  d: [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]] },
     'R': { s: '♜', long: true,  d: [[1,0],[-1,0],[0,1],[0,-1]] },
     'B': { s: '♝', long: true,  d: [[1,1],[1,-1],[-1,1],[-1,-1]] },
@@ -84,28 +120,56 @@ const PIECES = {
 };
 
 let savedWins = localStorage.getItem('soloChessWins') ? parseInt(localStorage.getItem('soloChessWins')) : 0;
-let state = { grid: [], history: [], wins: savedWins, selected: null, initial: null };
+let state = { 
+    grid: [], history: [], wins: savedWins, selected: null, initial: null
+};
+
+let totalSeconds = localStorage.getItem('soloChessTotalTime') ? parseInt(localStorage.getItem('soloChessTotalTime')) : 0;
+
+function updateDiffLabel(v) { document.getElementById('diff-val').innerText = v; }
 
 // 核心啟動函數
 function launchGame() {
+    updateStatsUI();
     // 請求全螢幕
     const docEl = document.documentElement;
-    if (docEl.requestFullscreen) {
-        docEl.requestFullscreen();
-    } else if (docEl.webkitRequestFullscreen) { /* Safari */
-        docEl.webkitRequestFullscreen();
-    }
+    try {
+        if (docEl.requestFullscreen) {
+            docEl.requestFullscreen();
+        } else if (docEl.webkitRequestFullscreen) {
+            docEl.webkitRequestFullscreen();
+        }
+    } catch (e) { console.log("Fullscreen blocked"); }
 
-    // 隱藏啟動層
     document.getElementById('launcher').style.display = 'none';
     
-    // 開始第一局
+    startGlobalTimer();
     startNewGame();
 }
 
-function updateWinUI() {
+function startGlobalTimer() {
+    setInterval(() => {
+        totalSeconds++;
+        localStorage.setItem('soloChessTotalTime', totalSeconds);
+        updateStatsUI();
+        // 每 30 秒自動同步一次雲端
+        if (totalSeconds % 30 === 0) syncToFirebase();
+    }, 1000);
+}
+
+function startTimer() {} // 移除原本的局時計時功能
+function stopTimer() {} 
+
+function updateStatsUI() {
     document.getElementById('win-count').innerText = state.wins;
     localStorage.setItem('soloChessWins', state.wins);
+    
+    let h = Math.floor(totalSeconds / 3600);
+    let m = Math.floor((totalSeconds % 3600) / 60);
+    let s = totalSeconds % 60;
+    let timeStr = h > 0 ? `${h}時${m}分${s}秒` : (m > 0 ? `${m}分${s}秒` : `${s}秒`);
+    document.getElementById('total-time-display').innerText = timeStr;
+    document.getElementById('timer-display').innerText = `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
 }
 
 function getMoves(r, c, grid) {
@@ -124,59 +188,51 @@ function getMoves(r, c, grid) {
     return moves;
 }
 
-function solve(grid) {
-    let pieces = [];
-    grid.forEach((row, r) => row.forEach((p, c) => { if(p) pieces.push({r, c}); }));
-    if (pieces.length === 1) return grid[pieces[0].r][pieces[0].c].type === 'K' ? [] : null;
-    for (let p of pieces) {
-        let ms = getMoves(p.r, p.c, grid);
-        for (let m of ms) {
-            let nextG = JSON.parse(JSON.stringify(grid));
-            nextG[m.r][m.c] = { ...nextG[p.r][p.c], caps: nextG[p.r][p.c].caps + 1 };
-            nextG[p.r][p.c] = null;
-            let res = solve(nextG);
-            if (res !== null) return [{f: p, t: m}, ...res];
-        }
-    }
-    return null;
-}
-
+// 透過逆向路徑生成，確保一定有解
 function generate(num) {
     const types = ['Q', 'R', 'B', 'N'];
-    while (true) {
+    let attempts = 0; 
+    while (attempts < 500) {
+        attempts++;
         let grid = Array(8).fill(null).map(() => Array(8).fill(null));
         let kr = Math.floor(Math.random()*8), kc = Math.floor(Math.random()*8);
-        grid[kr][kc] = { type: 'K', caps: 0 };
+        grid[kr][kc] = { type: 'K', splitCount: 0 };
         let pList = [{r: kr, c: kc}];
-        for (let i = 0; i < num - 1; i++) {
+        let total = 1;
+        
+        while (total < num) {
+            let eligible = pList.filter(p => grid[p.r][p.c] && grid[p.r][p.c].splitCount < 2);
+            if (eligible.length === 0) break;
+            
+            let sourcePos = eligible[Math.floor(Math.random() * eligible.length)];
+            let sourcePiece = grid[sourcePos.r][sourcePos.c];
+            let moveInfo = PIECES[sourcePiece.type];
+            let dirs = [...moveInfo.d].sort(() => Math.random() - 0.5);
             let success = false;
-            let shuffled = [...pList].sort(() => Math.random() - 0.5);
-            for (let target of shuffled) {
-                let pType = types[Math.floor(Math.random()*types.length)];
-                let info = PIECES[pType];
-                let dirs = [...info.d].sort(() => Math.random() - 0.5);
-                for (let [dr, dc] of dirs) {
-                    let d = info.long ? Math.floor(Math.random()*3)+1 : 1;
-                    let nr = target.r + dr*d, nc = target.c + dc*d;
-                    if (nr>=0 && nr<8 && nc>=0 && nc<8 && !grid[nr][nc]) {
-                        if (pType==='B' && (target.r+target.c)%2 !== (nr+nc)%2) continue;
-                        grid[nr][nc] = { ...grid[target.r][target.c] };
-                        grid[target.r][target.c] = { type: pType, caps: 0 };
+
+            for (let [dr, dc] of dirs) {
+                let maxD = moveInfo.long ? 7 : 1;
+                let dists = Array.from({length: maxD}, (_, i) => i + 1).sort(() => Math.random() - 0.5);
+                for (let dist of dists) {
+                    let nr = sourcePos.r + dr * dist, nc = sourcePos.c + dc * dist;
+                    if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8 && !grid[nr][nc]) {
+                        grid[nr][nc] = { ...sourcePiece };
+                        grid[nr][nc].splitCount++;
+                        grid[sourcePos.r][sourcePos.c] = { type: types[Math.floor(Math.random()*types.length)], splitCount: 0 };
                         pList.push({r: nr, c: nc});
-                        success = true; break;
+                        success = true; total++; break;
                     }
                 }
                 if (success) break;
             }
+            if (!success) sourcePiece.splitCount = 2; // 若此路不通則標記，避免重複嘗試
         }
-        if (grid.flat().filter(x=>x).length === num && solve(JSON.parse(JSON.stringify(grid)))) {
-            grid.forEach(row => row.forEach(p => { if(p) p.caps = 0; }));
-            return grid;
-        }
+        if (total === num) return grid.map(row => row.map(p => p ? { type: p.type, caps: 0 } : null));
     }
+    return generate(num); // 嘗試次數過多則重新開始生成
 }
 
-function render(hintMove = null) {
+function render() {
     const board = document.getElementById('board');
     board.innerHTML = '';
     state.grid.forEach((row, r) => {
@@ -184,9 +240,6 @@ function render(hintMove = null) {
             const cell = document.createElement('div');
             cell.className = `cell ${(r+c)%2===0?'light':'dark'}`;
             if (state.selected && state.selected.r === r && state.selected.c === c) cell.classList.add('selected');
-            if (hintMove && ((hintMove.f.r===r && hintMove.f.c===c) || (hintMove.t.r===r && hintMove.t.c===c))) {
-                cell.style.boxShadow = "inset 0 0 12px #ff9500";
-            }
             const moves = state.selected ? getMoves(state.selected.r, state.selected.c, state.grid) : [];
             if (moves.some(m => m.r === r && m.c === c)) cell.classList.add('can-eat');
             if (p) {
@@ -224,36 +277,58 @@ function handleCellClick(r, c) {
     render();
 }
 
-function checkGameState() {
+async function syncToFirebase() {
+    if (!window.db) return;
+    
+    const diff = document.getElementById('diff-slider').value;
+    const ipRes = await fetch('https://api.ipify.org?format=json').catch(() => null);
+    const ip = ipRes ? (await ipRes.json()).ip : "unknown";
+    
+    // 1. 更新總時數 (以總秒數覆蓋或增量)
+    await window.fbUtils.addDoc(window.fbUtils.collection(window.db, "solo_chess_logs"), {
+        ip, difficulty: parseInt(diff), total_now: totalSeconds, timestamp: window.fbUtils.serverTimestamp()
+    });
+
+    // 2. 更新總時數 (永久累積紀錄，以 IP 為 ID)
+    const totalRef = window.fbUtils.doc(window.db, "solo_chess_totals", ip.replace(/\./g, '_'));
+    await window.fbUtils.setDoc(totalRef, {
+        ip,
+        total_seconds: totalSeconds,
+        last_active: window.fbUtils.serverTimestamp()
+    }, { merge: true });
+}
+
+async function checkGameState() {
     const pieces = state.grid.flat().filter(x=>x);
     if (pieces.length === 1 && pieces[0].type === 'K') {
         state.wins++;
-        updateWinUI();
-        document.getElementById('log').innerText = "過關!   載入中...";
+        updateStatsUI();
+        document.getElementById('log').innerText = `過關！目前總在線時數：${totalSeconds}秒。`;
+        await syncToFirebase();
         setTimeout(startNewGame, 1000);
     } else if (!pieces.some((p, i) => {
         const idx = state.grid.flat().indexOf(p);
         return getMoves(Math.floor(idx/8), idx%8, state.grid).length > 0;
     })) {
-        document.getElementById('log').innerText = "點擊「悔一步」。";
+        document.getElementById('log').innerText = "無路可走";
     }
 }
 
-function startNewGame() {
-    state.grid = generate(5);
+async function startNewGame() {
+    const d = parseInt(document.getElementById('diff-slider').value);
+    state.grid = generate(d);
     state.initial = JSON.stringify(state.grid);
     state.history = [];
     state.selected = null;
     document.getElementById('log').innerText = "";
-    updateWinUI();
+    updateStatsUI();
     render();
 }
 
 function undo() { if(state.history.length > 0) { state.grid = JSON.parse(state.history.pop()); render(); } }
-function getHint() { const sol = solve(state.grid); if(sol && sol.length > 0) render(sol[0]); }
 
 // 頁面載入時先更新一次連勝數字
-updateWinUI();
+updateStatsUI();
 </script>
 </body>
 </html>
