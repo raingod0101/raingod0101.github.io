@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Raingod Pro | Owner Auto-Clear</title>
+    <title>Raingod Pro | Ultimate</title>
     <style>
         :root { --me-bg: #007aff; --other-bg: #f2f2f7; --danger: #ff3b30; }
         body { font-family: -apple-system, sans-serif; background: #000; margin: 0; display: flex; justify-content: center; height: 100vh; overflow: hidden; -webkit-user-select: none; }
@@ -29,7 +29,7 @@
 <div id="app">
     <div id="login-view" style="padding: 40px; text-align: center; flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 15px;">
         <h2 style="color: var(--me-bg); font-size: 30px; margin: 0;">Raingod Pro</h2>
-        <input type="text" id="room-input" placeholder="輸入房號">
+        <input type="text" id="room-input" placeholder="房號 (必填)">
         <input type="text" id="nick-input" placeholder="你的暱稱">
         <button onclick="handleJoin()" style="padding:16px; background:var(--me-bg); color:white; border:none; border-radius:15px; font-weight:bold; cursor:pointer;">進入 / 建立房間</button>
         <p id="status" style="color:var(--danger); font-size:12px;"></p>
@@ -47,7 +47,7 @@
         <div class="input-area">
             <input type="file" id="file-selector" class="hidden" onchange="sendFile(this)">
             <button onclick="document.getElementById('file-selector').click()" style="font-size:26px; border:none; background:none; cursor:pointer;">📎</button>
-            <input type="text" id="msg-input" placeholder="說點什麼..." onkeypress="if(event.key==='Enter') doSend()">
+            <input type="text" id="msg-input" placeholder="傳送訊息..." onkeypress="if(event.key==='Enter') doSend()">
             <button id="send-btn" onclick="doSend()" style="color:var(--me-bg); font-weight:bold; border:none; background:none; cursor:pointer;">傳送</button>
         </div>
     </div>
@@ -57,7 +57,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { getDatabase, ref, set, push, onValue, remove, get, update, serverTimestamp, onDisconnect } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-    // 禁用 F12
+    // 強制封鎖 F12
     document.onkeydown = e => { if(e.keyCode == 123 || (e.ctrlKey && e.shiftKey && e.keyCode == 73)) return false; };
 
     const firebaseConfig = { apiKey: "AIzaSyDHb0o6ahdNnvlL3-QQy_yRO_mg4XMqtJk", databaseURL: "https://chat-73802-default-rtdb.firebaseio.com" };
@@ -80,18 +80,18 @@
         const roomSnap = await get(roomRef);
 
         if (roomSnap.exists()) {
-            startSession(rInput, nInput); // 房號存在直接進
+            startSession(rInput, nInput);
         } else {
             // 一裝置限一房檢查
             const ownerSnap = await get(ref(db, `owners/${uid}`));
             if (ownerSnap.exists()) {
                 const activeRoom = await get(ref(db, `rooms/${ownerSnap.val()}`));
                 if (activeRoom.exists()) {
-                    document.getElementById('status').innerText = `你已擁有房：${ownerSnap.val()}，請先銷毀。`;
+                    document.getElementById('status').innerText = `你已擁有房：${ownerSnap.val()}，請先銷毀舊房。`;
                     return;
                 }
             }
-            // 創房
+            // 創立新房
             await set(ref(db, `rooms/${rInput}/meta`), { owner: uid, ts: serverTimestamp() });
             await set(ref(db, `owners/${uid}`), rInput);
             startSession(rInput, nInput);
@@ -113,7 +113,7 @@
         const inp = document.getElementById('msg-input');
         if(!inp.value.trim()) return;
         isCooldown = true;
-        setTimeout(() => isCooldown = false, 1500); // 1.5秒冷卻
+        setTimeout(() => isCooldown = false, 2000); // 2秒冷卻防刷
 
         const safeText = inp.value.replace(/</g, "&lt;").replace(/>/g, "&gt;");
         push(ref(db, `rooms/${currentRoom}/msgs`), {
@@ -135,25 +135,21 @@
         reader.readAsDataURL(file);
     };
 
+    // 收回：點擊自己氣泡
     window.recall = (id) => {
         if(confirm("收回此訊息？")) remove(ref(db, `rooms/${currentRoom}/msgs/${id}`));
     };
 
-    // 關鍵修正：銷毀時同步刪除 rooms 與 owners
+    // 銷毀：徹底刪除房間 + 刪除 Owner 紀錄
     window.destroyRoom = async () => {
-        if(confirm("⚠ 你是房主，確定要永久銷毀此房間並清空你的創房紀錄？")) {
+        if(confirm("⚠ 你是房主，確定要銷毀房間並【刪除你的 Owner 紀錄】嗎？")) {
             const updates = {};
-            // 同時將房間內容與 Owner 紀錄設為 null (刪除)
-            updates[`rooms/${currentRoom}`] = null;
-            updates[`owners/${uid}`] = null;
-            
+            updates[`rooms/${currentRoom}`] = null; // 刪除整個房間節點
+            updates[`owners/${uid}`] = null;       // 刪除你的創房配額紀錄
             try {
                 await update(ref(db), updates);
-                alert("房間已徹底刪除，創房紀錄已清除。");
                 location.reload();
-            } catch (err) {
-                alert("刪除失敗，請檢查權限。");
-            }
+            } catch (e) { alert("刪除失敗：" + e.message); }
         }
     };
 
@@ -161,7 +157,7 @@
         onValue(ref(db, `rooms/${currentRoom}/users`), s => document.getElementById('online-text').innerText = `(${s.size || 1}人)`);
         
         onValue(ref(db, `rooms/${currentRoom}/meta`), s => {
-            if(!s.exists()) { alert("房間已不存在"); location.reload(); return; }
+            if(!s.exists()) { alert("房間已被房主銷毀"); location.reload(); return; }
             if(s.val().owner === uid) document.getElementById('del-btn').classList.remove('hidden');
         });
 
@@ -179,6 +175,7 @@
                 } else if(d.type === 'file') {
                     html = `<a href="${d.content}" download="${d.fileName}" class="file-btn">📄 ${d.fileName}<br><b>[點擊下載]</b></a>`;
                 } else {
+                    // 程式碼純文字顯示
                     html = `<div style="white-space:pre-wrap; font-family:monospace;">${d.content}</div>`;
                 }
 
