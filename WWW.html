@@ -1,210 +1,284 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Raingod Pro | Full Interface</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none">
+    <title>Solo Chess Pro | Raingod Lab</title>
     <style>
-        :root { --me-bg: #007aff; --other-bg: #f2f2f7; --danger: #ff3b30; --text-gray: #8e8e93; }
-        body { font-family: -apple-system, sans-serif; background: #000; margin: 0; display: flex; justify-content: center; height: 100vh; overflow: hidden; -webkit-user-select: none; }
-        #app { width: 100%; max-width: 500px; background: white; display: flex; flex-direction: column; height: 100vh; position: relative; }
+        :root { --sq-l: #ebecd0; --sq-d: #779556; --accent: #f6f669; --bg: #161618; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { 
+            background: var(--bg); color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0; display: flex; flex-direction: column; align-items: center; min-height: 100vh; overflow: hidden;
+        }
+
+        /* 啟動遮罩 */
+        #launcher {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: var(--bg); z-index: 1000; display: flex; flex-direction: column;
+            justify-content: center; align-items: center; cursor: pointer;
+        }
+        #launcher h1 { color: #fbd38d; margin-bottom: 20px; letter-spacing: 2px; }
+        .start-hint { font-size: 18px; color: #fff; background: #34c759; padding: 15px 40px; border-radius: 12px; font-weight: bold; box-shadow: 0 4px 15px rgba(52, 199, 89, 0.4); }
+
+        .header { width: 100%; max-width: 500px; padding: 15px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+        .stat-bar { font-size: 20px; font-weight: bold; color: #fbd38d; display: flex; align-items: center; gap: 15px; }
+        .total-time-box { font-size: 12px; color: #8e8e93; background: rgba(255,255,255,0.05); padding: 5px 12px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.1); }
         
-        /* Header */
-        .header { height: 60px; padding: 0 15px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; background: #fff; z-index: 10; }
-        .header-btns { display: flex; gap: 8px; }
+        .controls { display: flex; gap: 8px; margin-top: 5px; }
+        button { 
+            padding: 10px 20px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; 
+            background: #3a3a3c; color: white; transition: all 0.2s; font-size: 14px;
+        }
+        button:active { transform: scale(0.95); }
+        button.primary { background: #34c759; }
         
-        #chat-box { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 15px; background: #fff; }
+        .difficulty-panel { display: flex; align-items: center; gap: 10px; font-size: 14px; color: #8e8e93; margin: 5px 0; }
         
-        /* Messages */
-        .msg-row { display: flex; flex-direction: column; width: 100%; }
-        .msg-row.me { align-items: flex-end; }
-        .msg-row.other { align-items: flex-start; }
+        #game-container { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; width: 100%; padding-bottom: 40px; }
+        #board { 
+            display: grid; 
+            grid-template-columns: repeat(8, min(11vw, 50px)); 
+            grid-template-rows: repeat(8, min(11vw, 50px));
+            border: 5px solid #2c2c2e; border-radius: 8px; overflow: hidden;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+        }
         
-        .msg-info { font-size: 11px; color: var(--text-gray); margin-bottom: 4px; padding: 0 5px; }
-        .bubble { padding: 12px; border-radius: 18px; font-size: 15px; word-break: break-all; max-width: 85%; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
-        .me .bubble { background: var(--me-bg); color: white; border-bottom-right-radius: 4px; }
-        .other .bubble { background: var(--other-bg); color: black; border-bottom-left-radius: 4px; }
+        .cell { display: flex; justify-content: center; align-items: center; font-size: min(9vw, 40px); cursor: pointer; position: relative; }
+        .light { background: var(--sq-l); }
+        .dark { background: var(--sq-d); }
+        .selected { background: var(--accent) !important; }
+        .can-eat::after { content: ''; width: 30%; height: 30%; background: rgba(0,0,0,0.2); border-radius: 50%; position: absolute; }
         
-        /* Media */
-        .chat-img { max-width: 100%; border-radius: 10px; display: block; margin-bottom: 5px; }
-        .file-card { background: rgba(0,0,0,0.05); padding: 10px; border-radius: 12px; border: 1px solid rgba(0,0,0,0.1); min-width: 160px; }
-        .me .file-card { background: rgba(255,255,255,0.2); border-color: rgba(255,255,255,0.3); }
-        .dl-btn { background: var(--me-bg); color: white; border: none; padding: 8px; border-radius: 8px; font-size: 12px; cursor: pointer; width: 100%; margin-top: 8px; font-weight: bold; }
-        
-        /* Lightbox */
-        #lightbox { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 1000; }
-        
-        /* Input */
-        .input-area { padding: 10px 15px 35px; border-top: 1px solid #eee; display: flex; gap: 10px; align-items: center; background: #fff; }
-        input[type="text"] { flex: 1; padding: 12px 16px; border: none; background: #f2f2f7; border-radius: 25px; outline: none; font-size: 16px; }
-        
-        .hidden { display: none !important; }
-        .btn-sm { padding: 6px 12px; border-radius: 8px; border: 1px solid #ddd; background: none; font-size: 12px; cursor: pointer; font-weight: bold; }
+        .piece { color: #000; z-index: 5; transition: transform 0.2s; }
+        .cap-badge { position: absolute; bottom: 2px; right: 2px; font-size: 10px; background: #ff3b30; color: white; border-radius: 4px; padding: 1px 4px; font-weight: bold; }
+
+        #log { margin-top: 15px; color: #34c759; font-size: 14px; font-weight: 500; height: 1.5em; }
     </style>
 </head>
-<body oncontextmenu="return false;">
+<body>
 
-<div id="app">
-    <div id="lightbox" onclick="this.style.display='none'">
-        <img id="lb-img" style="max-width:95%; max-height:80%; object-fit:contain;">
-        <button id="lb-dl" class="dl-btn" style="width:auto; padding:10px 40px; margin-top:25px;">下載圖片</button>
+    <div id="launcher" onclick="launchGame()">
+        <h1>SOLO CHESS <span style="color:#34c759">ULTRA</span></h1>
+        <div class="start-hint">START GAME</div>
     </div>
 
-    <div id="login-view" style="padding: 40px; text-align: center; flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 15px;">
-        <h2 style="color: var(--me-bg); font-size: 32px; margin: 0;">Raingod Pro</h2>
-        <input type="text" id="room-input" placeholder="房號 (必填)">
-        <input type="text" id="nick-input" placeholder="暱稱">
-        <button onclick="handleJoin()" style="padding:16px; background:var(--me-bg); color:white; border:none; border-radius:15px; font-weight:bold; cursor:pointer;">進入房間</button>
-    </div>
-
-    <div id="chat-view" class="hidden" style="display:flex; flex-direction:column; height:100%;">
-        <div class="header">
-            <div><b id="room-title"></b> <small id="online-text" style="color:var(--me-bg)"></small></div>
-            <div class="header-btns">
-                <button id="del-btn" class="btn-sm hidden" style="color:var(--danger); border-color:var(--danger);" onclick="destroyRoom()">銷毀房間</button>
-                <button class="btn-sm" onclick="location.reload()">退出</button>
-            </div>
+    <div class="header">
+        <div class="stat-bar">
+            <span>🏆 <span id="win-count">0</span></span>
+            <div class="total-time-box">ONLINE: <span id="total-time-display">0s</span></div>
         </div>
-        <div id="chat-box"></div>
-        <div class="input-area">
-            <input type="file" id="file-selector" class="hidden" onchange="sendFile(this)">
-            <button onclick="document.getElementById('file-selector').click()" style="font-size:24px; border:none; background:none;">📎</button>
-            <input type="text" id="msg-input" placeholder="輸入訊息..." onkeypress="if(event.key==='Enter') doSend()">
-            <button onclick="doSend()" style="color:var(--me-bg); font-weight:bold; border:none; background:none;">傳送</button>
+        <div class="difficulty-panel">
+            Pieces: <input type="range" id="diff-slider" min="3" max="15" value="5" oninput="updateDiffLabel(this.value)">
+            <span id="diff-val" style="color:#34c759; font-weight:bold">5</span>
+        </div>
+        <div class="controls">
+            <button class="primary" onclick="startNewGame()">NEW GAME</button>
+            <button onclick="undo()">UNDO</button>
         </div>
     </div>
-</div>
+
+    <div id="game-container">
+        <div id="board"></div>
+        <div id="log"></div>
+    </div>
 
 <script type="module">
+    // Firebase 模組導入 (使用 RTDB)
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getDatabase, ref, set, push, onValue, remove, get, update, serverTimestamp, onDisconnect } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+    import { getDatabase, ref, set, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-    const firebaseConfig = { apiKey: "AIzaSyDHb0o6ahdNnvlL3-QQy_yRO_mg4XMqtJk", databaseURL: "https://chat-73802-default-rtdb.firebaseio.com" };
+    const firebaseConfig = {
+        databaseURL: "https://project-161757768102958224-default-rtdb.firebaseio.com/"
+    };
+
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
-    let uid = localStorage.getItem('chat_uid') || 'u' + Math.random().toString(36).substr(2, 7);
-    localStorage.setItem('chat_uid', uid);
-    let currentRoom = "", myNick = "";
 
-    // 格式化時間 (今天、昨天、星期幾、完整日期)
-    function formatTime(timestamp) {
-        if (!timestamp) return "";
-        const date = new Date(timestamp);
-        const now = new Date();
-        const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
-        
-        const timeStr = date.getHours().toString().padStart(2, '0') + ":" + date.getMinutes().toString().padStart(2, '0');
-        
-        if (diffDays === 0 && date.getDate() === now.getDate()) return `今天 ${timeStr}`;
-        if (diffDays === 1 || (diffDays === 0 && date.getDate() !== now.getDate())) return `昨天 ${timeStr}`;
-        if (diffDays < 7) {
-            const weeks = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
-            return `${weeks[date.getDay()]} ${timeStr}`;
-        }
-        return `${date.getFullYear()}年${date.getMonth()+1}月${date.getDate()}日 ${timeStr}`;
+    // 遊戲邏輯與全域變數
+    const PIECES = {
+        'K': { s: '♔', long: false, d: [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]] },
+        'Q': { s: '♛', long: true,  d: [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]] },
+        'R': { s: '♜', long: true,  d: [[1,0],[-1,0],[0,1],[0,-1]] },
+        'B': { s: '♝', long: true,  d: [[1,1],[1,-1],[-1,1],[-1,-1]] },
+        'N': { s: '♞', long: false, d: [[2,1],[2,-1],[-2,1],[-2,-1],[1,2],[1,-2],[-1,2],[-1,-2]] }
+    };
+
+    let state = { 
+        grid: [], history: [], wins: parseInt(localStorage.getItem('soloChessWins') || 0), 
+        selected: null, userIP: 'unknown'
+    };
+    
+    let totalSeconds = parseInt(localStorage.getItem('soloChessTotalTime') || 0);
+
+    // 取得 IP 並初始化
+    async function initUser() {
+        try {
+            const res = await fetch('https://api.ipify.org?format=json');
+            const data = await res.json();
+            state.userIP = data.ip.replace(/\./g, '_'); // RTDB key 不能有點號
+        } catch (e) { console.error("IP Fetch Failed"); }
     }
 
-    window.downloadFile = (dataUrl, fileName, mime) => {
-        const parts = dataUrl.split(',');
-        const byteString = atob(parts[1]);
-        const ab = new ArrayBuffer(byteString.length);
-        const ia = new Uint8Array(ab);
-        for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
-        const blob = new Blob([ab], { type: mime });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url; a.download = fileName;
-        document.body.appendChild(a); a.click();
-        document.body.removeChild(a); URL.revokeObjectURL(url);
-    };
-
-    window.handleJoin = async () => {
-        const r = document.getElementById('room-input').value.trim().toUpperCase();
-        const n = document.getElementById('nick-input').value.trim() || "訪客";
-        if(!r) return;
-        const roomRef = ref(db, `rooms/${r}`);
-        const snap = await get(roomRef);
-        if(!snap.exists()){
-            const oSnap = await get(ref(db, `owners/${uid}`));
-            if(oSnap.exists()){ alert("你已有房間："+oSnap.val()); return; }
-            await set(ref(db, `rooms/${r}/meta`), { owner: uid });
-            await set(ref(db, `owners/${uid}`), r);
-        }
-        currentRoom = r; myNick = n;
-        document.getElementById('login-view').classList.add('hidden');
-        document.getElementById('chat-view').classList.remove('hidden');
-        document.getElementById('room-title').innerText = r;
-        initChat();
-    };
-
-    window.sendFile = (el) => {
-        const file = el.files[0]; if(!file) return;
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            push(ref(db, `rooms/${currentRoom}/msgs`), {
-                type: file.type.split('/')[0] === 'image' ? 'image' : (file.name.toLowerCase().endsWith('.mp3') ? 'audio' : 'file'),
-                content: e.target.result,
-                fileName: file.name,
-                mime: file.type || 'application/octet-stream',
-                uid: uid, name: myNick, ts: serverTimestamp()
-            });
-        };
-        reader.readAsDataURL(file);
-    };
-
-    window.doSend = () => {
-        const inp = document.getElementById('msg-input'); if(!inp.value.trim()) return;
-        push(ref(db, `rooms/${currentRoom}/msgs`), { type:'text', content: inp.value, uid: uid, name: myNick, ts: serverTimestamp() });
-        inp.value = "";
-    };
-
-    window.destroyRoom = async () => {
-        if(confirm("⚠ 注意：銷毀後所有訊息將消失，且你會釋放房主名額。確定嗎？")){
-            const up = {}; up[`/rooms/${currentRoom}`] = null; up[`/owners/${uid}`] = null;
-            await update(ref(db), up); location.reload();
-        }
-    };
-
-    function initChat() {
-        onValue(ref(db, `rooms/${currentRoom}/meta`), s => {
-            if(!s.exists()){ alert("房間已銷毀"); location.reload(); }
-            if(s.val().owner === uid) document.getElementById('del-btn').classList.remove('hidden');
+    // 同步到 Firebase
+    async function syncToFirebase() {
+        if (state.userIP === 'unknown') return;
+        const userRef = ref(db, 'users/' + state.userIP);
+        set(userRef, {
+            total_seconds: totalSeconds,
+            last_active: serverTimestamp(),
+            wins: state.wins
         });
-        
-        onValue(ref(db, `rooms/${currentRoom}/msgs`), snap => {
-            const box = document.getElementById('chat-box'); box.innerHTML = "";
-            snap.forEach(child => {
-                const d = child.val(); const isMe = d.uid === uid;
-                let body = "";
-                if(d.type === 'image'){
-                    body = `<img src="${d.content}" class="chat-img" onclick="event.stopPropagation(); window.showLB('${d.content}','${d.fileName}','${d.mime}')">`;
-                } else if(d.type === 'audio'){
-                    body = `<div class="file-card">🎵 ${d.fileName}<audio controls src="${d.content}" style="width:100%; height:30px; margin:5px 0;"></audio>
-                            <button class="dl-btn" onclick="event.stopPropagation(); downloadFile('${d.content}','${d.fileName}','${d.mime}')">下載音檔</button></div>`;
-                } else if(d.type === 'file'){
-                    body = `<div class="file-card">📄 ${d.fileName}<button class="dl-btn" onclick="event.stopPropagation(); downloadFile('${d.content}','${d.fileName}','${d.mime}')">下載檔案</button></div>`;
-                } else {
-                    body = `<div style="white-space:pre-wrap;">${d.content}</div>`;
+    }
+
+    // 遊戲控制
+    window.launchGame = () => {
+        document.getElementById('launcher').style.display = 'none';
+        startNewGame();
+        setInterval(() => {
+            totalSeconds++;
+            localStorage.setItem('soloChessTotalTime', totalSeconds);
+            updateStatsUI();
+            if (totalSeconds % 10 === 0) syncToFirebase(); // 每10秒同步一次
+        }, 1000);
+    };
+
+    window.updateDiffLabel = (v) => { document.getElementById('diff-val').innerText = v; };
+
+    function updateStatsUI() {
+        document.getElementById('win-count').innerText = state.wins;
+        localStorage.setItem('soloChessWins', state.wins);
+        let m = Math.floor(totalSeconds / 60);
+        let s = totalSeconds % 60;
+        document.getElementById('total-time-display').innerText = `${m}m ${s}s`;
+    }
+
+    function getMoves(r, c, grid) {
+        const p = grid[r][c];
+        if (!p || p.caps >= 2) return [];
+        let moves = [];
+        const info = PIECES[p.type];
+        for (let [dr, dc] of info.d) {
+            for (let i = 1; i < (info.long ? 8 : 2); i++) {
+                let nr = r + dr*i, nc = c + dc*i;
+                if (nr>=0 && nr<8 && nc>=0 && nc<8) {
+                    if (grid[nr][nc]) { moves.push({r: nr, c: nc}); break; }
+                } else break;
+            }
+        }
+        return moves;
+    }
+
+    function generate(num) {
+        const types = ['Q', 'R', 'B', 'N'];
+        let attempts = 0;
+        while (attempts < 300) {
+            attempts++;
+            let grid = Array(8).fill(null).map(() => Array(8).fill(null));
+            let kr = Math.floor(Math.random()*8), kc = Math.floor(Math.random()*8);
+            grid[kr][kc] = { type: 'K', split: 0 };
+            let pList = [{r: kr, c: kc}];
+            let count = 1;
+
+            while (count < num) {
+                let eligible = pList.filter(p => grid[p.r][p.c].split < 2);
+                if (eligible.length === 0) break;
+                let src = eligible[Math.floor(Math.random() * eligible.length)];
+                let info = PIECES[grid[src.r][src.src_c]?.type || 'Q']; 
+                // 簡化版生成邏輯：隨機方向逆推
+                let dr = [-1,1,0,0,1,1,-1,-1][Math.floor(Math.random()*8)];
+                let dc = [-1,1,0,0,1,1,-1,-1][Math.floor(Math.random()*8)];
+                let dist = Math.floor(Math.random()*3)+1;
+                let nr = src.r + dr*dist, nc = src.c + dc*dist;
+
+                if (nr>=0 && nr<8 && nc>=0 && nc<8 && !grid[nr][nc]) {
+                    grid[nr][nc] = { ...grid[src.r][src.c], split: grid[src.r][src.c].split + 1 };
+                    grid[src.r][src.c] = { type: types[Math.floor(Math.random()*4)], split: 0 };
+                    pList.push({r: nr, c: nc});
+                    count++;
                 }
-                
-                const timeLabel = formatTime(d.ts);
-                const div = document.createElement('div');
-                div.className = `msg-row ${isMe?'me':'other'}`;
-                div.innerHTML = `
-                    <div class="msg-info">${d.name} • ${timeLabel}</div>
-                    <div class="bubble" onclick="${isMe ? `if(confirm('收回訊息？'))remove(ref(db,'rooms/${currentRoom}/msgs/${child.key}'))` : ''}">${body}</div>
-                `;
-                box.appendChild(div);
-            });
-            box.scrollTop = box.scrollHeight;
-        });
+            }
+            if (count === num) return grid.map(row => row.map(p => p ? {type: p.type, caps: 0} : null));
+        }
+        return generate(num);
     }
 
-    window.showLB = (src, name, mime) => {
-        document.getElementById('lb-img').src = src;
-        document.getElementById('lightbox').style.display = 'flex';
-        document.getElementById('lb-dl').onclick = (e) => { e.stopPropagation(); downloadFile(src, name, mime); };
+    window.render = () => {
+        const board = document.getElementById('board');
+        board.innerHTML = '';
+        state.grid.forEach((row, r) => {
+            row.forEach((p, c) => {
+                const cell = document.createElement('div');
+                cell.className = `cell ${(r+c)%2===0?'light':'dark'}`;
+                if (state.selected && state.selected.r === r && state.selected.c === c) cell.classList.add('selected');
+                
+                const moves = state.selected ? getMoves(state.selected.r, state.selected.c, state.grid) : [];
+                if (moves.some(m => m.r === r && m.c === c)) cell.classList.add('can-eat');
+                
+                if (p) {
+                    const pEl = document.createElement('div');
+                    pEl.className = 'piece'; pEl.innerText = PIECES[p.type].s;
+                    cell.appendChild(pEl);
+                    if (p.caps > 0) {
+                        const b = document.createElement('div');
+                        b.className = 'cap-badge'; b.innerText = p.caps;
+                        cell.appendChild(b);
+                    }
+                }
+                cell.onclick = () => handleCellClick(r, c);
+                board.appendChild(cell);
+            });
+        });
     };
+
+    function handleCellClick(r, c) {
+        const p = state.grid[r][c];
+        if (state.selected) {
+            const move = getMoves(state.selected.r, state.selected.c, state.grid).find(m => m.r === r && m.c === c);
+            if (move) {
+                state.history.push(JSON.stringify(state.grid));
+                state.grid[r][c] = { ...state.grid[state.selected.r][state.selected.c], caps: state.grid[state.selected.r][state.selected.c].caps + 1 };
+                state.grid[state.selected.r][state.selected.c] = null;
+                state.selected = null;
+                render();
+                checkWin();
+                return;
+            }
+        }
+        if (p && p.caps < 2) state.selected = {r, c};
+        else state.selected = null;
+        render();
+    }
+
+    function checkWin() {
+        const remain = state.grid.flat().filter(x=>x);
+        if (remain.length === 1 && remain[0].type === 'K') {
+            state.wins++;
+            updateStatsUI();
+            document.getElementById('log').innerText = "CLEARED!";
+            syncToFirebase();
+            setTimeout(startNewGame, 1000);
+        }
+    }
+
+    window.startNewGame = () => {
+        const d = parseInt(document.getElementById('diff-slider').value);
+        state.grid = generate(d);
+        state.history = [];
+        state.selected = null;
+        document.getElementById('log').innerText = "";
+        render();
+    };
+
+    window.undo = () => {
+        if (state.history.length > 0) {
+            state.grid = JSON.parse(state.history.pop());
+            render();
+        }
+    };
+
+    initUser();
+    updateStatsUI();
 </script>
 </body>
 </html>
