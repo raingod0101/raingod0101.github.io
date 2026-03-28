@@ -2,332 +2,308 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none">
-    <title>單人棋 | Raingod</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>雨神大戰爭 | Raingod</title>
     <style>
-        :root { --sq-l: #ebecd0; --sq-d: #779556; --accent: #f6f669; --bg: #161618; }
-        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-        body { 
-            background: var(--bg); color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            margin: 0; display: flex; flex-direction: column; align-items: center; min-height: 100vh; overflow: hidden;
-        }
+        :root { --p-color: #00d4ff; --e-color: #ff4d4d; --gold: #f1c40f; --rarity-r: #bdc3c7; --rarity-sr: #f39c12; --rarity-ssr: #9b59b6; }
+        * { box-sizing: border-box; touch-action: manipulation; -webkit-user-select: none; }
+        body { margin: 0; background: #000; color: white; height: 100vh; overflow: hidden; font-family: '微軟正黑體', sans-serif; }
 
-        /* 啟動遮罩層 */
-        #launcher {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-            background: var(--bg); z-index: 1000; display: flex; flex-direction: column;
-            justify-content: center; align-items: center; cursor: pointer;
-        }
-        #launcher img { width: 80px; height: 80px; margin-bottom: 20px; border-radius: 20%; }
-        #launcher h1 { color: #fbd38d; margin-bottom: 20px; }
-        .start-hint { font-size: 18px; color: #fff; background: #34c759; padding: 15px 30px; border-radius: 12px; font-weight: bold; }
-
-        .header { width: 100%; max-width: 500px; padding: 15px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
-        .stat-bar { font-size: 22px; font-weight: bold; color: #fbd38d; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
-        .controls { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+        /* 介面框架 */
+        .screen { display: none; width: 100vw; height: 100vh; flex-direction: column; align-items: center; background: #1a1a2e; padding: 20px; }
+        .active { display: flex; }
+        .title { font-size: 32px; font-weight: 900; color: var(--p-color); margin-bottom: 20px; text-shadow: 0 0 10px #000; }
         
-        button { 
-            padding: 10px 16px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; 
-            background: #3a3a3c; color: white; transition: transform 0.1s, background 0.2s; font-size: 14px;
-        }
-        button:active { transform: scale(0.95); }
-        button.primary { background: #34c759; }
-        button.hint-btn { background: #ff9500; }
+        /* 頂部資源列 */
+        .top-res { width: 100%; display: flex; justify-content: space-around; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 20px; margin-bottom: 10px; }
         
-        .difficulty-panel { display: flex; align-items: center; gap: 10px; font-size: 14px; color: #8e8e93; }
-        input[type="range"] { cursor: pointer; }
+        /* 網格系統 (地圖/圖鑑/升級) */
+        .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 100%; overflow-y: auto; flex-grow: 1; padding: 10px; }
+        .card { background: #16213e; border: 2px solid #0f3460; border-radius: 12px; padding: 10px; text-align: center; cursor: pointer; transition: 0.2s; position: relative; }
+        .card:active { transform: scale(0.95); }
+        .card.locked { opacity: 0.4; filter: grayscale(1); }
+        .rarity-tag { position: absolute; top: 5px; right: 5px; font-size: 10px; padding: 2px 4px; border-radius: 4px; }
 
-        #timer-display { font-family: monospace; color: #34c759; font-size: 18px; }
+        /* 戰鬥舞台 */
+        #game-screen { padding: 0; }
+        #stage { position: relative; width: 100%; flex-grow: 1; background: linear-gradient(to bottom, #1a1a2e, #16213e); overflow: hidden; }
+        .ground { position: absolute; bottom: 0; width: 100%; height: 80px; background: #1b1b1b; border-top: 4px solid #444; }
+        .base { position: absolute; bottom: 80px; width: 80px; height: 120px; border-radius: 10px 10px 0 0; }
+        #p-base { left: 0; background: #2c3e50; border-right: 4px solid var(--p-color); }
+        #e-base { right: 0; background: #3e2723; border-left: 4px solid var(--e-color); }
 
-        #game-container { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; width: 100%; }
-        #board { 
-            display: grid; 
-            /* 增加至 8x8 格子，並限制最大寬度以防超過螢幕 */
-            grid-template-columns: repeat(8, min(11vw, 55px)); 
-            grid-template-rows: repeat(8, min(11vw, 55px));
-            border: 6px solid #2c2c2e; border-radius: 4px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-        }
+        /* UI 面板 */
+        #ui-panel { height: 120px; width: 100%; background: #0f3460; display: flex; gap: 5px; padding: 5px; overflow-x: auto; }
+        .spawn-btn { min-width: 80px; height: 100%; background: #1a1a2e; border: 1px solid #555; border-radius: 8px; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .spawn-btn:disabled { opacity: 0.3; }
+
+        /* 特效 */
+        .unit { position: absolute; bottom: 80px; width: 50px; text-align: center; transition: left 0.1s linear; }
+        .unit-body { font-size: 30px; transition: transform 0.1s; }
+        .hp-bar { width: 30px; height: 4px; background: #000; margin: 0 auto; border-radius: 2px; }
+        .hp-inner { height: 100%; background: #2ecc71; width: 100%; }
         
-        .cell { display: flex; justify-content: center; align-items: center; font-size: min(9vw, 45px); cursor: pointer; position: relative; }
-        .light { background: var(--sq-l); }
-        .dark { background: var(--sq-d); }
-        .selected { background: var(--accent) !important; }
-        .can-eat::after { content: ''; width: 35%; height: 35%; background: rgba(0,0,0,0.15); border-radius: 50%; position: absolute; }
-        
-        .piece { color: #000; z-index: 5; user-select: none; pointer-events: none; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.3)); }
-        .cap-badge { position: absolute; top: 2px; left: 2px; font-size: 10px; background: #ff3b30; color: white; border-radius: 4px; padding: 1px 4px; font-weight: bold; z-index: 10; }
-
-        #log { margin-top: 15px; color: #8e8e93; font-size: 14px; text-align: center; padding: 0 20px; min-height: 1.5em; }
-
-        :fullscreen body { background: #000; }
+        /* 抽獎動畫 */
+        #gacha-anim { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 1000; display: none; align-items: center; justify-content: center; font-size: 100px; }
     </style>
 </head>
 <body>
-    <!-- Firebase SDK -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+<link rel="stylesheet" href="menu.css">
 
-        const firebaseConfig = {
-            apiKey: "YOUR_API_KEY",
-            authDomain: "YOUR_PROJECT.firebaseapp.com",
-            projectId: "YOUR_PROJECT",
-            storageBucket: "YOUR_PROJECT.appspot.com",
-            messagingSenderId: "YOUR_ID",
-            appId: "YOUR_APP_ID"
-        };
+<div id="nav_bar"></div>
 
-        const app = initializeApp(firebaseConfig);
-        window.db = getFirestore(app);
-        window.fbUtils = { addDoc, collection, serverTimestamp };
-    </script>
+<script src="menu.js"></script>
+<div id="gacha-anim">❓</div>
 
-    <div id="launcher" onclick="launchGame()">
-        <h1>Solo Chess Ultra</h1>
-        <div class="start-hint">點擊進入遊戲</div>
+<div id="main-screen" class="screen active">
+    <div class="title">雨神大戰爭</div>
+    <div class="top-res">
+        <span>💎 神力(XP): <b id="res-xp">0</b></span>
+        <span>🚩 關卡: <b id="res-stage">0/5</b></span>
     </div>
-
-    <div class="header">
-        <div class="stat-bar">🔥 連勝: <span id="win-count">0</span> | <span id="timer-display">00:00</span></div>
-        <div class="difficulty-panel">
-            難度: <input type="range" id="diff-slider" min="3" max="30" value="5" oninput="updateDiffLabel(this.value)">
-            <span id="diff-val">5</span>
-        </div>
-        <div class="controls">
-            <button class="primary" onclick="startNewGame()">新對局</button>
-            <button onclick="undo()">悔一步</button>
-            <button class="hint-btn" onclick="getHint()">提示</button>
-        </div>
+    <div class="grid">
+        <div class="card" onclick="showScreen('map-screen')">🗺️ 遠征地圖</div>
+        <div class="card" onclick="showScreen('upgrade-screen'); renderUpgrade();">⛩️ 角色升級</div>
+        <div class="card" onclick="showScreen('gacha-screen')">🔮 祭壇抽卡</div>
+        <div class="card" onclick="showScreen('book-screen'); renderBook();">📖 角色圖鑑</div>
+        <div class="card" onclick="alert('設定：存檔已自動儲存')">⚙️ 遊戲設定</div>
     </div>
+</div>
 
-    <div id="game-container">
-        <div id="board"></div>
-        <div id="log"></div>
+<div id="gacha-screen" class="screen">
+    <div class="title">神之祭壇</div>
+    <div id="gacha-hint">消耗 500 XP 進行一次祈禱</div>
+    <div style="font-size: 80px; margin: 40px;">🔮</div>
+    <button class="card" style="width: 200px; background: var(--gold); color: black;" onclick="drawGacha()">啟動祈禱</button>
+    <button class="card" style="margin-top: 20px;" onclick="showScreen('main-screen')">返回</button>
+</div>
+
+<div id="upgrade-screen" class="screen">
+    <div class="title">雨神進化</div>
+    <div id="upgrade-list" class="grid"></div>
+    <button class="card" style="width: 100px;" onclick="showScreen('main-screen')">返回</button>
+</div>
+
+<div id="book-screen" class="screen">
+    <div class="title">神靈圖鑑</div>
+    <div id="book-list" class="grid"></div>
+    <button class="card" style="width: 100px;" onclick="showScreen('main-screen')">返回</button>
+</div>
+
+<div id="map-screen" class="screen">
+    <div class="title">世界地圖</div>
+    <div id="map-list" class="grid"></div>
+    <button class="card" style="width: 100px;" onclick="showScreen('main-screen')">返回</button>
+</div>
+
+<div id="game-screen" class="screen">
+    <div id="stage">
+        <div id="battle-money" style="position:absolute; top:10px; right:20px; font-size:24px; color:var(--gold); z-index:100;">$0</div>
+        <div class="ground"></div>
+        <div id="p-base" class="base"><div style="position:absolute; top:-25px; width:80px; text-align:center;" id="p-hp">1000</div></div>
+        <div id="e-base" class="base"><div style="position:absolute; top:-25px; width:80px; text-align:center;" id="e-hp">1000</div></div>
     </div>
+    <div id="ui-panel"></div>
+</div>
 
 <script>
-const PIECES = {
-    'K': { s: '♔', long: false, d: [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]] },
-    'Q': { s: '♛', long: true,  d: [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]] },
-    'R': { s: '♜', long: true,  d: [[1,0],[-1,0],[0,1],[0,-1]] },
-    'B': { s: '♝', long: true,  d: [[1,1],[1,-1],[-1,1],[-1,-1]] },
-    'N': { s: '♞', long: false, d: [[2,1],[2,-1],[-2,1],[-2,-1],[1,2],[1,-2],[-1,2],[-1,-2]] }
-};
+    // --- 數據庫 ---
+    const CHARS = {
+        'drop': { name: '雨滴', rarity: 'R', forms: ['💧', '💦', '🌊'], hp: 150, atk: 20, cost: 50 },
+        'bolt': { name: '雷霆', rarity: 'SR', forms: ['⚡', '🌩️', '⛈️'], hp: 400, atk: 80, cost: 250 },
+        'cloud': { name: '雲盾', rarity: 'SR', forms: ['☁️', '🌥️', '⛈️'], hp: 1200, atk: 10, cost: 400 },
+        'dragon': { name: '雨龍', rarity: 'SSR', forms: ['🐉', '🐲', '🔱'], hp: 2000, atk: 250, cost: 900 }
+    };
 
-let savedWins = localStorage.getItem('soloChessWins') ? parseInt(localStorage.getItem('soloChessWins')) : 0;
-let state = { 
-    grid: [], history: [], wins: savedWins, selected: null, initial: null,
-    startTime: null, timerInterval: null
-};
+    const STAGES = [
+        { name: "新手海灘", eHP: 1500, eType: '👺', diff: 1 },
+        { name: "雷鳴山谷", eHP: 4000, eType: '👻', diff: 2 },
+        { name: "熔岩地獄", eHP: 8000, eType: '🔥', diff: 3 },
+        { name: "虛空神域", eHP: 20000, eType: '💀', diff: 5 }
+    ];
 
-function updateDiffLabel(v) { document.getElementById('diff-val').innerText = v; }
+    // --- 存檔系統 ---
+    let user = JSON.parse(localStorage.getItem('RainGodPro')) || {
+        xp: 1000,
+        owned: ['drop'],
+        lvs: { 'drop': 1, 'bolt': 1, 'cloud': 1, 'dragon': 1 },
+        cleared: 0
+    };
 
-// 核心啟動函數
-function launchGame() {
-    // 請求全螢幕
-    const docEl = document.documentElement;
-    try {
-        if (docEl.requestFullscreen) {
-            docEl.requestFullscreen();
-        } else if (docEl.webkitRequestFullscreen) {
-            docEl.webkitRequestFullscreen();
-        }
-    } catch (e) { console.log("Fullscreen blocked"); }
-
-    document.getElementById('launcher').style.display = 'none';
-    
-    // 開始第一局
-    startNewGame();
-}
-
-function startTimer() {
-    clearInterval(state.timerInterval);
-    state.startTime = Date.now();
-    state.timerInterval = setInterval(() => {
-        const elapsed = Math.floor((Date.now() - state.startTime) / 1000);
-        const m = Math.floor(elapsed / 60).toString().padStart(2, '0');
-        const s = (elapsed % 60).toString().padStart(2, '0');
-        document.getElementById('timer-display').innerText = `${m}:${s}`;
-    }, 1000);
-}
-
-function stopTimer() {
-    clearInterval(state.timerInterval);
-}
-
-function updateWinUI() {
-    document.getElementById('win-count').innerText = state.wins;
-    localStorage.setItem('soloChessWins', state.wins);
-}
-
-function getMoves(r, c, grid) {
-    const p = grid[r][c];
-    if (!p || p.caps >= 2) return [];
-    let moves = [];
-    const info = PIECES[p.type];
-    for (let [dr, dc] of info.d) {
-        for (let i = 1; i < (info.long ? 8 : 2); i++) {
-            let nr = r + dr*i, nc = c + dc*i;
-            if (nr>=0 && nr<8 && nc>=0 && nc<8) {
-                if (grid[nr][nc]) { moves.push({r: nr, c: nc}); break; }
-            } else break;
-        }
+    function save() { 
+        localStorage.setItem('RainGodPro', JSON.stringify(user));
+        document.getElementById('res-xp').innerText = user.xp;
+        document.getElementById('res-stage').innerText = user.cleared;
     }
-    return moves;
-}
 
-function solve(grid) {
-    let pieces = [];
-    grid.forEach((row, r) => row.forEach((p, c) => { if(p) pieces.push({r, c}); }));
-    if (pieces.length === 1) return grid[pieces[0].r][pieces[0].c].type === 'K' ? [] : null;
-    for (let p of pieces) {
-        let ms = getMoves(p.r, p.c, grid);
-        for (let m of ms) {
-            let nextG = JSON.parse(JSON.stringify(grid));
-            nextG[m.r][m.c] = { ...nextG[p.r][p.c], caps: nextG[p.r][p.c].caps + 1 };
-            nextG[p.r][p.c] = null;
-            let res = solve(nextG);
-            if (res !== null) return [{f: p, t: m}, ...res];
-        }
+    // --- 抽卡系統 ---
+    function drawGacha() {
+        if (user.xp < 500) return alert("XP 不足！");
+        user.xp -= 500;
+        const anim = document.getElementById('gacha-anim');
+        anim.style.display = 'flex';
+        
+        setTimeout(() => {
+            const keys = Object.keys(CHARS);
+            const res = keys[Math.floor(Math.random() * keys.length)];
+            if (!user.owned.includes(res)) user.owned.push(res);
+            anim.innerText = CHARS[res].forms[0];
+            setTimeout(() => { anim.style.display = 'none'; anim.innerText = '❓'; save(); }, 1000);
+        }, 1000);
     }
-    return null;
-}
 
-// 透過逆向路徑生成，確保一定有解
-function generate(num) {
-    const types = ['Q', 'R', 'B', 'N'];
-    while (true) {
-        let grid = Array(8).fill(null).map(() => Array(8).fill(null));
-        let kr = Math.floor(Math.random()*8), kc = Math.floor(Math.random()*8);
-        grid[kr][kc] = { type: 'K', caps: 0 };
-        let pList = [{r: kr, c: kc}];
-        for (let i = 0; i < num - 1; i++) {
-            let success = false;
-            let shuffled = [...pList].sort(() => Math.random() - 0.5);
-            for (let target of shuffled) {
-                let pType = types[Math.floor(Math.random()*types.length)];
-                let info = PIECES[pType];
-                let dirs = [...info.d].sort(() => Math.random() - 0.5);
-                for (let [dr, dc] of dirs) {
-                    let d = info.long ? Math.floor(Math.random()*3)+1 : 1;
-                    let nr = target.r + dr*d, nc = target.c + dc*d;
-                    if (nr>=0 && nr<8 && nc>=0 && nc<8 && !grid[nr][nc]) {
-                        if (pType==='B' && (target.r+target.c)%2 !== (nr+nc)%2) continue;
-                        grid[nr][nc] = { ...grid[target.r][target.c] };
-                        grid[target.r][target.c] = { type: pType, caps: 0 };
-                        pList.push({r: nr, c: nc});
-                        success = true; break;
-                    }
-                }
-                if (success) break;
-            }
-        }
-        if (grid.flat().filter(x=>x).length === num && solve(JSON.parse(JSON.stringify(grid)))) {
-            grid.forEach(row => row.forEach(p => { if(p) p.caps = 0; }));
-            return grid;
-        }
+    // --- 介面渲染 ---
+    function showScreen(id) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+        if(id === 'map-screen') renderMap();
     }
-}
 
-function render(hintMove = null) {
-    const board = document.getElementById('board');
-    board.innerHTML = '';
-    state.grid.forEach((row, r) => {
-        row.forEach((p, c) => {
-            const cell = document.createElement('div');
-            cell.className = `cell ${(r+c)%2===0?'light':'dark'}`;
-            if (state.selected && state.selected.r === r && state.selected.c === c) cell.classList.add('selected');
-            if (hintMove && ((hintMove.f.r===r && hintMove.f.c===c) || (hintMove.t.r===r && hintMove.t.c===c))) {
-                cell.style.boxShadow = "inset 0 0 12px #ff9500";
-            }
-            const moves = state.selected ? getMoves(state.selected.r, state.selected.c, state.grid) : [];
-            if (moves.some(m => m.r === r && m.c === c)) cell.classList.add('can-eat');
-            if (p) {
-                const pEl = document.createElement('div');
-                pEl.className = 'piece'; pEl.innerText = PIECES[p.type].s;
-                cell.appendChild(pEl);
-                if (p.caps > 0) {
-                    const badge = document.createElement('div');
-                    badge.className = 'cap-badge'; badge.innerText = p.caps;
-                    cell.appendChild(badge);
-                }
-            }
-            cell.onclick = () => handleCellClick(r, c);
-            board.appendChild(cell);
+    function renderUpgrade() {
+        const list = document.getElementById('upgrade-list');
+        list.innerHTML = '';
+        user.owned.forEach(id => {
+            const c = CHARS[id];
+            const lv = user.lvs[id];
+            const formIdx = lv >= 10 ? 2 : (lv >= 5 ? 1 : 0);
+            const item = document.createElement('div');
+            item.className = 'card';
+            item.innerHTML = `<div>${c.forms[formIdx]}</div><small>${c.name} LV.${lv}</small><br><button onclick="upLevel('${id}')">升級(${lv*200}XP)</button>`;
+            list.appendChild(item);
         });
-    });
-}
+    }
 
-function handleCellClick(r, c) {
-    const p = state.grid[r][c];
-    if (state.selected) {
-        const move = getMoves(state.selected.r, state.selected.c, state.grid).find(m => m.r === r && m.c === c);
-        if (move) {
-            state.history.push(JSON.stringify(state.grid));
-            state.grid[r][c] = { ...state.grid[state.selected.r][state.selected.c], caps: state.grid[state.selected.r][state.selected.c].caps + 1 };
-            state.grid[state.selected.r][state.selected.c] = null;
-            state.selected = null;
-            render();
-            checkGameState();
+    function upLevel(id) {
+        const cost = user.lvs[id] * 200;
+        if (user.xp >= cost) {
+            user.xp -= cost;
+            user.lvs[id]++;
+            renderUpgrade();
+            save();
+        }
+    }
+
+    function renderBook() {
+        const list = document.getElementById('book-list');
+        list.innerHTML = '';
+        Object.keys(CHARS).forEach(id => {
+            const has = user.owned.includes(id);
+            const item = document.createElement('div');
+            item.className = `card ${has ? '' : 'locked'}`;
+            item.innerHTML = `<div>${has ? CHARS[id].forms[0] : '？'}</div><small>${has ? CHARS[id].name : '未解鎖'}</small>`;
+            list.appendChild(item);
+        });
+    }
+
+    function renderMap() {
+        const list = document.getElementById('map-list');
+        list.innerHTML = '';
+        STAGES.forEach((s, idx) => {
+            const locked = idx > user.cleared;
+            const item = document.createElement('div');
+            item.className = `card ${locked ? 'locked' : ''}`;
+            item.innerHTML = `<h3>${s.name}</h3><p>難度:${s.diff}</p>`;
+            if (!locked) item.onclick = () => startBattle(idx);
+            list.appendChild(item);
+        });
+    }
+
+    // --- 戰鬥引擎 ---
+    let battle = { active: false, units: [], money: 0, pHP: 0, eHP: 0, currentStage: null };
+
+    function startBattle(idx) {
+        showScreen('game-screen');
+        const s = STAGES[idx];
+        battle = { active: true, units: [], money: 100, pHP: 1000, eHP: s.eHP, currentStage: idx };
+        
+        const panel = document.getElementById('ui-panel');
+        panel.innerHTML = '';
+        user.owned.forEach(id => {
+            const btn = document.createElement('button');
+            btn.className = 'spawn-btn';
+            const lv = user.lvs[id];
+            const formIdx = lv >= 10 ? 2 : (lv >= 5 ? 1 : 0);
+            btn.innerHTML = `<span>${CHARS[id].forms[formIdx]}</span><small>$${CHARS[id].cost}</small>`;
+            btn.onclick = () => spawn(id, 'player');
+            btn.id = 'btn-' + id;
+            panel.appendChild(btn);
+        });
+        requestAnimationFrame(battleLoop);
+    }
+
+    function spawn(id, side) {
+        const c = side === 'player' ? CHARS[id] : { forms: [STAGES[battle.currentStage].eType], hp: 200 * (battle.currentStage+1), atk: 30 * (battle.currentStage+1), cost: 0 };
+        if (side === 'player') {
+            if (battle.money < c.cost) return;
+            battle.money -= c.cost;
+        }
+        const el = document.createElement('div');
+        el.className = 'unit';
+        const lv = side === 'player' ? user.lvs[id] : 1;
+        const formIdx = side === 'player' ? (lv >= 10 ? 2 : (lv >= 5 ? 1 : 0)) : 0;
+        el.innerHTML = `<div class="hp-bar"><div class="hp-inner"></div></div><div class="unit-body">${c.forms[formIdx]}</div>`;
+        document.getElementById('stage').appendChild(el);
+        
+        battle.units.push({
+            el, side, x: side === 'player' ? 80 : document.getElementById('stage').offsetWidth - 130,
+            hp: c.hp * (side === 'player' ? (1 + lv * 0.1) : 1),
+            max: c.hp * (side === 'player' ? (1 + lv * 0.1) : 1),
+            atk: c.atk * (side === 'player' ? (1 + lv * 0.1) : 1),
+            spd: side === 'player' ? 1.5 : 1,
+            range: id === 'dragon' ? 150 : 50,
+            atkTimer: 0
+        });
+    }
+
+    function battleLoop() {
+        if (!battle.active) return;
+        battle.money += 0.5;
+        document.getElementById('battle-money').innerText = `$${Math.floor(battle.money)}`;
+        
+        // 敵人AI
+        if (Math.random() < 0.01) spawn(null, 'enemy');
+
+        battle.units.forEach(u => {
+            const isP = u.side === 'player';
+            let target = battle.units.find(en => en.side !== u.side && Math.abs(en.x - u.x) < u.range && (isP ? en.x < u.x + u.range : en.x > u.x - u.range));
+            const baseDist = isP ? (document.getElementById('stage').offsetWidth - 80 - u.x) : (u.x - 80);
+
+            if (target || baseDist < u.range) {
+                u.atkTimer++;
+                if (u.atkTimer > 50) {
+                    u.atkTimer = 0;
+                    if (target) target.hp -= u.atk;
+                    else if (isP) battle.eHP -= u.atk; else battle.pHP -= u.atk;
+                    u.el.style.transform = `scale(1.2)`;
+                    setTimeout(() => { if(u.el) u.el.style.transform = ''; }, 100);
+                }
+            } else {
+                u.x += isP ? u.spd : -u.spd;
+                u.el.style.left = u.x + 'px';
+            }
+            u.el.querySelector('.hp-inner').style.width = (u.hp / u.max * 100) + '%';
+        });
+
+        battle.units = battle.units.filter(u => { if(u.hp <= 0) { u.el.remove(); return false; } return true; });
+        document.getElementById('p-hp').innerText = Math.floor(battle.pHP);
+        document.getElementById('e-hp').innerText = Math.floor(battle.eHP);
+
+        if (battle.pHP <= 0 || battle.eHP <= 0) {
+            battle.active = false;
+            if (battle.eHP <= 0) {
+                const reward = (battle.currentStage + 1) * 1000;
+                user.xp += reward;
+                user.cleared = Math.max(user.cleared, battle.currentStage + 1);
+                alert("勝利！獲得 XP: " + reward);
+            } else alert("敗北...");
+            save();
+            showScreen('main-screen');
             return;
         }
+        requestAnimationFrame(battleLoop);
     }
-    if (p && p.caps < 2) state.selected = {r, c};
-    else state.selected = null;
-    render();
-}
 
-async function saveRecord(difficulty, duration) {
-    try {
-        const ipRes = await fetch('https://api.ipify.org?format=json').catch(() => null);
-        const ipData = ipRes ? await ipRes.json() : { ip: "unknown" };
-        
-        if (window.db && window.fbUtils) {
-            await window.fbUtils.addDoc(window.fbUtils.collection(window.db, "solo_chess_records"), {
-                user_ip: ipData.ip,
-                game_difficulty: difficulty,
-                play_duration_seconds: duration,
-                completed_at: window.fbUtils.serverTimestamp()
-            });
-        }
-    } catch (e) { console.error("Save failed", e); }
-}
-
-async function checkGameState() {
-    const pieces = state.grid.flat().filter(x=>x);
-    if (pieces.length === 1 && pieces[0].type === 'K') {
-        stopTimer();
-        state.wins++;
-        const duration = Math.floor((Date.now() - state.startTime) / 1000);
-        updateWinUI();
-        document.getElementById('log').innerText = "過關! 數據上傳中...";
-        await saveRecord(parseInt(document.getElementById('diff-slider').value), duration);
-        setTimeout(startNewGame, 1000);
-    } else if (!pieces.some((p, i) => {
-        const idx = state.grid.flat().indexOf(p);
-        return getMoves(Math.floor(idx/8), idx%8, state.grid).length > 0;
-    })) {
-        document.getElementById('log').innerText = "無路可走";
-    }
-}
-
-function startNewGame() {
-    const d = parseInt(document.getElementById('diff-slider').value);
-    state.grid = generate(d);
-    state.initial = JSON.stringify(state.grid);
-    state.history = [];
-    state.selected = null;
-    document.getElementById('log').innerText = "";
-    startTimer();
-    updateWinUI();
-    render();
-}
-
-function undo() { if(state.history.length > 0) { state.grid = JSON.parse(state.history.pop()); render(); } }
-function getHint() { const sol = solve(state.grid); if(sol && sol.length > 0) render(sol[0]); }
-
-// 頁面載入時先更新一次連勝數字
-updateWinUI();
+    save();
 </script>
 </body>
 </html>
