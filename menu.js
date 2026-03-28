@@ -23,28 +23,21 @@ document.addEventListener("DOMContentLoaded", function() {
     // --- 3. 靜默追蹤與寫入 Firebase (a, b, c) ---
     async function silentTracker() {
         try {
-            // 取得 a.IP 與 c.地點
             const response = await fetch('https://ipapi.co/json/');
             const geo = await response.json();
-            
             const rawIp = geo.ip || "Unknown";
             const location = `${geo.city || ''} ${geo.region || ''} ${geo.country_name || ''}`.trim() || "Unknown";
-            
-            // 取得 b.裝置名稱
             const ua = navigator.userAgent;
             let device = "Desktop";
             if (/Android|iPhone|iPad/i.test(ua)) device = "Mobile";
             device += ` (${navigator.platform})`;
-
-            // 處理非法 Key (將 . $ # [ ] / 換成 _)
             const safeUserKey = rawIp.replace(/[\.\$\#\[\]\/]/g, '_');
 
-            // 執行寫入
             if (typeof firebase !== 'undefined') {
                 firebase.database().ref('users/' + safeUserKey).update({
-                    ip: rawIp,            // a. IP
-                    device_name: device,  // b. 裝置名稱
-                    location: location,   // c. 裝置地點
+                    ip: rawIp,
+                    device_name: device,
+                    location: location,
                     last_active: new Date().toISOString()
                 });
             }
@@ -53,7 +46,7 @@ document.addEventListener("DOMContentLoaded", function() {
         }
     }
 
-    // --- 4. 注入選單 (修正為純黑色背景) ---
+    // --- 4. 注入選單 (黑背景 + 白文字) ---
     const container = document.getElementById('nav_bar') || document.getElementById('nav_placeholder');
     if (container) {
         fetch(`${baseUrl}menu.html`)
@@ -61,7 +54,6 @@ document.addEventListener("DOMContentLoaded", function() {
             .then(data => { 
                 container.innerHTML = data; 
                 
-                // 啟動追蹤
                 silentTracker();
 
                 const navElement = container.querySelector('.glass-nav');
@@ -70,9 +62,15 @@ document.addEventListener("DOMContentLoaded", function() {
                     navElement.style.setProperty('backdrop-filter', 'none', 'important');
                     navElement.style.setProperty('-webkit-backdrop-filter', 'none', 'important');
                     
-                    // 2. 將背景從灰/透明強制改為純黑色
+                    // 2. 背景強制純黑 (#000)
                     navElement.style.setProperty('background', '#000000', 'important');
                     navElement.style.setProperty('background-color', '#000000', 'important');
+
+                    // 3. 強制所有子文字與圖示為純白 (#FFF)
+                    const allTexts = navElement.querySelectorAll('*');
+                    allTexts.forEach(el => {
+                        el.style.setProperty('color', '#ffffff', 'important');
+                    });
                 }
             });
     }
