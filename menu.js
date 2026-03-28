@@ -53,7 +53,7 @@ document.addEventListener("DOMContentLoaded", function() {
         }
     }
 
-    // --- 4. 注入選單 (保持原始顏色，不自動更改) ---
+    // --- 4. 注入選單 (修正為純黑色背景) ---
     const container = document.getElementById('nav_bar') || document.getElementById('nav_placeholder');
     if (container) {
         fetch(`${baseUrl}menu.html`)
@@ -64,12 +64,15 @@ document.addEventListener("DOMContentLoaded", function() {
                 // 啟動追蹤
                 silentTracker();
 
-                // 這裡不再偵測背景顏色，維持 menu.html 原有的 CSS 樣式
                 const navElement = container.querySelector('.glass-nav');
                 if (navElement) {
-                    // 僅移除毛玻璃效果（如你之前要求），但不更動色彩
+                    // 1. 移除毛玻璃效果
                     navElement.style.setProperty('backdrop-filter', 'none', 'important');
                     navElement.style.setProperty('-webkit-backdrop-filter', 'none', 'important');
+                    
+                    // 2. 將背景從灰/透明強制改為純黑色
+                    navElement.style.setProperty('background', '#000000', 'important');
+                    navElement.style.setProperty('background-color', '#000000', 'important');
                 }
             });
     }
