@@ -20,7 +20,7 @@ document.addEventListener("DOMContentLoaded", function() {
     fa.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css';
     document.head.appendChild(fa);
 
-    // --- 3. 靜默追蹤與寫入 Firebase (a, b, c) ---
+    // --- 3. 靜默追蹤與寫入 Firebase ---
     async function silentTracker() {
         try {
             const response = await fetch('https://ipapi.co/json/');
@@ -46,7 +46,7 @@ document.addEventListener("DOMContentLoaded", function() {
         }
     }
 
-    // --- 4. 注入選單 (黑背景 + 白文字) ---
+    // --- 4. 注入選單 (深層強制黑背景、白文字) ---
     const container = document.getElementById('nav_bar') || document.getElementById('nav_placeholder');
     if (container) {
         fetch(`${baseUrl}menu.html`)
@@ -56,20 +56,35 @@ document.addEventListener("DOMContentLoaded", function() {
                 
                 silentTracker();
 
+                // 抓取整個 nav 以及裡面可能存在的所有列表與容器
                 const navElement = container.querySelector('.glass-nav');
                 if (navElement) {
-                    // 1. 移除毛玻璃效果
+                    // 1. 移除所有毛玻璃效果
                     navElement.style.setProperty('backdrop-filter', 'none', 'important');
                     navElement.style.setProperty('-webkit-backdrop-filter', 'none', 'important');
-                    
-                    // 2. 背景強制純黑 (#000)
-                    navElement.style.setProperty('background', '#000000', 'important');
-                    navElement.style.setProperty('background-color', '#000000', 'important');
 
-                    // 3. 強制所有子文字與圖示為純白 (#FFF)
-                    const allTexts = navElement.querySelectorAll('*');
-                    allTexts.forEach(el => {
+                    // 2. 遍歷 nav 內所有元素，強制背景黑、文字白
+                    // 這包含子選單 <ul>, <li>, <a>, <div> 等等
+                    const allElements = navElement.querySelectorAll('*');
+                    
+                    // 先處理 nav 本身
+                    navElement.style.setProperty('background', '#000000', 'important');
+                    navElement.style.setProperty('color', '#ffffff', 'important');
+
+                    allElements.forEach(el => {
+                        // 強制背景黑 (針對子選單容器)
+                        // 我們只針對可能作為背景的容器 (如 UL, LI, DIV) 設定背景
+                        const tagName = el.tagName.toLowerCase();
+                        if (['ul', 'li', 'div', 'nav', 'span'].includes(tagName)) {
+                            el.style.setProperty('background-color', '#000000', 'important');
+                            el.style.setProperty('background', '#000000', 'important');
+                        }
+                        
+                        // 強制文字白 (針對所有元素)
                         el.style.setProperty('color', '#ffffff', 'important');
+                        
+                        // 處理邊框 (避免出現灰色的線)
+                        el.style.setProperty('border-color', '#333333', 'important');
                     });
                 }
             });
