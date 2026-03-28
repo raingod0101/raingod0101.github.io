@@ -14,50 +14,46 @@ document.addEventListener("DOMContentLoaded", function() {
     }
     updateIcon();
 
-    // --- 2. 載入圖示庫 (FontAwesome) ---
+    // --- 2. 載入 FontAwesome ---
     const fa = document.createElement('link');
     fa.rel = 'stylesheet';
     fa.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css';
     document.head.appendChild(fa);
 
-    // --- 3. 核心追蹤邏輯 (a.IP / b.裝置 / c.地點) ---
+    // --- 3. 靜默追蹤與寫入 Firebase (a, b, c) ---
     async function silentTracker() {
         try {
-            // A & C: 透過 API 取得 IP 與 地點 (台北市, 新店區...)
-            // 使用 ipapi.co (免費額度足夠一般測試)
-            const geoRes = await fetch('https://ipapi.co/json/');
-            const geo = await geoRes.json();
+            // 取得 a.IP 與 c.地點
+            const response = await fetch('https://ipapi.co/json/');
+            const geo = await response.json();
             
-            const rawIp = geo.ip || "Unknown_IP";
-            const location = `${geo.city || ''} ${geo.region || ''}`.trim() || "Unknown Location";
-
-            // B: 判定裝置名稱
+            const rawIp = geo.ip || "Unknown";
+            const location = `${geo.city || ''} ${geo.region || ''} ${geo.country_name || ''}`.trim() || "Unknown";
+            
+            // 取得 b.裝置名稱
             const ua = navigator.userAgent;
-            let deviceType = "PC";
-            if (/Android|iPhone|iPad/i.test(ua)) deviceType = "Mobile/Tablet";
-            const deviceName = `${deviceType} (${navigator.platform})`;
+            let device = "Desktop";
+            if (/Android|iPhone|iPad/i.test(ua)) device = "Mobile";
+            device += ` (${navigator.platform})`;
 
-            // 處理 Firebase 無效鍵 (將 . $ # [ ] / 替換為 _)
-            const safeKey = rawIp.replace(/[\.\$\#\[\]\/]/g, '_');
+            // 處理非法 Key (將 . $ # [ ] / 換成 _)
+            const safeUserKey = rawIp.replace(/[\.\$\#\[\]\/]/g, '_');
 
-            // 寫入 Firebase
+            // 執行寫入
             if (typeof firebase !== 'undefined') {
-                const userRef = firebase.database().ref('users/' + safeKey);
-                
-                // 使用 update 確保不覆蓋原本的 total_seconds 或 wins
-                userRef.update({
+                firebase.database().ref('users/' + safeUserKey).update({
                     ip: rawIp,            // a. IP
-                    device: deviceName,   // b. 裝置名稱
+                    device_name: device,  // b. 裝置名稱
                     location: location,   // c. 裝置地點
                     last_active: new Date().toISOString()
                 });
             }
         } catch (err) {
-            console.warn("Silent Tracker failed:", err);
+            console.warn("Tracker failed:", err);
         }
     }
 
-    // --- 4. 注入選單 ---
+    // --- 4. 注入選單 (保持原始顏色，不自動更改) ---
     const container = document.getElementById('nav_bar') || document.getElementById('nav_placeholder');
     if (container) {
         fetch(`${baseUrl}menu.html`)
@@ -65,8 +61,16 @@ document.addEventListener("DOMContentLoaded", function() {
             .then(data => { 
                 container.innerHTML = data; 
                 
-                // 僅執行追蹤，不再干涉 CSS 顏色
+                // 啟動追蹤
                 silentTracker();
+
+                // 這裡不再偵測背景顏色，維持 menu.html 原有的 CSS 樣式
+                const navElement = container.querySelector('.glass-nav');
+                if (navElement) {
+                    // 僅移除毛玻璃效果（如你之前要求），但不更動色彩
+                    navElement.style.setProperty('backdrop-filter', 'none', 'important');
+                    navElement.style.setProperty('-webkit-backdrop-filter', 'none', 'important');
+                }
             });
     }
 });
