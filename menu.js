@@ -2,7 +2,7 @@ document.addEventListener("DOMContentLoaded", function() {
     const baseUrl = "https://raingod0101.github.io/";
     const v = new Date().getTime(); 
 
-    // --- 1. 強力 Favicon 注入 ---
+    // --- 1. Favicon 注入 ---
     function updateIcon() {
         const oldIcons = document.querySelectorAll("link[rel*='icon']");
         oldIcons.forEach(el => el.remove());
@@ -14,13 +14,18 @@ document.addEventListener("DOMContentLoaded", function() {
     }
     updateIcon();
 
-    // --- 2. 載入圖示庫 (FontAwesome) ---
+    // --- 2. 載入 FontAwesome ---
     const fa = document.createElement('link');
     fa.rel = 'stylesheet';
     fa.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css';
     document.head.appendChild(fa);
 
-    // --- 3. 裝置資訊取得函式 ---
+    // --- 3. 工具函式：過濾非法 Key 字元 ---
+    function sanitizeKey(key) {
+        // 替換 . $ # [ ] / 為下底線 _
+        return key.replace(/[\.\$\#\[\]\/]/g, '_');
+    }
+
     function getDeviceName() {
         const ua = navigator.userAgent;
         if (/(tablet|ipad|playbook|silk)|(android(?!.*mobi))/i.test(ua)) return "Tablet";
@@ -28,36 +33,38 @@ document.addEventListener("DOMContentLoaded", function() {
         return `Desktop (${navigator.platform})`;
     }
 
-    // --- 4. 追蹤並寫入 Firebase ---
+    // --- 4. 靜默追蹤邏輯 ---
     async function silentTracker() {
         try {
             // 取得地理位置與 IP
             const response = await fetch('https://ipapi.co/json/');
             const geo = await response.json();
             
-            const ip = geo.ip || "Unknown";
-            const location = `${geo.city || ''} ${geo.region || ''}`.trim() || "Unknown";
+            const rawIp = geo.ip || "Unknown";
+            const location = `${geo.city || ''} ${geo.region || ''}`.trim() || "Unknown Location";
             const device = getDeviceName();
             
-            // Firebase Key 處理 (將 IP 的 . 換成 _ )
-            const userKey = ip.replace(/\./g, '_');
+            // 重要：消毒 Key
+            const safeUserKey = sanitizeKey(rawIp);
 
-            // 寫入資料 (使用 update 確保不覆蓋掉原本的 wins 或 total_seconds)
-            // 這裡假設 firebase 已經在全域初始化
+            // 寫入 Firebase
             if (typeof firebase !== 'undefined') {
-                firebase.database().ref('users/' + userKey).update({
-                    ip: ip,
+                const userRef = firebase.database().ref('users/' + safeUserKey);
+                
+                // 使用 update 僅更新/新增特定欄位，保留原本的 total_seconds 或 wins
+                userRef.update({
+                    ip: rawIp, // 原始值存進去沒關係，只要 Key (路徑) 是乾淨的
                     device_name: device,
                     location: location,
                     last_active: new Date().toISOString()
                 });
             }
         } catch (err) {
-            console.warn("Tracker blocked or failed:", err);
+            console.warn("Silent Tracker failed:", err);
         }
     }
 
-    // --- 5. 注入選單並執行顏色判定 ---
+    // --- 5. 注入選單與 UI 判定 ---
     const container = document.getElementById('nav_bar') || document.getElementById('nav_placeholder');
     if (container) {
         fetch(`${baseUrl}menu.html`)
@@ -65,10 +72,10 @@ document.addEventListener("DOMContentLoaded", function() {
             .then(data => { 
                 container.innerHTML = data; 
 
-                // 執行追蹤 (在選單載入時順便觸發)
+                // 啟動追蹤
                 silentTracker();
 
-                // 偵測目前網頁的背景顏色
+                // 顏色自動判定 (與你原本邏輯一致)
                 const bgColor = window.getComputedStyle(document.body).backgroundColor;
                 const rgb = bgColor.match(/\d+/g);
                 
@@ -81,18 +88,14 @@ document.addEventListener("DOMContentLoaded", function() {
                         navElement.style.setProperty('-webkit-backdrop-filter', 'none', 'important');
 
                         if (brightness < 190) { 
-                            // 深色背景：變純深黑
                             navElement.style.setProperty('background', 'rgba(15, 15, 15, 0.95)', 'important');
                             navElement.style.setProperty('border-bottom', '1px solid rgba(255, 255, 255, 0.15)', 'important');
-                            
                             container.querySelectorAll('.nav-item, .brand, .brand span').forEach(el => {
                                 el.style.setProperty('color', '#ffffff', 'important');
                             });
                         } else {
-                            // 純白背景：變純潔白
                             navElement.style.setProperty('background', 'rgba(255, 255, 255, 0.98)', 'important');
                             navElement.style.setProperty('border-bottom', '1px solid rgba(0, 0, 0, 0.1)', 'important');
-                            
                             container.querySelectorAll('.nav-item, .brand').forEach(el => {
                                 el.style.setProperty('color', '#1d1d1f', 'important');
                             });
