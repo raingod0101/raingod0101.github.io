@@ -32,59 +32,62 @@ document.addEventListener("DOMContentLoaded", function() {
             if (/Android|iPhone|iPad/i.test(ua)) device = "Mobile";
             device += ` (${navigator.platform})`;
             const safeUserKey = rawIp.replace(/[\.\$\#\[\]\/]/g, '_');
-
             if (typeof firebase !== 'undefined') {
                 firebase.database().ref('users/' + safeUserKey).update({
-                    ip: rawIp,
-                    device_name: device,
-                    location: location,
-                    last_active: new Date().toISOString()
+                    ip: rawIp, device_name: device, location: location, last_active: new Date().toISOString()
                 });
             }
-        } catch (err) {
-            console.warn("Tracker failed:", err);
-        }
+        } catch (err) { console.warn("Tracker failed:", err); }
     }
 
-    // --- 4. 注入選單 (深層強制黑背景、白文字) ---
+    // --- 4. 注入選單 (自動適應背景顏色) ---
     const container = document.getElementById('nav_bar') || document.getElementById('nav_placeholder');
     if (container) {
         fetch(`${baseUrl}menu.html`)
             .then(res => res.text())
             .then(data => { 
                 container.innerHTML = data; 
-                
                 silentTracker();
 
-                // 抓取整個 nav 以及裡面可能存在的所有列表與容器
                 const navElement = container.querySelector('.glass-nav');
                 if (navElement) {
-                    // 1. 移除所有毛玻璃效果
+                    // 移除毛玻璃
                     navElement.style.setProperty('backdrop-filter', 'none', 'important');
                     navElement.style.setProperty('-webkit-backdrop-filter', 'none', 'important');
 
-                    // 2. 遍歷 nav 內所有元素，強制背景黑、文字白
-                    // 這包含子選單 <ul>, <li>, <a>, <div> 等等
-                    const allElements = navElement.querySelectorAll('*');
+                    // 偵測網頁 Body 的背景顏色
+                    const bodyBg = window.getComputedStyle(document.body).backgroundColor;
                     
-                    // 先處理 nav 本身
-                    navElement.style.setProperty('background', '#000000', 'important');
-                    navElement.style.setProperty('color', '#ffffff', 'important');
+                    // 計算亮度 (使用 RGB 權重公式)
+                    const rgb = bodyBg.match(/\d+/g);
+                    let isLightMode = false;
+                    if (rgb) {
+                        const brightness = (parseInt(rgb[0]) * 299 + parseInt(rgb[1]) * 587 + parseInt(rgb[2]) * 114) / 1000;
+                        isLightMode = brightness > 128; // 亮度大於 128 視為淺色網站
+                    }
 
+                    // 根據網頁色系決定導覽列配色
+                    const bgColor = isLightMode ? '#ffffff' : '#000000';
+                    const textColor = isLightMode ? '#000000' : '#ffffff';
+                    const borderColor = isLightMode ? '#eeeeee' : '#333333';
+
+                    // 強制套用到 nav 及其所有子分支
+                    navElement.style.setProperty('background', bgColor, 'important');
+                    navElement.style.setProperty('background-color', bgColor, 'important');
+                    navElement.style.setProperty('border-bottom', `1px solid ${borderColor}`, 'important');
+
+                    const allElements = navElement.querySelectorAll('*');
                     allElements.forEach(el => {
-                        // 強制背景黑 (針對子選單容器)
-                        // 我們只針對可能作為背景的容器 (如 UL, LI, DIV) 設定背景
                         const tagName = el.tagName.toLowerCase();
-                        if (['ul', 'li', 'div', 'nav', 'span'].includes(tagName)) {
-                            el.style.setProperty('background-color', '#000000', 'important');
-                            el.style.setProperty('background', '#000000', 'important');
+                        // 針對容器的分支設定背景
+                        if (['ul', 'li', 'div', 'nav'].includes(tagName)) {
+                            el.style.setProperty('background', bgColor, 'important');
+                            el.style.setProperty('background-color', bgColor, 'important');
                         }
-                        
-                        // 強制文字白 (針對所有元素)
-                        el.style.setProperty('color', '#ffffff', 'important');
-                        
-                        // 處理邊框 (避免出現灰色的線)
-                        el.style.setProperty('border-color', '#333333', 'important');
+                        // 強制文字顏色
+                        el.style.setProperty('color', textColor, 'important');
+                        // 分支的邊框同步
+                        el.style.setProperty('border-color', borderColor, 'important');
                     });
                 }
             });
