@@ -5,87 +5,89 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none">
     <title>單人棋 | Raingod</title>
     <style>
-        :root { --sq-l: #ebecd0; --sq-d: #779556; --accent: #f6f669; --hint: #34c759; --bg: #161618; }
+        :root { --sq-l: #ebecd0; --sq-d: #779556; --accent: #f6f669; --bg: #161618; }
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        
         body { 
-            background: var(--bg); color: #fff; font-family: "Microsoft JhengHei", sans-serif;
-            margin: 0; display: flex; flex-direction: column; align-items: center; 
+            background: var(--bg); color: #fff; font-family: sans-serif;
+            margin: 0; padding: 0; display: flex; flex-direction: column; 
+            justify-content: center; align-items: center;
             height: 100vh; width: 100vw; overflow: hidden;
         }
 
         #launcher {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-            background: var(--bg); z-index: 1000; display: flex; flex-direction: column;
+            background: var(--bg); z-index: 2000; display: flex; flex-direction: column;
             justify-content: center; align-items: center; cursor: pointer;
         }
-        #launcher h1 { color: #fbd38d; margin-bottom: 10px; font-size: 32px; letter-spacing: 5px; }
-        .start-hint { font-size: 20px; color: #fff; background: #34c759; padding: 15px 50px; border-radius: 12px; font-weight: bold; }
 
-        .header { width: 100%; max-width: 600px; padding: 10px; display: flex; flex-direction: column; align-items: center; gap: 8px; flex-shrink: 0; }
-        .stat-bar { font-size: 18px; font-weight: bold; color: #fbd38d; display: flex; align-items: center; gap: 15px; }
-        .total-time-box { font-size: 11px; color: #8e8e93; background: rgba(255,255,255,0.05); padding: 4px 10px; border-radius: 20px; }
+        /* 頂部控制列：整合統計數據 */
+        .header { 
+            position: absolute; top: 0; width: 100%; z-index: 1000;
+            padding: 5px 10px; background: rgba(0,0,0,0.6);
+            display: flex; justify-content: space-between; align-items: center;
+            font-size: 13px;
+        }
+        .stats { display: flex; flex-direction: column; gap: 2px; }
+        .controls { display: flex; gap: 6px; align-items: center; }
         
-        .controls { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
         button { 
-            padding: 8px 14px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; 
-            background: #3a3a3c; color: white; transition: 0.2s; font-size: 13px;
+            padding: 6px 12px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; 
+            background: #444; color: white;
         }
-        button.primary { background: #34c759; }
-        button.hint-btn { background: #5856d6; }
-        button:active { transform: scale(0.95); }
-        
-        /* 棋盤大小優化：取寬高最小值，確保正方形且不超出螢幕 */
+
         #game-container { 
-            flex-grow: 1; display: flex; justify-content: center; align-items: center; 
-            width: 100%; height: 100%; padding: 10px; overflow: hidden;
+            width: 100vw; height: 100vh;
+            display: flex; justify-content: center; align-items: center;
+            padding-top: 40px; 
         }
+
         #board { 
             display: grid; 
             grid-template-columns: repeat(8, 1fr); 
             grid-template-rows: repeat(8, 1fr);
-            width: min(85vw, 70vh); 
-            height: min(85vw, 70vh);
-            border: 4px solid #2c2c2e; border-radius: 4px; box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+            width: min(98vw, calc(100vh - 120px));
+            height: min(98vw, calc(100vh - 120px));
+            border: 2px solid #000;
+            box-shadow: 0 0 30px rgba(0,0,0,0.8);
+            touch-action: none;
         }
         
-        .cell { display: flex; justify-content: center; align-items: center; font-size: min(8vw, 5vh); cursor: pointer; position: relative; }
+        .cell { display: flex; justify-content: center; align-items: center; width: 100%; height: 100%; cursor: pointer; position: relative; }
         .light { background: var(--sq-l); }
         .dark { background: var(--sq-d); }
         .selected { background: var(--accent) !important; }
-        .can-eat::after { content: ''; width: 30%; height: 30%; background: rgba(0,0,0,0.15); border-radius: 50%; position: absolute; }
-        .hint-square { box-shadow: inset 0 0 0 4px var(--hint); }
+        .can-eat::after { content: ''; width: 35%; height: 35%; background: rgba(0,0,0,0.2); border-radius: 50%; position: absolute; z-index: 10; }
         
-        .piece { color: #000; z-index: 5; user-select: none; pointer-events: none; }
-        .cap-badge { position: absolute; bottom: 2px; right: 2px; font-size: 10px; background: #ff3b30; color: white; border-radius: 4px; padding: 1px 3px; font-weight: bold; }
+        .piece { font-size: min(12vw, 10vh); color: #000; z-index: 5; user-select: none; pointer-events: none; position: absolute; }
+        .cap-badge { position: absolute; bottom: 2px; right: 2px; font-size: 10px; background: #ff3b30; color: white; border-radius: 3px; padding: 1px 3px; font-weight: bold; z-index: 15; }
 
-        #log { margin: 10px 0; color: #34c759; font-size: 14px; font-weight: bold; height: 1.2em; flex-shrink: 0; }
+        #log { position: absolute; bottom: 15px; width: 100%; text-align: center; color: #34c759; font-size: 20px; font-weight: bold; pointer-events: none; }
     </style>
 </head>
 <body>
-    <link rel="stylesheet" href="menu.css">
+<link rel="stylesheet" href="menu.css">
 
 <div id="nav_bar"></div>
 
 <script src="menu.js"></script>
     <div id="launcher" onclick="launchGame()">
-        <h1>單人棋</h1>
-        <div class="start-hint">點擊進入遊戲</div>
+        <h1 style="color:#fbd38d; margin-bottom:20px">單人棋</h1>
+        <div style="background:#34c759; padding:15px 50px; border-radius:15px; font-size:20px; font-weight:bold">恢復對局</div>
     </div>
 
     <div class="header">
-        <div class="stat-bar">
-            <span>🔥 連勝: <span id="win-count">0</span></span>
-            <div class="total-time-box">總時數: <span id="total-time-display">0秒</span></div>
+        <div class="stats">
+            <p></p><p></p><br>
+            <div style="color:#fbd38d">🏆 連勝: <span id="win-count">0</span></div>
+            <div style="color:#aaa">⏳ 遊玩: <span id="play-time">0m</span></div>
         </div>
         <div class="controls">
-            棋子: <input type="range" id="diff-slider" min="3" max="30" value="10" oninput="updateDiffLabel(this.value)">
-            <span id="diff-val" style="color:#34c759; font-weight:bold">10</span>
-        </div>
-        <div class="controls">
-            <button class="primary" onclick="startNewGame()">新對局</button>
-            <button class="hint-btn" onclick="showHint()">提示</button>
-            <button onclick="undo()">悔一步</button>
-            <button onclick="toggleFS()">全螢幕</button>
+            
+            <input type="range" id="diff-slider" min="3" max="30" value="10" style="width:60px" oninput="document.getElementById('diff-val').innerText=this.value">
+            <span id="diff-val" style="width:18px; color:#fff">10</span>
+            <button style="background:#34c759" onclick="startNewGame()">新局</button>
+            <button onclick="undo()">悔棋</button>
         </div>
     </div>
 
@@ -94,14 +96,7 @@
     </div>
     <div id="log"></div>
 
-<script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getDatabase, ref, set, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-
-    const firebaseConfig = { databaseURL: "https://project-161757768102958224-default-rtdb.firebaseio.com/" };
-    const app = initializeApp(firebaseConfig);
-    const db = getDatabase(app);
-
+<script>
     const PIECES = {
         'K': { s: '♔', long: false, d: [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]] },
         'Q': { s: '♛', long: true,  d: [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]] },
@@ -110,235 +105,124 @@
         'N': { s: '♞', long: false, d: [[2,1],[2,-1],[-2,1],[-2,-1],[1,2],[1,-2],[-1,2],[-1,-2]] }
     };
 
+    // 初始化狀態，優先從 localStorage 讀取
     let state = { 
-        grid: [], history: [], wins: parseInt(localStorage.getItem('soloChessWins') || 0), 
-        selected: null, userIP: 'unknown', hint: null, solutionSteps: [] 
-    };
-    let totalSeconds = parseInt(localStorage.getItem('soloChessTotalTime') || 0);
-
-    async function initUser() {
-        try {
-            const res = await fetch('https://api.ipify.org?format=json');
-            const data = await res.json();
-            state.userIP = data.ip.replace(/\./g, '_');
-        } catch (e) { state.userIP = "local_user"; }
-    }
-
-    window.toggleFS = () => {
-        if (!document.fullscreenElement) document.documentElement.requestFullscreen();
-        else document.exitFullscreen();
+        grid: [], 
+        history: [], 
+        wins: parseInt(localStorage.getItem('chess_wins')) || 0, 
+        totalTime: parseInt(localStorage.getItem('chess_time')) || 0,
+        selected: null 
     };
 
-    async function syncToFirebase() {
-        if (state.userIP === 'unknown') return;
-        const userRef = ref(db, 'users/' + state.userIP);
-        set(userRef, {
-            wins: state.wins,
-            total_seconds: totalSeconds,
-            last_active: serverTimestamp(),
-            last_difficulty: document.getElementById('diff-slider').value
-        });
-    }
-
-    window.launchGame = () => {
-        document.getElementById('launcher').style.display = 'none';
-        startNewGame();
-        setInterval(() => {
-            totalSeconds++;
-            localStorage.setItem('soloChessTotalTime', totalSeconds);
-            updateStatsUI();
-            if (totalSeconds % 30 === 0) syncToFirebase();
-        }, 1000);
-    };
-
-    window.updateDiffLabel = (v) => { document.getElementById('diff-val').innerText = v; };
-
-    function updateStatsUI() {
+    // 更新顯示與儲存
+    function updateStats() {
         document.getElementById('win-count').innerText = state.wins;
-        localStorage.setItem('soloChessWins', state.wins);
-        let m = Math.floor(totalSeconds / 60);
-        let s = totalSeconds % 60;
-        document.getElementById('total-time-display').innerText = `${m}分${s}秒`;
+        const mins = Math.floor(state.totalTime / 60);
+        const secs = state.totalTime % 60;
+        document.getElementById('play-time').innerText = `${mins}m ${secs}s`;
+        
+        localStorage.setItem('chess_wins', state.wins);
+        localStorage.setItem('chess_time', state.totalTime);
     }
 
+    // 計時器邏輯
+    setInterval(() => {
+        if (document.getElementById('launcher').style.display === 'none') {
+            state.totalTime++;
+            updateStats();
+        }
+    }, 1000);
+
+    window.launchGame = () => { 
+        document.getElementById('launcher').style.display='none'; 
+        updateStats();
+        startNewGame(); 
+    };
+    
     function getMoves(r, c, grid) {
-        const p = grid[r][c];
-        if (!p || p.caps >= 2) return [];
-        let moves = [];
-        const info = PIECES[p.type];
+        const p = grid[r][c]; if (!p || p.caps >= 2) return [];
+        let moves = []; const info = PIECES[p.type];
         for (let [dr, dc] of info.d) {
             for (let i = 1; i < (info.long ? 8 : 2); i++) {
                 let nr = r + dr*i, nc = c + dc*i;
-                if (nr>=0 && nr<8 && nc>=0 && nc<8) {
-                    if (grid[nr][nc]) { moves.push({r: nr, c: nc}); break; }
+                if (nr>=0 && nr<8 && nc>=0 && nc<8) { 
+                    if (grid[nr][nc]) { moves.push({r: nr, c: nc}); break; } 
                 } else break;
             }
         }
         return moves;
     }
 
-    // 核心遞迴求解器 (用於確保題目有解 & 提供正確提示)
-    function solve(currentGrid) {
-        const pieces = [];
-        for(let r=0; r<8; r++) {
-            for(let c=0; c<8; c++) {
-                if(currentGrid[r][c]) pieces.push({r, c, p: currentGrid[r][c]});
-            }
-        }
-        
-        if (pieces.length === 1) return pieces[0].p.type === 'K' ? [] : null;
-
-        for (let piece of pieces) {
-            const moves = getMoves(piece.r, piece.c, currentGrid);
-            for (let m of moves) {
-                // 模擬移動
-                const nextGrid = currentGrid.map(row => row.slice());
-                const attacker = {...nextGrid[piece.r][piece.c]};
-                attacker.caps++;
-                nextGrid[m.r][m.c] = attacker;
-                nextGrid[piece.r][piece.c] = null;
-                
-                const res = solve(nextGrid);
-                if (res !== null) return [{from: {r: piece.r, c: piece.c}, to: {r: m.r, c: m.c}}, ...res];
-            }
-        }
-        return null;
-    }
-
-    window.generate = (num) => {
-        const types = ['Q', 'R', 'B', 'N'];
-        let grid = Array(8).fill(null).map(() => Array(8).fill(null));
-        let kr = Math.floor(Math.random()*8), kc = Math.floor(Math.random()*8);
-        grid[kr][kc] = { type: 'K', split: 0 };
-        let pList = [{r: kr, c: kc}], count = 1;
-        
+    window.generate = (n) => {
+        let g = Array(8).fill(0).map(()=>Array(8).fill(null));
+        let kr=Math.floor(Math.random()*8), kc=Math.floor(Math.random()*8);
+        g[kr][kc]={type:'K', split:0};
+        let pList=[{r:kr,c:kc}], count=1;
         let safety = 0;
-        while (count < num && safety < 3000) {
+        while(count < n && safety < 5000) {
             safety++;
-            let eligible = pList.filter(p => grid[p.r][p.c].split < 2);
-            if (eligible.length === 0) break;
-            let src = eligible[Math.floor(Math.random() * eligible.length)];
-            let info = PIECES[grid[src.r][src.c].type];
-            let drdc = info.d[Math.floor(Math.random() * info.d.length)];
-            let dist = info.long ? (Math.floor(Math.random()*7)+1) : 1;
-            let nr = src.r + drdc[0]*dist, nc = src.c + drdc[1]*dist;
-
-            if (nr>=0 && nr<8 && nc>=0 && nc<8 && !grid[nr][nc]) {
-                grid[nr][nc] = { ...grid[src.r][src.c], split: grid[src.r][src.c].split + 1 };
-                grid[src.r][src.c] = { type: types[Math.floor(Math.random()*4)], split: 0 };
-                pList.push({r: nr, c: nc});
+            let idx = Math.floor(Math.random()*pList.length);
+            let src = pList[idx];
+            if (g[src.r][src.c].split >= 2) continue;
+            let info = PIECES[g[src.r][src.c].type];
+            let d = info.d[Math.floor(Math.random()*info.d.length)];
+            let dist = info.long ? Math.floor(Math.random()*7)+1 : 1;
+            let nr = src.r + d[0]*dist, nc = src.c + d[1]*dist;
+            if(nr>=0 && nr<8 && nc>=0 && nc<8 && !g[nr][nc]) {
+                g[nr][nc] = { type: g[src.r][src.c].type, split: g[src.r][src.c].split + 1 };
+                g[src.r][src.c] = { type: ['Q','R','B','N'][Math.floor(Math.random()*4)], split: 0 };
+                pList.push({r:nr, c:nc});
                 count++;
             }
         }
-        
-        const finalGrid = grid.map(row => row.map(p => p ? {type: p.type, caps: 0} : null));
-        // 驗證是否有解，無解則重抽
-        if (count < num || !solve(finalGrid)) return generate(num);
-        return finalGrid;
-    }
+        return g.map(row=>row.map(p=>p?{type:p.type, caps:0}:null));
+    };
 
     window.render = () => {
-        const board = document.getElementById('board');
-        board.innerHTML = '';
-        state.grid.forEach((row, r) => {
-            row.forEach((p, c) => {
-                const cell = document.createElement('div');
-                cell.className = `cell ${(r+c)%2===0?'light':'dark'}`;
-                
-                if (state.selected && state.selected.r === r && state.selected.c === c) cell.classList.add('selected');
-                
-                const moves = state.selected ? getMoves(state.selected.r, state.selected.c, state.grid) : [];
-                if (moves.some(m => m.r === r && m.c === c)) cell.classList.add('can-eat');
-                
-                // 提示顯示
-                if (state.hint && ((state.hint.from.r === r && state.hint.from.c === c) || (state.hint.to.r === r && state.hint.to.c === c))) {
-                    cell.classList.add('hint-square');
-                }
-
-                if (p) {
-                    const pEl = document.createElement('div');
-                    pEl.className = 'piece'; pEl.innerText = PIECES[p.type].s;
-                    cell.appendChild(pEl);
-                    if (p.caps > 0) {
-                        const b = document.createElement('div');
-                        b.className = 'cap-badge'; b.innerText = p.caps;
-                        cell.appendChild(b);
-                    }
-                }
-                cell.onclick = () => handleCellClick(r, c);
-                board.appendChild(cell);
-            });
-        });
+        const b = document.getElementById('board'); b.innerHTML='';
+        state.grid.forEach((row,r)=>{ row.forEach((p,c)=>{
+            const cell = document.createElement('div');
+            cell.className=`cell ${(r+c)%2===0?'light':'dark'}`;
+            if(state.selected?.r===r && state.selected?.c===c) cell.classList.add('selected');
+            if(state.selected && getMoves(state.selected.r, state.selected.c, state.grid).some(m=>m.r===r&&m.c===c)) cell.classList.add('can-eat');
+            if(p) {
+                const el = document.createElement('div'); el.className='piece'; el.innerText=PIECES[p.type].s;
+                cell.appendChild(el);
+                if(p.caps>0) { const bd=document.createElement('div'); bd.className='cap-badge'; bd.innerText=p.caps; cell.appendChild(bd); }
+            }
+            cell.onclick=()=>handle(r,c); b.appendChild(cell);
+        })});
     };
 
-    function handleCellClick(r, c) {
-        state.hint = null; // 點擊即清除提示
-        const p = state.grid[r][c];
-        if (state.selected) {
-            const move = getMoves(state.selected.r, state.selected.c, state.grid).find(m => m.r === r && m.c === c);
-            if (move) {
+    function handle(r,c) {
+        if(state.selected) {
+            let m = getMoves(state.selected.r, state.selected.c, state.grid).find(x=>x.r===r&&x.c===c);
+            if(m) {
                 state.history.push(JSON.stringify(state.grid));
-                state.grid[r][c] = { ...state.grid[state.selected.r][state.selected.c], caps: state.grid[state.selected.r][state.selected.c].caps + 1 };
-                state.grid[state.selected.r][state.selected.c] = null;
-                state.selected = null;
-                render();
-                checkWin();
-                return;
+                state.grid[r][c] = {...state.grid[state.selected.r][state.selected.c], caps:state.grid[state.selected.r][state.selected.c].caps+1};
+                state.grid[state.selected.r][state.selected.c]=null; state.selected=null; render(); check(); return;
             }
         }
-        if (p && p.caps < 2) state.selected = {r, c};
-        else state.selected = null;
+        if(state.grid[r][c] && state.grid[r][c].caps < 2) state.selected={r,c}; else state.selected=null;
         render();
     }
 
-    window.showHint = () => {
-        const solution = solve(state.grid);
-        if (solution && solution.length > 0) {
-            state.hint = solution[0];
-            document.getElementById('log').innerText = "提示：請觀察高亮棋子";
-            render();
-        } else {
-            document.getElementById('log').innerText = "目前狀態無解，請悔一步";
-        }
-    };
-
-    function checkWin() {
-        const remain = state.grid.flat().filter(x=>x);
-        if (remain.length === 1 && remain[0].type === 'K') {
-            state.wins++;
-            updateStatsUI();
-            document.getElementById('log').innerText = "太棒了！挑戰成功！";
-            syncToFirebase();
-            setTimeout(startNewGame, 1000);
-        } else if (!remain.some((p, i) => {
-            const flatIdx = state.grid.flat().indexOf(p);
-            return getMoves(Math.floor(flatIdx/8), flatIdx%8, state.grid).length > 0;
-        })) {
-            document.getElementById('log').innerText = "死局！請嘗試悔一步或看提示";
+    function check() {
+        let rs = state.grid.flat().filter(x=>x);
+        if(rs.length===1 && rs[0].type==='K') { 
+            state.wins++; 
+            updateStats();
+            document.getElementById('log').innerText="挑戰成功！"; 
+            setTimeout(startNewGame, 1000); 
         }
     }
 
-    window.startNewGame = () => {
-        const d = parseInt(document.getElementById('diff-slider').value);
-        state.grid = generate(d);
-        state.history = [];
-        state.selected = null;
-        state.hint = null;
-        document.getElementById('log').innerText = "新局開始";
-        render();
+    window.startNewGame = () => { 
+        state.grid = generate(parseInt(document.getElementById('diff-slider').value)); 
+        state.history=[]; state.selected=null; 
+        document.getElementById('log').innerText=""; render(); 
     };
-
-    window.undo = () => {
-        if (state.history.length > 0) {
-            state.grid = JSON.parse(state.history.pop());
-            state.hint = null;
-            render();
-            document.getElementById('log').innerText = "已返回上一步";
-        }
-    };
-
-    initUser();
-    updateStatsUI();
+    window.undo = () => { if(state.history.length) { state.grid=JSON.parse(state.history.pop()); render(); } };
 </script>
 </body>
 </html>
