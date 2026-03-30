@@ -1,102 +1,50 @@
-document.addEventListener("DOMContentLoaded", function() {
-    const baseUrl = "https://raingod0101.github.io/";
-    
-    // 1. 初始化 Firebase Google 登入 (請確保頁面已引用 Firebase SDK)
-    const provider = (typeof firebase !== 'undefined') ? new firebase.auth.GoogleAuthProvider() : null;
+/* 導覽列主體 - 強制純色，不透明 */
+.glass-nav {
+    position: fixed !important; top: 0 !important; left: 0 !important;
+    width: 100% !important; height: 52px !important;
+    z-index: 2147483646 !important;
+    display: flex !important; align-items: center !important;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif !important;
+    backdrop-filter: none !important; /* 關閉毛玻璃避免變灰 */
+    -webkit-backdrop-filter: none !important;
+}
 
-    async function handleAuth() {
-        const authBtn = document.getElementById('login-btn');
-        if (!authBtn) return;
+.nav-content {
+    width: 100% !important; max-width: 1200px !important;
+    margin: 0 auto !important; display: flex !important;
+    justify-content: space-between !important; align-items: center !important;
+    padding: 0 24px !important; height: 100% !important;
+}
 
-        authBtn.addEventListener('click', () => {
-            firebase.auth().signInWithPopup(provider).catch(console.error);
-        });
+.nav-left { display: flex !important; align-items: center !important; gap: 25px !important; }
+.nav-right { display: flex !important; align-items: center !important; }
 
-        firebase.auth().onAuthStateChanged(user => {
-            const authSection = document.getElementById('auth-section');
-            if (user) {
-                // 已登入：換成頭像
-                authSection.innerHTML = `<img src="${user.photoURL}" class="user-avatar" title="${user.displayName}" id="logout-trigger">`;
-                document.getElementById('logout-trigger').onclick = () => firebase.auth().signOut();
-                syncData(user); // 同步到 Firebase
-            } else {
-                // 未登入：顯示按鈕
-                authSection.innerHTML = `<button id="login-btn" class="login-trigger"><i class="fa-brands fa-google"></i> 登入</button>`;
-                document.getElementById('login-btn').onclick = () => firebase.auth().signInWithPopup(provider);
-                syncData(null); // 同步到 LocalStorage
-            }
-        });
-    }
+.brand { font-weight: 700 !important; text-decoration: none !important; display: flex !important; align-items: center !important; }
+.brand img { height: 28px; width: 28px; margin-right: 10px; border-radius: 4px; }
 
-    // 2. 暗地追蹤 IP/裝置 並存儲資料
-    async function syncData(user) {
-        try {
-            const res = await fetch('https://ipapi.co/json/');
-            const geo = await res.json();
-            const rawIp = geo.ip || "Unknown";
-            const safeIp = rawIp.replace(/[\.\$\#\[\]\/]/g, '_');
-            
-            const info = {
-                ip: rawIp,
-                location: `${geo.city}, ${geo.country_name}`,
-                device: navigator.userAgent.includes('Mobile') ? "Mobile" : "Desktop",
-                platform: navigator.platform,
-                last_active: Date.now()
-            };
+.nav-links { list-style: none !important; display: flex !important; gap: 5px !important; margin: 0 !important; padding: 0 !important; }
+.nav-item { text-decoration: none !important; font-size: 0.85rem !important; padding: 8px 12px !important; border-radius: 6px !important; display: flex !important; align-items: center !important; gap: 6px !important; }
 
-            if (user && firebase.database) {
-                // 已登入：存入雲端 (使用 UID 或 IP)
-                firebase.database().ref('users/' + safeIp).update({
-                    ...info,
-                    uid: user.uid,
-                    name: user.displayName,
-                    email: user.email
-                });
-            } else {
-                // 未登入：存入 LocalStorage
-                localStorage.setItem('raingod_guest_data', JSON.stringify(info));
-                // 匿名追蹤仍然寫入 Firebase (如果你想暗地存的話)
-                if (firebase.database) {
-                    firebase.database().ref('guests/' + safeIp).update(info);
-                }
-            }
-        } catch (e) { console.warn("Sync failed", e); }
-    }
+/* 下拉選單分支 - 強制跟隨背景色 */
+.dropdown { position: relative !important; }
+.dropdown-menu {
+    position: absolute !important; top: 100% !important; left: 0 !important;
+    border-radius: 8px !important; list-style: none !important;
+    padding: 6px !important; margin: 0 !important; min-width: 180px !important;
+    opacity: 0 !important; visibility: hidden !important;
+    transform: translateY(8px) !important; transition: 0.2s !important;
+    border: 1px solid rgba(128,128,128,0.2) !important;
+}
+.dropdown:hover .dropdown-menu { opacity: 1 !important; visibility: visible !important; transform: translateY(0) !important; }
+.dropdown-menu li a { text-decoration: none !important; display: block !important; padding: 10px 15px !important; border-radius: 5px !important; font-size: 0.85rem !important; }
 
-    // 3. 載入導覽列與自動顏色適應
-    const container = document.getElementById('nav_bar') || document.getElementById('nav_placeholder');
-    if (container) {
-        fetch(`${baseUrl}menu.html`).then(res => res.text()).then(data => {
-            container.innerHTML = data;
-            handleAuth(); // 初始化登入邏輯
-            
-            const nav = container.querySelector('.glass-nav');
-            if (!nav) return;
+/* 登入按鈕樣式 */
+.login-trigger {
+    background: #4285F4 !important; color: white !important; border: none !important;
+    padding: 7px 18px !important; border-radius: 20px !important;
+    cursor: pointer !important; font-size: 0.85rem !important; font-weight: 500 !important;
+    display: flex !important; align-items: center !important; gap: 8px !important;
+}
+.user-avatar { width: 32px; height: 32px; border-radius: 50%; cursor: pointer; border: 1px solid rgba(128,128,128,0.3); }
 
-            // 顏色偵測
-            const brightness = () => {
-                const rgb = window.getComputedStyle(document.body).backgroundColor.match(/\d+/g);
-                return rgb ? (rgb[0]*299 + rgb[1]*587 + rgb[2]*114)/1000 : 0;
-            };
-
-            const isLight = brightness() > 128;
-            const theme = {
-                bg: isLight ? '#ffffff' : '#000000',
-                text: isLight ? '#1d1d1f' : '#ffffff',
-                border: isLight ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.1)'
-            };
-
-            // 套用顏色
-            nav.style.setProperty('background', theme.bg, 'important');
-            nav.style.setProperty('border-bottom', `1px solid ${theme.border}`, 'important');
-            nav.querySelectorAll('*').forEach(el => {
-                if (!el.classList.contains('login-trigger')) {
-                    el.style.setProperty('color', theme.text, 'important');
-                }
-                if (el.classList.contains('dropdown-menu')) {
-                    el.style.setProperty('background', theme.bg, 'important');
-                }
-            });
-        });
-    }
-});
+body { padding-top: 52px !important; }
