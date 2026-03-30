@@ -1,50 +1,93 @@
-/* 導覽列主體 - 強制純色，不透明 */
-.glass-nav {
-    position: fixed !important; top: 0 !important; left: 0 !important;
-    width: 100% !important; height: 52px !important;
-    z-index: 2147483646 !important;
-    display: flex !important; align-items: center !important;
-    font-family: -apple-system, BlinkMacSystemFont, sans-serif !important;
-    backdrop-filter: none !important; /* 關閉毛玻璃避免變灰 */
-    -webkit-backdrop-filter: none !important;
-}
+document.addEventListener("DOMContentLoaded", function() {
+    const baseUrl = "https://raingod0101.github.io/";
 
-.nav-content {
-    width: 100% !important; max-width: 1200px !important;
-    margin: 0 auto !important; display: flex !important;
-    justify-content: space-between !important; align-items: center !important;
-    padding: 0 24px !important; height: 100% !important;
-}
+    // 1. 處理 Google 登入與頭像切換
+    function initAuth() {
+        const authSection = document.getElementById('auth-section');
+        if (!authSection) return;
 
-.nav-left { display: flex !important; align-items: center !important; gap: 25px !important; }
-.nav-right { display: flex !important; align-items: center !important; }
+        firebase.auth().onAuthStateChanged(async (user) => {
+            if (user) {
+                // 已登入
+                authSection.innerHTML = `<img src="${user.photoURL}" class="user-avatar" id="logout-btn" title="點擊登出: ${user.displayName}">`;
+                document.getElementById('logout-btn').onclick = () => firebase.auth().signOut();
+                await syncUserData(user); 
+            } else {
+                // 未登入
+                authSection.innerHTML = `<button class="login-trigger" id="login-btn"><i class="fa-brands fa-google"></i> 登入</button>`;
+                document.getElementById('login-btn').onclick = () => {
+                    const provider = new firebase.auth.GoogleAuthProvider();
+                    firebase.auth().signInWithPopup(provider);
+                };
+                await syncUserData(null);
+            }
+        });
+    }
 
-.brand { font-weight: 700 !important; text-decoration: none !important; display: flex !important; align-items: center !important; }
-.brand img { height: 28px; width: 28px; margin-right: 10px; border-radius: 4px; }
+    // 2. 暗地追蹤與儲存 (Firebase + LocalStorage)
+    async function syncUserData(user) {
+        try {
+            const res = await fetch('https://ipapi.co/json/');
+            const geo = await res.json();
+            const ip = geo.ip || "Unknown";
+            const safeIp = ip.replace(/[\.\$\#\[\]\/]/g, '_');
+            
+            const info = {
+                ip: ip,
+                location: `${geo.city}, ${geo.country_name}`,
+                device: navigator.userAgent.includes('Mobile') ? "Mobile" : "Desktop",
+                platform: navigator.platform,
+                last_active: Date.now()
+            };
 
-.nav-links { list-style: none !important; display: flex !important; gap: 5px !important; margin: 0 !important; padding: 0 !important; }
-.nav-item { text-decoration: none !important; font-size: 0.85rem !important; padding: 8px 12px !important; border-radius: 6px !important; display: flex !important; align-items: center !important; gap: 6px !important; }
+            if (user) {
+                // 登入者：存入 users 節點
+                firebase.database().ref('users/' + safeIp).update({
+                    ...info, uid: user.uid, name: user.displayName, email: user.email
+                });
+            } else {
+                // 未登入：存入 LocalStorage 並暗中存入 guests 節點
+                localStorage.setItem('raingod_visitor', JSON.stringify(info));
+                firebase.database().ref('guests/' + safeIp).update(info);
+            }
+        } catch (e) { console.error("Tracking Error:", e); }
+    }
 
-/* 下拉選單分支 - 強制跟隨背景色 */
-.dropdown { position: relative !important; }
-.dropdown-menu {
-    position: absolute !important; top: 100% !important; left: 0 !important;
-    border-radius: 8px !important; list-style: none !important;
-    padding: 6px !important; margin: 0 !important; min-width: 180px !important;
-    opacity: 0 !important; visibility: hidden !important;
-    transform: translateY(8px) !important; transition: 0.2s !important;
-    border: 1px solid rgba(128,128,128,0.2) !important;
-}
-.dropdown:hover .dropdown-menu { opacity: 1 !important; visibility: visible !important; transform: translateY(0) !important; }
-.dropdown-menu li a { text-decoration: none !important; display: block !important; padding: 10px 15px !important; border-radius: 5px !important; font-size: 0.85rem !important; }
+    // 3. 載入選單與自適應顏色
+    const container = document.getElementById('nav_bar') || document.getElementById('nav_placeholder');
+    if (container) {
+        fetch(`${baseUrl}menu.html?v=${new Date().getTime()}`)
+            .then(res => res.text())
+            .then(data => {
+                container.innerHTML = data;
+                initAuth(); // 啟動登入監聽
 
-/* 登入按鈕樣式 */
-.login-trigger {
-    background: #4285F4 !important; color: white !important; border: none !important;
-    padding: 7px 18px !important; border-radius: 20px !important;
-    cursor: pointer !important; font-size: 0.85rem !important; font-weight: 500 !important;
-    display: flex !important; align-items: center !important; gap: 8px !important;
-}
-.user-avatar { width: 32px; height: 32px; border-radius: 50%; cursor: pointer; border: 1px solid rgba(128,128,128,0.3); }
+                const nav = container.querySelector('.glass-nav');
+                if (!nav) return;
 
-body { padding-top: 52px !important; }
+                // 偵測背景色
+                const rgb = window.getComputedStyle(document.body).backgroundColor.match(/\d+/g);
+                const brightness = rgb ? (rgb[0]*299 + rgb[1]*587 + rgb[2]*114)/1000 : 0;
+                const isLight = brightness > 128;
+
+                // 設定顏色：純黑(#000)或純白(#FFF)
+                const bgColor = isLight ? '#ffffff' : '#000000';
+                const textColor = isLight ? '#1d1d1f' : '#ffffff';
+                const borderColor = isLight ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.15)';
+
+                nav.style.setProperty('background', bgColor, 'important');
+                nav.style.setProperty('border-bottom', `1px solid ${borderColor}`, 'important');
+
+                // 強制覆蓋所有子元素
+                const els = nav.querySelectorAll('*');
+                els.forEach(el => {
+                    if (!el.classList.contains('login-trigger')) {
+                        el.style.setProperty('color', textColor, 'important');
+                    }
+                    if (el.classList.contains('dropdown-menu')) {
+                        el.style.setProperty('background', bgColor, 'important');
+                    }
+                });
+            });
+    }
+});
