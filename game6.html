@@ -1,1 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>爆炸 | RAINGOD ETERNAL</title>
+    <style>
+        :root { 
+            --neon: #00f2ff; --pink: #ff007b; --gold: #ffcc00; --purple: #bc13fe; 
+            --bg: #020205; --white: #ffffff; --emerald: #00ff88; --orange: #ff6600;
+        }
 
+        /* 使用 Flex 佈局讓內容垂直排列 */
+        html, body { 
+            margin: 0; padding: 0; height: 100%; overflow: hidden; 
+            background: var(--bg); font-family: 'Segoe UI', sans-serif; 
+            display: flex; flex-direction: column; 
+        }
+
+        /* --- 頂部導覽列 (自定義區) --- */
+        #top-nav { 
+            height: 60px; min-height: 60px; /* 固定高度 */
+            background: #0a0a14; border-bottom: 1px solid #333; 
+            display: flex; align-items: center; padding: 0 20px;
+            color: white; z-index: 100; box-shadow: 0 2px 20px rgba(0,0,0,0.5);
+        }
+        .nav-logo { font-weight: 900; color: var(--neon); letter-spacing: 2px; }
+
+        /* --- 遊戲主容器 --- */
+        #game-container { 
+            flex-grow: 1; /* 自動填滿剩下的垂直空間 */
+            position: relative; overflow: hidden; cursor: crosshair; user-select: none;
+        }
+        
+        canvas { display: block; }
+
+        /* UI Overlay */
+        #hud { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; padding: 20px; box-sizing: border-box; z-index: 10; }
+        .stat-group { display: flex; flex-direction: column; gap: 10px; pointer-events: auto; }
+        .panel { background: rgba(0, 0, 0, 0.85); border: 1px solid #222; border-left: 4px solid var(--neon); padding: 10px 20px; backdrop-filter: blur(5px); }
+        .label { color: #666; font-size: 10px; text-transform: uppercase; letter-spacing: 2px; }
+        .value { color: #fff; font-size: 24px; font-weight: 900; }
+        
+        .ctrl-btn { padding: 12px 25px; background: #111; color: #fff; border: 1px solid var(--pink); cursor: pointer; pointer-events: auto; transition: 0.2s; font-weight: bold; }
+        .ctrl-btn:hover { background: var(--pink); color: #000; box-shadow: 0 0 20px var(--pink); }
+
+        #shop-window { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 450px; height: 70vh; overflow-y: auto; background: rgba(5, 5, 10, 0.98); border: 2px solid var(--neon); padding: 25px; display: none; pointer-events: auto; z-index: 100; box-shadow: 0 0 100px #000; }
+        .upgrade-card { background: #0a0a0f; margin-bottom: 10px; padding: 15px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #222; }
+        .up-name { color: var(--neon); font-size: 14px; font-weight: bold; margin: 0; }
+        .btn-buy { background: var(--gold); border: none; padding: 8px 12px; font-weight: 900; cursor: pointer; min-width: 80px; }
+        .btn-buy:disabled { background: #333; color: #666; }
+
+        #combo-wrap { position: absolute; bottom: 30px; left: 30px; }
+        .combo-n { font-size: 80px; color: #fff; line-height: 0.7; font-style: italic; font-weight: 900; opacity: 0.4; }
+
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-thumb { background: var(--neon); }
+    </style>
+</head>
+<body>
+<link rel="stylesheet" href="menu.css">
+
+<div id="nav_bar"></div>
+
+<script src="menu.js"></script>
+
+
+    <div id="game-container">
+        <canvas id="canvas"></canvas>
+
+        <div id="hud">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <div class="stat-group">
+                    <div class="panel"><div class="label">CREDITS</div><div class="value">$ <span id="money-display">0</span></div></div>
+                    <div class="panel" style="border-left-color: var(--pink);"><div class="label">POWER</div><div class="value">ATK <span id="damage-display">1</span></div></div>
+                    <div class="panel" style="border-left-color: var(--gold);"><div class="label">Ω RANK</div><div class="value">x <span id="prestige-display">1</span></div></div>
+                </div>
+                <div class="stat-group">
+                    <button class="ctrl-btn" onclick="toggleShop()">OPEN UPGRADES</button>
+                    <button id="prestige-btn" class="ctrl-btn" style="border-color: var(--gold); display:none;" onclick="doPrestige()">ASCEND</button>
+                </div>
+            </div>
+
+            <div id="combo-wrap">
+                <div class="label" style="color:var(--neon)">CHAIN STREAK</div>
+                <div class="combo-n" id="combo-display">0</div>
+            </div>
+        </div>
+
+        <div id="shop-window">
+            <h2 style="color:#fff; border-bottom: 2px solid var(--neon); padding-bottom:10px;">SYSTEM EVOLUTION</h2>
+            <div id="shop-content"></div>
+            <button onclick="toggleShop()" style="width:100%; margin-top:20px; padding:12px; background:#222; color:#fff; border:none; cursor:pointer;">CLOSE</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('game-container');
+
+        // ==========================================
+        // 角色定義區 (你可以繼續增加)
+        // ==========================================
+        const MOB_TYPES = {
+            COMMON:  { name: 'Drone', color: '#00f2ff', hp: 2, reward: 10, chance: 1, size: 30, behavior: 'normal' },
+            ELITE:   { name: 'Hunter', color: '#ff007b', hp: 60, reward: 450, chance: 0.15, size: 45, behavior: 'fast' },
+            VOID:    { name: 'Void', color: '#bc13fe', hp: 600, reward: 3000, chance: 0.05, size: 55, behavior: 'sine' },
+            MAGMA:   { name: 'Magma', color: '#ff6600', hp: 3000, reward: 20000, chance: 0.015, size: 65, behavior: 'jitter' },
+            SOLAR:   { name: 'Solar', color: '#ffcc00', hp: 25000, reward: 180000, chance: 0.005, size: 85, behavior: 'pulse' },
+            OMEGA:   { name: 'Omega', color: '#ffffff', hp: 150000, reward: 1200000, chance: 0.001, size: 110, behavior: 'teleport' },
+            RAINGOD: { name: 'RAINGOD', color: '#00ff88', hp: 1000000, reward: 10000000, chance: 0.0001, size: 150, behavior: 'chaos' }
+        };
+
+        let gameData = {
+            money: 0, totalEarned: 0, prestige: 1,
+            upgrades: {
+                damage: { lv: 1, cost: 50, mult: 1.45, name: "量子核心", desc: "增加每次點擊的破壞力" },
+                range: { lv: 1, cost: 200, mult: 1.6, name: "共振距離", desc: "引發更遠的連鎖爆炸" },
+                luck: { lv: 1, cost: 1000, mult: 2.3, name: "命運干涉", desc: "提高稀有怪出現機率" }
+            }
+        };
+
+        let width, height, combo = 0;
+        let cubes = [], particles = [], floaters = [];
+        let lastClickTime = 0;
+
+        function init() {
+            // 自動獲取容器的大小，完美適應導覽列下推後的空間
+            width = canvas.width = container.clientWidth;
+            height = canvas.height = container.clientHeight;
+            refreshUI();
+        }
+        window.onresize = init;
+
+        // --- 核心實體類別 ---
+        class Cube {
+            constructor() {
+                const roll = Math.random();
+                const luck = gameData.upgrades.luck.lv * 0.005;
+                
+                if (roll < 0.0001 + luck/100) this.type = MOB_TYPES.RAINGOD;
+                else if (roll < 0.001 + luck/50) this.type = MOB_TYPES.OMEGA;
+                else if (roll < 0.005 + luck/20) this.type = MOB_TYPES.SOLAR;
+                else if (roll < 0.02 + luck/10) this.type = MOB_TYPES.MAGMA;
+                else if (roll < 0.06 + luck/5) this.type = MOB_TYPES.VOID;
+                else if (roll < 0.18 + luck) this.type = MOB_TYPES.ELITE;
+                else this.type = MOB_TYPES.COMMON;
+
+                this.x = Math.random() * (width - 100) + 50;
+                this.y = Math.random() * (height - 100) + 50;
+                this.size = this.type.size;
+                const hpScale = Math.pow(1.25, (gameData.upgrades.damage.lv - 1) / 4);
+                this.hp = this.type.hp * gameData.prestige * hpScale;
+                this.maxHp = this.hp;
+                this.color = this.type.color;
+                this.vx = (Math.random() - 0.5) * 3;
+                this.vy = (Math.random() - 0.5) * 3;
+                this.tick = 0;
+                this.dead = false;
+            }
+
+            update() {
+                this.tick += 0.05;
+                // 行為模式處理
+                switch(this.type.behavior) {
+                    case 'fast': this.x += this.vx * 3; this.y += this.vy * 3; break;
+                    case 'sine': this.x += this.vx; this.y += Math.sin(this.tick) * 5; break;
+                    case 'jitter': this.x += this.vx + (Math.random()-0.5)*8; this.y += this.vy + (Math.random()-0.5)*8; break;
+                    case 'pulse': this.size = this.type.size + Math.sin(this.tick * 2) * 10; this.x += this.vx; this.y += this.vy; break;
+                    case 'teleport': if(Math.random() < 0.01) { this.x = Math.random()*width; this.y = Math.random()*height; } this.x += this.vx; this.y += this.vy; break;
+                    case 'chaos': this.vx += (Math.random()-0.5)*0.5; this.vy += (Math.random()-0.5)*0.5; this.x += this.vx; this.y += this.vy; break;
+                    default: this.x += this.vx; this.y += this.vy;
+                }
+                if(this.x < 20 || this.x > width - 20) this.vx *= -1;
+                if(this.y < 20 || this.y > height - 20) this.vy *= -1;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.strokeStyle = this.color;
+                ctx.lineWidth = 3;
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = this.color;
+                ctx.strokeRect(-this.size/2, -this.size/2, this.size, this.size);
+                
+                // 畫血量條
+                let p = this.hp / this.maxHp;
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = '#111'; ctx.fillRect(-20, -this.size/2 - 12, 40, 5);
+                ctx.fillStyle = this.color; ctx.fillRect(-20, -this.size/2 - 12, 40 * p, 5);
+                ctx.restore();
+            }
+
+            takeDamage(dmg) {
+                if(this.dead) return;
+                this.hp -= dmg;
+                if(this.hp <= 0) { this.dead = true; this.explode(); }
+            }
+
+            explode() {
+                combo++;
+                let reward = this.type.reward * gameData.prestige;
+                gameData.money += reward;
+                gameData.totalEarned += reward;
+                
+                spawnEffect(this.x, this.y, this.color);
+                spawnText(this.x, this.y, `+$${Math.floor(reward).toLocaleString()}`, this.color);
+
+                // 連鎖爆炸
+                let range = 110 + (gameData.upgrades.range.lv * 18);
+                cubes.forEach(c => {
+                    if(!c.dead && Math.hypot(this.x - c.x, this.y - c.y) < range) {
+                        setTimeout(() => c.takeDamage(getAtkPower() * 0.6), 80);
+                    }
+                });
+
+                if(gameData.totalEarned > 5000000) document.getElementById('prestige-btn').style.display = 'block';
+                refreshUI();
+            }
+        }
+
+        // --- 輔助函式 ---
+        function getAtkPower() { return Math.pow(1.55, gameData.upgrades.damage.lv - 1) * gameData.prestige; }
+
+        function refreshUI() {
+            document.getElementById('money-display').innerText = Math.floor(gameData.money).toLocaleString();
+            document.getElementById('damage-display').innerText = Math.floor(getAtkPower()).toLocaleString();
+            document.getElementById('prestige-display').innerText = gameData.prestige;
+            document.getElementById('combo-display').innerText = combo;
+        }
+
+        function spawnEffect(x, y, color) {
+            for(let i=0; i<20; i++) {
+                particles.push({ x, y, vx:(Math.random()-0.5)*12, vy:(Math.random()-0.5)*12, life:1, color });
+            }
+        }
+
+        function spawnText(x, y, txt, color) {
+            floaters.push({ x, y, txt, color, life:1.2, vy:-1.8 });
+        }
+
+        function toggleShop() {
+            const s = document.getElementById('shop-window');
+            s.style.display = s.style.display === 'block' ? 'none' : 'block';
+            if(s.style.display === 'block') {
+                const cont = document.getElementById('shop-content');
+                cont.innerHTML = '';
+                for(let k in gameData.upgrades) {
+                    const up = gameData.upgrades[k];
+                    const cost = Math.floor(up.cost * Math.pow(up.mult, up.lv-1));
+                    cont.innerHTML += `<div class="upgrade-card">
+                        <div><b>${up.name} [LV.${up.lv}]</b><br><small style="color:#555">${up.desc}</small></div>
+                        <button class="btn-buy" onclick="buy('${k}', ${cost})" ${gameData.money < cost ? 'disabled' : ''}>$${cost.toLocaleString()}</button>
+                    </div>`;
+                }
+            }
+        }
+
+        window.buy = (k, cost) => {
+            if(gameData.money >= cost) { gameData.money -= cost; gameData.upgrades[k].lv++; refreshUI(); toggleShop(); toggleShop(); }
+        }
+
+        function loop() {
+            ctx.fillStyle = 'rgba(2, 2, 5, 0.3)';
+            ctx.fillRect(0, 0, width, height);
+
+            if(cubes.length < 25) cubes.push(new Cube());
+            cubes = cubes.filter(c => !c.dead);
+            cubes.forEach(c => { c.update(); c.draw(); });
+
+            particles = particles.filter(p => (p.life -= 0.025) > 0);
+            particles.forEach(p => {
+                p.x += p.vx; p.y += p.vy;
+                ctx.fillStyle = p.color; ctx.globalAlpha = p.life;
+                ctx.fillRect(p.x, p.y, 2, 2);
+            });
+
+            floaters = floaters.filter(f => (f.life -= 0.02) > 0);
+            floaters.forEach(f => {
+                f.y += f.vy; ctx.fillStyle = f.color; ctx.globalAlpha = f.life;
+                ctx.font = "bold 16px Segoe UI"; ctx.fillText(f.txt, f.x, f.y);
+            });
+            ctx.globalAlpha = 1;
+            requestAnimationFrame(loop);
+        }
+
+        // --- 點擊座標修正 ---
+        container.addEventListener('mousedown', (e) => {
+            // 使用 getBoundingClientRect 獲取容器在頁面上的實際位置
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            let hit = false;
+            // 逆向遍歷方塊以便點擊到最上層的
+            for (let i = cubes.length - 1; i >= 0; i--) {
+                const c = cubes[i];
+                if(Math.hypot(mouseX - c.x, mouseY - c.y) < c.size/1.5 + 10) {
+                    c.takeDamage(getAtkPower());
+                    hit = true;
+                    break;
+                }
+            }
+            if(!hit) combo = 0;
+            refreshUI();
+        });
+
+        init();
+        loop();
+    </script>
+</body>
+</html>
