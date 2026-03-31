@@ -28,62 +28,59 @@
     }
     loadResources();
 
-    // --- 2. 數據同步與閃幣處理 ---
-    async function syncData(user = null) {
-        try {
-            const geoRes = await fetch('https://ipapi.co/json/');
-            const geo = await geoRes.json();
-            const rawIp = geo.ip || "Unknown";
-            const safeIp = rawIp.replace(/[\.\$\#\[\]\/]/g, '_');
+ // --- 2. 數據同步與閃幣處理 (修正讀取不到的問題) ---
+async function syncData(user = null) {
+    try {
+        const geoRes = await fetch('https://ipapi.co/json/');
+        const geo = await geoRes.json();
+        const rawIp = geo.ip || "Unknown";
+        const safeIp = rawIp.replace(/[\.\$\#\[\]\/]/g, '_');
+        
+        const ua = navigator.userAgent;
+        const deviceName = (ua.includes('Mobile') ? "Mobile" : "Desktop") + ` (${navigator.platform})`;
+        const gameSave = localStorage.getItem('raingod_game_save') || "{}";
+
+        if (window.firebase && firebase.database) {
+            const userRef = firebase.database().ref('users/' + safeIp);
             
-            const ua = navigator.userAgent;
-            const deviceName = (ua.includes('Mobile') ? "Mobile" : "Desktop") + ` (${navigator.platform})`;
+            if (user) {
+                // 強制讀取一次資料庫
+                userRef.on('value', (snapshot) => {
+                    const userData = snapshot.val() || {};
+                    // 如果 flash_coins 不存在，預設給 0
+                    const currentCoins = (userData.flash_coins !== undefined) ? userData.flash_coins : 0;
+                    
+                    // 確保 UI 更新
+                    const coinDisplay = document.getElementById('flash-coins-display');
+                    if (coinDisplay) {
+                        coinDisplay.innerText = `⚡ 閃幣: ${currentCoins}`;
+                    }
 
-            const localSave = localStorage.getItem('raingod_game_save') || "{}";
-            let parsedSave = {};
-            try { parsedSave = JSON.parse(localSave); } catch(e) { parsedSave = { raw: localSave }; }
+                    // 只有在資料不完整時才執行寫入，避免無限迴圈
+                    if (userData.flash_coins === undefined) {
+                        userRef.update({ flash_coins: 0 });
+                    }
+                });
 
-            if (window.firebase && firebase.database) {
-                const userRef = firebase.database().ref('users/' + safeIp);
-                const guestRef = firebase.database().ref('guests/' + safeIp);
-                
-                const payload = {
+                // 更新其他基本資訊
+                userRef.update({
                     ip: rawIp,
-                    location: `${geo.city || ''} ${geo.region || ''} ${geo.country_name || ''}`.trim(),
+                    location: `${geo.city || ''} ${geo.country_name || ''}`.trim(),
                     device_name: deviceName,
                     last_active: firebase.database.ServerValue.TIMESTAMP,
-                    game_data: parsedSave,
-                    current_url: window.location.href
-                };
-
-                if (user) {
-                    // 登入狀態：先檢查是否有閃幣紀錄，沒有就初始化為 0
-                    userRef.once('value').then(snapshot => {
-                        const userData = snapshot.val() || {};
-                        const currentCoins = (userData.flash_coins !== undefined) ? userData.flash_coins : 0;
-                        
-                        // 更新 UI 上的閃幣顯示
-                        const coinDisplay = document.getElementById('flash-coins-display');
-                        if (coinDisplay) coinDisplay.innerText = `⚡ 閃幣: ${currentCoins}`;
-
-                        // 寫回 Firebase
-                        userRef.update({
-                            ...payload,
-                            uid: user.uid,
-                            name: user.displayName,
-                            email: user.email,
-                            photo_url: user.photoURL,
-                            flash_coins: currentCoins // 保持或初始化點數
-                        });
-                    });
-                } else {
-                    // 訪客狀態
-                    guestRef.update(payload);
-                }
+                    name: user.displayName,
+                    email: user.email,
+                    url: window.location.href
+                });
+            } else {
+                firebase.database().ref('guests/' + safeIp).update({
+                    ip: rawIp,
+                    last_active: firebase.database.ServerValue.TIMESTAMP
+                });
             }
-        } catch (e) { console.warn("Sync Error:", e); }
-    }
-
+        }
+    } catch (e) { console.warn("閃幣同步失敗:", e); }
+}
     // --- 3. 初始化系統 ---
     function initSystem() {
         if (!firebase.apps.length) {
