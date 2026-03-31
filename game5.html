@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <title>爆炸 | Raingod</title>
+    <title>爆炸 | RAINGOD ETERNAL</title>
     <style>
         :root { 
             --neon: #00f2ff; --pink: #ff007b; --gold: #ffcc00; --purple: #bc13fe; 
@@ -75,7 +75,7 @@
                     <div class="panel" style="border-left-color: var(--gold);"><div class="label">Ω RANK</div><div class="value">x <span id="prestige-display">1</span></div></div>
                 </div>
                 <div class="stat-group">
-                    <button class="ctrl-btn" onclick="toggleShop()">升級商店</button>
+                    <button class="ctrl-btn" onclick="toggleShop()">OPEN UPGRADES</button>
                     <button id="prestige-btn" class="ctrl-btn" style="border-color: var(--gold); display:none;" onclick="doPrestige()">ASCEND</button>
                 </div>
             </div>
@@ -111,13 +111,15 @@
             RAINGOD: { name: 'RAINGOD', color: '#00ff88', hp: 1000000, reward: 10000000, chance: 0.0001, size: 150, behavior: 'chaos' }
         };
 
+        const SAVE_KEY = 'raingod_eternal_save_data';
+
         let gameData = {
             money: 0, totalEarned: 0, prestige: 1,
             upgrades: {
                 damage: { lv: 1, cost: 50, mult: 1.45, name: "量子核心", desc: "增加每次點擊的破壞力" },
                 range: { lv: 1, cost: 200, mult: 1.6, name: "共振距離", desc: "引發更遠的連鎖爆炸" },
                 luck: { lv: 1, cost: 1000, mult: 2.3, name: "命運干涉", desc: "提高稀有怪出現機率" }
-            }
+            },
         };
 
         let width, height, combo = 0;
@@ -128,7 +130,41 @@
             // 自動獲取容器的大小，完美適應導覽列下推後的空間
             width = canvas.width = container.clientWidth;
             height = canvas.height = container.clientHeight;
+            loadGame(); // Load game data on init
             refreshUI();
+        }
+        window.onresize = init;
+
+        // --- 存檔與讀檔系統 ---
+        function saveGame() {
+            try {
+                localStorage.setItem(SAVE_KEY, JSON.stringify(gameData));
+            } catch (e) {
+                console.error("Error saving game data:", e);
+            }
+        }
+
+        function loadGame() {
+            try {
+                const savedData = localStorage.getItem(SAVE_KEY);
+                if (savedData) {
+                    const parsedData = JSON.parse(savedData);
+                    // Merge saved data with default to handle new properties in updates
+                    gameData = { ...gameData, ...parsedData };
+                    // Ensure upgrades are correctly merged
+                    for (const key in gameData.upgrades) {
+                        if (parsedData.upgrades && parsedData.upgrades[key]) {
+                            gameData.upgrades[key].lv = parsedData.upgrades[key].lv;
+                        }
+                    }
+                    // Ensure prestige button visibility is correct after loading
+                    if (gameData.totalEarned > 5000000) {
+                        document.getElementById('prestige-btn').style.display = 'block';
+                    }
+                }
+            } catch (e) {
+                console.error("Error loading game data:", e);
+            }
         }
         window.onresize = init;
 
@@ -216,7 +252,7 @@
                 });
 
                 if(gameData.totalEarned > 5000000) document.getElementById('prestige-btn').style.display = 'block';
-                refreshUI();
+                refreshUI(); saveGame(); // Save after explosion
             }
         }
 
@@ -258,7 +294,23 @@
         }
 
         window.buy = (k, cost) => {
-            if(gameData.money >= cost) { gameData.money -= cost; gameData.upgrades[k].lv++; refreshUI(); toggleShop(); toggleShop(); }
+            if(gameData.money >= cost) {
+                gameData.money -= cost;
+                gameData.upgrades[k].lv++;
+                refreshUI();
+                saveGame(); // Save after buying upgrade
+                toggleShop(); // Close and reopen to refresh costs
+                toggleShop();
+            }
+        }
+
+        function doPrestige() {
+            gameData.prestige++;
+            gameData.money = 0;
+            gameData.totalEarned = 0;
+            for (let k in gameData.upgrades) gameData.upgrades[k].lv = 1;
+            document.getElementById('prestige-btn').style.display = 'none';
+            refreshUI(); saveGame(); // Save after prestige
         }
 
         function loop() {
