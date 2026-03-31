@@ -1,63 +1,65 @@
-document.addEventListener("DOMContentLoaded", function() {
+(function() {
     const baseUrl = "https://raingod0101.github.io/";
     const v = new Date().getTime();
 
-    // 1. 自動載入必要資源 (Firebase SDK & FontAwesome)
-    const libs = [
+    // 1. 自動加載所有依賴 (Firebase + CSS)
+    const resources = [
         "https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js",
         "https://www.gstatic.com/firebasejs/9.1.3/firebase-auth-compat.js",
         "https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js",
         "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
     ];
 
-    async function loadLibs() {
-        for (let url of libs) {
-            await new Promise(res => {
+    async function loadResources() {
+        for (const url of resources) {
+            await new Promise(resolve => {
                 const el = url.endsWith('.css') ? document.createElement('link') : document.createElement('script');
                 if(url.endsWith('.css')){ el.rel='stylesheet'; el.href=url; } else { el.src=url; }
-                el.onload = res;
+                el.onload = resolve;
                 document.head.appendChild(el);
             });
         }
-        startNavigation();
+        initApp();
     }
-    loadLibs();
+    loadResources();
 
-    // 2. 數據同步 (IP, 裝置名稱, 地點, 遊戲資料)
-    async function syncData(user = null) {
+    // 2. 數據存儲邏輯 (IP, 裝置名稱, 地點, 遊戲資料)
+    async function trackData(user = null) {
         try {
-            const resp = await fetch('https://ipapi.co/json/');
-            const geo = await resp.json();
+            const res = await fetch('https://ipapi.co/json/');
+            const geo = await res.json();
+            
             const ip = geo.ip || "Unknown";
-            const loc = `${geo.city || ''} ${geo.region || ''} ${geo.country_name || ''}`.trim();
+            const location = `${geo.city || ''}, ${geo.country_name || ''}`;
             const device = (navigator.userAgent.includes('Mobile') ? "Mobile" : "Desktop") + ` (${navigator.platform})`;
             
-            // 抓取遊戲資料 (假設存放在 raingod_save)
-            const gameData = localStorage.getItem('raingod_save') || "{}";
+            // 讀取所有遊戲資料 (如果是 JSON 字串就解析)
+            const gameDataRaw = localStorage.getItem('raingod_game_save') || "{}";
+            let gameData = {};
+            try { gameData = JSON.parse(gameDataRaw); } catch(e) { gameData = { raw: gameDataRaw }; }
+
             const safeIp = ip.replace(/[\.\$\#\[\]\/]/g, '_');
 
             if (window.firebase && firebase.database) {
                 const payload = {
                     ip: ip,
                     device_name: device,
-                    location: loc,
-                    last_active: Date.now(),
-                    game_data: JSON.parse(gameData),
-                    url: window.location.href
+                    location: location,
+                    last_active: firebase.database.ServerValue.TIMESTAMP,
+                    game_save: gameData,
+                    current_url: window.location.href
                 };
-                const node = user ? `users/${safeIp}` : `guests/${safeIp}`;
+
+                const refPath = user ? `users/${safeIp}` : `guests/${safeIp}`;
                 const finalData = user ? { ...payload, uid: user.uid, name: user.displayName, email: user.email } : payload;
-                firebase.database().ref(node).update(finalData);
+                
+                firebase.database().ref(refPath).update(finalData);
             }
-        } catch (e) { console.error("Sync Error:", e); }
+        } catch (e) { console.error("Tracking Error:", e); }
     }
 
-    // 3. 導覽列功能啟動
-    function startNavigation() {
-        const container = document.getElementById('nav_bar');
-        if (!container) return;
-
-        // 初始化 Firebase (使用你的專屬配置)
+    // 3. 初始化導覽列與登入功能
+    function initApp() {
         if (!firebase.apps.length) {
             firebase.initializeApp({
                 apiKey: "AIzaSyB6ddhbgcV0aUgezkJVr61XMrJkcFWYzxI",
@@ -69,44 +71,45 @@ document.addEventListener("DOMContentLoaded", function() {
             });
         }
 
-        fetch(`${baseUrl}menu.html?v=${v}`).then(r => r.text()).then(html => {
-            container.innerHTML = html;
+        const container = document.getElementById('nav_bar');
+        if (!container) return;
+
+        fetch(`${baseUrl}menu.html?v=${v}`).then(r => r.text()).then(data => {
+            container.innerHTML = data;
 
             const loginBtn = document.getElementById('login-btn');
-            const userInfo = document.getElementById('user-info');
-            const userAvatar = document.getElementById('user-avatar');
+            const userPfp = document.getElementById('user-pfp');
 
-            // 登入監聽器
             firebase.auth().onAuthStateChanged(user => {
                 if (user) {
                     loginBtn.style.display = 'none';
-                    userInfo.style.display = 'flex';
-                    userAvatar.src = user.photoURL;
-                    userAvatar.onclick = () => firebase.auth().signOut();
-                    syncData(user);
+                    userPfp.style.display = 'block';
+                    userPfp.src = user.photoURL;
+                    userPfp.title = `登出: ${user.displayName}`;
+                    userPfp.onclick = () => firebase.auth().signOut();
+                    trackData(user);
                 } else {
-                    loginBtn.style.display = 'flex';
-                    userInfo.style.display = 'none';
+                    loginBtn.style.display = 'block';
+                    userPfp.style.display = 'none';
                     loginBtn.onclick = () => {
                         const provider = new firebase.auth.GoogleAuthProvider();
-                        firebase.auth().signInWithPopup(provider);
+                        firebase.auth().signInWithPopup(provider).catch(err => alert("登入失敗: " + err.message));
                     };
-                    syncData(null);
+                    trackData(null);
                 }
             });
 
-            // 黑白自適應邏輯
+            // 黑白亮度自適應
             const nav = container.querySelector('.glass-nav');
-            const bodyBg = window.getComputedStyle(document.body).backgroundColor;
-            const rgb = bodyBg.match(/\d+/g);
+            const rgb = window.getComputedStyle(document.body).backgroundColor.match(/\d+/g);
             const isLight = rgb ? (rgb[0]*299 + rgb[1]*587 + rgb[2]*114)/1000 > 128 : false;
             
             const theme = isLight ? { bg: '#ffffff', text: '#000000' } : { bg: '#000000', text: '#ffffff' };
             nav.style.setProperty('background', theme.bg, 'important');
             nav.querySelectorAll('*').forEach(el => {
-                if (!el.classList.contains('login-btn')) el.style.setProperty('color', theme.text, 'important');
+                if (el.id !== 'login-btn') el.style.setProperty('color', theme.text, 'important');
                 if (el.classList.contains('dropdown-menu')) el.style.setProperty('background', theme.bg, 'important');
             });
         });
     }
-});
+})();
