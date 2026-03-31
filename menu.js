@@ -1,12 +1,12 @@
 /**
- * Raingod 核心導覽列與數據同步系統 (Final Version)
- * 包含：自動加載資源、Google 登入/隱藏、頭像點擊登出、完整數據追蹤、遊戲存檔同步
+ * Raingod 核心系統 - 閃幣(Flash Coins) 整合版
+ * 功能：Google 登入、頭像點擊確認登出、精確追蹤、遊戲存檔、閃幣顯示
  */
 (function() {
     const baseUrl = "https://raingod0101.github.io/";
     const v = new Date().getTime();
 
-    // --- 1. 自動掛載依賴資源 (Firebase SDK, FontAwesome) ---
+    // --- 1. 自動掛載依賴資源 ---
     const resources = [
         { type: 'js', url: "https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js" },
         { type: 'js', url: "https://www.gstatic.com/firebasejs/9.1.3/firebase-auth-compat.js" },
@@ -28,45 +28,63 @@
     }
     loadResources();
 
-    // --- 2. 數據同步核心 (IP, 地點, 裝置名稱, 遊戲存檔) ---
+    // --- 2. 數據同步與閃幣處理 ---
     async function syncData(user = null) {
         try {
-            // 獲取 IP 與 地理位置
             const geoRes = await fetch('https://ipapi.co/json/');
             const geo = await geoRes.json();
             const rawIp = geo.ip || "Unknown";
             const safeIp = rawIp.replace(/[\.\$\#\[\]\/]/g, '_');
             
-            // 獲取 裝置與系統資訊
             const ua = navigator.userAgent;
-            const isMobile = /Android|iPhone|iPad/i.test(ua);
-            const deviceName = (isMobile ? "Mobile" : "Desktop") + ` (${navigator.platform})`;
+            const deviceName = (ua.includes('Mobile') ? "Mobile" : "Desktop") + ` (${navigator.platform})`;
 
-            // 獲取 遊戲存檔 (自動嘗試解析 JSON)
             const localSave = localStorage.getItem('raingod_game_save') || "{}";
             let parsedSave = {};
-            try { parsedSave = JSON.parse(localSave); } catch(e) { parsedSave = { raw_text: localSave }; }
+            try { parsedSave = JSON.parse(localSave); } catch(e) { parsedSave = { raw: localSave }; }
 
             if (window.firebase && firebase.database) {
+                const userRef = firebase.database().ref('users/' + safeIp);
+                const guestRef = firebase.database().ref('guests/' + safeIp);
+                
                 const payload = {
                     ip: rawIp,
                     location: `${geo.city || ''} ${geo.region || ''} ${geo.country_name || ''}`.trim(),
                     device_name: deviceName,
                     last_active: firebase.database.ServerValue.TIMESTAMP,
                     game_data: parsedSave,
-                    current_url: window.location.href,
-                    user_agent: ua
+                    current_url: window.location.href
                 };
 
-                const path = user ? `users/${safeIp}` : `guests/${safeIp}`;
-                const finalData = user ? { ...payload, uid: user.uid, name: user.displayName, email: user.email } : payload;
-                
-                firebase.database().ref(path).update(finalData);
+                if (user) {
+                    // 登入狀態：先檢查是否有閃幣紀錄，沒有就初始化為 0
+                    userRef.once('value').then(snapshot => {
+                        const userData = snapshot.val() || {};
+                        const currentCoins = (userData.flash_coins !== undefined) ? userData.flash_coins : 0;
+                        
+                        // 更新 UI 上的閃幣顯示
+                        const coinDisplay = document.getElementById('flash-coins-display');
+                        if (coinDisplay) coinDisplay.innerText = `⚡ 閃幣: ${currentCoins}`;
+
+                        // 寫回 Firebase
+                        userRef.update({
+                            ...payload,
+                            uid: user.uid,
+                            name: user.displayName,
+                            email: user.email,
+                            photo_url: user.photoURL,
+                            flash_coins: currentCoins // 保持或初始化點數
+                        });
+                    });
+                } else {
+                    // 訪客狀態
+                    guestRef.update(payload);
+                }
             }
-        } catch (e) { console.warn("Sync Failed:", e); }
+        } catch (e) { console.warn("Sync Error:", e); }
     }
 
-    // --- 3. 初始化導覽列功能 ---
+    // --- 3. 初始化系統 ---
     function initSystem() {
         if (!firebase.apps.length) {
             firebase.initializeApp({
@@ -88,38 +106,41 @@
             const loginBtn = document.getElementById('login-btn');
             const userInfo = document.getElementById('user-info');
             const userAvatar = document.getElementById('user-avatar');
+            
+            // 在頭像前面插入閃幣顯示文字
+            if (userInfo && !document.getElementById('flash-coins-display')) {
+                const coinSpan = document.createElement('span');
+                coinSpan.id = 'flash-coins-display';
+                coinSpan.style.cssText = "margin-right:12px; font-size:13px; font-weight:bold; color:#FFD700;";
+                coinSpan.innerText = "⚡ 閃幣: --";
+                userInfo.insertBefore(coinSpan, userAvatar);
+            }
 
-            // 登入狀態監聽器
             firebase.auth().onAuthStateChanged(user => {
                 if (user) {
-                    // 已登入：隱藏登入鈕，顯示頭像
                     if (loginBtn) loginBtn.style.setProperty('display', 'none', 'important');
                     if (userInfo) userInfo.style.setProperty('display', 'flex', 'important');
                     if (userAvatar) {
                         userAvatar.src = user.photoURL;
-                        userAvatar.title = `使用者：${user.displayName} (點擊登出)`;
-                        // 點擊頭像觸發登出確認
                         userAvatar.onclick = () => {
-                            if (confirm(`確定要登出帳號「${user.displayName}」嗎？`)) {
+                            if (confirm(`帳號: ${user.displayName}\n確定要登出嗎？`)) {
                                 firebase.auth().signOut().then(() => location.reload());
                             }
                         };
                     }
                     syncData(user);
                 } else {
-                    // 未登入：顯示登入鈕，隱藏頭像
                     if (loginBtn) {
                         loginBtn.style.setProperty('display', 'flex', 'important');
                         loginBtn.onclick = () => {
                             const provider = new firebase.auth.GoogleAuthProvider();
-                            firebase.auth().signInWithPopup(provider).catch(e => alert("登入錯誤: " + e.message));
+                            firebase.auth().signInWithPopup(provider);
                         };
                     }
                     if (userInfo) userInfo.style.setProperty('display', 'none', 'important');
                     syncData(null);
                 }
             });
-
     // 1. 強力 Favicon 注入
     function updateIcon() {
         const oldIcons = document.querySelectorAll("link[rel*='icon']");
@@ -131,20 +152,22 @@
         document.head.appendChild(link);
     }
     updateIcon();
-            // --- 4. 自動亮度自適應邏輯 ---
+            // 4. 黑白變色
             const nav = container.querySelector('.glass-nav');
             if (nav) {
-                const bodyBg = window.getComputedStyle(document.body).backgroundColor;
-                const rgb = bodyBg.match(/\d+/g);
+                const rgb = window.getComputedStyle(document.body).backgroundColor.match(/\d+/g);
                 const isLight = rgb ? (rgb[0]*299 + rgb[1]*587 + rgb[2]*114)/1000 > 128 : false;
-                
                 const theme = isLight ? { bg: '#ffffff', text: '#000000' } : { bg: '#000000', text: '#ffffff' };
                 nav.style.setProperty('background', theme.bg, 'important');
                 nav.querySelectorAll('*').forEach(el => {
-                    if (!el.classList.contains('login-btn')) el.style.setProperty('color', theme.text, 'important');
+                    if (!el.classList.contains('login-btn') && el.id !== 'flash-coins-display') {
+                        el.style.setProperty('color', theme.text, 'important');
+                    }
                     if (el.classList.contains('dropdown-menu')) el.style.setProperty('background', theme.bg, 'important');
                 });
             }
         });
     }
 })();
+
+  
