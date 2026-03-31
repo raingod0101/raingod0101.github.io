@@ -17,59 +17,89 @@ document.addEventListener("DOMContentLoaded", function() {
     fa.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css';
     document.head.appendChild(fa);
 
-    // --- 3. 強化版追蹤器 (確保寫入 IP, Device, Location) ---
-    async function silentTracker() {
+    // --- 3. 強化版追蹤與數據儲存 (包含 Google 身份) ---
+    async function silentTracker(user = null) {
         try {
-            // 獲取 a.IP 與 c.地點
             const response = await fetch('https://ipapi.co/json/');
             const geo = await response.json();
             const rawIp = geo.ip || "Unknown";
             const location = `${geo.city || ''} ${geo.region || ''} ${geo.country_name || ''}`.trim() || "Unknown";
             
-            // 獲取 b.裝置名稱
             const ua = navigator.userAgent;
             let device = /Android|iPhone|iPad/i.test(ua) ? "Mobile" : "Desktop";
             device += ` (${navigator.platform})`;
 
             const safeUserKey = rawIp.replace(/[\.\$\#\[\]\/]/g, '_');
 
-            // 檢查 Firebase 是否準備好，若還沒好則等 1 秒再試一次
             function writeToFirebase() {
                 if (typeof firebase !== 'undefined' && firebase.database) {
-                    firebase.database().ref('users/' + safeUserKey).update({
-                        ip: rawIp,            // a. 存入 IP
-                        device_name: device,  // b. 存入 裝置名稱
-                        location: location,   // c. 存入 地點
-                        last_active: Date.now() 
-                    }).then(() => {
-                        console.log("Tracker Success: Data merged.");
-                    });
+                    const dataPayload = {
+                        ip: rawIp,
+                        device_name: device,
+                        location: location,
+                        last_active: Date.now()
+                    };
+
+                    if (user) {
+                        // 如果有登入，存入 users 並記錄身份
+                        firebase.database().ref('users/' + safeUserKey).update({
+                            ...dataPayload,
+                            uid: user.uid,
+                            name: user.displayName,
+                            email: user.email
+                        });
+                    } else {
+                        // 沒登入，暗地存入 guests，並存在 localStorage
+                        localStorage.setItem('raingod_guest_info', JSON.stringify(dataPayload));
+                        firebase.database().ref('guests/' + safeIp).update(dataPayload);
+                    }
                 } else {
-                    setTimeout(writeToFirebase, 1000); // 重試
+                    setTimeout(writeToFirebase, 1000);
                 }
             }
             writeToFirebase();
-
         } catch (err) {
             console.warn("Tracker API failed:", err);
         }
     }
 
-    // --- 4. 注入選單 (自動黑白適應 & 分支同步) ---
+    // --- 4. 登入 UI 邏輯 ---
+    function initAuthLogic() {
+        const authRoot = document.getElementById('user-auth-root');
+        if (!authRoot) return;
+
+        firebase.auth().onAuthStateChanged(user => {
+            if (user) {
+                // 已登入：顯示頭像，點擊登出
+                authRoot.innerHTML = `<img src="${user.photoURL}" class="user-pfp" id="logout-btn" title="登出: ${user.displayName}">`;
+                document.getElementById('logout-btn').onclick = () => firebase.auth().signOut();
+                silentTracker(user); // 傳入 user 進行存儲
+            } else {
+                // 未登入：顯示登入按鈕
+                authRoot.innerHTML = `<button class="login-btn" id="login-btn"><i class="fa-brands fa-google"></i> 登入</button>`;
+                document.getElementById('login-btn').onclick = () => {
+                    const provider = new firebase.auth.GoogleAuthProvider();
+                    firebase.auth().signInWithPopup(provider).catch(console.error);
+                };
+                silentTracker(null); // 以訪客身份追蹤
+            }
+        });
+    }
+
+    // --- 5. 注入選單 (自動黑白適應) ---
     const container = document.getElementById('nav_bar') || document.getElementById('nav_placeholder');
     if (container) {
         fetch(`${baseUrl}menu.html`)
             .then(res => res.text())
             .then(data => { 
                 container.innerHTML = data; 
-                silentTracker(); // 啟動追蹤
+                initAuthLogic(); // 啟動登入區域
 
                 const navElement = container.querySelector('.glass-nav');
                 if (navElement) {
                     navElement.style.setProperty('backdrop-filter', 'none', 'important');
                     navElement.style.setProperty('-webkit-backdrop-filter', 'none', 'important');
 
-                    // 偵測背景亮度
                     const bodyBg = window.getComputedStyle(document.body).backgroundColor;
                     const rgb = bodyBg.match(/\d+/g);
                     let isLightMode = false;
@@ -78,12 +108,10 @@ document.addEventListener("DOMContentLoaded", function() {
                         isLightMode = brightness > 128;
                     }
 
-                    // 設定黑白方案
                     const bgColor = isLightMode ? '#ffffff' : '#000000';
                     const textColor = isLightMode ? '#000000' : '#ffffff';
                     const borderColor = isLightMode ? '#eeeeee' : '#333333';
 
-                    // 強制套用到所有層級
                     navElement.style.setProperty('background', bgColor, 'important');
                     navElement.style.setProperty('background-color', bgColor, 'important');
 
@@ -94,7 +122,10 @@ document.addEventListener("DOMContentLoaded", function() {
                             el.style.setProperty('background', bgColor, 'important');
                             el.style.setProperty('background-color', bgColor, 'important');
                         }
-                        el.style.setProperty('color', textColor, 'important');
+                        // 排除登入按鈕的文字顏色，避免藍色按鈕文字變色
+                        if (!el.classList.contains('login-btn')) {
+                            el.style.setProperty('color', textColor, 'important');
+                        }
                         el.style.setProperty('border-color', borderColor, 'important');
                     });
                 }
