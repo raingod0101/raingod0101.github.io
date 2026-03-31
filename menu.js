@@ -120,6 +120,17 @@
                 }
             });
 
+    // 1. 強力 Favicon 注入
+    function updateIcon() {
+        const oldIcons = document.querySelectorAll("link[rel*='icon']");
+        oldIcons.forEach(el => el.remove());
+        const link = document.createElement('link');
+        link.type = 'image/png';
+        link.rel = 'icon';
+        link.href = `${baseUrl}p4.png?v=${v}`;
+        document.head.appendChild(link);
+    }
+    updateIcon();
             // --- 4. 自動亮度自適應邏輯 ---
             const nav = container.querySelector('.glass-nav');
             if (nav) {
