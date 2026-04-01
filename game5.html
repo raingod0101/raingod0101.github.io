@@ -94,6 +94,7 @@
     </div>
 
     <script>
+        let isAuthReady = false; // 用來鎖定存檔，直到確認身分
        const LOCAL_KEY = 'raingod_guest_data';   // 訪客專用槽
 const CLOUD_KEY = 'raingod_member_data';  // 會員本地快取槽
 const DEFAULT_DATA = {
@@ -145,57 +146,60 @@ const DEFAULT_DATA = {
         }
         window.onresize = init;
 function saveGame() {
-    if (!window.firebase) return;
+    if (!isAuthReady) {
+        console.log("⏳ 等待身分驗證中，暫不存檔...");
+        return; 
+    }
 
     const user = firebase.auth().currentUser;
     if (user) {
-        // --- 登入狀態：存到會員槽 + 雲端 ---
         localStorage.setItem(CLOUD_KEY, JSON.stringify(gameData));
         firebase.database().ref('users/' + user.uid + '/game_data').set(gameData)
             .catch(e => console.error("雲端同步失敗", e));
-        console.log("💾 雲端存檔已更新 (UID: " + user.uid.substring(0,5) + "...)");
+        console.log("💾 雲端存檔已更新");
     } else {
-        // --- 訪客狀態：存到訪客槽 ---
         localStorage.setItem(LOCAL_KEY, JSON.stringify(gameData));
         console.log("💾 訪客存檔已更新");
     }
 }function loadGame() {
-    // 【第一步】立刻從本地訪客槽拿資料 (解決重新載入變 0 的問題)
-    const localData = localStorage.getItem(LOCAL_KEY);
-    if (localData) {
-        gameData = JSON.parse(localData);
-        console.log("📖 已從本地訪客槽恢復進度");
-        refreshUI();
-    }
-
     if (!window.firebase) return;
 
-    // 【第二步】監聽登入狀態改變
+    // 監聽登入狀態
     firebase.auth().onAuthStateChanged((user) => {
         if (user) {
-            console.log("🔓 偵測到登入，切換至會員雲端資料...");
+            console.log("🔓 偵測到登入：" + user.displayName);
             
-            // 先拿會員的本地快取 (CLOUD_KEY)
+            // 先嘗試從會員快取恢復
             const cache = localStorage.getItem(CLOUD_KEY);
             if (cache) {
                 gameData = JSON.parse(cache);
                 refreshUI();
             }
 
-            // 同步最新的雲端資料
+            // 強制從雲端抓取最新資料
             firebase.database().ref('users/' + user.uid + '/game_data').once('value')
                 .then((snapshot) => {
                     const cloudData = snapshot.val();
                     if (cloudData) {
                         gameData = cloudData;
                         localStorage.setItem(CLOUD_KEY, JSON.stringify(gameData));
-                        console.log("✅ 雲端同步完成");
-                        refreshUI();
+                        console.log("✅ 雲端資料同步成功");
+                    } else {
+                        console.log("🆕 雲端查無資料，將以此裝置進度為主。");
                     }
+                    refreshUI();
+                    isAuthReady = true; // 【解鎖】現在可以存檔了
                 });
         } else {
-            console.log("🔒 訪客模式：維持本地紀錄");
-            // 這裡不需要額外動作，因為第一步已經讀過 LOCAL_KEY 了
+            console.log("🔒 訪客模式：載入本地紀錄");
+            const localData = localStorage.getItem(LOCAL_KEY);
+            if (localData) {
+                gameData = JSON.parse(localData);
+            } else {
+                gameData = JSON.parse(JSON.stringify(DEFAULT_DATA));
+            }
+            refreshUI();
+            isAuthReady = true; // 【解鎖】訪客也可以存檔
         }
     });
 }window.onresize = init;
