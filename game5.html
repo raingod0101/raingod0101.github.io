@@ -150,37 +150,51 @@ function saveGame() {
         }
     }
 }
-
-       // --- 核心讀檔：優先拿雲端，沒登入拿本地 ---
+// --- 跨裝置同步強化版讀檔 ---
 function loadGame() {
-    // 1. 先從本地拿資料當作墊底 (防止網路慢的時候沒資料)
+    // 1. 先拿本地的墊底（舊裝置有的話就先用）
     const localData = localStorage.getItem(SAVE_KEY);
     if (localData) {
-        gameData = { ...gameData, ...JSON.parse(localData) };
+        try {
+            gameData = { ...gameData, ...JSON.parse(localData) };
+            refreshUI();
+        } catch(e) { console.error("解析本地存檔失敗", e); }
     }
 
-    // 2. 如果有登入，Firebase 會在 background 自動跑 syncData
-    // 這裡我們加一個監聽，當 Firebase 數據回來時，自動覆蓋掉目前的 gameData 並更新 UI
+    // 2. 處理雲端同步 (這是解決跨裝置沒東西的關鍵)
     if (window.firebase) {
         firebase.auth().onAuthStateChanged(user => {
             if (user) {
-                console.log("已登入，正在從雲端同步進度...");
-                // 這裡的邏輯 nav-main.js 已經幫你寫好寫入 LocalStorage 了
-                // 我們只需要在 1 秒後重新抓取一次 LocalStorage 即可確保資料最新
-                setTimeout(() => {
-                    const cloudSyncedData = localStorage.getItem(SAVE_KEY);
-                    if (cloudSyncedData) {
-                        gameData = { ...gameData, ...JSON.parse(cloudSyncedData) };
-                        refreshUI(); // 強制更新遊戲畫面上的數字
-                    }
-                }, 1000);
-            } else {
-                console.log("未登入，使用本地 LocalStorage 存檔");
+                console.log("偵測到登入，正在準備同步雲端存檔...");
+                
+                // 獲取目前 IP 並到 Firebase 拿資料
+                // 這裡我們直接去 Firebase 讀取，不透過 nav-main.js 轉手，比較快
+                fetch('https://api.ipify.org?format=json')
+                    .then(res => res.json())
+                    .then(ipData => {
+                        const safeIp = ipData.ip.replace(/[\.\$\#\[\]\/]/g, '_');
+                        const dbRef = firebase.database().ref('users/' + safeIp + '/game_data');
+                        
+                        // 直接監聽雲端資料庫
+                        dbRef.once('value', (snapshot) => {
+                            const cloudData = snapshot.val();
+                            if (cloudData) {
+                                console.log("✅ 成功從雲端抓到存檔！正在更新遊戲資料...");
+                                // 用雲端資料蓋掉本地資料
+                                gameData = { ...gameData, ...cloudData };
+                                // 同時更新 LocalStorage，下次進來就不用等
+                                localStorage.setItem(SAVE_KEY, JSON.stringify(gameData));
+                                // 強制刷新遊戲介面
+                                refreshUI();
+                            } else {
+                                console.log("⚠️ 雲端目前沒有這台裝置(IP)的存檔。");
+                            }
+                        });
+                    });
             }
         });
     }
-}
-        window.onresize = init;
+} window.onresize = init;
 
         // --- 核心實體類別 ---
         class Cube {
