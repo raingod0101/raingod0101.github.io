@@ -1,6 +1,7 @@
 (function() {
     const baseUrl = "https://raingod0101.github.io/";
     const v = new Date().getTime();
+    let currentIp = "Unknown_IP"; // 用於全域存檔路徑
 
     const resources = [
         { type: 'js', url: "https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js" },
@@ -10,6 +11,15 @@
     ];
 
     async function loadResources() {
+        // --- 修正 1：自動設置網頁分頁圖示 (Favicon) ---
+        let favicon = document.querySelector("link[rel~='icon']");
+        if (!favicon) {
+            favicon = document.createElement('link');
+            favicon.rel = 'icon';
+            document.head.appendChild(favicon);
+        }
+        favicon.href = `${baseUrl}p4.png`;
+
         for (const res of resources) {
             await new Promise((resolve) => {
                 let el = res.type === 'js' ? document.createElement('script') : document.createElement('link');
@@ -23,61 +33,61 @@
     }
     loadResources();
 
-    // --- 混合存檔與閃幣同步核心 ---
+    // --- 修正 2：定義全域存檔函式 ---
+    window.raingodSave = function(gameData) {
+        // 1. 永遠先存本地
+        localStorage.setItem('raingod_game_save', JSON.stringify(gameData));
+        console.log("Raingod: 本地存檔成功");
+
+        // 2. 檢查是否登入，若有則同步雲端
+        const user = firebase.auth().currentUser;
+        if (user && currentIp !== "Unknown_IP") {
+            const safeIp = currentIp.replace(/[\.\$\#\[\]\/]/g, '_');
+            firebase.database().ref('users/' + safeIp).update({
+                game_data: gameData,
+                last_save: firebase.database.ServerValue.TIMESTAMP
+            }).then(() => console.log("Raingod: 雲端同步成功"));
+        }
+    };
+
     async function syncData(user = null) {
-        let rawIp = "Unknown_IP";
         try {
             const res = await fetch('https://api.ipify.org?format=json');
             const data = await res.json();
-            rawIp = data.ip;
+            currentIp = data.ip; // 更新到全域變數
         } catch (e) { console.warn("IP fetch failed"); }
 
-        const safeIp = rawIp.replace(/[\.\$\#\[\]\/]/g, '_');
+        const safeIp = currentIp.replace(/[\.\$\#\[\]\/]/g, '_');
 
         if (window.firebase && firebase.database) {
             const userRef = firebase.database().ref('users/' + safeIp);
 
             if (user) {
-                // 【已登入模式】
                 userRef.on('value', (snapshot) => {
                     const userData = snapshot.val() || {};
-                    
-                    // 1. 處理閃幣
-                    const currentCoins = (userData.flash_coins !== undefined) ? userData.flash_coins : 0;
+                    // 顯示閃幣
+                    const currentCoins = userData.flash_coins || 0;
                     const coinDisplay = document.getElementById('flash-coins-display');
                     if (coinDisplay) coinDisplay.innerText = `⚡ 閃幣: ${currentCoins}`;
 
-                    // 2. 處理遊戲存檔 (雲端同步到本地)
+                    // 雲端同步到本地 (僅在本地沒資料或雲端更新時)
                     if (userData.game_data) {
                         localStorage.setItem('raingod_game_save', JSON.stringify(userData.game_data));
-                        console.log("Raingod: 雲端存檔已同步至本地");
-                    } else {
-                        // 如果雲端沒資料，就把本地目前的資料傳上去
-                        const localData = localStorage.getItem('raingod_game_save');
-                        if (localData) {
-                            userRef.update({ game_data: JSON.parse(localData) });
-                        }
                     }
-
-                    // 初始化閃幣
-                    if (userData.flash_coins === undefined) userRef.update({ flash_coins: 0 });
                 });
-
-                // 更新足跡
+                
                 userRef.update({
-                    ip: rawIp,
+                    ip: currentIp,
                     last_active: firebase.database.ServerValue.TIMESTAMP,
                     name: user.displayName,
-                    url: window.location.href
+                    photo_url: user.photoURL
                 });
             } else {
-                // 【訪客模式】僅記錄足跡，存檔保留在本地 localStorage (由遊戲腳本自行控制)
                 firebase.database().ref('guests/' + safeIp).update({
-                    ip: rawIp,
+                    ip: currentIp,
                     last_active: firebase.database.ServerValue.TIMESTAMP,
                     url: window.location.href
                 });
-                console.log("Raingod: 目前為訪客模式，使用 LocalStorage 存檔");
             }
         }
     }
@@ -100,11 +110,11 @@
         fetch(`${baseUrl}menu.html?v=${v}`).then(r => r.text()).then(html => {
             container.innerHTML = html;
             
-            // 強制加回 icon (確保 html 內也有)
+            // 導覽列圖示處理
             const brandA = container.querySelector('.brand');
             if (brandA && !brandA.querySelector('img')) {
                 const img = document.createElement('img');
-                img.src = "https://raingod0101.github.io/p4.png";
+                img.src = `${baseUrl}p4.png`;
                 img.style.cssText = "height: 28px; width: 28px; object-fit: contain; margin-right: 10px; border-radius: 4px;";
                 brandA.prepend(img);
             }
@@ -128,7 +138,7 @@
                     if (userAvatar) {
                         userAvatar.src = user.photoURL;
                         userAvatar.onclick = () => {
-                            if (confirm(`確定要登出嗎？\n登出後將切換回本地存檔。`)) {
+                            if (confirm(`確定要登出嗎？`)) {
                                 firebase.auth().signOut().then(() => location.reload());
                             }
                         };
@@ -144,7 +154,7 @@
                 }
             });
 
-            // 背景自適應
+            // 亮度自適應
             const nav = container.querySelector('.glass-nav');
             if (nav) {
                 const rgb = window.getComputedStyle(document.body).backgroundColor.match(/\d+/g);
@@ -155,7 +165,6 @@
                     if (!el.classList.contains('login-btn') && el.id !== 'flash-coins-display') {
                         el.style.setProperty('color', theme.text, 'important');
                     }
-                    if (el.classList.contains('dropdown-menu')) el.style.setProperty('background', theme.bg, 'important');
                 });
             }
         });
