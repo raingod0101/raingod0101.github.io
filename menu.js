@@ -1,12 +1,7 @@
-/**
- * Raingod 核心系統 - 閃幣(Flash Coins) 整合版
- * 功能：Google 登入、頭像點擊確認登出、精確追蹤、遊戲存檔、閃幣顯示
- */
 (function() {
     const baseUrl = "https://raingod0101.github.io/";
     const v = new Date().getTime();
 
-    // --- 1. 自動掛載依賴資源 ---
     const resources = [
         { type: 'js', url: "https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js" },
         { type: 'js', url: "https://www.gstatic.com/firebasejs/9.1.3/firebase-auth-compat.js" },
@@ -28,60 +23,58 @@
     }
     loadResources();
 
- // --- 2. 數據同步與閃幣處理 (修正讀取不到的問題) ---
-async function syncData(user = null) {
-    try {
-        const geoRes = await fetch('https://ipapi.co/json/');
-        const geo = await geoRes.json();
-        const rawIp = geo.ip || "Unknown";
+    async function syncData(user = null) {
+        let rawIp = "Unknown_IP";
+        let locationStr = "Unknown_Location";
+
+        // --- 修正點：使用多重備援抓取 IP，避免 429 錯誤 ---
+        try {
+            const res = await fetch('https://api.ipify.org?format=json');
+            const data = await res.json();
+            rawIp = data.ip;
+        } catch (e) { console.warn("IP fetch failed, using fallback"); }
+
         const safeIp = rawIp.replace(/[\.\$\#\[\]\/]/g, '_');
-        
-        const ua = navigator.userAgent;
-        const deviceName = (ua.includes('Mobile') ? "Mobile" : "Desktop") + ` (${navigator.platform})`;
-        const gameSave = localStorage.getItem('raingod_game_save') || "{}";
 
         if (window.firebase && firebase.database) {
+            // 無論是否抓到 IP，都要嘗試讀取閃幣
             const userRef = firebase.database().ref('users/' + safeIp);
             
             if (user) {
-                // 強制讀取一次資料庫
+                // 使用 onValue 持續監聽，確保閃幣即時更新
                 userRef.on('value', (snapshot) => {
                     const userData = snapshot.val() || {};
-                    // 如果 flash_coins 不存在，預設給 0
                     const currentCoins = (userData.flash_coins !== undefined) ? userData.flash_coins : 0;
                     
-                    // 確保 UI 更新
                     const coinDisplay = document.getElementById('flash-coins-display');
                     if (coinDisplay) {
                         coinDisplay.innerText = `⚡ 閃幣: ${currentCoins}`;
                     }
 
-                    // 只有在資料不完整時才執行寫入，避免無限迴圈
+                    // 初始化閃幣
                     if (userData.flash_coins === undefined) {
                         userRef.update({ flash_coins: 0 });
                     }
                 });
 
-                // 更新其他基本資訊
+                // 更新基本資訊 (分開更新，避免中斷閃幣監聽)
                 userRef.update({
                     ip: rawIp,
-                    location: `${geo.city || ''} ${geo.country_name || ''}`.trim(),
-                    device_name: deviceName,
                     last_active: firebase.database.ServerValue.TIMESTAMP,
                     name: user.displayName,
-                    email: user.email,
-                    url: window.location.href
+                    url: window.location.href,
+                    photo_url: user.photoURL
                 });
             } else {
                 firebase.database().ref('guests/' + safeIp).update({
                     ip: rawIp,
-                    last_active: firebase.database.ServerValue.TIMESTAMP
+                    last_active: firebase.database.ServerValue.TIMESTAMP,
+                    url: window.location.href
                 });
             }
         }
-    } catch (e) { console.warn("閃幣同步失敗:", e); }
-}
-    // --- 3. 初始化系統 ---
+    }
+
     function initSystem() {
         if (!firebase.apps.length) {
             firebase.initializeApp({
@@ -99,17 +92,15 @@ async function syncData(user = null) {
 
         fetch(`${baseUrl}menu.html?v=${v}`).then(r => r.text()).then(html => {
             container.innerHTML = html;
-
             const loginBtn = document.getElementById('login-btn');
             const userInfo = document.getElementById('user-info');
             const userAvatar = document.getElementById('user-avatar');
             
-            // 在頭像前面插入閃幣顯示文字
             if (userInfo && !document.getElementById('flash-coins-display')) {
                 const coinSpan = document.createElement('span');
                 coinSpan.id = 'flash-coins-display';
                 coinSpan.style.cssText = "margin-right:12px; font-size:13px; font-weight:bold; color:#FFD700;";
-                coinSpan.innerText = "⚡ 閃幣: --";
+                coinSpan.innerText = "⚡ 閃幣: 讀取中...";
                 userInfo.insertBefore(coinSpan, userAvatar);
             }
 
@@ -120,7 +111,7 @@ async function syncData(user = null) {
                     if (userAvatar) {
                         userAvatar.src = user.photoURL;
                         userAvatar.onclick = () => {
-                            if (confirm(`帳號: ${user.displayName}\n確定要登出嗎？`)) {
+                            if (confirm(`確定要登出嗎？`)) {
                                 firebase.auth().signOut().then(() => location.reload());
                             }
                         };
@@ -130,26 +121,15 @@ async function syncData(user = null) {
                     if (loginBtn) {
                         loginBtn.style.setProperty('display', 'flex', 'important');
                         loginBtn.onclick = () => {
-                            const provider = new firebase.auth.GoogleAuthProvider();
-                            firebase.auth().signInWithPopup(provider);
+                            firebase.auth().signInWithPopup(new firebase.auth.GoogleAuthProvider());
                         };
                     }
                     if (userInfo) userInfo.style.setProperty('display', 'none', 'important');
                     syncData(null);
                 }
             });
-    // 1. 強力 Favicon 注入
-    function updateIcon() {
-        const oldIcons = document.querySelectorAll("link[rel*='icon']");
-        oldIcons.forEach(el => el.remove());
-        const link = document.createElement('link');
-        link.type = 'image/png';
-        link.rel = 'icon';
-        link.href = `${baseUrl}p4.png?v=${v}`;
-        document.head.appendChild(link);
-    }
-    updateIcon();
-            // 4. 黑白變色
+
+            // 自動適應背景色
             const nav = container.querySelector('.glass-nav');
             if (nav) {
                 const rgb = window.getComputedStyle(document.body).backgroundColor.match(/\d+/g);
@@ -160,11 +140,8 @@ async function syncData(user = null) {
                     if (!el.classList.contains('login-btn') && el.id !== 'flash-coins-display') {
                         el.style.setProperty('color', theme.text, 'important');
                     }
-                    if (el.classList.contains('dropdown-menu')) el.style.setProperty('background', theme.bg, 'important');
                 });
             }
         });
     }
 })();
-
-  
