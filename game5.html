@@ -160,46 +160,42 @@ function saveGame() {
         console.log("💾 訪客存檔已更新");
     }
 }function loadGame() {
+    // 【第一步】立刻從本地訪客槽拿資料 (解決重新載入變 0 的問題)
+    const localData = localStorage.getItem(LOCAL_KEY);
+    if (localData) {
+        gameData = JSON.parse(localData);
+        console.log("📖 已從本地訪客槽恢復進度");
+        refreshUI();
+    }
+
     if (!window.firebase) return;
 
-    // 監聽登入狀態改變 (登入或登出都會跑這裡)
+    // 【第二步】監聽登入狀態改變
     firebase.auth().onAuthStateChanged((user) => {
         if (user) {
-            console.log("🔓 檢測到登入，切換至會員資料...");
+            console.log("🔓 偵測到登入，切換至會員雲端資料...");
             
-            // 1. 先拿本地會員快取 (不用等網路)
+            // 先拿會員的本地快取 (CLOUD_KEY)
             const cache = localStorage.getItem(CLOUD_KEY);
             if (cache) {
                 gameData = JSON.parse(cache);
                 refreshUI();
             }
 
-            // 2. 向 Firebase 拿最新資料 (覆蓋快取)
+            // 同步最新的雲端資料
             firebase.database().ref('users/' + user.uid + '/game_data').once('value')
                 .then((snapshot) => {
                     const cloudData = snapshot.val();
                     if (cloudData) {
                         gameData = cloudData;
                         localStorage.setItem(CLOUD_KEY, JSON.stringify(gameData));
-                        console.log("✅ 雲端資料載入成功");
+                        console.log("✅ 雲端同步完成");
                         refreshUI();
-                    } else {
-                        console.log("🆕 這是新帳號，雲端沒資料。");
-                        saveGame(); // 幫他在雲端開個紀錄
                     }
                 });
         } else {
-            console.log("🔒 檢測到登出，切換至訪客資料...");
-            
-            // 讀取訪客槽
-            const localData = localStorage.getItem(LOCAL_KEY);
-            if (localData) {
-                gameData = JSON.parse(localData);
-            } else {
-                // 如果連訪客槽都沒資料，就給初始值
-                gameData = JSON.parse(JSON.stringify(DEFAULT_DATA));
-            }
-            refreshUI();
+            console.log("🔒 訪客模式：維持本地紀錄");
+            // 這裡不需要額外動作，因為第一步已經讀過 LOCAL_KEY 了
         }
     });
 }window.onresize = init;
