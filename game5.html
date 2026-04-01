@@ -134,66 +134,77 @@
             refreshUI();
         }
         window.onresize = init;
+// --- 核心存檔：同步本地與雲端 ---
 function saveGame() {
-    // 1. 先存本地 (確保基本進度不丟失)
+    // 1. 先存一份在本地瀏覽器 (防止網路斷線)
     localStorage.setItem(SAVE_KEY, JSON.stringify(gameData));
+    // console.log("本地存檔已更新");
 
-    // 2. 檢查 Firebase 狀態
-    if (!window.firebase) {
-        console.error("❌ 錯誤：網頁還沒載入 Firebase SDK，請檢查 menu.js 是否正常。");
-        return;
-    }
-
-    const user = firebase.auth().currentUser;
-    if (user) {
-        console.log("正在嘗試同步到 UID: " + user.uid);
-        // 強制寫入 users/UID/game_data 路徑
-        firebase.database().ref('users/' + user.uid + '/game_data').set(gameData)
+    // 2. 檢查 Firebase 登入狀態並同步
+    if (window.firebase && firebase.auth().currentUser) {
+        const uid = firebase.auth().currentUser.uid;
+        // 將目前的 gameData 完整推送到雲端使用者的 UID 路徑下
+        firebase.database().ref('users/' + uid + '/game_data').set(gameData)
             .then(() => {
-                console.log("✅ [Firebase] 雲端存檔成功！");
+                // console.log("✅ [Firebase] 雲端存檔成功！");
             })
             .catch((error) => {
-                console.error("❌ [Firebase] 存檔失敗，原因：", error.message);
-                if (error.message.includes("permission_denied")) {
-                    console.error("👉 請去 Firebase Console 修改 Rules 為 true");
-                }
+                console.error("❌ [Firebase] 存檔失敗：", error.message);
             });
-    } else {
-        console.warn("⚠️ 目前未登入 Google，資料僅存在本機。");
     }
-}function loadGame() {
-    // 1. 先從本地讀取
+}// --- 核心讀檔：優先讀取雲端資料 ---
+function loadGame() {
+    // 1. 啟動時先拿本地的墊底 (讓畫面不至於空掉)
     const localData = localStorage.getItem(SAVE_KEY);
     if (localData) {
         try {
             gameData = { ...gameData, ...JSON.parse(localData) };
             refreshUI();
-        } catch(e) { console.error("解析本地資料失敗", e); }
+        } catch(e) { 
+            console.error("解析本地存檔失敗", e); 
+        }
     }
 
-    // 2. 監聽登入狀態切換
+    // 2. 核心同步邏輯：監聽 Google 登入狀態
     if (window.firebase) {
         firebase.auth().onAuthStateChanged((user) => {
             if (user) {
-                console.log("👋 你好 " + user.displayName + "，正在抓取你的雲端進度...");
+                console.log("👋 已登入：" + user.displayName + "，正在同步雲端進度...");
                 
+                // 到該使用者的專屬路徑抓資料
                 firebase.database().ref('users/' + user.uid + '/game_data').once('value')
                     .then((snapshot) => {
                         const cloudData = snapshot.val();
+                        
                         if (cloudData) {
-                            console.log("🚀 成功同步雲端進度！");
+                            console.log("🚀 發現雲端進度！正在覆蓋本地資料...");
+                            // 重要：用雲端資料覆蓋目前的 gameData
                             gameData = { ...gameData, ...cloudData };
-                            localStorage.setItem(SAVE_KEY, JSON.stringify(gameData)); // 同步到本地
+                            
+                            // 更新本地緩存，下次進來更快
+                            localStorage.setItem(SAVE_KEY, JSON.stringify(gameData));
+                            
+                            // 強制刷新遊戲畫面 (數字、等級)
                             refreshUI();
+                            if(typeof toggleShop === "function") {
+                                // 如果商店開著，順便刷新商店價格
+                                const shop = document.getElementById('shop-window');
+                                if(shop && shop.style.display === 'block') {
+                                    toggleShop(); toggleShop(); 
+                                }
+                            }
                         } else {
-                            console.log("🆕 雲端沒資料，這可能是你的新帳號，或是還沒按過存檔。");
+                            console.log("🆕 雲端尚無資料，將以目前進度作為初始備份。");
+                            saveGame(); // 如果是新玩家，直接幫他存一次
                         }
                     })
                     .catch(err => console.error("❌ 讀取雲端失敗：", err));
+            } else {
+                console.log("👤 目前為訪客模式，資料僅存於此瀏覽器。");
             }
         });
     }
-} window.onresize = init;
+}window.onresize = init;
 
         // --- 核心實體類別 ---
         class Cube {
