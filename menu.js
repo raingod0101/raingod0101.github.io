@@ -3,15 +3,9 @@
     const v = new Date().getTime();
     let currentIp = "Unknown_IP"; 
 
-    const resources = [
-        { type: 'js', url: "https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js" },
-        { type: 'js', url: "https://www.gstatic.com/firebasejs/9.1.3/firebase-auth-compat.js" },
-        { type: 'js', url: "https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js" },
-        { type: 'css', url: "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" }
-    ];
-
+    // --- 1. 自動加載資源 (含 Favicon) ---
     async function loadResources() {
-        // --- 自動設置分頁圖示 (Favicon) ---
+        // 設置分頁圖示
         let favicon = document.querySelector("link[rel~='icon']");
         if (!favicon) {
             favicon = document.createElement('link');
@@ -19,6 +13,13 @@
             document.head.appendChild(favicon);
         }
         favicon.href = `${baseUrl}p4.png`;
+
+        const resources = [
+            { type: 'js', url: "https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js" },
+            { type: 'js', url: "https://www.gstatic.com/firebasejs/9.1.3/firebase-auth-compat.js" },
+            { type: 'js', url: "https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js" },
+            { type: 'css', url: "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" }
+        ];
 
         for (const res of resources) {
             await new Promise((resolve) => {
@@ -33,7 +34,7 @@
     }
     loadResources();
 
-    // --- 全域工具 1：儲存遊戲資料 (自動判斷本地/雲端) ---
+    // --- 2. 全域存檔函式 ---
     window.raingodSave = function(gameData) {
         localStorage.setItem('raingod_game_save', JSON.stringify(gameData));
         const user = firebase.auth().currentUser;
@@ -46,18 +47,7 @@
         }
     };
 
-    // --- 全域工具 2：增加閃幣 ---
-    window.addFlashCoins = function(amount) {
-        const user = firebase.auth().currentUser;
-        if (user && currentIp !== "Unknown_IP") {
-            const safeIp = currentIp.replace(/[\.\$\#\[\]\/]/g, '_');
-            const coinRef = firebase.database().ref('users/' + safeIp + '/flash_coins');
-            coinRef.transaction((current) => (current || 0) + amount);
-        } else {
-            console.warn("未登入，無法獲得閃幣");
-        }
-    };
-
+    // --- 3. 閃幣同步核心 ---
     async function syncData(user = null) {
         try {
             const res = await fetch('https://api.ipify.org?format=json');
@@ -75,14 +65,9 @@
                     const currentCoins = userData.flash_coins || 0;
                     const coinDisplay = document.getElementById('flash-coins-display');
                     if (coinDisplay) coinDisplay.innerText = `⚡ 閃幣: ${currentCoins}`;
-                    
-                    // 登入後自動同步雲端存檔到本地
-                    if (userData.game_data) {
-                        localStorage.setItem('raingod_game_save', JSON.stringify(userData.game_data));
-                    }
+                    if (userData.game_data) localStorage.setItem('raingod_game_save', JSON.stringify(userData.game_data));
                 });
             }
-            // 基礎資訊更新
             const path = user ? `users/${safeIp}` : `guests/${safeIp}`;
             firebase.database().ref(path).update({
                 ip: currentIp,
@@ -92,6 +77,7 @@
         }
     }
 
+    // --- 4. 初始化導覽列與狀態切換 ---
     function initSystem() {
         if (!firebase.apps.length) {
             firebase.initializeApp({
@@ -110,7 +96,7 @@
         fetch(`${baseUrl}menu.html?v=${v}`).then(r => r.text()).then(html => {
             container.innerHTML = html;
             
-            // 導覽列內的 Icon
+            // 補上品牌 Icon
             const brandA = container.querySelector('.brand');
             if (brandA && !brandA.querySelector('img')) {
                 const img = document.createElement('img');
@@ -123,6 +109,7 @@
             const userInfo = document.getElementById('user-info');
             const userAvatar = document.getElementById('user-avatar');
             
+            // 建立閃幣顯示區域
             if (userInfo && !document.getElementById('flash-coins-display')) {
                 const coinSpan = document.createElement('span');
                 coinSpan.id = 'flash-coins-display';
@@ -131,26 +118,39 @@
                 userInfo.insertBefore(coinSpan, userAvatar);
             }
 
+            // 【核心修復】狀態切換邏輯
             firebase.auth().onAuthStateChanged(user => {
                 if (user) {
-                    if (loginBtn) loginBtn.style.setProperty('display', 'none', 'important');
-                    if (userInfo) userInfo.style.setProperty('display', 'flex', 'important');
+                    // 已登入：隱藏登入鈕 (強制)，顯示用戶資訊
+                    if (loginBtn) {
+                        loginBtn.style.setProperty('display', 'none', 'important');
+                    }
+                    if (userInfo) {
+                        userInfo.style.setProperty('display', 'flex', 'important');
+                    }
                     if (userAvatar) {
                         userAvatar.src = user.photoURL;
-                        userAvatar.onclick = () => { if (confirm(`確定要登出嗎？`)) firebase.auth().signOut().then(() => location.reload()); };
+                        userAvatar.onclick = () => {
+                            if (confirm(`確定要登出嗎？\n登出後會切換回本地存檔。`)) {
+                                firebase.auth().signOut().then(() => location.reload());
+                            }
+                        };
                     }
                     syncData(user);
                 } else {
+                    // 未登入：顯示登入鈕，隱藏用戶資訊
                     if (loginBtn) {
                         loginBtn.style.setProperty('display', 'flex', 'important');
                         loginBtn.onclick = () => firebase.auth().signInWithPopup(new firebase.auth.GoogleAuthProvider());
                     }
-                    if (userInfo) userInfo.style.setProperty('display', 'none', 'important');
+                    if (userInfo) {
+                        userInfo.style.setProperty('display', 'none', 'important');
+                    }
                     syncData(null);
                 }
             });
 
-            // 背景自適應
+            // 背景自適應 (黑/白模式)
             const nav = container.querySelector('.glass-nav');
             if (nav) {
                 const rgb = window.getComputedStyle(document.body).backgroundColor.match(/\d+/g);
@@ -158,7 +158,9 @@
                 const theme = isLight ? { bg: '#ffffff', text: '#000000' } : { bg: '#000000', text: '#ffffff' };
                 nav.style.setProperty('background', theme.bg, 'important');
                 nav.querySelectorAll('*').forEach(el => {
-                    if (!el.classList.contains('login-btn') && el.id !== 'flash-coins-display') el.style.setProperty('color', theme.text, 'important');
+                    if (!el.classList.contains('login-btn') && el.id !== 'flash-coins-display') {
+                        el.style.setProperty('color', theme.text, 'important');
+                    }
                 });
             }
         });
