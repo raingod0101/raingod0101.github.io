@@ -94,6 +94,8 @@
     </div>
 
     <script>
+        const LOCAL_KEY = 'raingod_local_save';  // 訪客專用
+const CLOUD_CACHE_KEY = 'raingod_cloud_cache'; // 登入者專用
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
         const container = document.getElementById('game-container');
@@ -134,73 +136,63 @@
             refreshUI();
         }
         window.onresize = init;
-// --- 核心存檔：同步本地與雲端 ---
 function saveGame() {
-    // 1. 先存一份在本地瀏覽器 (防止網路斷線)
-    localStorage.setItem(SAVE_KEY, JSON.stringify(gameData));
-    // console.log("本地存檔已更新");
+    const user = window.firebase ? firebase.auth().currentUser : null;
 
-    // 2. 檢查 Firebase 登入狀態並同步
-    if (window.firebase && firebase.auth().currentUser) {
-        const uid = firebase.auth().currentUser.uid;
-        // 將目前的 gameData 完整推送到雲端使用者的 UID 路徑下
-        firebase.database().ref('users/' + uid + '/game_data').set(gameData)
-            .then(() => {
-                // console.log("✅ [Firebase] 雲端存檔成功！");
-            })
-            .catch((error) => {
-                console.error("❌ [Firebase] 存檔失敗：", error.message);
-            });
+    if (user) {
+        // --- 登入狀態：存到雲端 + 雲端快取 ---
+        localStorage.setItem(CLOUD_CACHE_KEY, JSON.stringify(gameData));
+        firebase.database().ref('users/' + user.uid + '/game_data').set(gameData)
+            .catch(e => console.error("雲端存檔失敗", e));
+        // console.log("已同步至雲端帳號");
+    } else {
+        // --- 登出/訪客狀態：存到純本地 ---
+        localStorage.setItem(LOCAL_KEY, JSON.stringify(gameData));
+        // console.log("已存至本地訪客紀錄");
     }
-}// --- 核心讀檔：優先讀取雲端資料 ---
-function loadGame() {
-    // 1. 啟動時先拿本地的墊底 (讓畫面不至於空掉)
-    const localData = localStorage.getItem(SAVE_KEY);
-    if (localData) {
-        try {
-            gameData = { ...gameData, ...JSON.parse(localData) };
-            refreshUI();
-        } catch(e) { 
-            console.error("解析本地存檔失敗", e); 
+}function loadGame() {
+    // 預設先讀取「本地訪客」的資料
+    const rawLocal = localStorage.getItem(LOCAL_KEY);
+    const defaultData = {
+        money: 0, totalEarned: 0, prestige: 1,
+        upgrades: {
+            damage: { lv: 1, cost: 50, mult: 1.45, name: "量子核心", desc: "增加每次點擊的破壞力" },
+            range: { lv: 1, cost: 200, mult: 1.6, name: "共振距離", desc: "引發更遠的連鎖爆炸" },
+            luck: { lv: 1, cost: 1000, mult: 2.3, name: "命運干涉", desc: "提高稀有怪出現機率" }
         }
-    }
+    };
 
-    // 2. 核心同步邏輯：監聽 Google 登入狀態
     if (window.firebase) {
         firebase.auth().onAuthStateChanged((user) => {
             if (user) {
-                console.log("👋 已登入：" + user.displayName + "，正在同步雲端進度...");
+                // ======= 登入成功：切換到雲端資料 =======
+                console.log("切換至雲端存檔...");
                 
-                // 到該使用者的專屬路徑抓資料
+                // 先嘗試拿雲端快取（避免網路慢），再拿最新的雲端
+                const cache = localStorage.getItem(CLOUD_CACHE_KEY);
+                if (cache) {
+                    gameData = JSON.parse(cache);
+                    refreshUI();
+                }
+
                 firebase.database().ref('users/' + user.uid + '/game_data').once('value')
                     .then((snapshot) => {
                         const cloudData = snapshot.val();
-                        
                         if (cloudData) {
-                            console.log("🚀 發現雲端進度！正在覆蓋本地資料...");
-                            // 重要：用雲端資料覆蓋目前的 gameData
-                            gameData = { ...gameData, ...cloudData };
-                            
-                            // 更新本地緩存，下次進來更快
-                            localStorage.setItem(SAVE_KEY, JSON.stringify(gameData));
-                            
-                            // 強制刷新遊戲畫面 (數字、等級)
+                            gameData = cloudData;
+                            localStorage.setItem(CLOUD_CACHE_KEY, JSON.stringify(gameData));
                             refreshUI();
-                            if(typeof toggleShop === "function") {
-                                // 如果商店開著，順便刷新商店價格
-                                const shop = document.getElementById('shop-window');
-                                if(shop && shop.style.display === 'block') {
-                                    toggleShop(); toggleShop(); 
-                                }
-                            }
-                        } else {
-                            console.log("🆕 雲端尚無資料，將以目前進度作為初始備份。");
-                            saveGame(); // 如果是新玩家，直接幫他存一次
                         }
-                    })
-                    .catch(err => console.error("❌ 讀取雲端失敗：", err));
+                    });
             } else {
-                console.log("👤 目前為訪客模式，資料僅存於此瀏覽器。");
+                // ======= 登出 / 訪客：切換回本地資料 =======
+                console.log("切換回本地訪客存檔...");
+                if (rawLocal) {
+                    gameData = JSON.parse(rawLocal);
+                } else {
+                    gameData = JSON.parse(JSON.stringify(defaultData)); // 沒紀錄就重置
+                }
+                refreshUI();
             }
         });
     }
