@@ -135,37 +135,51 @@
         }
         window.onresize = init;
 
-        // --- 存檔與讀檔系統 ---
-        function saveGame() {
-            try {
-                localStorage.setItem(SAVE_KEY, JSON.stringify(gameData));
-            } catch (e) {
-                console.error("Error saving game data:", e);
-            }
-        }
+        // --- 核心存檔：自動判斷本地或雲端 ---
+function saveGame() {
+    // 1. 無論如何，先存一份在本地瀏覽器 (LocalStorage)
+    localStorage.setItem(SAVE_KEY, JSON.stringify(gameData));
+    console.log("本地存檔已更新");
 
-        function loadGame() {
-            try {
-                const savedData = localStorage.getItem(SAVE_KEY);
-                if (savedData) {
-                    const parsedData = JSON.parse(savedData);
-                    // Merge saved data with default to handle new properties in updates
-                    gameData = { ...gameData, ...parsedData };
-                    // Ensure upgrades are correctly merged
-                    for (const key in gameData.upgrades) {
-                        if (parsedData.upgrades && parsedData.upgrades[key]) {
-                            gameData.upgrades[key].lv = parsedData.upgrades[key].lv;
-                        }
-                    }
-                    // Ensure prestige button visibility is correct after loading
-                    if (gameData.totalEarned > 5000000) {
-                        document.getElementById('prestige-btn').style.display = 'block';
-                    }
-                }
-            } catch (e) {
-                console.error("Error loading game data:", e);
-            }
+    // 2. 檢查有沒有登入 Google 帳號 (透過 nav-main.js 提供的 firebase)
+    if (window.firebase && firebase.auth().currentUser) {
+        // 呼叫我們在 nav-main.js 裡寫好的全域同步函式
+        if (typeof window.raingodSave === "function") {
+            window.raingodSave(gameData); 
+            console.log("雲端同步成功！");
         }
+    }
+}
+
+       // --- 核心讀檔：優先拿雲端，沒登入拿本地 ---
+function loadGame() {
+    // 1. 先從本地拿資料當作墊底 (防止網路慢的時候沒資料)
+    const localData = localStorage.getItem(SAVE_KEY);
+    if (localData) {
+        gameData = { ...gameData, ...JSON.parse(localData) };
+    }
+
+    // 2. 如果有登入，Firebase 會在 background 自動跑 syncData
+    // 這裡我們加一個監聽，當 Firebase 數據回來時，自動覆蓋掉目前的 gameData 並更新 UI
+    if (window.firebase) {
+        firebase.auth().onAuthStateChanged(user => {
+            if (user) {
+                console.log("已登入，正在從雲端同步進度...");
+                // 這裡的邏輯 nav-main.js 已經幫你寫好寫入 LocalStorage 了
+                // 我們只需要在 1 秒後重新抓取一次 LocalStorage 即可確保資料最新
+                setTimeout(() => {
+                    const cloudSyncedData = localStorage.getItem(SAVE_KEY);
+                    if (cloudSyncedData) {
+                        gameData = { ...gameData, ...JSON.parse(cloudSyncedData) };
+                        refreshUI(); // 強制更新遊戲畫面上的數字
+                    }
+                }, 1000);
+            } else {
+                console.log("未登入，使用本地 LocalStorage 存檔");
+            }
+        });
+    }
+}
         window.onresize = init;
 
         // --- 核心實體類別 ---
