@@ -105,33 +105,60 @@
         'N': { s: '♞', long: false, d: [[2,1],[2,-1],[-2,1],[-2,-1],[1,2],[1,-2],[-1,2],[-1,-2]] }
     };
 
-    // 初始化狀態，優先從 localStorage 讀取
+    // --- 1. 初始化狀態：優先讀取自定義的 raingod_game_save ---
+    let savedData = JSON.parse(localStorage.getItem('raingod_game_save')) || {};
+    
     let state = { 
         grid: [], 
         history: [], 
-        wins: parseInt(localStorage.getItem('chess_wins')) || 0, 
-        totalTime: parseInt(localStorage.getItem('chess_time')) || 0,
+        wins: savedData.wins || parseInt(localStorage.getItem('chess_wins')) || 0, 
+        totalTime: savedData.totalTime || parseInt(localStorage.getItem('chess_time')) || 0,
         selected: null 
     };
 
-    // 更新顯示與儲存
+    // --- 2. 核心：更新顯示並觸發存檔 (包含雲端判斷) ---
     function updateStats() {
+        // 更新介面
         document.getElementById('win-count').innerText = state.wins;
         const mins = Math.floor(state.totalTime / 60);
         const secs = state.totalTime % 60;
         document.getElementById('play-time').innerText = `${mins}m ${secs}s`;
         
+        // 封裝當前數據
+        const gameData = {
+            wins: state.wins,
+            totalTime: state.totalTime,
+            last_save: Date.now()
+        };
+
+        // A. 基本在地儲存 (確保沒網路也能存)
         localStorage.setItem('chess_wins', state.wins);
         localStorage.setItem('chess_time', state.totalTime);
+
+        // B. 呼叫外部注入的存檔函式 (即你後來貼的那段 js 裡的 raingodSave)
+        if (typeof window.raingodSave === 'function') {
+            window.raingodSave(gameData);
+        } else {
+            // 如果外部 script 還沒加載完成，先存到 raingod_game_save 備份
+            localStorage.setItem('raingod_game_save', JSON.stringify(gameData));
+        }
     }
 
     // 計時器邏輯
     setInterval(() => {
         if (document.getElementById('launcher').style.display === 'none') {
             state.totalTime++;
-            updateStats();
+            // 為了效能，計時器每秒只更新 UI，每 10 秒才觸發一次完整存檔
+            if (state.totalTime % 10 === 0) {
+                updateStats();
+            } else {
+                document.getElementById('play-time').innerText = 
+                    `${Math.floor(state.totalTime / 60)}m ${state.totalTime % 60}s`;
+            }
         }
     }, 1000);
+
+    // --- 以下為原本的遊戲邏輯 (保持不變或微調渲染) ---
 
     window.launchGame = () => { 
         document.getElementById('launcher').style.display='none'; 
@@ -211,7 +238,7 @@
         let rs = state.grid.flat().filter(x=>x);
         if(rs.length===1 && rs[0].type==='K') { 
             state.wins++; 
-            updateStats();
+            updateStats(); // 贏球時立即觸發存檔
             document.getElementById('log').innerText="挑戰成功！"; 
             setTimeout(startNewGame, 1000); 
         }
