@@ -2,9 +2,14 @@
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <!-- 加入這行：強制手機版不縮放，點擊反應最快 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>爆炸 | Raingod</title>
+    <title>爆炸 | Raingod (Cloud Sync)</title>
+    
+    <!-- 1. 引入 Firebase SDK (版本 8.x 最穩定且適合此架構) -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
     <style>
         :root { 
             --neon: #00f2ff; --pink: #ff007b; --gold: #ffcc00; --purple: #bc13fe; 
@@ -15,38 +20,28 @@
             margin: 0; padding: 0; height: 100%; overflow: hidden; 
             background: var(--bg); font-family: 'Segoe UI', sans-serif; 
             display: flex; flex-direction: column;
-            /* 防止手機長按選取文字 */
             user-select: none; -webkit-user-select: none;
-        }
-
-        #top-nav { 
-            height: 60px; min-height: 60px;
-            background: #0a0a14; border-bottom: 1px solid #333; 
-            display: flex; align-items: center; padding: 0 20px;
-            color: white; z-index: 100;
         }
 
         #game-container { 
             flex-grow: 1; 
             position: relative; overflow: hidden; 
-            cursor: crosshair;
-            /* 重要：禁用手機默認觸控行為（如滾動、縮放） */
-            touch-action: none; 
+            cursor: crosshair; touch-action: none; 
             -webkit-tap-highlight-color: transparent;
         }
         
         canvas { display: block; }
 
-        /* UI 面板優化 */
+        /* UI 面板 */
         #hud { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; padding: 15px; box-sizing: border-box; z-index: 10; }
         .stat-group { display: flex; flex-direction: column; gap: 8px; pointer-events: auto; }
         .panel { background: rgba(0, 0, 0, 0.85); border: 1px solid #222; border-left: 4px solid var(--neon); padding: 8px 15px; backdrop-filter: blur(5px); }
         .label { color: #666; font-size: 9px; text-transform: uppercase; letter-spacing: 1px; }
         .value { color: #fff; font-size: 18px; font-weight: 900; }
         
-        .ctrl-btn { padding: 10px 18px; background: #111; color: #fff; border: 1px solid var(--pink); cursor: pointer; pointer-events: auto; font-weight: bold; font-size: 14px; }
+        .ctrl-btn { padding: 10px 18px; background: #111; color: #fff; border: 1px solid var(--pink); cursor: pointer; pointer-events: auto; font-weight: bold; font-size: 12px; }
 
-        /* 商店手機版自適應 */
+        /* 商店 */
         #shop-window { 
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
             width: 90%; max-width: 450px; height: 75vh; overflow-y: auto; 
@@ -54,23 +49,17 @@
             display: none; pointer-events: auto; z-index: 100; 
         }
         .upgrade-card { background: #0a0a0f; margin-bottom: 10px; padding: 12px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #222; }
-        .btn-buy { background: var(--gold); border: none; padding: 8px; font-weight: 900; cursor: pointer; min-width: 70px; font-size: 12px; }
+        .btn-buy { background: var(--gold); border: none; padding: 8px; font-weight: 900; cursor: pointer; min-width: 70px; font-size: 11px; }
 
         #combo-wrap { position: absolute; bottom: 20px; left: 20px; }
         .combo-n { font-size: 50px; color: #fff; line-height: 0.7; font-style: italic; font-weight: 900; opacity: 0.4; }
 
-        @media (min-width: 800px) {
-            .value { font-size: 24px; }
-            .combo-n { font-size: 80px; }
-        }
+        /* 登入狀態標籤 */
+        #sync-status { font-size: 10px; color: #555; margin-top: 5px; }
     </style>
 </head>
 <body>
-<link rel="stylesheet" href="menu.css">
 
-<div id="nav_bar"></div>
-
-<script src="menu.js"></script>
     <div id="game-container">
         <canvas id="canvas"></canvas>
 
@@ -80,6 +69,7 @@
                     <div class="panel"><div class="label">CREDITS</div><div class="value">$ <span id="money-display">0</span></div></div>
                     <div class="panel" style="border-left-color: var(--pink);"><div class="label">POWER</div><div class="value">ATK <span id="damage-display">1</span></div></div>
                     <div class="panel" style="border-left-color: var(--gold);"><div class="label">Ω RANK</div><div class="value">x <span id="prestige-display">1</span></div></div>
+                    <div id="sync-status">模式：本地存檔</div>
                 </div>
                 <div class="stat-group">
                     <button class="ctrl-btn" onclick="toggleShop()">SHOP</button>
@@ -101,9 +91,31 @@
     </div>
 
     <script>
+        // ==========================================
+        // 2. Firebase 初始化設定 (請替換成你自己的)
+        // ==========================================
+        const firebaseConfig = {
+            apiKey: "你的API_KEY",
+            authDomain: "你的PROJECT_ID.firebaseapp.com",
+            databaseURL: "https://你的PROJECT_ID-default-rtdb.firebaseio.com",
+            projectId: "你的PROJECT_ID",
+            storageBucket: "你的PROJECT_ID.appspot.com",
+            messagingSenderId: "你的SENDER_ID",
+            appId: "你的APP_ID"
+        };
+        
+        // 初始化 Firebase (如果 apiKey 有填寫才執行)
+        if (firebaseConfig.apiKey !== "你的API_KEY") {
+            firebase.initializeApp(firebaseConfig);
+        }
+
+        // ==========================================
+        // 3. 遊戲核心變數與邏輯
+        // ==========================================
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
         const container = document.getElementById('game-container');
+        const SAVE_KEY = 'raingod_eternal_save_data';
 
         const MOB_TYPES = {
             COMMON:  { name: 'Drone', color: '#00f2ff', hp: 2, reward: 10, chance: 1, size: 30, behavior: 'normal' },
@@ -115,7 +127,6 @@
             RAINGOD: { name: 'RAINGOD', color: '#00ff88', hp: 1000000, reward: 10000000, chance: 0.0001, size: 150, behavior: 'chaos' }
         };
 
-        const SAVE_KEY = 'raingod_eternal_save_data';
         let gameData = {
             money: 0, totalEarned: 0, prestige: 1,
             upgrades: {
@@ -128,26 +139,66 @@
         let width, height, combo = 0;
         let cubes = [], particles = [], floaters = [];
 
+        // ==========================================
+        // 4. 存檔與讀檔邏輯 (本地 + 雲端同步)
+        // ==========================================
+
+        function saveGame() {
+            // 永遠先存本地
+            localStorage.setItem(SAVE_KEY, JSON.stringify(gameData));
+
+            // 如果有登入，同步到 Firebase
+            if (window.firebase && firebase.auth().currentUser) {
+                const uid = firebase.auth().currentUser.uid;
+                firebase.database().ref('users/' + uid).set(gameData);
+                document.getElementById('sync-status').innerText = "狀態：雲端已同步";
+            }
+        }
+
+        function loadGame() {
+            // 1. 先從本地讀取（墊底）
+            const localData = localStorage.getItem(SAVE_KEY);
+            if (localData) {
+                try {
+                    gameData = { ...gameData, ...JSON.parse(localData) };
+                } catch(e) { console.error(e); }
+            }
+
+            // 2. 監聽 Firebase 登入狀態，一旦登入成功就抓雲端資料覆蓋本地
+            if (window.firebase) {
+                firebase.auth().onAuthStateChanged((user) => {
+                    if (user) {
+                        document.getElementById('sync-status').innerText = "狀態：登入中...";
+                        firebase.database().ref('users/' + user.uid).once('value').then((snapshot) => {
+                            const cloudData = snapshot.val();
+                            if (cloudData) {
+                                // 雲端有資料，合併並更新本地
+                                gameData = { ...gameData, ...cloudData };
+                                localStorage.setItem(SAVE_KEY, JSON.stringify(gameData));
+                                document.getElementById('sync-status').innerText = "狀態：雲端同步完畢";
+                                refreshUI();
+                            } else {
+                                // 雲端沒資料（新玩家），把目前的本地進度傳上去
+                                saveGame();
+                                document.getElementById('sync-status').innerText = "狀態：已建立雲端備份";
+                            }
+                        });
+                    } else {
+                        document.getElementById('sync-status').innerText = "狀態：本地模式 (未登入)";
+                    }
+                });
+            }
+        }
+
+        // ==========================================
+        // 5. 遊戲運行邏輯 (與你提供的程式碼一致)
+        // ==========================================
+
         function init() {
             width = canvas.width = container.clientWidth;
             height = canvas.height = container.clientHeight;
             loadGame();
             refreshUI();
-        }
-
-        // --- 存檔與讀取 ---
-        function saveGame() {
-            localStorage.setItem(SAVE_KEY, JSON.stringify(gameData));
-        }
-
-        function loadGame() {
-            const localData = localStorage.getItem(SAVE_KEY);
-            if (localData) {
-                try {
-                    const parsed = JSON.parse(localData);
-                    gameData = { ...gameData, ...parsed };
-                } catch(e) { console.error(e); }
-            }
         }
 
         class Cube {
@@ -305,14 +356,10 @@
             requestAnimationFrame(loop);
         }
 
-        // --- 核心：點擊與觸控優化 ---
         function handleAction(e) {
-            // 防止手機端雙擊縮放
             if(e.cancelable) e.preventDefault();
-            
             const rect = canvas.getBoundingClientRect();
             let clientX, clientY;
-            
             if(e.touches) {
                 clientX = e.touches[0].clientX;
                 clientY = e.touches[0].clientY;
@@ -320,14 +367,10 @@
                 clientX = e.clientX;
                 clientY = e.clientY;
             }
-
             const mouseX = clientX - rect.left;
             const mouseY = clientY - rect.top;
-
             let hit = false;
-            // 手機版增加判定寬度 (tolerance)
             const tolerance = 25; 
-
             for (let i = cubes.length - 1; i >= 0; i--) {
                 const c = cubes[i];
                 const dist = Math.hypot(mouseX - c.x, mouseY - c.y);
@@ -341,7 +384,6 @@
             refreshUI();
         }
 
-        // 監聽觸摸與滑鼠
         container.addEventListener('touchstart', handleAction, {passive: false});
         container.addEventListener('mousedown', handleAction);
 
