@@ -1,399 +1,805 @@
 <!DOCTYPE html>
+
 <html lang="zh-Hant">
+
 <head>
+
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>爆炸 | Raingod (Cloud Sync)</title>
-    
-    <!-- 1. 引入 Firebase SDK (版本 8.x 最穩定且適合此架構) -->
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+    <title>爆炸 | Raingod</title>
 
     <style>
+
         :root { 
+
             --neon: #00f2ff; --pink: #ff007b; --gold: #ffcc00; --purple: #bc13fe; 
+
             --bg: #020205; --white: #ffffff; --emerald: #00ff88; --orange: #ff6600;
+
         }
+
+
+
+        /* 使用 Flex 佈局讓內容垂直排列 */
 
         html, body { 
+
             margin: 0; padding: 0; height: 100%; overflow: hidden; 
+
             background: var(--bg); font-family: 'Segoe UI', sans-serif; 
-            display: flex; flex-direction: column;
-            user-select: none; -webkit-user-select: none;
+
+            display: flex; flex-direction: column; 
+
         }
+
+
+
+        /* --- 頂部導覽列 (自定義區) --- */
+
+        #top-nav { 
+
+            height: 60px; min-height: 60px; /* 固定高度 */
+
+            background: #0a0a14; border-bottom: 1px solid #333; 
+
+            display: flex; align-items: center; padding: 0 20px;
+
+            color: white; z-index: 100; box-shadow: 0 2px 20px rgba(0,0,0,0.5);
+
+        }
+
+        .nav-logo { font-weight: 900; color: var(--neon); letter-spacing: 2px; }
+
+
+
+        /* --- 遊戲主容器 --- */
 
         #game-container { 
-            flex-grow: 1; 
-            position: relative; overflow: hidden; 
-            cursor: crosshair; touch-action: none; 
-            -webkit-tap-highlight-color: transparent;
+
+            flex-grow: 1; /* 自動填滿剩下的垂直空間 */
+
+            position: relative; overflow: hidden; cursor: crosshair; user-select: none;
+
         }
+
         
+
         canvas { display: block; }
 
-        /* UI 面板 */
-        #hud { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; padding: 15px; box-sizing: border-box; z-index: 10; }
-        .stat-group { display: flex; flex-direction: column; gap: 8px; pointer-events: auto; }
-        .panel { background: rgba(0, 0, 0, 0.85); border: 1px solid #222; border-left: 4px solid var(--neon); padding: 8px 15px; backdrop-filter: blur(5px); }
-        .label { color: #666; font-size: 9px; text-transform: uppercase; letter-spacing: 1px; }
-        .value { color: #fff; font-size: 18px; font-weight: 900; }
+
+
+        /* UI Overlay */
+
+        #hud { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; padding: 20px; box-sizing: border-box; z-index: 10; }
+
+        .stat-group { display: flex; flex-direction: column; gap: 10px; pointer-events: auto; }
+
+        .panel { background: rgba(0, 0, 0, 0.85); border: 1px solid #222; border-left: 4px solid var(--neon); padding: 10px 20px; backdrop-filter: blur(5px); }
+
+        .label { color: #666; font-size: 10px; text-transform: uppercase; letter-spacing: 2px; }
+
+        .value { color: #fff; font-size: 24px; font-weight: 900; }
+
         
-        .ctrl-btn { padding: 10px 18px; background: #111; color: #fff; border: 1px solid var(--pink); cursor: pointer; pointer-events: auto; font-weight: bold; font-size: 12px; }
 
-        /* 商店 */
-        #shop-window { 
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
-            width: 90%; max-width: 450px; height: 75vh; overflow-y: auto; 
-            background: rgba(5, 5, 10, 0.98); border: 2px solid var(--neon); padding: 20px; 
-            display: none; pointer-events: auto; z-index: 100; 
-        }
-        .upgrade-card { background: #0a0a0f; margin-bottom: 10px; padding: 12px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #222; }
-        .btn-buy { background: var(--gold); border: none; padding: 8px; font-weight: 900; cursor: pointer; min-width: 70px; font-size: 11px; }
+        .ctrl-btn { padding: 12px 25px; background: #111; color: #fff; border: 1px solid var(--pink); cursor: pointer; pointer-events: auto; transition: 0.2s; font-weight: bold; }
 
-        #combo-wrap { position: absolute; bottom: 20px; left: 20px; }
-        .combo-n { font-size: 50px; color: #fff; line-height: 0.7; font-style: italic; font-weight: 900; opacity: 0.4; }
+        .ctrl-btn:hover { background: var(--pink); color: #000; box-shadow: 0 0 20px var(--pink); }
 
-        /* 登入狀態標籤 */
-        #sync-status { font-size: 10px; color: #555; margin-top: 5px; }
+
+
+        #shop-window { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 450px; height: 70vh; overflow-y: auto; background: rgba(5, 5, 10, 0.98); border: 2px solid var(--neon); padding: 25px; display: none; pointer-events: auto; z-index: 100; box-shadow: 0 0 100px #000; }
+
+        .upgrade-card { background: #0a0a0f; margin-bottom: 10px; padding: 15px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #222; }
+
+        .up-name { color: var(--neon); font-size: 14px; font-weight: bold; margin: 0; }
+
+        .btn-buy { background: var(--gold); border: none; padding: 8px 12px; font-weight: 900; cursor: pointer; min-width: 80px; }
+
+        .btn-buy:disabled { background: #333; color: #666; }
+
+
+
+        #combo-wrap { position: absolute; bottom: 30px; left: 30px; }
+
+        .combo-n { font-size: 80px; color: #fff; line-height: 0.7; font-style: italic; font-weight: 900; opacity: 0.4; }
+
+
+
+        ::-webkit-scrollbar { width: 4px; }
+
+        ::-webkit-scrollbar-thumb { background: var(--neon); }
+
     </style>
+
 </head>
+
 <body>
+
 <link rel="stylesheet" href="menu.css">
+
+
 
 <div id="nav_bar"></div>
 
+
+
 <script src="menu.js"></script>
+
+
+
+
+
     <div id="game-container">
+
         <canvas id="canvas"></canvas>
 
+
+
         <div id="hud">
+
             <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+
                 <div class="stat-group">
+
                     <div class="panel"><div class="label">CREDITS</div><div class="value">$ <span id="money-display">0</span></div></div>
+
                     <div class="panel" style="border-left-color: var(--pink);"><div class="label">POWER</div><div class="value">ATK <span id="damage-display">1</span></div></div>
+
                     <div class="panel" style="border-left-color: var(--gold);"><div class="label">Ω RANK</div><div class="value">x <span id="prestige-display">1</span></div></div>
-                    <div id="sync-status">模式：本地存檔</div>
+
                 </div>
+
                 <div class="stat-group">
-                    <button class="ctrl-btn" onclick="toggleShop()">SHOP</button>
+
+                    <button class="ctrl-btn" onclick="toggleShop()">OPEN UPGRADES</button>
+
                     <button id="prestige-btn" class="ctrl-btn" style="border-color: var(--gold); display:none;" onclick="doPrestige()">ASCEND</button>
+
                 </div>
+
             </div>
+
+
 
             <div id="combo-wrap">
-                <div class="label" style="color:var(--neon)">CHAIN</div>
+
+                <div class="label" style="color:var(--neon)">CHAIN STREAK</div>
+
                 <div class="combo-n" id="combo-display">0</div>
+
             </div>
+
         </div>
+
+
 
         <div id="shop-window">
-            <h2 style="color:#fff; border-bottom: 2px solid var(--neon); padding-bottom:10px; font-size: 18px;">UPGRADES</h2>
+
+            <h2 style="color:#fff; border-bottom: 2px solid var(--neon); padding-bottom:10px;">SYSTEM EVOLUTION</h2>
+
             <div id="shop-content"></div>
-            <button onclick="toggleShop()" style="width:100%; margin-top:20px; padding:12px; background:#222; color:#fff; border:none;">CLOSE</button>
+
+            <button onclick="toggleShop()" style="width:100%; margin-top:20px; padding:12px; background:#222; color:#fff; border:none; cursor:pointer;">CLOSE</button>
+
         </div>
+
     </div>
 
+
+
     <script>
-        // ==========================================
-        // 2. Firebase 初始化設定 (請替換成你自己的)
-        // ==========================================
-        const firebaseConfig = {
-            apiKey: "你的API_KEY",
-            authDomain: "你的PROJECT_ID.firebaseapp.com",
-            databaseURL: "https://你的PROJECT_ID-default-rtdb.firebaseio.com",
-            projectId: "你的PROJECT_ID",
-            storageBucket: "你的PROJECT_ID.appspot.com",
-            messagingSenderId: "你的SENDER_ID",
-            appId: "你的APP_ID"
-        };
-        
-        // 初始化 Firebase (如果 apiKey 有填寫才執行)
-        if (firebaseConfig.apiKey !== "你的API_KEY") {
-            firebase.initializeApp(firebaseConfig);
-        }
+
+        const canvas = document.getElementById('canvas');
+
+        const ctx = canvas.getContext('2d');
+
+        const container = document.getElementById('game-container');
+
+
 
         // ==========================================
-        // 3. 遊戲核心變數與邏輯
+
+        // 角色定義區 (你可以繼續增加)
+
         // ==========================================
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-        const container = document.getElementById('game-container');
-        const SAVE_KEY = 'raingod_eternal_save_data';
 
         const MOB_TYPES = {
+
             COMMON:  { name: 'Drone', color: '#00f2ff', hp: 2, reward: 10, chance: 1, size: 30, behavior: 'normal' },
+
             ELITE:   { name: 'Hunter', color: '#ff007b', hp: 60, reward: 450, chance: 0.15, size: 45, behavior: 'fast' },
+
             VOID:    { name: 'Void', color: '#bc13fe', hp: 600, reward: 3000, chance: 0.05, size: 55, behavior: 'sine' },
+
             MAGMA:   { name: 'Magma', color: '#ff6600', hp: 3000, reward: 20000, chance: 0.015, size: 65, behavior: 'jitter' },
+
             SOLAR:   { name: 'Solar', color: '#ffcc00', hp: 25000, reward: 180000, chance: 0.005, size: 85, behavior: 'pulse' },
+
             OMEGA:   { name: 'Omega', color: '#ffffff', hp: 150000, reward: 1200000, chance: 0.001, size: 110, behavior: 'teleport' },
+
             RAINGOD: { name: 'RAINGOD', color: '#00ff88', hp: 1000000, reward: 10000000, chance: 0.0001, size: 150, behavior: 'chaos' }
+
         };
+
+
+
+        const SAVE_KEY = 'raingod_eternal_save_data';
+
+
 
         let gameData = {
+
             money: 0, totalEarned: 0, prestige: 1,
+
             upgrades: {
-                damage: { lv: 1, cost: 50, mult: 1.45, name: "量子核心", desc: "增加點擊力" },
-                range: { lv: 1, cost: 200, mult: 1.6, name: "共振距離", desc: "連鎖爆炸範圍" },
-                luck: { lv: 1, cost: 1000, mult: 2.3, name: "命運干涉", desc: "稀有怪機率" }
+
+                damage: { lv: 1, cost: 50, mult: 1.45, name: "量子核心", desc: "增加每次點擊的破壞力" },
+
+                range: { lv: 1, cost: 200, mult: 1.6, name: "共振距離", desc: "引發更遠的連鎖爆炸" },
+
+                luck: { lv: 1, cost: 1000, mult: 2.3, name: "命運干涉", desc: "提高稀有怪出現機率" }
+
             },
+
         };
 
+
+
         let width, height, combo = 0;
+
         let cubes = [], particles = [], floaters = [];
 
-        // ==========================================
-        // 4. 存檔與讀檔邏輯 (本地 + 雲端同步)
-        // ==========================================
+        let lastClickTime = 0;
 
-        function saveGame() {
-            // 永遠先存本地
-            localStorage.setItem(SAVE_KEY, JSON.stringify(gameData));
 
-            // 如果有登入，同步到 Firebase
-            if (window.firebase && firebase.auth().currentUser) {
-                const uid = firebase.auth().currentUser.uid;
-                firebase.database().ref('users/' + uid).set(gameData);
-                document.getElementById('sync-status').innerText = "狀態：雲端已同步";
-            }
-        }
-
-        function loadGame() {
-            // 1. 先從本地讀取（墊底）
-            const localData = localStorage.getItem(SAVE_KEY);
-            if (localData) {
-                try {
-                    gameData = { ...gameData, ...JSON.parse(localData) };
-                } catch(e) { console.error(e); }
-            }
-
-            // 2. 監聽 Firebase 登入狀態，一旦登入成功就抓雲端資料覆蓋本地
-            if (window.firebase) {
-                firebase.auth().onAuthStateChanged((user) => {
-                    if (user) {
-                        document.getElementById('sync-status').innerText = "狀態：登入中...";
-                        firebase.database().ref('users/' + user.uid).once('value').then((snapshot) => {
-                            const cloudData = snapshot.val();
-                            if (cloudData) {
-                                // 雲端有資料，合併並更新本地
-                                gameData = { ...gameData, ...cloudData };
-                                localStorage.setItem(SAVE_KEY, JSON.stringify(gameData));
-                                document.getElementById('sync-status').innerText = "狀態：雲端同步完畢";
-                                refreshUI();
-                            } else {
-                                // 雲端沒資料（新玩家），把目前的本地進度傳上去
-                                saveGame();
-                                document.getElementById('sync-status').innerText = "狀態：已建立雲端備份";
-                            }
-                        });
-                    } else {
-                        document.getElementById('sync-status').innerText = "狀態：本地模式 (未登入)";
-                    }
-                });
-            }
-        }
-
-        // ==========================================
-        // 5. 遊戲運行邏輯 (與你提供的程式碼一致)
-        // ==========================================
 
         function init() {
+
+            // 自動獲取容器的大小，完美適應導覽列下推後的空間
+
             width = canvas.width = container.clientWidth;
+
             height = canvas.height = container.clientHeight;
-            loadGame();
+
+            loadGame(); // Load game data on init
+
             refreshUI();
+
         }
+
+        window.onresize = init;
+
+// --- 核心存檔：同步本地與雲端 ---
+
+function saveGame() {
+
+    // 1. 先存一份在本地瀏覽器 (防止網路斷線)
+
+    localStorage.setItem(SAVE_KEY, JSON.stringify(gameData));
+
+    // console.log("本地存檔已更新");
+
+
+
+    // 2. 檢查 Firebase 登入狀態並同步
+
+    if (window.firebase && firebase.auth().currentUser) {
+
+        const uid = firebase.auth().currentUser.uid;
+
+        // 將目前的 gameData 完整推送到雲端使用者的 UID 路徑下
+
+        firebase.database().ref('users/' + uid + '/game_data').set(gameData)
+
+            .then(() => {
+
+                // console.log("✅ [Firebase] 雲端存檔成功！");
+
+            })
+
+            .catch((error) => {
+
+                console.error("❌ [Firebase] 存檔失敗：", error.message);
+
+            });
+
+    }
+
+}// --- 核心讀檔：優先讀取雲端資料 ---
+
+function loadGame() {
+
+    // 1. 啟動時先拿本地的墊底 (讓畫面不至於空掉)
+
+    const localData = localStorage.getItem(SAVE_KEY);
+
+    if (localData) {
+
+        try {
+
+            gameData = { ...gameData, ...JSON.parse(localData) };
+
+            refreshUI();
+
+        } catch(e) { 
+
+            console.error("解析本地存檔失敗", e); 
+
+        }
+
+    }
+
+
+
+    // 2. 核心同步邏輯：監聽 Google 登入狀態
+
+    if (window.firebase) {
+
+        firebase.auth().onAuthStateChanged((user) => {
+
+            if (user) {
+
+                console.log("👋 已登入：" + user.displayName + "，正在同步雲端進度...");
+
+                
+
+                // 到該使用者的專屬路徑抓資料
+
+                firebase.database().ref('users/' + user.uid + '/game_data').once('value')
+
+                    .then((snapshot) => {
+
+                        const cloudData = snapshot.val();
+
+                        
+
+                        if (cloudData) {
+
+                            console.log("🚀 發現雲端進度！正在覆蓋本地資料...");
+
+                            // 重要：用雲端資料覆蓋目前的 gameData
+
+                            gameData = { ...gameData, ...cloudData };
+
+                            
+
+                            // 更新本地緩存，下次進來更快
+
+                            localStorage.setItem(SAVE_KEY, JSON.stringify(gameData));
+
+                            
+
+                            // 強制刷新遊戲畫面 (數字、等級)
+
+                            refreshUI();
+
+                            if(typeof toggleShop === "function") {
+
+                                // 如果商店開著，順便刷新商店價格
+
+                                const shop = document.getElementById('shop-window');
+
+                                if(shop && shop.style.display === 'block') {
+
+                                    toggleShop(); toggleShop(); 
+
+                                }
+
+                            }
+
+                        } else {
+
+                            console.log("🆕 雲端尚無資料，將以目前進度作為初始備份。");
+
+                            saveGame(); // 如果是新玩家，直接幫他存一次
+
+                        }
+
+                    })
+
+                    .catch(err => console.error("❌ 讀取雲端失敗：", err));
+
+            } else {
+
+                console.log("👤 目前為訪客模式，資料僅存於此瀏覽器。");
+
+            }
+
+        });
+
+    }
+
+}window.onresize = init;
+
+
+
+        // --- 核心實體類別 ---
 
         class Cube {
+
             constructor() {
+
                 const roll = Math.random();
+
                 const luck = gameData.upgrades.luck.lv * 0.005;
+
+                
+
                 if (roll < 0.0001 + luck/100) this.type = MOB_TYPES.RAINGOD;
+
                 else if (roll < 0.001 + luck/50) this.type = MOB_TYPES.OMEGA;
+
                 else if (roll < 0.005 + luck/20) this.type = MOB_TYPES.SOLAR;
+
                 else if (roll < 0.02 + luck/10) this.type = MOB_TYPES.MAGMA;
+
                 else if (roll < 0.06 + luck/5) this.type = MOB_TYPES.VOID;
+
                 else if (roll < 0.18 + luck) this.type = MOB_TYPES.ELITE;
+
                 else this.type = MOB_TYPES.COMMON;
 
-                this.x = Math.random() * (width - 60) + 30;
-                this.y = Math.random() * (height - 60) + 30;
+
+
+                this.x = Math.random() * (width - 100) + 50;
+
+                this.y = Math.random() * (height - 100) + 50;
+
                 this.size = this.type.size;
+
                 const hpScale = Math.pow(1.25, (gameData.upgrades.damage.lv - 1) / 4);
+
                 this.hp = this.type.hp * gameData.prestige * hpScale;
+
                 this.maxHp = this.hp;
+
                 this.color = this.type.color;
-                this.vx = (Math.random() - 0.5) * 2.5;
-                this.vy = (Math.random() - 0.5) * 2.5;
+
+                this.vx = (Math.random() - 0.5) * 3;
+
+                this.vy = (Math.random() - 0.5) * 3;
+
                 this.tick = 0;
+
                 this.dead = false;
+
             }
+
+
 
             update() {
+
                 this.tick += 0.05;
+
+                // 行為模式處理
+
                 switch(this.type.behavior) {
-                    case 'fast': this.x += this.vx * 2.5; this.y += this.vy * 2.5; break;
-                    case 'sine': this.x += this.vx; this.y += Math.sin(this.tick) * 4; break;
-                    case 'jitter': this.x += this.vx + (Math.random()-0.5)*6; this.y += this.vy + (Math.random()-0.5)*6; break;
-                    case 'pulse': this.size = this.type.size + Math.sin(this.tick * 2) * 8; this.x += this.vx; this.y += this.vy; break;
+
+                    case 'fast': this.x += this.vx * 3; this.y += this.vy * 3; break;
+
+                    case 'sine': this.x += this.vx; this.y += Math.sin(this.tick) * 5; break;
+
+                    case 'jitter': this.x += this.vx + (Math.random()-0.5)*8; this.y += this.vy + (Math.random()-0.5)*8; break;
+
+                    case 'pulse': this.size = this.type.size + Math.sin(this.tick * 2) * 10; this.x += this.vx; this.y += this.vy; break;
+
                     case 'teleport': if(Math.random() < 0.01) { this.x = Math.random()*width; this.y = Math.random()*height; } this.x += this.vx; this.y += this.vy; break;
-                    case 'chaos': this.vx += (Math.random()-0.5)*0.4; this.vy += (Math.random()-0.5)*0.4; this.x += this.vx; this.y += this.vy; break;
+
+                    case 'chaos': this.vx += (Math.random()-0.5)*0.5; this.vy += (Math.random()-0.5)*0.5; this.x += this.vx; this.y += this.vy; break;
+
                     default: this.x += this.vx; this.y += this.vy;
+
                 }
-                if(this.x < 15 || this.x > width - 15) this.vx *= -1;
-                if(this.y < 15 || this.y > height - 15) this.vy *= -1;
+
+                if(this.x < 20 || this.x > width - 20) this.vx *= -1;
+
+                if(this.y < 20 || this.y > height - 20) this.vy *= -1;
+
             }
+
+
 
             draw() {
+
                 ctx.save();
+
                 ctx.translate(this.x, this.y);
+
                 ctx.strokeStyle = this.color;
-                ctx.lineWidth = 2;
+
+                ctx.lineWidth = 3;
+
+                ctx.shadowBlur = 15;
+
+                ctx.shadowColor = this.color;
+
                 ctx.strokeRect(-this.size/2, -this.size/2, this.size, this.size);
-                let p = Math.max(0, this.hp / this.maxHp);
-                ctx.fillStyle = '#111'; ctx.fillRect(-15, -this.size/2 - 10, 30, 4);
-                ctx.fillStyle = this.color; ctx.fillRect(-15, -this.size/2 - 10, 30 * p, 4);
+
+                
+
+                // 畫血量條
+
+                let p = this.hp / this.maxHp;
+
+                ctx.shadowBlur = 0;
+
+                ctx.fillStyle = '#111'; ctx.fillRect(-20, -this.size/2 - 12, 40, 5);
+
+                ctx.fillStyle = this.color; ctx.fillRect(-20, -this.size/2 - 12, 40 * p, 5);
+
                 ctx.restore();
+
             }
+
+
 
             takeDamage(dmg) {
+
                 if(this.dead) return;
+
                 this.hp -= dmg;
+
                 if(this.hp <= 0) { this.dead = true; this.explode(); }
+
             }
+
+
 
             explode() {
+
                 combo++;
+
                 let reward = this.type.reward * gameData.prestige;
+
                 gameData.money += reward;
+
                 gameData.totalEarned += reward;
+
+                
+
                 spawnEffect(this.x, this.y, this.color);
+
                 spawnText(this.x, this.y, `+$${Math.floor(reward).toLocaleString()}`, this.color);
 
-                let range = 100 + (gameData.upgrades.range.lv * 15);
+
+
+                // 連鎖爆炸
+
+                let range = 110 + (gameData.upgrades.range.lv * 18);
+
                 cubes.forEach(c => {
+
                     if(!c.dead && Math.hypot(this.x - c.x, this.y - c.y) < range) {
-                        setTimeout(() => c.takeDamage(getAtkPower() * 0.5), 70);
+
+                        setTimeout(() => c.takeDamage(getAtkPower() * 0.6), 80);
+
                     }
+
                 });
 
+
+
                 if(gameData.totalEarned > 5000000) document.getElementById('prestige-btn').style.display = 'block';
-                refreshUI(); saveGame();
+
+                refreshUI(); saveGame(); // Save after explosion
+
             }
+
         }
+
+
+
+        // --- 輔助函式 ---
 
         function getAtkPower() { return Math.pow(1.55, gameData.upgrades.damage.lv - 1) * gameData.prestige; }
 
+
+
         function refreshUI() {
+
             document.getElementById('money-display').innerText = Math.floor(gameData.money).toLocaleString();
+
             document.getElementById('damage-display').innerText = Math.floor(getAtkPower()).toLocaleString();
+
             document.getElementById('prestige-display').innerText = gameData.prestige;
+
             document.getElementById('combo-display').innerText = combo;
+
         }
+
+
 
         function spawnEffect(x, y, color) {
-            for(let i=0; i<12; i++) {
-                particles.push({ x, y, vx:(Math.random()-0.5)*10, vy:(Math.random()-0.5)*10, life:1, color });
+
+            for(let i=0; i<20; i++) {
+
+                particles.push({ x, y, vx:(Math.random()-0.5)*12, vy:(Math.random()-0.5)*12, life:1, color });
+
             }
+
         }
+
+
 
         function spawnText(x, y, txt, color) {
-            floaters.push({ x, y, txt, color, life:1.0, vy:-1.5 });
+
+            floaters.push({ x, y, txt, color, life:1.2, vy:-1.8 });
+
         }
+
+
 
         function toggleShop() {
+
             const s = document.getElementById('shop-window');
+
             s.style.display = s.style.display === 'block' ? 'none' : 'block';
+
             if(s.style.display === 'block') {
+
                 const cont = document.getElementById('shop-content');
+
                 cont.innerHTML = '';
+
                 for(let k in gameData.upgrades) {
+
                     const up = gameData.upgrades[k];
+
                     const cost = Math.floor(up.cost * Math.pow(up.mult, up.lv-1));
+
                     cont.innerHTML += `<div class="upgrade-card">
-                        <div style="max-width:60%"><b>${up.name}</b><br><small style="color:#777">LV.${up.lv} - ${up.desc}</small></div>
+
+                        <div><b>${up.name} [LV.${up.lv}]</b><br><small style="color:#555">${up.desc}</small></div>
+
                         <button class="btn-buy" onclick="buy('${k}', ${cost})" ${gameData.money < cost ? 'disabled' : ''}>$${cost.toLocaleString()}</button>
+
                     </div>`;
+
                 }
+
             }
+
         }
+
+
 
         window.buy = (k, cost) => {
+
             if(gameData.money >= cost) {
+
                 gameData.money -= cost;
+
                 gameData.upgrades[k].lv++;
-                refreshUI(); saveGame();
-                toggleShop(); toggleShop();
+
+                refreshUI();
+
+                saveGame(); // Save after buying upgrade
+
+                toggleShop(); // Close and reopen to refresh costs
+
+                toggleShop();
+
             }
+
         }
+
+
 
         function doPrestige() {
+
             gameData.prestige++;
-            gameData.money = 0; gameData.totalEarned = 0;
+
+            gameData.money = 0;
+
+            gameData.totalEarned = 0;
+
             for (let k in gameData.upgrades) gameData.upgrades[k].lv = 1;
+
             document.getElementById('prestige-btn').style.display = 'none';
-            refreshUI(); saveGame();
+
+            refreshUI(); saveGame(); // Save after prestige
+
         }
+
+
 
         function loop() {
-            ctx.fillStyle = 'rgba(2, 2, 5, 0.4)';
+
+            ctx.fillStyle = 'rgba(2, 2, 5, 0.3)';
+
             ctx.fillRect(0, 0, width, height);
 
-            if(cubes.length < 20) cubes.push(new Cube());
+
+
+            if(cubes.length < 25) cubes.push(new Cube());
+
             cubes = cubes.filter(c => !c.dead);
+
             cubes.forEach(c => { c.update(); c.draw(); });
 
-            particles = particles.filter(p => (p.life -= 0.03) > 0);
+
+
+            particles = particles.filter(p => (p.life -= 0.025) > 0);
+
             particles.forEach(p => {
+
                 p.x += p.vx; p.y += p.vy;
+
                 ctx.fillStyle = p.color; ctx.globalAlpha = p.life;
+
                 ctx.fillRect(p.x, p.y, 2, 2);
+
             });
 
-            floaters = floaters.filter(f => (f.life -= 0.025) > 0);
+
+
+            floaters = floaters.filter(f => (f.life -= 0.02) > 0);
+
             floaters.forEach(f => {
+
                 f.y += f.vy; ctx.fillStyle = f.color; ctx.globalAlpha = f.life;
-                ctx.font = "bold 14px Segoe UI"; ctx.fillText(f.txt, f.x, f.y);
+
+                ctx.font = "bold 16px Segoe UI"; ctx.fillText(f.txt, f.x, f.y);
+
             });
+
             ctx.globalAlpha = 1;
+
             requestAnimationFrame(loop);
+
         }
 
-        function handleAction(e) {
-            if(e.cancelable) e.preventDefault();
+
+
+        // --- 點擊座標修正 ---
+
+        container.addEventListener('mousedown', (e) => {
+
+            // 使用 getBoundingClientRect 獲取容器在頁面上的實際位置
+
             const rect = canvas.getBoundingClientRect();
-            let clientX, clientY;
-            if(e.touches) {
-                clientX = e.touches[0].clientX;
-                clientY = e.touches[0].clientY;
-            } else {
-                clientX = e.clientX;
-                clientY = e.clientY;
-            }
-            const mouseX = clientX - rect.left;
-            const mouseY = clientY - rect.top;
+
+            const mouseX = e.clientX - rect.left;
+
+            const mouseY = e.clientY - rect.top;
+
+
+
             let hit = false;
-            const tolerance = 25; 
+
+            // 逆向遍歷方塊以便點擊到最上層的
+
             for (let i = cubes.length - 1; i >= 0; i--) {
+
                 const c = cubes[i];
-                const dist = Math.hypot(mouseX - c.x, mouseY - c.y);
-                if(dist < (c.size / 1.5) + tolerance) {
+
+                if(Math.hypot(mouseX - c.x, mouseY - c.y) < c.size/1.5 + 10) {
+
                     c.takeDamage(getAtkPower());
+
                     hit = true;
+
                     break;
+
                 }
+
             }
+
             if(!hit) combo = 0;
+
             refreshUI();
-        }
 
-        container.addEventListener('touchstart', handleAction, {passive: false});
-        container.addEventListener('mousedown', handleAction);
+        });
 
-        window.onresize = init;
+
+
         init();
+
         loop();
+
     </script>
+
 </body>
+
 </html>
