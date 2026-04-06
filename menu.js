@@ -64,7 +64,7 @@
                     const userData = snapshot.val() || {};
                     const currentCoins = userData.flash_coins || 0;
                     const coinDisplay = document.getElementById('flash-coins-display');
-                    if (coinDisplay) coinDisplay.innerText = `⚡ 閃幣: ${currentCoins}`;
+                    if (coinDisplay) coinDisplay.innerText = `⚡: ${currentCoins}`;
                     if (userData.game_data) localStorage.setItem('raingod_game_save', JSON.stringify(userData.game_data));
                 });
             }
