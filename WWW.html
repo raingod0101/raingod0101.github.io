@@ -299,22 +299,61 @@
             }
 
             explode() {
+                // 1. 連擊與基礎獎勵計算
                 combo++;
                 let reward = this.type.reward * gameData.prestige;
                 gameData.money += reward;
                 gameData.totalEarned += reward;
+
+                // 2. 視覺特效觸發 (震動與飄字)
                 spawnEffect(this.x, this.y, this.color);
                 spawnText(this.x, this.y, `+$${Math.floor(reward).toLocaleString()}`, this.color);
 
-                let range = 110 + (gameData.upgrades.range.lv * 18);
+                // 3. 動態連鎖爆炸邏輯
+                // 基礎範圍 110，隨升級增加。特定 BOSS 級角色範圍再加成
+                let baseRange = 110 + (gameData.upgrades.range.lv * 18);
+                let explosionScale = 1;
+                
+                // 如果是高等級角色，爆炸範圍更大 (例如 ZENITH 或是 RAINGOD)
+                if (this.size > 120) explosionScale = 1.5;
+                if (this.type.name === '絕對頂點' || this.type.name === '創世神') explosionScale = 2.5;
+
+                let finalRange = baseRange * explosionScale;
+
+                // 遍歷所有方塊進行連鎖反應
                 cubes.forEach(c => {
-                    if(!c.dead && Math.hypot(this.x - c.x, this.y - c.y) < range) {
-                        setTimeout(() => c.takeDamage(getAtkPower() * 0.6), 80);
+                    if(!c.dead) {
+                        const dist = Math.hypot(this.x - c.x, this.y - c.y);
+                        if (dist < finalRange) {
+                            // 延遲爆炸營造「連鎖波紋」感
+                            // 越遠的怪越晚爆炸 (距離/2 毫秒)
+                            setTimeout(() => {
+                                // 連鎖傷害為當前攻擊力的 60%
+                                c.takeDamage(getAtkPower() * 0.6);
+                            }, dist / 2);
+                        }
                     }
                 });
 
-                if(gameData.totalEarned > 5000000) document.getElementById('prestige-btn').style.display = 'block';
-                refreshUI(); saveGame();
+                // 4. 動態轉生門檻判斷 (門檻持平倍率成長)
+                // 基礎門檻 5,000,000 * 當前轉生倍率
+                let prestigeThreshold = 5000000 * gameData.prestige;
+
+                const pBtn = document.getElementById('prestige-btn');
+                if (gameData.money >= prestigeThreshold) {
+                    pBtn.style.display = 'block';
+                    pBtn.innerText = `ASCEND TO RANK ${gameData.prestige + 1}`;
+                    // 給按鈕一點亮色效果
+                    pBtn.style.borderColor = 'var(--gold)';
+                    pBtn.style.boxShadow = '0 0 15px var(--gold)';
+                } else {
+                    // 如果錢花掉了低於門檻，按鈕隱藏
+                    pBtn.style.display = 'none';
+                }
+
+                // 5. 數據更新與存檔
+                refreshUI();
+                saveGame();
             }
 
             takeDamage(dmg) {
@@ -370,13 +409,40 @@
         }
 
         function doPrestige() {
-            gameData.prestige++;
-            gameData.money = 0; gameData.totalEarned = 0;
-            for (let k in gameData.upgrades) gameData.upgrades[k].lv = 1;
-            document.getElementById('prestige-btn').style.display = 'none';
-            refreshUI(); saveGame();
-        }
+            // 1. 同步門檻邏輯 (500萬 * 當前 Rank)
+            let prestigeThreshold = 5000000 * gameData.prestige;
+            
+            // 2. 二次檢查 (防止玩家透過 F12 呼叫函數)
+            if (gameData.money < prestigeThreshold) {
+                alert(`還差 $${Math.floor(prestigeThreshold - gameData.money).toLocaleString()} 才能晉升維度！`);
+                return;
+            }
 
+            // 3. 執行晉升
+            gameData.prestige++;  // 這是最重要的：倍率 +1
+            gameData.money = 0;   // 錢重置
+            gameData.totalEarned = 0; // 總收入重置 (讓下一個門檻重新計算)
+            
+            // 4. 重置所有升級等級 (Lv.1)
+            // 雖然等級回歸，但因為 prestige 變大了，你隨便點一隻怪賺的錢會是上一次 Rank 的數倍
+            for (let k in gameData.upgrades) {
+                gameData.upgrades[k].lv = 1;
+            }
+            
+            // 5. UI 與特效處理
+            document.getElementById('prestige-btn').style.display = 'none';
+            
+            // 在畫面中央噴出巨大的 RANK UP 字樣
+            spawnText(width / 2, height / 2, `RANK UP: Ω RANK ${gameData.prestige}`, "#ffcc00");
+            
+            // 噴發一堆粒子特效慶祝
+            for(let i=0; i<50; i++) {
+                spawnEffect(width/2, height/2, "var(--gold)");
+            }
+
+            refreshUI();
+            saveGame();
+        }
         function loop() {
             ctx.fillStyle = 'rgba(2, 2, 5, 0.3)';
             ctx.fillRect(0, 0, width, height);
