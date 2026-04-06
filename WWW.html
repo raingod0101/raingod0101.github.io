@@ -137,34 +137,56 @@
         }
 
         function loadGame() {
-            // 1. 先讀本地
-            const localData = localStorage.getItem(SAVE_KEY);
-            if (localData) {
-                try {
-                    gameData = { ...gameData, ...JSON.parse(localData) };
-                    refreshUI();
-                } catch(e) { console.error("Local Load Error", e); }
-            }
-
-            // 2. 監聽 Firebase 登入 (雲端同步)
-            if (window.firebase) {
-                firebase.auth().onAuthStateChanged((user) => {
-                    if (user) {
-                        firebase.database().ref('users/' + user.uid + '/game_data').once('value')
-                            .then((snapshot) => {
-                                const cloudData = snapshot.val();
-                                if (cloudData) {
-                                    gameData = { ...gameData, ...cloudData };
-                                    localStorage.setItem(SAVE_KEY, JSON.stringify(gameData));
-                                    refreshUI(); // 雲端讀到後必須再次刷新 UI
-                                } else {
-                                    saveGame();
-                                }
-                            });
-                    }
-                });
-            }
+    // 1. 優先讀取本地存檔 (讓玩家一進來就看到數字)
+    const localData = localStorage.getItem(SAVE_KEY);
+    if (localData) {
+        try {
+            gameData = { ...gameData, ...JSON.parse(localData) };
+            refreshUI();
+            console.log("已加載本地存檔");
+        } catch(e) { 
+            console.error("解析本地存檔失敗", e); 
         }
+    }
+
+    // 2. 核心同步邏輯：監聽 Firebase 登入狀態
+    if (window.firebase) {
+        firebase.auth().onAuthStateChanged((user) => {
+            if (user) {
+                console.log("👋 已登入：" + user.displayName);
+                
+                firebase.database().ref('users/' + user.uid + '/game_data').once('value')
+                    .then((snapshot) => {
+                        const cloudData = snapshot.val();
+                        
+                        if (cloudData) {
+                            // --- 情況 A：雲端有資料 ---
+                            console.log("🚀 發現雲端進度！同步中...");
+                            gameData = { ...gameData, ...cloudData };
+                            // 同步回本地，確保下次進來很快
+                            localStorage.setItem(SAVE_KEY, JSON.stringify(gameData));
+                            refreshUI();
+                        } else {
+                            // --- 情況 B：第一次登入（雲端沒資料） ---
+                            // 檢查本地是否有玩過的痕跡 (例如錢大於 0 或有升級過)
+                            const isLocalAdvanced = gameData.totalEarned > 0 || gameData.upgrades.damage.lv > 1;
+                            
+                            if (isLocalAdvanced) {
+                                console.log("✨ 第一次登入：偵測到本地已有進度，正在同步至雲端備份...");
+                                saveGame(); // 直接把現在的本地資料存上雲端
+                            } else {
+                                console.log("🆕 第一次登入：雲端與本地皆無資料，初始化新帳號。");
+                                saveGame();
+                            }
+                        }
+                    })
+                    .catch(err => console.error("❌ 讀取雲端失敗：", err));
+            } else {
+                console.log("👤 目前為訪客模式。");
+            }
+        });
+    }
+}
 
         class Cube {
             constructor() {
