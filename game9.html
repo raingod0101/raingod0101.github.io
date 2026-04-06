@@ -2,7 +2,6 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <!-- 加入 viewport-fit=cover 處理瀏海屏 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>雨神大戰爭 | Raingod</title>
     <style>
@@ -14,12 +13,10 @@
         
         body { 
             margin: 0; background: #000; color: white; 
-            /* 使用 svh 解決手機網址列遮擋 */
             height: 100svh; width: 100vw; 
             overflow: hidden; font-family: '微軟正黑體', sans-serif; 
         }
 
-        /* 介面框架 */
         .screen { 
             display: none; width: 100%; height: 100%; 
             flex-direction: column; align-items: center; 
@@ -37,7 +34,6 @@
         .card:active { transform: scale(0.95); }
         .card.locked { opacity: 0.4; filter: grayscale(1); }
 
-        /* 戰鬥舞台 */
         #game-screen { padding: 0; position: relative; }
         #stage { 
             position: relative; width: 100%; flex-grow: 1; 
@@ -48,16 +44,14 @@
         .base { position: absolute; bottom: 60px; width: 60px; height: 100px; border-radius: 8px 8px 0 0; z-index: 5; }
         #p-base { left: 0; background: #2c3e50; border-right: 4px solid var(--p-color); }
         #e-base { right: 0; background: #3e2723; border-left: 4px solid var(--e-color); }
-
         .base-hp { position: absolute; top: -25px; width: 100%; text-align: center; font-size: 12px; font-weight: bold; }
 
-        /* UI 面板：解決手機最下面看不到的問題 */
         #ui-panel { 
             height: 100px; width: 100%; 
             background: #0f3460; display: flex; 
             gap: 8px; padding: 10px; overflow-x: auto;
             border-top: 2px solid #1a1a2e;
-            padding-bottom: env(safe-area-inset-bottom); /* 針對 iPhone 底部橫條 */
+            padding-bottom: env(safe-area-inset-bottom);
         }
         .spawn-btn { 
             min-width: 70px; height: 100%; 
@@ -68,27 +62,21 @@
         }
         .spawn-btn:disabled { opacity: 0.3; }
 
-        /* 戰鬥單位 */
-        .unit { position: absolute; bottom: 60px; width: 40px; text-align: center; z-index: 10; pointer-events: none; }
+        .unit { position: absolute; bottom: 60px; width: 40px; text-align: center; z-index: 10; pointer-events: none; transition: transform 0.1s; }
         .unit-body { font-size: 24px; }
         .hp-bar { width: 100%; height: 4px; background: #000; margin-bottom: 2px; border-radius: 2px; overflow: hidden; }
         .hp-inner { height: 100%; background: #2ecc71; width: 100%; transition: width 0.2s; }
         
         #gacha-anim { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 1000; display: none; align-items: center; justify-content: center; font-size: 80px; }
-
-        /* 隱藏捲軸 */
         #ui-panel::-webkit-scrollbar { display: none; }
     </style>
 </head>
 <body>
-<link rel="stylesheet" href="menu.css">
 
 <div id="nav_bar"></div>
-
-<script src="menu.js"></script>
-    
 <div id="gacha-anim">❓</div>
 
+<!-- 主選單 -->
 <div id="main-screen" class="screen active">
     <div class="title">雨神大戰爭</div>
     <div class="top-res">
@@ -103,6 +91,7 @@
     </div>
 </div>
 
+<!-- 祭壇抽卡 -->
 <div id="gacha-screen" class="screen">
     <div class="title">神之祭壇</div>
     <div id="gacha-hint">消耗 500 XP 祈禱</div>
@@ -111,25 +100,28 @@
     <button class="card" style="margin-top: 15px; width: 120px;" onclick="showScreen('main-screen')">返回</button>
 </div>
 
-<!-- 其他螢幕保持結構不變，僅調整樣式細節 -->
+<!-- 角色升級 -->
 <div id="upgrade-screen" class="screen">
     <div class="title">雨神進化</div>
     <div id="upgrade-list" class="grid"></div>
     <button class="card" style="width: 100px; margin-top:10px" onclick="showScreen('main-screen')">返回</button>
 </div>
 
+<!-- 角色圖鑑 -->
 <div id="book-screen" class="screen">
     <div class="title">神靈圖鑑</div>
     <div id="book-list" class="grid"></div>
     <button class="card" style="width: 100px; margin-top:10px" onclick="showScreen('main-screen')">返回</button>
 </div>
 
+<!-- 地圖選擇 -->
 <div id="map-screen" class="screen">
     <div class="title">世界地圖</div>
     <div id="map-list" class="grid"></div>
     <button class="card" style="width: 100px; margin-top:10px" onclick="showScreen('main-screen')">返回</button>
 </div>
 
+<!-- 戰鬥畫面 -->
 <div id="game-screen" class="screen">
     <div id="stage">
         <div id="battle-money" style="position:absolute; top:10px; right:20px; font-size:20px; color:var(--gold); z-index:100; font-weight:bold;">$0</div>
@@ -141,6 +133,7 @@
 </div>
 
 <script>
+    const SAVE_KEY = 'RainGodPro';
     const CHARS = {
         'drop': { name: '雨滴', rarity: 'R', forms: ['💧', '💦', '🌊'], hp: 150, atk: 25, cost: 50 },
         'bolt': { name: '雷霆', rarity: 'SR', forms: ['⚡', '🌩️', '⛈️'], hp: 450, atk: 90, cost: 250 },
@@ -155,20 +148,70 @@
         { name: "虛空神域", eHP: 22000, eType: '💀', diff: 5 }
     ];
 
-    let user = JSON.parse(localStorage.getItem('RainGodPro')) || {
+    // 初始預設資料
+    let user = {
         xp: 1000,
         owned: ['drop'],
         lvs: { 'drop': 1, 'bolt': 1, 'cloud': 1, 'dragon': 1 },
         cleared: 0
     };
 
+    // --- 存檔與加載核心邏輯 ---
     function save() { 
-        localStorage.setItem('RainGodPro', JSON.stringify(user));
-        document.getElementById('res-xp').innerText = user.xp;
+        // 1. 存本地
+        localStorage.setItem(SAVE_KEY, JSON.stringify(user));
+        
+        // 2. 更新 UI
+        document.getElementById('res-xp').innerText = Math.floor(user.xp);
         document.getElementById('res-stage').innerText = `${user.cleared}/${STAGES.length}`;
-        if (window.raingodSave) window.raingodSave(user);
+
+        // 3. 存雲端 (若已登入)
+        if (window.firebase && firebase.auth().currentUser) {
+            const uid = firebase.auth().currentUser.uid;
+            firebase.database().ref('users/' + uid + '/raingod_pro_data').set(user);
+        }
     }
 
+    function loadGame() {
+        // A. 讀取本地 LocalStorage
+        const localData = localStorage.getItem(SAVE_KEY);
+        if (localData) {
+            try {
+                user = { ...user, ...JSON.parse(localData) };
+                console.log("已載入本地進度");
+            } catch(e) { console.error("本地讀取出錯", e); }
+        }
+        save(); // 立即同步 UI 顯示
+
+        // B. 處理 Firebase 同步
+        if (window.firebase) {
+            firebase.auth().onAuthStateChanged((fbUser) => {
+                if (fbUser) {
+                    console.log("雲端身份驗證成功：" + fbUser.displayName);
+                    firebase.database().ref('users/' + fbUser.uid + '/raingod_pro_data').once('value')
+                        .then((snapshot) => {
+                            const cloudData = snapshot.val();
+                            if (cloudData) {
+                                // 第二次登入：雲端覆蓋本地
+                                console.log("同步雲端進度...");
+                                user = { ...user, ...cloudData };
+                                localStorage.setItem(SAVE_KEY, JSON.stringify(user));
+                                save();
+                            } else {
+                                // 第一次登入：檢查本地是否有玩過，有就推上去
+                                const hasProgress = user.xp > 1000 || user.owned.length > 1 || user.cleared > 0;
+                                if (hasProgress) {
+                                    console.log("首次登入：將本地修行成果同步至雲端...");
+                                    save();
+                                }
+                            }
+                        });
+                }
+            });
+        }
+    }
+
+    // --- 遊戲介面邏輯 ---
     function showScreen(id) {
         document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
         document.getElementById(id).classList.add('active');
@@ -184,7 +227,7 @@
             const item = document.createElement('div');
             item.className = 'card';
             item.innerHTML = `<div>${c.forms[lv >= 10 ? 2 : (lv >= 5 ? 1 : 0)]}</div><small>${c.name} Lv.${lv}</small><br>
-                <button onclick="upLevel('${id}')" style="font-size:12px">升級(${lv*200})</button>`;
+                <button onclick="upLevel('${id}')" style="font-size:12px; margin-top:5px;">升級(${lv*200})</button>`;
             list.appendChild(item);
         });
     }
@@ -196,6 +239,8 @@
             user.lvs[id]++;
             renderUpgrade();
             save();
+        } else {
+            alert("XP 不足！");
         }
     }
 
@@ -218,15 +263,16 @@
             const locked = idx > user.cleared;
             const item = document.createElement('div');
             item.className = `card ${locked ? 'locked' : ''}`;
-            item.innerHTML = `<h3>${s.name}</h3><small>HP: ${s.eHP}</small>`;
+            item.innerHTML = `<h3>${s.name}</h3><small>目標HP: ${s.eHP}</small>`;
             if (!locked) item.onclick = () => startBattle(idx);
             list.appendChild(item);
         });
     }
 
     function drawGacha() {
-        if (user.xp < 500) return alert("XP 不足！");
+        if (user.xp < 500) return alert("XP 不足以啟動祭壇！");
         user.xp -= 500;
+        save();
         const anim = document.getElementById('gacha-anim');
         anim.style.display = 'flex';
         setTimeout(() => {
@@ -238,8 +284,8 @@
         }, 800);
     }
 
-    // --- 戰鬥引擎修復 ---
-    let battle = { active: false, units: [], money: 0, pHP: 0, eHP: 0, currentStage: null };
+    // --- 戰鬥引擎 ---
+    let battle = { active: false, units: [], money: 0, pHP: 0, eHP: 0, currentStage: null, width: 0 };
 
     function startBattle(idx) {
         showScreen('game-screen');
@@ -292,9 +338,7 @@
 
         battle.units.forEach(u => {
             const isP = u.side === 'player';
-            // 尋找目標：改進範圍檢測
             let target = battle.units.find(en => en.side !== u.side && (isP ? (en.x - u.x < u.range && en.x > u.x) : (u.x - en.x < u.range && u.x > en.x)));
-            
             const baseDist = isP ? (battle.width - 60 - u.x) : (u.x - 60);
 
             if (target || baseDist < u.range) {
@@ -324,8 +368,10 @@
                 const reward = (battle.currentStage + 1) * 1200;
                 user.xp += reward;
                 user.cleared = Math.max(user.cleared, battle.currentStage + 1);
-                alert("勝利！XP+" + reward);
-            } else alert("戰敗...");
+                alert("🚩 勝利！獲得 XP: " + reward);
+            } else {
+                alert("💥 戰敗，撤退...");
+            }
             save();
             showScreen('main-screen');
             return;
@@ -333,7 +379,8 @@
         requestAnimationFrame(battleLoop);
     }
 
-    save();
+    // 初始化啟動
+    loadGame();
 </script>
 </body>
 </html>
