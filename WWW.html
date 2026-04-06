@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <!-- 1. 解決手機縮放問題 -->
+    <!-- 1. 解決手機縮放與版型問題 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>爆炸 | Raingod</title>
     <style>
@@ -15,54 +15,43 @@
             margin: 0; padding: 0; height: 100%; overflow: hidden; 
             background: var(--bg); font-family: 'Segoe UI', sans-serif; 
             display: flex; flex-direction: column; 
-            /* 防止手機長按彈出菜單 */
-            -webkit-touch-callout: none;
-            -webkit-user-select: none;
-            user-select: none;
+            -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
         }
 
-        #top-nav { 
-            height: 60px; min-height: 60px;
-            background: #0a0a14; border-bottom: 1px solid #333; 
-            display: flex; align-items: center; padding: 0 20px;
-            color: white; z-index: 100; box-shadow: 0 2px 20px rgba(0,0,0,0.5);
-        }
-        .nav-logo { font-weight: 900; color: var(--neon); letter-spacing: 2px; }
+        /* 頂部導覽列 */
+        #nav_bar { height: 60px; background: #0a0a14; border-bottom: 1px solid #333; z-index: 100; }
 
         #game-container { 
-            flex-grow: 1; 
-            position: relative; overflow: hidden; 
-            cursor: crosshair;
-            /* 2. 禁用瀏覽器預設手勢 */
-            touch-action: none; 
+            flex-grow: 1; position: relative; overflow: hidden; 
+            cursor: crosshair; touch-action: none; 
         }
         
         canvas { display: block; width: 100%; height: 100%; }
 
+        /* UI Overlay */
         #hud { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; padding: 15px; box-sizing: border-box; z-index: 10; }
         .stat-group { display: flex; flex-direction: column; gap: 8px; pointer-events: auto; }
         .panel { background: rgba(0, 0, 0, 0.85); border: 1px solid #222; border-left: 4px solid var(--neon); padding: 8px 15px; backdrop-filter: blur(5px); }
         .label { color: #666; font-size: 9px; text-transform: uppercase; letter-spacing: 1px; }
         .value { color: #fff; font-size: 20px; font-weight: 900; }
         
-        .ctrl-btn { padding: 10px 20px; background: #111; color: #fff; border: 1px solid var(--pink); cursor: pointer; pointer-events: auto; transition: 0.2s; font-weight: bold; font-size: 14px; }
-        .ctrl-btn:hover { background: var(--pink); color: #000; box-shadow: 0 0 20px var(--pink); }
+        .ctrl-btn { padding: 10px 15px; background: #111; color: #fff; border: 1px solid var(--pink); cursor: pointer; pointer-events: auto; font-weight: bold; font-size: 13px; }
+        .ctrl-btn:active { background: var(--pink); color: #000; }
 
-        /* 3. 手機版商店寬度優化 */
         #shop-window { 
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
-            width: 90%; max-width: 450px; height: 75vh; 
+            width: 90%; max-width: 450px; height: 70vh; 
             overflow-y: auto; background: rgba(5, 5, 10, 0.98); 
             border: 2px solid var(--neon); padding: 20px; display: none; 
-            pointer-events: auto; z-index: 100; box-shadow: 0 0 100px #000; 
+            pointer-events: auto; z-index: 100; 
         }
         .upgrade-card { background: #0a0a0f; margin-bottom: 10px; padding: 12px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #222; }
-        .up-name { color: var(--neon); font-size: 13px; font-weight: bold; margin: 0; }
-        .btn-buy { background: var(--gold); border: none; padding: 8px 10px; font-weight: 900; cursor: pointer; min-width: 70px; font-size: 12px; }
+        .up-name { color: var(--neon); font-size: 13px; font-weight: bold; }
+        .btn-buy { background: var(--gold); border: none; padding: 8px 10px; font-weight: 900; min-width: 70px; }
         .btn-buy:disabled { background: #333; color: #666; }
 
         #combo-wrap { position: absolute; bottom: 20px; left: 20px; }
-        .combo-n { font-size: 60px; color: #fff; line-height: 0.7; font-style: italic; font-weight: 900; opacity: 0.4; }
+        .combo-n { font-size: 50px; color: #fff; line-height: 0.7; font-style: italic; font-weight: 900; opacity: 0.4; }
 
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-thumb { background: var(--neon); }
@@ -77,7 +66,6 @@
 
     <div id="game-container">
         <canvas id="canvas"></canvas>
-
         <div id="hud">
             <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                 <div class="stat-group">
@@ -86,21 +74,19 @@
                     <div class="panel" style="border-left-color: var(--gold);"><div class="label">Ω RANK</div><div class="value">x <span id="prestige-display">1</span></div></div>
                 </div>
                 <div class="stat-group">
-                    <button class="ctrl-btn" onclick="toggleShop()">UPGRADES</button>
+                    <button class="ctrl-btn" onclick="toggleShop()">SHOP</button>
                     <button id="prestige-btn" class="ctrl-btn" style="border-color: var(--gold); display:none;" onclick="doPrestige()">ASCEND</button>
                 </div>
             </div>
-
             <div id="combo-wrap">
                 <div class="label" style="color:var(--neon)">CHAIN STREAK</div>
                 <div class="combo-n" id="combo-display">0</div>
             </div>
         </div>
-
         <div id="shop-window">
-            <h2 style="color:#fff; border-bottom: 2px solid var(--neon); padding-bottom:10px; font-size: 20px;">SYSTEM EVOLUTION</h2>
+            <h2 style="color:#fff; border-bottom: 2px solid var(--neon); padding-bottom:10px;">UPGRADES</h2>
             <div id="shop-content"></div>
-            <button onclick="toggleShop()" style="width:100%; margin-top:20px; padding:12px; background:#222; color:#fff; border:none; cursor:pointer;">CLOSE</button>
+            <button onclick="toggleShop()" style="width:100%; margin-top:20px; padding:12px; background:#222; color:#fff; border:none;">CLOSE</button>
         </div>
     </div>
 
@@ -139,27 +125,28 @@
             loadGame(); 
             refreshUI();
         }
-        window.onresize = init;
 
-        // --- 核心存檔邏輯 (與原本完全一致) ---
+        // --- 原本的存儲邏輯 (完全保留) ---
         function saveGame() {
             localStorage.setItem(SAVE_KEY, JSON.stringify(gameData));
             if (window.firebase && firebase.auth().currentUser) {
                 const uid = firebase.auth().currentUser.uid;
                 firebase.database().ref('users/' + uid + '/game_data').set(gameData)
-                    .catch((error) => console.error("Firebase Save Error:", error.message));
+                    .catch((err) => console.error("Cloud Save Error", err));
             }
         }
 
         function loadGame() {
+            // 1. 先讀本地
             const localData = localStorage.getItem(SAVE_KEY);
             if (localData) {
                 try {
                     gameData = { ...gameData, ...JSON.parse(localData) };
                     refreshUI();
-                } catch(e) { console.error("Local load failed", e); }
+                } catch(e) { console.error("Local Load Error", e); }
             }
 
+            // 2. 監聽 Firebase 登入 (雲端同步)
             if (window.firebase) {
                 firebase.auth().onAuthStateChanged((user) => {
                     if (user) {
@@ -169,7 +156,7 @@
                                 if (cloudData) {
                                     gameData = { ...gameData, ...cloudData };
                                     localStorage.setItem(SAVE_KEY, JSON.stringify(gameData));
-                                    refreshUI();
+                                    refreshUI(); // 雲端讀到後必須再次刷新 UI
                                 } else {
                                     saveGame();
                                 }
@@ -224,7 +211,7 @@
                 ctx.translate(this.x, this.y);
                 ctx.strokeStyle = this.color;
                 ctx.lineWidth = 3;
-                ctx.shadowBlur = 15;
+                ctx.shadowBlur = 10;
                 ctx.shadowColor = this.color;
                 ctx.strokeRect(-this.size/2, -this.size/2, this.size, this.size);
                 
@@ -233,12 +220,6 @@
                 ctx.fillStyle = '#111'; ctx.fillRect(-20, -this.size/2 - 12, 40, 5);
                 ctx.fillStyle = this.color; ctx.fillRect(-20, -this.size/2 - 12, 40 * p, 5);
                 ctx.restore();
-            }
-
-            takeDamage(dmg) {
-                if(this.dead) return;
-                this.hp -= dmg;
-                if(this.hp <= 0) { this.dead = true; this.explode(); }
             }
 
             explode() {
@@ -259,6 +240,12 @@
                 if(gameData.totalEarned > 5000000) document.getElementById('prestige-btn').style.display = 'block';
                 refreshUI(); saveGame();
             }
+
+            takeDamage(dmg) {
+                if(this.dead) return;
+                this.hp -= dmg;
+                if(this.hp <= 0) { this.dead = true; this.explode(); }
+            }
         }
 
         function getAtkPower() { return Math.pow(1.55, gameData.upgrades.damage.lv - 1) * gameData.prestige; }
@@ -271,7 +258,7 @@
         }
 
         function spawnEffect(x, y, color) {
-            for(let i=0; i<15; i++) {
+            for(let i=0; i<12; i++) {
                 particles.push({ x, y, vx:(Math.random()-0.5)*10, vy:(Math.random()-0.5)*10, life:1, color });
             }
         }
@@ -301,16 +288,14 @@
             if(gameData.money >= cost) {
                 gameData.money -= cost;
                 gameData.upgrades[k].lv++;
-                refreshUI();
-                saveGame();
+                refreshUI(); saveGame();
                 toggleShop(); toggleShop();
             }
         }
 
         function doPrestige() {
             gameData.prestige++;
-            gameData.money = 0;
-            gameData.totalEarned = 0;
+            gameData.money = 0; gameData.totalEarned = 0;
             for (let k in gameData.upgrades) gameData.upgrades[k].lv = 1;
             document.getElementById('prestige-btn').style.display = 'none';
             refreshUI(); saveGame();
@@ -319,18 +304,15 @@
         function loop() {
             ctx.fillStyle = 'rgba(2, 2, 5, 0.3)';
             ctx.fillRect(0, 0, width, height);
-
             if(cubes.length < 20) cubes.push(new Cube());
             cubes = cubes.filter(c => !c.dead);
             cubes.forEach(c => { c.update(); c.draw(); });
-
             particles = particles.filter(p => (p.life -= 0.03) > 0);
             particles.forEach(p => {
                 p.x += p.vx; p.y += p.vy;
                 ctx.fillStyle = p.color; ctx.globalAlpha = p.life;
                 ctx.fillRect(p.x, p.y, 2, 2);
             });
-
             floaters = floaters.filter(f => (f.life -= 0.02) > 0);
             floaters.forEach(f => {
                 f.y += f.vy; ctx.fillStyle = f.color; ctx.globalAlpha = f.life;
@@ -340,38 +322,31 @@
             requestAnimationFrame(loop);
         }
 
-        // --- 改良版點擊判定 (滑鼠 + 觸控) ---
+        // --- 點擊處理 (優化手機 Hitbox) ---
         function handleAction(ex, ey) {
             const rect = canvas.getBoundingClientRect();
             const mouseX = ex - rect.left;
             const mouseY = ey - rect.top;
-
             let hit = false;
             for (let i = cubes.length - 1; i >= 0; i--) {
                 const c = cubes[i];
-                // 手機版增加額外 20px 的點擊判定寬容度
-                const hitRange = c.size/1.5 + 20; 
-                if(Math.hypot(mouseX - c.x, mouseY - c.y) < hitRange) {
+                // 手機版增加 25px 點擊範圍寬容度
+                if(Math.hypot(mouseX - c.x, mouseY - c.y) < (c.size/1.5) + 25) {
                     c.takeDamage(getAtkPower());
-                    hit = true;
-                    break;
+                    hit = true; break;
                 }
             }
             if(!hit) combo = 0;
             refreshUI();
         }
 
-        // 監聽滑鼠
         container.addEventListener('mousedown', (e) => handleAction(e.clientX, e.clientY));
-        
-        // 監聽觸控 (核心修正：防止縮放並立即反應)
         container.addEventListener('touchstart', (e) => {
             e.preventDefault(); 
-            const t = e.touches[0];
-            handleAction(t.clientX, t.clientY);
+            handleAction(e.touches[0].clientX, e.touches[0].clientY);
         }, { passive: false });
 
-        init();
+        window.onload = init;
         loop();
     </script>
 </body>
