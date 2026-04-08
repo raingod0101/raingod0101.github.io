@@ -2,7 +2,6 @@
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <!-- 1. 解決手機縮放與版型問題 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>爆炸 | Raingod</title>
     <style>
@@ -10,24 +9,19 @@
             --neon: #00f2ff; --pink: #ff007b; --gold: #ffcc00; --purple: #bc13fe; 
             --bg: #020205; --white: #ffffff; --emerald: #00ff88; --orange: #ff6600;
         }
-
         html, body { 
             margin: 0; padding: 0; height: 100%; overflow: hidden; 
             background: var(--bg); font-family: 'Segoe UI', sans-serif; 
             display: flex; flex-direction: column; 
             -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
         }
-
-        /* 頂部導覽列 */
         #nav_bar { height: 60px; background: #0a0a14; border-bottom: 1px solid #333; z-index: 100; }
-
         #game-container { 
             flex-grow: 1; position: relative; overflow: hidden; 
             cursor: crosshair; touch-action: none; 
         }
-        
         canvas { display: block; width: 100%; height: 100%; }
-
+        
         /* UI Overlay */
         #hud { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; padding: 15px; box-sizing: border-box; z-index: 10; }
         .stat-group { display: flex; flex-direction: column; gap: 8px; pointer-events: auto; }
@@ -43,26 +37,21 @@
             width: 90%; max-width: 450px; height: 70vh; 
             overflow-y: auto; background: rgba(5, 5, 10, 0.98); 
             border: 2px solid var(--neon); padding: 20px; display: none; 
-            pointer-events: auto; z-index: 100; 
+            pointer-events: auto; z-index: 100; touch-action: auto;
         }
         .upgrade-card { background: #0a0a0f; margin-bottom: 10px; padding: 12px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #222; }
         .up-name { color: var(--neon); font-size: 13px; font-weight: bold; }
-        .btn-buy { background: var(--gold); border: none; padding: 8px 10px; font-weight: 900; min-width: 70px; }
-        .btn-buy:disabled { background: #333; color: #666; }
+        .btn-buy { background: var(--gold); border: none; padding: 8px 10px; font-weight: 900; min-width: 70px; cursor: pointer; }
+        .btn-buy:disabled { background: #333; color: #666; cursor: not-allowed; }
 
         #combo-wrap { position: absolute; bottom: 20px; left: 20px; }
         .combo-n { font-size: 50px; color: #fff; line-height: 0.7; font-style: italic; font-weight: 900; opacity: 0.4; }
-
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-thumb { background: var(--neon); }
     </style>
 </head>
 <body>
-<link rel="stylesheet" href="menu.css">
-
-<div id="nav_bar"></div>
-
-<script src="menu.js"></script>
+    <div id="nav_bar"></div>
 
     <div id="game-container">
         <canvas id="canvas"></canvas>
@@ -83,10 +72,11 @@
                 <div class="combo-n" id="combo-display">0</div>
             </div>
         </div>
+        
         <div id="shop-window">
             <h2 style="color:#fff; border-bottom: 2px solid var(--neon); padding-bottom:10px;">UPGRADES</h2>
             <div id="shop-content"></div>
-            <button onclick="toggleShop()" style="width:100%; margin-top:20px; padding:12px; background:#222; color:#fff; border:none;">CLOSE</button>
+            <button onclick="toggleShop()" style="width:100%; margin-top:20px; padding:12px; background:#222; color:#fff; border:none; cursor:pointer;">CLOSE</button>
         </div>
     </div>
 
@@ -96,51 +86,16 @@
         const container = document.getElementById('game-container');
 
         const MOB_TYPES = {
-    // --- [階級 1：基礎粒子] (Normal 動作) ---
-    NANO:    { name: '納米碎片', color: '#555555', hp: 1, reward: 5, size: 20, behavior: 'normal' },
-    COMMON:  { name: 'Drone', color: '#00f2ff', hp: 3, reward: 15, size: 30, behavior: 'normal' },
-    BIT:     { name: '位元蟲', color: '#00ff44', hp: 8, reward: 40, size: 25, behavior: 'normal' },
-    CORE:    { name: '核心單元', color: '#ffffff', hp: 20, reward: 100, size: 35, behavior: 'normal' },
-    
-    // --- [階級 2：進階獵手] (Fast / Sine 動作) ---
-    ELITE:   { name: 'Hunter', color: '#ff007b', hp: 80, reward: 500, size: 45, behavior: 'fast' },
-    SCOUT:   { name: '偵查者', color: '#ffff00', hp: 150, reward: 1200, size: 40, behavior: 'fast' },
-    VOID:    { name: 'Void', color: '#bc13fe', hp: 800, reward: 4000, size: 55, behavior: 'sine' },
-    GHOST:   { name: '幽靈程序', color: '#888888', hp: 1500, reward: 8000, size: 50, behavior: 'sine' },
-    SHADOW:  { name: '暗影', color: '#330066', hp: 3000, reward: 15000, size: 48, behavior: 'fast' },
-
-    // --- [階級 3：元素力量] (Wobble / Jitter 震動動作) ---
-    PHANTOM: { name: '魅影', color: '#7000ff', hp: 7000, reward: 35000, size: 52, behavior: 'wobble' },
-    FLAME:   { name: '烈焰', color: '#ff4400', hp: 15000, reward: 70000, size: 60, behavior: 'jitter' },
-    MAGMA:   { name: 'Magma', color: '#ff6600', hp: 35000, reward: 150000, size: 65, behavior: 'jitter' },
-    FROST:   { name: '極寒', color: '#00ffff', hp: 60000, reward: 250000, size: 62, behavior: 'wobble' },
-    STORM:   { name: '風暴', color: '#00ccff', hp: 120000, reward: 500000, size: 70, behavior: 'vortex' },
-
-    // --- [階級 4：巨頭與星體] (Vortex / Pulse 旋轉縮放) ---
-    TYT:     { name: 'TYT-巨頭', color: '#ff0000', hp: 300000, reward: 1200000, size: 100, behavior: 'sine' },
-    TITAN:   { name: '泰坦', color: '#aa8855', hp: 700000, reward: 3000000, size: 110, behavior: 'wobble' },
-    SOLAR:   { name: 'Solar', color: '#ffcc00', hp: 1500000, reward: 7000000, size: 85, behavior: 'pulse' },
-    PULSAR:  { name: '脈衝星', color: '#0055ff', hp: 3500000, reward: 15000000, size: 80, behavior: 'pulse' },
-    NEBULA:  { name: '星雲', color: '#ff00ff', hp: 8000000, reward: 40000000, size: 95, behavior: 'teleport' },
-
-    // --- [階級 5：宇宙法則] (Teleport / Chaos 混亂動作) ---
-    GALAXY:  { name: '銀河核心', color: '#4444ff', hp: 20000000, reward: 100000000, size: 115, behavior: 'vortex' },
-    BLACKHOLE:{ name: '黑洞', color: '#111111', hp: 50000000, reward: 250000000, size: 120, behavior: 'vortex' },
-    OMEGA:   { name: 'Omega', color: '#ffffff', hp: 120000000, reward: 600000000, size: 125, behavior: 'teleport' },
-    CHRONOS: { name: '時空主宰', color: '#ffff00', hp: 300000000, reward: 1500000000, size: 130, behavior: 'chaos' },
-    DIMENSION:{ name: '位面旅行者', color: '#ff88ff', hp: 700000000, reward: 4000000000, size: 110, behavior: 'teleport' },
-
-    // --- [階級 6：神與永恆] (最終 Boss 級別) ---
-    ETERNAL: { name: '永恆之巔', color: '#00ffff', hp: 2000000000, reward: 12000000000, size: 140, behavior: 'pulse' },
-    INFINITY:{ name: '無限意志', color: '#ff0055', hp: 5000000000, reward: 35000000000, size: 145, behavior: 'chaos' },
-    VOID_GOD:{ name: '虛空神', color: '#220022', hp: 15000000000, reward: 100000000000, size: 155, behavior: 'vortex' },
-    RAINGOD: { name: 'RAINGOD', color: '#00ff88', hp: 50000000000, reward: 500000000000, size: 160, behavior: 'chaos' },
-    CREATOR: { name: '創世神', color: '#ffeeaa', hp: 200000000000, reward: 1500000000000, size: 180, behavior: 'pulse' },
-    ZENITH:  { name: '絕對頂點', color: '#ffffff', hp: 1000000000000, reward: 9999999999999, size: 200, behavior: 'chaos' }
-};
+            COMMON:  { name: 'Drone', color: '#00f2ff', hp: 2, reward: 10, chance: 1, size: 30, behavior: 'normal' },
+            ELITE:   { name: 'Hunter', color: '#ff007b', hp: 60, reward: 450, chance: 0.15, size: 45, behavior: 'fast' },
+            VOID:    { name: 'Void', color: '#bc13fe', hp: 600, reward: 3000, chance: 0.05, size: 55, behavior: 'sine' },
+            MAGMA:   { name: 'Magma', color: '#ff6600', hp: 3000, reward: 20000, chance: 0.015, size: 65, behavior: 'jitter' },
+            SOLAR:   { name: 'Solar', color: '#ffcc00', hp: 25000, reward: 180000, chance: 0.005, size: 85, behavior: 'pulse' },
+            OMEGA:   { name: 'Omega', color: '#ffffff', hp: 150000, reward: 1200000, chance: 0.001, size: 110, behavior: 'teleport' },
+            RAINGOD: { name: 'RAINGOD', color: '#00ff88', hp: 1000000, reward: 10000000, chance: 0.0001, size: 150, behavior: 'chaos' }
+        };
 
         const SAVE_KEY = 'raingod_eternal_save_data';
-
         let gameData = {
             money: 0, totalEarned: 0, prestige: 1,
             upgrades: {
@@ -160,105 +115,30 @@
             refreshUI();
         }
 
-        // --- 原本的存儲邏輯 (完全保留) ---
         function saveGame() {
             localStorage.setItem(SAVE_KEY, JSON.stringify(gameData));
-            if (window.firebase && firebase.auth().currentUser) {
-                const uid = firebase.auth().currentUser.uid;
-                firebase.database().ref('users/' + uid + '/game_data').set(gameData)
-                    .catch((err) => console.error("Cloud Save Error", err));
-            }
         }
 
         function loadGame() {
-    // 1. 優先讀取本地存檔 (讓玩家一進來就看到數字)
-    const localData = localStorage.getItem(SAVE_KEY);
-    if (localData) {
-        try {
-            gameData = { ...gameData, ...JSON.parse(localData) };
-            refreshUI();
-            console.log("已加載本地存檔");
-        } catch(e) { 
-            console.error("解析本地存檔失敗", e); 
-        }
-    }
-
-    // 2. 核心同步邏輯：監聽 Firebase 登入狀態
-    if (window.firebase) {
-        firebase.auth().onAuthStateChanged((user) => {
-            if (user) {
-                console.log("👋 已登入：" + user.displayName);
-                
-                firebase.database().ref('users/' + user.uid + '/game_data').once('value')
-                    .then((snapshot) => {
-                        const cloudData = snapshot.val();
-                        
-                        if (cloudData) {
-                            // --- 情況 A：雲端有資料 ---
-                            console.log("🚀 發現雲端進度！同步中...");
-                            gameData = { ...gameData, ...cloudData };
-                            // 同步回本地，確保下次進來很快
-                            localStorage.setItem(SAVE_KEY, JSON.stringify(gameData));
-                            refreshUI();
-                        } else {
-                            // --- 情況 B：第一次登入（雲端沒資料） ---
-                            // 檢查本地是否有玩過的痕跡 (例如錢大於 0 或有升級過)
-                            const isLocalAdvanced = gameData.totalEarned > 0 || gameData.upgrades.damage.lv > 1;
-                            
-                            if (isLocalAdvanced) {
-                                console.log("✨ 第一次登入：偵測到本地已有進度，正在同步至雲端備份...");
-                                saveGame(); // 直接把現在的本地資料存上雲端
-                            } else {
-                                console.log("🆕 第一次登入：雲端與本地皆無資料，初始化新帳號。");
-                                saveGame();
-                            }
-                        }
-                    })
-                    .catch(err => console.error("❌ 讀取雲端失敗：", err));
-            } else {
-                console.log("👤 目前為訪客模式。");
+            const localData = localStorage.getItem(SAVE_KEY);
+            if (localData) {
+                try {
+                    gameData = { ...gameData, ...JSON.parse(localData) };
+                } catch(e) { console.error(e); }
             }
-        });
-    }
-}
+        }
 
         class Cube {
             constructor() {
-                // 在 constructor 裡面
                 const roll = Math.random();
-const luck = gameData.upgrades.luck.lv * 0.005;
-
-// 由強到弱判定
-if (roll < 0.00001 + luck/500) this.type = MOB_TYPES.ZENITH;
-else if (roll < 0.00005 + luck/450) this.type = MOB_TYPES.CREATOR;
-else if (roll < 0.0001 + luck/400) this.type = MOB_TYPES.RAINGOD;
-else if (roll < 0.0003 + luck/350) this.type = MOB_TYPES.VOID_GOD;
-else if (roll < 0.0006 + luck/300) this.type = MOB_TYPES.INFINITY;
-else if (roll < 0.001 + luck/250) this.type = MOB_TYPES.ETERNAL;
-else if (roll < 0.002 + luck/200) this.type = MOB_TYPES.DIMENSION;
-else if (roll < 0.004 + luck/180) this.type = MOB_TYPES.CHRONOS;
-else if (roll < 0.007 + luck/160) this.type = MOB_TYPES.OMEGA;
-else if (roll < 0.012 + luck/140) this.type = MOB_TYPES.BLACKHOLE;
-else if (roll < 0.018 + luck/120) this.type = MOB_TYPES.GALAXY;
-else if (roll < 0.025 + luck/100) this.type = MOB_TYPES.NEBULA;
-else if (roll < 0.035 + luck/90) this.type = MOB_TYPES.PULSAR;
-else if (roll < 0.05 + luck/80) this.type = MOB_TYPES.SOLAR;
-else if (roll < 0.07 + luck/70) this.type = MOB_TYPES.TITAN;
-else if (roll < 0.10 + luck/60) this.type = MOB_TYPES.TYT;
-else if (roll < 0.14 + luck/55) this.type = MOB_TYPES.STORM;
-else if (roll < 0.18 + luck/50) this.type = MOB_TYPES.FROST;
-else if (roll < 0.23 + luck/45) this.type = MOB_TYPES.MAGMA;
-else if (roll < 0.28 + luck/40) this.type = MOB_TYPES.FLAME;
-else if (roll < 0.33 + luck/35) this.type = MOB_TYPES.PHANTOM;
-else if (roll < 0.38 + luck/30) this.type = MOB_TYPES.SHADOW;
-else if (roll < 0.43 + luck/25) this.type = MOB_TYPES.GHOST;
-else if (roll < 0.48 + luck/20) this.type = MOB_TYPES.VOID;
-else if (roll < 0.53 + luck/15) this.type = MOB_TYPES.SCOUT;
-else if (roll < 0.60 + luck/10) this.type = MOB_TYPES.ELITE;
-else if (roll < 0.70 + luck/5) this.type = MOB_TYPES.CORE;
-else if (roll < 0.80 + luck/2) this.type = MOB_TYPES.BIT;
-else if (roll < 0.90 + luck) this.type = MOB_TYPES.COMMON;
-else this.type = MOB_TYPES.NANO;
+                const luck = gameData.upgrades.luck.lv * 0.005;
+                if (roll < 0.0001 + luck/100) this.type = MOB_TYPES.RAINGOD;
+                else if (roll < 0.001 + luck/50) this.type = MOB_TYPES.OMEGA;
+                else if (roll < 0.005 + luck/20) this.type = MOB_TYPES.SOLAR;
+                else if (roll < 0.02 + luck/10) this.type = MOB_TYPES.MAGMA;
+                else if (roll < 0.06 + luck/5) this.type = MOB_TYPES.VOID;
+                else if (roll < 0.18 + luck) this.type = MOB_TYPES.ELITE;
+                else this.type = MOB_TYPES.COMMON;
 
                 this.x = Math.random() * (width - 60) + 30;
                 this.y = Math.random() * (height - 60) + 30;
@@ -275,49 +155,15 @@ else this.type = MOB_TYPES.NANO;
 
             update() {
                 this.tick += 0.05;
-                // 在開始計算前，確保透明度是正常的 (防止殘留效果)
-                ctx.globalAlpha = 1;
-
                 switch(this.type.behavior) {
-                    case 'fast': 
-                        this.x += this.vx * 3; this.y += this.vy * 3; 
-                        break;
-                    case 'sine': 
-                        this.x += this.vx; this.y += Math.sin(this.tick) * 5; 
-                        break;
-                    case 'jitter': 
-                        // 劇烈震動 (Magma)
-                        this.x += this.vx + (Math.random()-0.5)*8; 
-                        this.y += this.vy + (Math.random()-0.5)*8; 
-                        break;
-                    case 'wobble': 
-                        // 輕微上下震動 (魅影)
-                        this.x += this.vx;
-                        this.y += this.vy + Math.sin(this.tick * 4) * 3;
-                        break;
-                    case 'pulse': 
-                        // 縮放動作 (Solar, Eternal)
-                        this.size = this.type.size + Math.sin(this.tick * 2) * 10; 
-                        this.x += this.vx; this.y += this.vy; 
-                        break;
-                    case 'vortex': 
-                        // 旋轉移動 (Storm, Galaxy)
-                        this.x += this.vx + Math.cos(this.tick) * 4;
-                        this.y += this.vy + Math.sin(this.tick) * 4;
-                        break;
-                    case 'teleport': 
-                        if(Math.random() < 0.01) { this.x = Math.random()*width; this.y = Math.random()*height; } 
-                        this.x += this.vx; this.y += this.vy; 
-                        break;
-                    case 'chaos': 
-                        this.vx += (Math.random()-0.5)*0.5; this.vy += (Math.random()-0.5)*0.5; 
-                        this.x += this.vx; this.y += this.vy; 
-                        break;
-                    default: 
-                        this.x += this.vx; this.y += this.vy;
+                    case 'fast': this.x += this.vx * 3; this.y += this.vy * 3; break;
+                    case 'sine': this.x += this.vx; this.y += Math.sin(this.tick) * 5; break;
+                    case 'jitter': this.x += this.vx + (Math.random()-0.5)*8; this.y += this.vy + (Math.random()-0.5)*8; break;
+                    case 'pulse': this.size = this.type.size + Math.sin(this.tick * 2) * 10; this.x += this.vx; this.y += this.vy; break;
+                    case 'teleport': if(Math.random() < 0.01) { this.x = Math.random()*width; this.y = Math.random()*height; } this.x += this.vx; this.y += this.vy; break;
+                    case 'chaos': this.vx += (Math.random()-0.5)*0.5; this.vy += (Math.random()-0.5)*0.5; this.x += this.vx; this.y += this.vy; break;
+                    default: this.x += this.vx; this.y += this.vy;
                 }
-                
-                // 邊界判定 (保持不變)
                 if(this.x < 20 || this.x > width - 20) this.vx *= -1;
                 if(this.y < 20 || this.y > height - 20) this.vy *= -1;
             }
@@ -330,7 +176,6 @@ else this.type = MOB_TYPES.NANO;
                 ctx.shadowBlur = 10;
                 ctx.shadowColor = this.color;
                 ctx.strokeRect(-this.size/2, -this.size/2, this.size, this.size);
-                
                 let p = this.hp / this.maxHp;
                 ctx.shadowBlur = 0;
                 ctx.fillStyle = '#111'; ctx.fillRect(-20, -this.size/2 - 12, 40, 5);
@@ -339,61 +184,21 @@ else this.type = MOB_TYPES.NANO;
             }
 
             explode() {
-                // 1. 連擊與基礎獎勵計算
                 combo++;
                 let reward = this.type.reward * gameData.prestige;
                 gameData.money += reward;
                 gameData.totalEarned += reward;
-
-                // 2. 視覺特效觸發 (震動與飄字)
                 spawnEffect(this.x, this.y, this.color);
                 spawnText(this.x, this.y, `+$${Math.floor(reward).toLocaleString()}`, this.color);
 
-                // 3. 動態連鎖爆炸邏輯
-                // 基礎範圍 110，隨升級增加。特定 BOSS 級角色範圍再加成
-                let baseRange = 110 + (gameData.upgrades.range.lv * 18);
-                let explosionScale = 1;
-                
-                // 如果是高等級角色，爆炸範圍更大 (例如 ZENITH 或是 RAINGOD)
-                if (this.size > 120) explosionScale = 1.5;
-                if (this.type.name === '絕對頂點' || this.type.name === '創世神') explosionScale = 2.5;
-
-                let finalRange = baseRange * explosionScale;
-
-                // 遍歷所有方塊進行連鎖反應
+                let range = 110 + (gameData.upgrades.range.lv * 18);
                 cubes.forEach(c => {
-                    if(!c.dead) {
-                        const dist = Math.hypot(this.x - c.x, this.y - c.y);
-                        if (dist < finalRange) {
-                            // 延遲爆炸營造「連鎖波紋」感
-                            // 越遠的怪越晚爆炸 (距離/2 毫秒)
-                            setTimeout(() => {
-                                // 連鎖傷害為當前攻擊力的 60%
-                                c.takeDamage(getAtkPower() * 0.6);
-                            }, dist / 2);
-                        }
+                    if(!c.dead && Math.hypot(this.x - c.x, this.y - c.y) < range) {
+                        setTimeout(() => c.takeDamage(getAtkPower() * 0.6), 80);
                     }
                 });
-
-                // 4. 動態轉生門檻判斷 (門檻持平倍率成長)
-                // 基礎門檻 5,000,000 * 當前轉生倍率
-                let prestigeThreshold = 5000000 * gameData.prestige;
-
-                const pBtn = document.getElementById('prestige-btn');
-                if (gameData.money >= prestigeThreshold) {
-                    pBtn.style.display = 'block';
-                    pBtn.innerText = `ASCEND TO RANK ${gameData.prestige + 1}`;
-                    // 給按鈕一點亮色效果
-                    pBtn.style.borderColor = 'var(--gold)';
-                    pBtn.style.boxShadow = '0 0 15px var(--gold)';
-                } else {
-                    // 如果錢花掉了低於門檻，按鈕隱藏
-                    pBtn.style.display = 'none';
-                }
-
-                // 5. 數據更新與存檔
-                refreshUI();
-                saveGame();
+                if(gameData.totalEarned > 5000000) document.getElementById('prestige-btn').style.display = 'block';
+                refreshUI(); saveGame();
             }
 
             takeDamage(dmg) {
@@ -449,40 +254,13 @@ else this.type = MOB_TYPES.NANO;
         }
 
         function doPrestige() {
-            // 1. 同步門檻邏輯 (500萬 * 當前 Rank)
-            let prestigeThreshold = 5000000 * gameData.prestige;
-            
-            // 2. 二次檢查 (防止玩家透過 F12 呼叫函數)
-            if (gameData.money < prestigeThreshold) {
-                alert(`還差 $${Math.floor(prestigeThreshold - gameData.money).toLocaleString()} 才能晉升維度！`);
-                return;
-            }
-
-            // 3. 執行晉升
-            gameData.prestige++;  // 這是最重要的：倍率 +1
-            gameData.money = 0;   // 錢重置
-            gameData.totalEarned = 0; // 總收入重置 (讓下一個門檻重新計算)
-            
-            // 4. 重置所有升級等級 (Lv.1)
-            // 雖然等級回歸，但因為 prestige 變大了，你隨便點一隻怪賺的錢會是上一次 Rank 的數倍
-            for (let k in gameData.upgrades) {
-                gameData.upgrades[k].lv = 1;
-            }
-            
-            // 5. UI 與特效處理
+            gameData.prestige++;
+            gameData.money = 0; gameData.totalEarned = 0;
+            for (let k in gameData.upgrades) gameData.upgrades[k].lv = 1;
             document.getElementById('prestige-btn').style.display = 'none';
-            
-            // 在畫面中央噴出巨大的 RANK UP 字樣
-            spawnText(width / 2, height / 2, `RANK UP: Ω RANK ${gameData.prestige}`, "#ffcc00");
-            
-            // 噴發一堆粒子特效慶祝
-            for(let i=0; i<50; i++) {
-                spawnEffect(width/2, height/2, "var(--gold)");
-            }
-
-            refreshUI();
-            saveGame();
+            refreshUI(); saveGame();
         }
+
         function loop() {
             ctx.fillStyle = 'rgba(2, 2, 5, 0.3)';
             ctx.fillRect(0, 0, width, height);
@@ -504,7 +282,6 @@ else this.type = MOB_TYPES.NANO;
             requestAnimationFrame(loop);
         }
 
-        // --- 點擊處理 (優化手機 Hitbox) ---
         function handleAction(ex, ey) {
             const rect = canvas.getBoundingClientRect();
             const mouseX = ex - rect.left;
@@ -512,8 +289,7 @@ else this.type = MOB_TYPES.NANO;
             let hit = false;
             for (let i = cubes.length - 1; i >= 0; i--) {
                 const c = cubes[i];
-                // 手機版增加 25px 點擊範圍寬容度
-                if(Math.hypot(mouseX - c.x, mouseY - c.y) < (c.size/1.5) + 25) {
+                if(Math.hypot(mouseX - c.x, mouseY - c.y) < (c.size/1.5) + 30) {
                     c.takeDamage(getAtkPower());
                     hit = true; break;
                 }
@@ -522,10 +298,12 @@ else this.type = MOB_TYPES.NANO;
             refreshUI();
         }
 
-        container.addEventListener('mousedown', (e) => handleAction(e.clientX, e.clientY));
-        container.addEventListener('touchstart', (e) => {
+        // 專門處理遊戲畫布的點擊
+        canvas.addEventListener('mousedown', (e) => handleAction(e.clientX, e.clientY));
+        canvas.addEventListener('touchstart', (e) => {
             e.preventDefault(); 
-            handleAction(e.touches[0].clientX, e.touches[0].clientY);
+            const touch = e.touches[0];
+            handleAction(touch.clientX, touch.clientY);
         }, { passive: false });
 
         window.onload = init;
