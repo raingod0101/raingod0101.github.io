@@ -1,8 +1,8 @@
+
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <!-- 1. 解決手機縮放與版型問題 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>爆炸 | Raingod</title>
     <style>
@@ -10,24 +10,19 @@
             --neon: #00f2ff; --pink: #ff007b; --gold: #ffcc00; --purple: #bc13fe; 
             --bg: #020205; --white: #ffffff; --emerald: #00ff88; --orange: #ff6600;
         }
-
         html, body { 
             margin: 0; padding: 0; height: 100%; overflow: hidden; 
             background: var(--bg); font-family: 'Segoe UI', sans-serif; 
             display: flex; flex-direction: column; 
             -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
         }
-
-        /* 頂部導覽列 */
         #nav_bar { height: 60px; background: #0a0a14; border-bottom: 1px solid #333; z-index: 100; }
-
         #game-container { 
             flex-grow: 1; position: relative; overflow: hidden; 
             cursor: crosshair; touch-action: none; 
         }
-        
         canvas { display: block; width: 100%; height: 100%; }
-
+        
         /* UI Overlay */
         #hud { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; padding: 15px; box-sizing: border-box; z-index: 10; }
         .stat-group { display: flex; flex-direction: column; gap: 8px; pointer-events: auto; }
@@ -43,16 +38,15 @@
             width: 90%; max-width: 450px; height: 70vh; 
             overflow-y: auto; background: rgba(5, 5, 10, 0.98); 
             border: 2px solid var(--neon); padding: 20px; display: none; 
-            pointer-events: auto; z-index: 100; 
+            pointer-events: auto; z-index: 100; touch-action: auto;
         }
         .upgrade-card { background: #0a0a0f; margin-bottom: 10px; padding: 12px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #222; }
         .up-name { color: var(--neon); font-size: 13px; font-weight: bold; }
-        .btn-buy { background: var(--gold); border: none; padding: 8px 10px; font-weight: 900; min-width: 70px; }
-        .btn-buy:disabled { background: #333; color: #666; }
+        .btn-buy { background: var(--gold); border: none; padding: 8px 10px; font-weight: 900; min-width: 70px; cursor: pointer; }
+        .btn-buy:disabled { background: #333; color: #666; cursor: not-allowed; }
 
         #combo-wrap { position: absolute; bottom: 20px; left: 20px; }
         .combo-n { font-size: 50px; color: #fff; line-height: 0.7; font-style: italic; font-weight: 900; opacity: 0.4; }
-
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-thumb { background: var(--neon); }
     </style>
@@ -63,7 +57,6 @@
 <div id="nav_bar"></div>
 
 <script src="menu.js"></script>
-
     <div id="game-container">
         <canvas id="canvas"></canvas>
         <div id="hud">
@@ -83,10 +76,11 @@
                 <div class="combo-n" id="combo-display">0</div>
             </div>
         </div>
+        
         <div id="shop-window">
             <h2 style="color:#fff; border-bottom: 2px solid var(--neon); padding-bottom:10px;">UPGRADES</h2>
             <div id="shop-content"></div>
-            <button onclick="toggleShop()" style="width:100%; margin-top:20px; padding:12px; background:#222; color:#fff; border:none;">CLOSE</button>
+            <button onclick="toggleShop()" style="width:100%; margin-top:20px; padding:12px; background:#222; color:#fff; border:none; cursor:pointer;">CLOSE</button>
         </div>
     </div>
 
@@ -106,7 +100,6 @@
         };
 
         const SAVE_KEY = 'raingod_eternal_save_data';
-
         let gameData = {
             money: 0, totalEarned: 0, prestige: 1,
             upgrades: {
@@ -126,67 +119,18 @@
             refreshUI();
         }
 
-        // --- 原本的存儲邏輯 (完全保留) ---
         function saveGame() {
             localStorage.setItem(SAVE_KEY, JSON.stringify(gameData));
-            if (window.firebase && firebase.auth().currentUser) {
-                const uid = firebase.auth().currentUser.uid;
-                firebase.database().ref('users/' + uid + '/game_data').set(gameData)
-                    .catch((err) => console.error("Cloud Save Error", err));
-            }
         }
 
         function loadGame() {
-    // 1. 優先讀取本地存檔 (讓玩家一進來就看到數字)
-    const localData = localStorage.getItem(SAVE_KEY);
-    if (localData) {
-        try {
-            gameData = { ...gameData, ...JSON.parse(localData) };
-            refreshUI();
-            console.log("已加載本地存檔");
-        } catch(e) { 
-            console.error("解析本地存檔失敗", e); 
-        }
-    }
-
-    // 2. 核心同步邏輯：監聽 Firebase 登入狀態
-    if (window.firebase) {
-        firebase.auth().onAuthStateChanged((user) => {
-            if (user) {
-                console.log("👋 已登入：" + user.displayName);
-                
-                firebase.database().ref('users/' + user.uid + '/game_data').once('value')
-                    .then((snapshot) => {
-                        const cloudData = snapshot.val();
-                        
-                        if (cloudData) {
-                            // --- 情況 A：雲端有資料 ---
-                            console.log("🚀 發現雲端進度！同步中...");
-                            gameData = { ...gameData, ...cloudData };
-                            // 同步回本地，確保下次進來很快
-                            localStorage.setItem(SAVE_KEY, JSON.stringify(gameData));
-                            refreshUI();
-                        } else {
-                            // --- 情況 B：第一次登入（雲端沒資料） ---
-                            // 檢查本地是否有玩過的痕跡 (例如錢大於 0 或有升級過)
-                            const isLocalAdvanced = gameData.totalEarned > 0 || gameData.upgrades.damage.lv > 1;
-                            
-                            if (isLocalAdvanced) {
-                                console.log("✨ 第一次登入：偵測到本地已有進度，正在同步至雲端備份...");
-                                saveGame(); // 直接把現在的本地資料存上雲端
-                            } else {
-                                console.log("🆕 第一次登入：雲端與本地皆無資料，初始化新帳號。");
-                                saveGame();
-                            }
-                        }
-                    })
-                    .catch(err => console.error("❌ 讀取雲端失敗：", err));
-            } else {
-                console.log("👤 目前為訪客模式。");
+            const localData = localStorage.getItem(SAVE_KEY);
+            if (localData) {
+                try {
+                    gameData = { ...gameData, ...JSON.parse(localData) };
+                } catch(e) { console.error(e); }
             }
-        });
-    }
-}
+        }
 
         class Cube {
             constructor() {
@@ -236,7 +180,6 @@
                 ctx.shadowBlur = 10;
                 ctx.shadowColor = this.color;
                 ctx.strokeRect(-this.size/2, -this.size/2, this.size, this.size);
-                
                 let p = this.hp / this.maxHp;
                 ctx.shadowBlur = 0;
                 ctx.fillStyle = '#111'; ctx.fillRect(-20, -this.size/2 - 12, 40, 5);
@@ -258,7 +201,6 @@
                         setTimeout(() => c.takeDamage(getAtkPower() * 0.6), 80);
                     }
                 });
-
                 if(gameData.totalEarned > 5000000) document.getElementById('prestige-btn').style.display = 'block';
                 refreshUI(); saveGame();
             }
@@ -344,11 +286,28 @@
             requestAnimationFrame(loop);
         }
 
-        745146
-        container.addEventListener('mousedown', (e) => handleAction(e.clientX, e.clientY));
-        container.addEventListener('touchstart', (e) => {
+        function handleAction(ex, ey) {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = ex - rect.left;
+            const mouseY = ey - rect.top;
+            let hit = false;
+            for (let i = cubes.length - 1; i >= 0; i--) {
+                const c = cubes[i];
+                if(Math.hypot(mouseX - c.x, mouseY - c.y) < (c.size/1.5) + 30) {
+                    c.takeDamage(getAtkPower());
+                    hit = true; break;
+                }
+            }
+            if(!hit) combo = 0;
+            refreshUI();
+        }
+
+        // 專門處理遊戲畫布的點擊
+        canvas.addEventListener('mousedown', (e) => handleAction(e.clientX, e.clientY));
+        canvas.addEventListener('touchstart', (e) => {
             e.preventDefault(); 
-            handleAction(e.touches[0].clientX, e.touches[0].clientY);
+            const touch = e.touches[0];
+            handleAction(touch.clientX, touch.clientY);
         }, { passive: false });
 
         window.onload = init;
