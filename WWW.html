@@ -90,31 +90,21 @@
         const container = document.getElementById('game-container');
 
         const MOB_TYPES = {
-    // 基礎階級 (權重高)
-    NANO:      { name: '納米碎片', color: '#555555', hp: 2, reward: 5, size: 20, weight: 1000 },
-    COMMON:    { name: 'Drone', color: '#00f2ff', hp: 10, reward: 20, size: 30, weight: 800 },
-    BIT:       { name: '位元蟲', color: '#00ff44', hp: 25, reward: 60, size: 25, weight: 600 },
-    CORE:      { name: '核心單元', color: '#ffffff', hp: 60, reward: 150, size: 35, weight: 400 },
+    // --- [ 基礎與普通層級 ] ---
+    COMMON:  { name: 'Drone', color: '#00f2ff', hp: 2, reward: 10, size: 30, behavior: 'normal' },
+    ELITE:   { name: 'Hunter', color: '#ff007b', hp: 60, reward: 450, size: 45, behavior: 'fast' },
+    VOID:    { name: 'Void', color: '#bc13fe', hp: 600, reward: 3000, size: 55, behavior: 'sine' },
+    MAGMA:   { name: 'Magma', color: '#ff6600', hp: 3000, reward: 20000, size: 65, behavior: 'jitter' },
+    SOLAR:   { name: 'Solar', color: '#ffcc00', hp: 25000, reward: 180000, size: 85, behavior: 'pulse' },
+    OMEGA:   { name: 'Omega', color: '#ffffff', hp: 150000, reward: 1200000, size: 110, behavior: 'teleport' },
+    RAINGOD: { name: 'RAINGOD', color: '#00ff88', hp: 1000000, reward: 10000000, size: 150, behavior: 'chaos' },
 
-    // 進階階級
-    ELITE:     { name: 'Hunter', color: '#ff007b', hp: 150, reward: 600, size: 45, weight: 200 },
-    SCOUT:     { name: '偵查者', color: '#ffff00', hp: 300, reward: 1200, size: 40, weight: 150 },
-    VOID:      { name: 'Void', color: '#bc13fe', hp: 1200, reward: 5000, size: 55, weight: 100 },
-    GHOST:     { name: '幽靈程序', color: '#888888', hp: 3000, reward: 10000, size: 50, weight: 80 },
-    SHADOW:    { name: '暗影', color: '#330066', hp: 6000, reward: 20000, size: 48, weight: 60 },
-
-    // 元素與星體
-    PHANTOM:   { name: '魅影', color: '#7000ff', hp: 12000, reward: 40000, size: 52, weight: 40 },
-    FLAME:     { name: '烈焰', color: '#ff4400', hp: 25000, reward: 80000, size: 60, weight: 30 },
-    STORM:     { name: '風暴', color: '#00ccff', hp: 180000, reward: 600000, size: 70, weight: 15 },
-    SOLAR:     { name: 'Solar', color: '#ffcc00', hp: 2500000, reward: 10000000, size: 85, weight: 5 },
-    BLACKHOLE: { name: '黑洞', color: '#111111', hp: 60000000, reward: 300000000, size: 120, weight: 1 },
-
-    // 神話階級 (權重極低)
-    CHRONOS:   { name: '時空主宰', color: '#ffff00', hp: 400000000, reward: 2000000000, size: 130, weight: 0.2 },
-    ETERNAL:   { name: '永恆之巔', color: '#00ffff', hp: 2500000000, reward: 15000000000, size: 140, weight: 0.05 },
-    INFINITY:  { name: '無限意志', color: '#ff0055', hp: 10000000000, reward: 50000000000, size: 145, weight: 0.01 },
-    ZENITH:    { name: '絕對頂點', color: '#ffffff', hp: 500000000000, reward: 999999999999, size: 200, weight: 0.001 }
+    // --- [ 隱藏與超稀有層級 - 隨幸運值微幅增加機率 ] ---
+    DIMENSION: { name: '位面主宰', color: '#ff00ff', hp: 5000000, reward: 60000000, size: 160, behavior: 'teleport' },
+    ETERNAL:   { name: '永恆之光', color: '#00ffff', hp: 25000000, reward: 350000000, size: 170, behavior: 'pulse' },
+    INFINITY:  { name: '無限意志', color: '#ff0055', hp: 150000000, reward: 2500000000, size: 180, behavior: 'chaos' },
+    CREATOR:   { name: '創世神', color: '#ffeeaa', hp: 1000000000, reward: 15000000000, size: 190, behavior: 'vortex' },
+    ZENITH:    { name: '絕對頂點', color: '#ffffff', hp: 10000000000, reward: 99999999999, size: 220, behavior: 'chaos' }
 };
         const SAVE_KEY = 'raingod_eternal_save_data';
         let gameData = {
@@ -152,48 +142,32 @@
         class Cube {
             constructor() {
                 // 在 Mob 類的 constructor 內
-// 在 Mob 類的 constructor 內
+// --- 在 Mob 的 constructor 內 ---
+
 const roll = Math.random();
-// 幸運值加成修正：進一步壓縮 luck 的影響力
-// 使用 Math.log1p 或更小的係數，確保 luck lv 很高時不會失控
-const luck = gameData.upgrades.luck.lv * 0.005; 
-const luckBonus = Math.sqrt(luck) * 0.1; // 縮小 luckBonus 的量級
+// 修正幸運值：將 Luck lv 轉為極小的加成，避免崩壞
+const luck = gameData.upgrades.luck.lv * 0.005;
+const L = Math.sqrt(luck) * 0.01; // 極稀有怪物的判定加數
 
-// --- 判定邏輯 (由強到弱，確保稀有怪機率嚴格受控) ---
+// --- 判定邏輯 (由強到弱，從機率 0.000001 開始) ---
 
-// 1. 神級 (極其罕見，Luck 影響範圍控制在萬分位)
-if (roll < 0.000005 + luckBonus * 0.0001)      this.type = MOB_TYPES.ZENITH;
-else if (roll < 0.00003 + luckBonus * 0.0003)  this.type = MOB_TYPES.INFINITY;
-else if (roll < 0.0001 + luckBonus * 0.0008)   this.type = MOB_TYPES.VOID_GOD; // 補回漏掉的種類
-else if (roll < 0.0003 + luckBonus * 0.0015)  this.type = MOB_TYPES.ETERNAL;
-else if (roll < 0.0008 + luckBonus * 0.003)   this.type = MOB_TYPES.CHRONOS;
+// 1. 神級 (極低機率)
+if (roll < 0.000001 + L * 0.001)      this.type = MOB_TYPES.ZENITH;
+else if (roll < 0.00001 + L * 0.005)  this.type = MOB_TYPES.CREATOR;
+else if (roll < 0.00005 + L * 0.01)   this.type = MOB_TYPES.INFINITY;
+else if (roll < 0.0001 + L * 0.02)    this.type = MOB_TYPES.ETERNAL;
+else if (roll < 0.0003 + L * 0.05)    this.type = MOB_TYPES.DIMENSION;
 
-// 2. 宇宙級 (稀有，Luck 影響控制在千分位)
-else if (roll < 0.002 + luckBonus * 0.006)    this.type = MOB_TYPES.DIMENSION;
-else if (roll < 0.005 + luckBonus * 0.012)    this.type = MOB_TYPES.BLACKHOLE;
-else if (roll < 0.012 + luckBonus * 0.02)     this.type = MOB_TYPES.GALAXY;
-else if (roll < 0.025 + luckBonus * 0.03)     this.type = MOB_TYPES.NEBULA;
+// 2. 原本的稀有層級 (依照你提供的機率調整)
+else if (roll < 0.0001 + L * 0.1)     this.type = MOB_TYPES.RAINGOD;
+else if (roll < 0.001 + L * 0.2)      this.type = MOB_TYPES.OMEGA;
+else if (roll < 0.005 + L * 0.5)      this.type = MOB_TYPES.SOLAR;
+else if (roll < 0.015 + L)            this.type = MOB_TYPES.MAGMA;
+else if (roll < 0.05 + L * 2)         this.type = MOB_TYPES.VOID;
 
-// 3. 星體與元素級 (開始有感，但依然保持低機率)
-else if (roll < 0.045 + luckBonus * 0.04)     this.type = MOB_TYPES.PULSAR;
-else if (roll < 0.07 + luckBonus * 0.05)      this.type = MOB_TYPES.SOLAR;
-else if (roll < 0.11 + luckBonus * 0.06)      this.type = MOB_TYPES.TITAN;
-else if (roll < 0.16 + luckBonus * 0.07)      this.type = MOB_TYPES.STORM;
-
-// 4. 進階/中階級 (遊戲的中堅怪物)
-else if (roll < 0.22 + luckBonus * 0.08)      this.type = MOB_TYPES.MAGMA;
-else if (roll < 0.29 + luckBonus * 0.09)      this.type = MOB_TYPES.PHANTOM;
-else if (roll < 0.37 + luckBonus * 0.1)       this.type = MOB_TYPES.SHADOW;
-else if (roll < 0.46 + luckBonus * 0.1)       this.type = MOB_TYPES.GHOST;
-else if (roll < 0.56 + luckBonus * 0.1)       this.type = MOB_TYPES.VOID;
-
-// 5. 基礎級 (保底區域：確保低階怪有足夠的 roll 點空間)
-// 這裡不加 luckBonus，讓基礎怪成為 luck 提升後的「犧牲區間」，但保留固定比例
-else if (roll < 0.68)                         this.type = MOB_TYPES.ELITE;
-else if (roll < 0.78)                         this.type = MOB_TYPES.CORE;
-else if (roll < 0.87)                         this.type = MOB_TYPES.BIT;
-else if (roll < 0.95)                         this.type = MOB_TYPES.COMMON;
-else                                          this.type = MOB_TYPES.NANO;
+// 3. 基礎層級 (保底區間，確保不消失)
+else if (roll < 0.20)                 this.type = MOB_TYPES.ELITE;
+else                                  this.type = MOB_TYPES.COMMON;
                 this.x = Math.random() * (width - 60) + 30;
                 this.y = Math.random() * (height - 60) + 30;
                 this.size = this.type.size;
