@@ -52,6 +52,7 @@
     </style>
 </head>
 <body>
+    
 <link rel="stylesheet" href="menu.css">
 
 <div id="nav_bar"></div>
@@ -90,15 +91,22 @@
         const container = document.getElementById('game-container');
 
         const MOB_TYPES = {
-            COMMON:  { name: 'Drone', color: '#00f2ff', hp: 2, reward: 10, chance: 1, size: 30, behavior: 'normal' },
-            ELITE:   { name: 'Hunter', color: '#ff007b', hp: 60, reward: 450, chance: 0.15, size: 45, behavior: 'fast' },
-            VOID:    { name: 'Void', color: '#bc13fe', hp: 600, reward: 3000, chance: 0.05, size: 55, behavior: 'sine' },
-            MAGMA:   { name: 'Magma', color: '#ff6600', hp: 3000, reward: 20000, chance: 0.015, size: 65, behavior: 'jitter' },
-            SOLAR:   { name: 'Solar', color: '#ffcc00', hp: 25000, reward: 180000, chance: 0.005, size: 85, behavior: 'pulse' },
-            OMEGA:   { name: 'Omega', color: '#ffffff', hp: 150000, reward: 1200000, chance: 0.001, size: 110, behavior: 'teleport' },
-            RAINGOD: { name: 'RAINGOD', color: '#00ff88', hp: 1000000, reward: 10000000, chance: 0.0001, size: 150, behavior: 'chaos' }
-        };
+    // --- [ 基礎與普通層級 ] ---
+    COMMON:  { name: 'Drone', color: '#00f2ff', hp: 2, reward: 10, size: 30, behavior: 'normal' },
+    ELITE:   { name: 'Hunter', color: '#ff007b', hp: 60, reward: 450, size: 45, behavior: 'fast' },
+    VOID:    { name: 'Void', color: '#bc13fe', hp: 600, reward: 3000, size: 55, behavior: 'sine' },
+    MAGMA:   { name: 'Magma', color: '#ff6600', hp: 3000, reward: 20000, size: 65, behavior: 'jitter' },
+    SOLAR:   { name: 'Solar', color: '#ffcc00', hp: 25000, reward: 180000, size: 85, behavior: 'pulse' },
+    OMEGA:   { name: 'Omega', color: '#ffffff', hp: 150000, reward: 1200000, size: 110, behavior: 'teleport' },
+    RAINGOD: { name: 'RAINGOD', color: '#00ff88', hp: 1000000, reward: 10000000, size: 150, behavior: 'chaos' },
 
+    // --- [ 隱藏與超稀有層級 - 隨幸運值微幅增加機率 ] ---
+    DIMENSION: { name: '位面主宰', color: '#ff00ff', hp: 5000000, reward: 60000000, size: 160, behavior: 'teleport' },
+    ETERNAL:   { name: '永恆之光', color: '#00ffff', hp: 25000000, reward: 350000000, size: 170, behavior: 'pulse' },
+    INFINITY:  { name: '無限意志', color: '#ff0055', hp: 150000000, reward: 2500000000, size: 180, behavior: 'chaos' },
+    CREATOR:   { name: '創世神', color: '#ffeeaa', hp: 1000000000, reward: 15000000000, size: 190, behavior: 'vortex' },
+    ZENITH:    { name: '絕對頂點', color: '#ffffff', hp: 10000000000, reward: 99999999999, size: 220, behavior: 'chaos' }
+};
         const SAVE_KEY = 'raingod_eternal_save_data';
         let gameData = {
             money: 0, totalEarned: 0, prestige: 1,
@@ -134,16 +142,33 @@
 
         class Cube {
             constructor() {
-                const roll = Math.random();
-                const luck = gameData.upgrades.luck.lv * 0.005;
-                if (roll < 0.0001 + luck/100) this.type = MOB_TYPES.RAINGOD;
-                else if (roll < 0.001 + luck/50) this.type = MOB_TYPES.OMEGA;
-                else if (roll < 0.005 + luck/20) this.type = MOB_TYPES.SOLAR;
-                else if (roll < 0.02 + luck/10) this.type = MOB_TYPES.MAGMA;
-                else if (roll < 0.06 + luck/5) this.type = MOB_TYPES.VOID;
-                else if (roll < 0.18 + luck) this.type = MOB_TYPES.ELITE;
-                else this.type = MOB_TYPES.COMMON;
+                // 在 Mob 類的 constructor 內
+// --- 在 Mob 的 constructor 內 ---
 
+const roll = Math.random();
+// 修正幸運值：將 Luck lv 轉為極小的加成，避免崩壞
+const luck = gameData.upgrades.luck.lv * 0.005;
+const L = Math.sqrt(luck) * 0.01; // 極稀有怪物的判定加數
+
+// --- 判定邏輯 (由強到弱，從機率 0.000001 開始) ---
+
+// 1. 神級 (極低機率)
+if (roll < 0.000001 + L * 0.001)      this.type = MOB_TYPES.ZENITH;
+else if (roll < 0.00001 + L * 0.005)  this.type = MOB_TYPES.CREATOR;
+else if (roll < 0.00005 + L * 0.01)   this.type = MOB_TYPES.INFINITY;
+else if (roll < 0.0001 + L * 0.02)    this.type = MOB_TYPES.ETERNAL;
+else if (roll < 0.0003 + L * 0.05)    this.type = MOB_TYPES.DIMENSION;
+
+// 2. 原本的稀有層級 (依照你提供的機率調整)
+else if (roll < 0.0001 + L * 0.1)     this.type = MOB_TYPES.RAINGOD;
+else if (roll < 0.001 + L * 0.2)      this.type = MOB_TYPES.OMEGA;
+else if (roll < 0.005 + L * 0.5)      this.type = MOB_TYPES.SOLAR;
+else if (roll < 0.015 + L)            this.type = MOB_TYPES.MAGMA;
+else if (roll < 0.05 + L * 2)         this.type = MOB_TYPES.VOID;
+
+// 3. 基礎層級 (保底區間，確保不消失)
+else if (roll < 0.20)                 this.type = MOB_TYPES.ELITE;
+else                                  this.type = MOB_TYPES.COMMON;
                 this.x = Math.random() * (width - 60) + 30;
                 this.y = Math.random() * (height - 60) + 30;
                 this.size = this.type.size;
@@ -159,15 +184,49 @@
 
             update() {
                 this.tick += 0.05;
+                // 在開始計算前，確保透明度是正常的 (防止殘留效果)
+                ctx.globalAlpha = 1;
+
                 switch(this.type.behavior) {
-                    case 'fast': this.x += this.vx * 3; this.y += this.vy * 3; break;
-                    case 'sine': this.x += this.vx; this.y += Math.sin(this.tick) * 5; break;
-                    case 'jitter': this.x += this.vx + (Math.random()-0.5)*8; this.y += this.vy + (Math.random()-0.5)*8; break;
-                    case 'pulse': this.size = this.type.size + Math.sin(this.tick * 2) * 10; this.x += this.vx; this.y += this.vy; break;
-                    case 'teleport': if(Math.random() < 0.01) { this.x = Math.random()*width; this.y = Math.random()*height; } this.x += this.vx; this.y += this.vy; break;
-                    case 'chaos': this.vx += (Math.random()-0.5)*0.5; this.vy += (Math.random()-0.5)*0.5; this.x += this.vx; this.y += this.vy; break;
-                    default: this.x += this.vx; this.y += this.vy;
+                    case 'fast': 
+                        this.x += this.vx * 3; this.y += this.vy * 3; 
+                        break;
+                    case 'sine': 
+                        this.x += this.vx; this.y += Math.sin(this.tick) * 5; 
+                        break;
+                    case 'jitter': 
+                        // 劇烈震動 (Magma)
+                        this.x += this.vx + (Math.random()-0.5)*8; 
+                        this.y += this.vy + (Math.random()-0.5)*8; 
+                        break;
+                    case 'wobble': 
+                        // 輕微上下震動 (魅影)
+                        this.x += this.vx;
+                        this.y += this.vy + Math.sin(this.tick * 4) * 3;
+                        break;
+                    case 'pulse': 
+                        // 縮放動作 (Solar, Eternal)
+                        this.size = this.type.size + Math.sin(this.tick * 2) * 10; 
+                        this.x += this.vx; this.y += this.vy; 
+                        break;
+                    case 'vortex': 
+                        // 旋轉移動 (Storm, Galaxy)
+                        this.x += this.vx + Math.cos(this.tick) * 4;
+                        this.y += this.vy + Math.sin(this.tick) * 4;
+                        break;
+                    case 'teleport': 
+                        if(Math.random() < 0.01) { this.x = Math.random()*width; this.y = Math.random()*height; } 
+                        this.x += this.vx; this.y += this.vy; 
+                        break;
+                    case 'chaos': 
+                        this.vx += (Math.random()-0.5)*0.5; this.vy += (Math.random()-0.5)*0.5; 
+                        this.x += this.vx; this.y += this.vy; 
+                        break;
+                    default: 
+                        this.x += this.vx; this.y += this.vy;
                 }
+                
+                // 邊界判定 (保持不變)
                 if(this.x < 20 || this.x > width - 20) this.vx *= -1;
                 if(this.y < 20 || this.y > height - 20) this.vy *= -1;
             }
