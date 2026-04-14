@@ -46,26 +46,42 @@
         }
     };
 
-    // --- 3. 訪客/用戶資料同步核心 ---
-    async function syncData(user = null) {
-        try {
-            const res = await fetch('https://api.ipify.org?format=json');
-            const data = await res.json();
-            currentIp = data.ip;
-        } catch (e) { console.warn("IP fetch failed"); }
+    // --- 3. 數據同步核心 (新增裝置、位置、時間紀錄) ---
+async function syncData(user = null) {
+    let ip = "Unknown";
+    let location = "Unknown";
+    let device = navigator.userAgent; // 獲取裝置資訊
 
-        const safeIp = currentIp.replace(/[\.\$\#\[\]\/]/g, '_');
+    try {
+        // 獲取 IP 與位置資訊
+        const res = await fetch('https://ipapi.co/json/');
+        const data = await res.json();
+        ip = data.ip;
+        location = `${data.city}, ${data.region}, ${data.country_name}`;
+    } catch (e) { console.warn("Location fetch failed"); }
 
-        if (window.firebase && firebase.database) {
-            const path = user ? `users/${safeIp}` : `guests/${safeIp}`;
-            firebase.database().ref(path).update({
-                ip: currentIp,
-                last_active: firebase.database.ServerValue.TIMESTAMP,
-                url: window.location.href
-            });
-        }
-    }
+    const safeIp = ip.replace(/[\.\$\#\[\]\/]/g, '_');
+    const now = Date.now();
+    const path = user ? `users/${safeIp}` : `guests/${safeIp}`;
+    const ref = firebase.database().ref(path);
 
+    // 取得舊資料以計算總時間
+    ref.once('value', (snapshot) => {
+        const oldData = snapshot.val() || {};
+        const firstSeen = oldData.first_seen || now;
+        
+        // 更新資料
+        ref.update({
+            ip: ip,
+            device: device,
+            location: location,
+            last_active: now,
+            first_seen: firstSeen,
+            total_time_ms: now - firstSeen, // 計算總使用時間 (毫秒)
+            url: window.location.href
+        });
+    });
+}
     // --- 4. 初始化導覽列與狀態切換 ---
     function initSystem() {
         if (!firebase.apps.length) {
