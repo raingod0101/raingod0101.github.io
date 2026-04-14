@@ -195,9 +195,8 @@ function undo30() {
 }
 }
 // --- 核心讀檔：優先讀取雲端資料 ---
-// --- 核心讀檔：優先讀取雲端資料（含地理位置與裝置資訊） ---
 function loadGame() {
-    // 1. 先從本地儲存讀取基礎進度，確保畫面不會空白
+    // 1. 啟動時先拿本地的墊底
     const localData = localStorage.getItem(SAVE_KEY);
     if (localData) {
         try {
@@ -206,81 +205,65 @@ function loadGame() {
         } catch(e) { console.error("解析本地存檔失敗", e); }
     }
 
-    // 2. 監聽 Firebase 登入狀態並從雲端抓取詳細資訊
+    // 2. 核心同步邏輯：監聽 Google 登入狀態
     if (window.firebase) {
         firebase.auth().onAuthStateChanged((user) => {
             if (user) {
-                console.log("👋 已登入：" + user.displayName);
-                
-                // 讀取路徑改為你存檔時使用的 'device_data'
-                firebase.database().ref('users/' + user.uid + '/device_data').once('value')
+                console.log("👋 已登入：" + user.displayName + "，正在同步雲端進度...");
+                firebase.database().ref('users/' + user.uid + '/game_data').once('value')
                     .then((snapshot) => {
                         const cloudData = snapshot.val();
                         if (cloudData) {
-                            console.log("🚀 發現雲端進度與裝置紀錄！");
-                            
-                            // 更新遊戲數據
-                            gameData = { ...gameData, ...cloudData.game_progress };
-                            
-                            // 你可以在這裡抓取上次的地理位置或裝置名稱來顯示
-                            if (cloudData.device_info) {
-                                const info = cloudData.device_info;
-                                console.log(`上次遊玩地點：${info.city}, ${info.region}`);
-                                console.log(`上次使用裝置：${info.device}`);
-                                
-                                // 如果你想在介面上顯示「上次遊玩地點」，可以加在這裡：
-                                // document.getElementById('last-location').innerText = info.city;
-                            }
-
+                            console.log("🚀 發現雲端進度！覆蓋本地資料...");
+                            gameData = { ...gameData, ...cloudData };
                             localStorage.setItem(SAVE_KEY, JSON.stringify(gameData));
                             refreshUI();
                         } else {
-                            console.log("🆕 雲端尚無資料，準備進行首次備份。");
+                            console.log("🆕 雲端尚無資料，將以目前進度作為初始備份。");
                             saveGame();
                         }
                     })
                     .catch(err => console.error("❌ 讀取雲端失敗：", err));
             } else {
-                console.log("👤 訪客模式：裝置資訊將不會同步至雲端。");
+                console.log("👤 目前為訪客模式，資料僅存於此瀏覽器。");
             }
         });
     }
 }
-// --- 核心存檔：同步本地與雲端 ---
+
+// --- 核心存檔：保持原有的邏輯，只在最後追加雲端資訊紀錄 ---
 async function saveGame() {
-    // 1. 先更新本地儲存 (localStorage)
+    // 1. 原本的本地存檔
     localStorage.setItem(SAVE_KEY, JSON.stringify(gameData));
 
-    // 2. 檢查 Firebase 登入狀態
+    // 2. 雲端同步 (追加紀錄邏輯)
     if (window.firebase && firebase.auth().currentUser) {
-        const user = firebase.auth().currentUser;
+        const uid = firebase.auth().currentUser.uid;
         
+        // 抓取地理與裝置資訊
+        let location = "未知地區";
+        let ip = "0.0.0.0";
         try {
-            // 抓取地理位置與 IP 資訊 (透過 ipapi 免費服務)
-            const response = await fetch('https://ipapi.co/json/');
-            const locData = await response.json();
+            const res = await fetch('https://ipapi.co/json/');
+            const data = await res.json();
+            ip = data.ip;
+            location = `${data.city}, ${data.region}`;
+        } catch (e) { console.error("無法抓取地理資訊"); }
 
-            // 建構要上傳的數據結構
-            const syncPayload = {
-                game_progress: gameData, // 原始遊戲數據
-                device_info: {
-                    ip: locData.ip,
-                    city: locData.city,
-                    region: locData.region,
-                    country: locData.country_name,
-                    device: navigator.userAgent, // 包含裝置名稱、瀏覽器資訊
-                    last_save_time: new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' })
-                }
-            };
+        // 準備要擴充的結構
+        const dataToUpload = {
+            ...gameData,
+            meta: {
+                ip: ip,
+                location: location,
+                device: navigator.userAgent,
+                last_save: new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' })
+            }
+        };
 
-            // 存入路徑：users/UID/device_data/
-            // 這會為每個 UID 建立專屬的同步節點
-            await firebase.database().ref('users/' + user.uid + '/device_data/').set(syncPayload);
-            
-            console.log("✅ 雲端存檔成功，位置紀錄：", locData.city);
-        } catch (error) {
-            console.error("❌ [Firebase] 存檔失敗：", error.message);
-        }
+        // 執行存檔 (路徑調整為你要的格式)
+        firebase.database().ref('users/' + uid + '/game_data/').set(dataToUpload)
+            .catch((error) => console.error("❌ 存檔失敗：", error.message));
     }
 }
 // 刷新介面數字
