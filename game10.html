@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Square Arena Battle</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+    <style>
+        body { margin: 0; display: flex; flex-direction: column; align-items: center; background: #222; color: white; font-family: sans-serif; }
+        canvas { background: #333; margin-top: 10px; }
+        .ui { padding: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="ui">
+    <h2 id="status">準備中...</h2>
+    力道 (1-10): <input type="range" id="power" min="1" max="10" value="5">
+    角度: <input type="number" id="angle" value="0" min="0" max="360">
+    <button onclick="readyUp()">準備好！</button>
+</div>
+<canvas id="arena"></canvas>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-app.js";
+    import { getDatabase, ref, onValue, update } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-database.js";
+
+    // 1. 初始化物理世界
+    const { Engine, Render, World, Bodies, Body, Runner } = Matter;
+    const engine = Engine.create();
+    const render = Render.create({ element: document.body, canvas: document.getElementById('arena'), engine: engine, options: { width: 600, height: 600, wireframes: false } });
+    
+    // 建立牆壁 (邊緣推力效果)
+    const walls = [
+        Bodies.rectangle(300, 0, 600, 20, { isStatic: true }),
+        Bodies.rectangle(300, 600, 600, 20, { isStatic: true }),
+        Bodies.rectangle(0, 300, 20, 600, { isStatic: true }),
+        Bodies.rectangle(600, 300, 20, 600, { isStatic: true })
+    ];
+    World.add(engine.world, walls);
+    
+    const p1 = Bodies.circle(200, 300, 20, { render: { fillStyle: '#ff0000' } });
+    const p2 = Bodies.circle(400, 300, 20, { render: { fillStyle: '#0000ff' } });
+    World.add(engine.world, [p1, p2]);
+
+    // 2. Firebase 邏輯
+    const firebaseConfig = { /* 填入你的設定 */ };
+    const db = getDatabase(initializeApp(firebaseConfig));
+
+    window.readyUp = () => {
+        const p = document.getElementById('power').value;
+        const a = document.getElementById('angle').value;
+        update(ref(db, 'game/p1'), { power: p, angle: a, ready: true });
+        document.getElementById('status').innerText = "等待對手...";
+    };
+
+    // 3. 接收數據並觸發物理
+    onValue(ref(db, 'game'), (snapshot) => {
+        const data = snapshot.val();
+        if (data.p1.ready && data.p2.ready) {
+            document.getElementById('status').innerText = "發射！";
+            // 將力道轉為物理向量
+            const force = parseFloat(data.p1.power) * 0.01;
+            const angle = (parseFloat(data.p1.angle) * Math.PI) / 180;
+            Body.applyForce(p1, p1.position, { x: Math.cos(angle) * force, y: Math.sin(angle) * force });
+            // 重置 ready 狀態...
+        }
+    });
+
+    Runner.run(Runner.create(), engine);
+    Render.run(render);
+</script>
+</body>
+</html>
