@@ -1,386 +1,197 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none">
-    <title>單人棋 | Raingod</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>雨神聊天室 | Raingod</title>
     <style>
-        :root { --sq-l: #ebecd0; --sq-d: #779556; --accent: #f6f669; --bg: #161618; }
-        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        :root { --me-bg: #007aff; --other-bg: #f2f2f7; --danger: #ff3b30; --text-gray: #8e8e93; }
+        body { font-family: -apple-system, sans-serif; background: #000; margin: 0; display: flex; justify-content: center; height: 100vh; overflow: hidden; -webkit-user-select: none; }
+        #app { width: 100%; max-width: 500px; background: white; display: flex; flex-direction: column; height: 100vh; position: relative; }
         
-        body { 
-            background: var(--bg); color: #fff; font-family: sans-serif;
-            margin: 0; padding: 0; display: flex; flex-direction: column; 
-            justify-content: center; align-items: center;
-            height: 100vh; width: 100vw; overflow: hidden;
-        }
-
-        #launcher {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-            background: var(--bg); z-index: 2000; display: flex; flex-direction: column;
-            justify-content: center; align-items: center; cursor: pointer;
-        }
-
-        /* 頂部控制列：整合統計數據 */
-        .header { 
-            position: absolute; top: 0; width: 100%; z-index: 1000;
-            padding: 5px 10px; background: rgba(0,0,0,0.6);
-            display: flex; justify-content: space-between; align-items: center;
-            font-size: 13px;
-        }
-        .stats { display: flex; flex-direction: column; gap: 2px; }
-        .controls { display: flex; gap: 6px; align-items: center; }
+        /* Header */
+        .header { height: 60px; padding: 0 15px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; background: #fff; z-index: 10; }
+        .header-btns { display: flex; gap: 8px; }
         
-        button { 
-            padding: 6px 12px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; 
-            background: #444; color: white;
-        }
-
-        #game-container { 
-            width: 100vw; height: 100vh;
-            display: flex; justify-content: center; align-items: center;
-            padding-top: 40px; 
-        }
-
-        #board { 
-            display: grid; 
-            grid-template-columns: repeat(8, 1fr); 
-            grid-template-rows: repeat(8, 1fr);
-            width: min(98vw, calc(100vh - 120px));
-            height: min(98vw, calc(100vh - 120px));
-            border: 2px solid #000;
-            box-shadow: 0 0 30px rgba(0,0,0,0.8);
-            touch-action: none;
-        }
+        #chat-box { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 15px; background: #fff; }
         
-        .cell { display: flex; justify-content: center; align-items: center; width: 100%; height: 100%; cursor: pointer; position: relative; }
-        .light { background: var(--sq-l); }
-        .dark { background: var(--sq-d); }
-        .selected { background: var(--accent) !important; }
-        .can-eat::after { content: ''; width: 35%; height: 35%; background: rgba(0,0,0,0.2); border-radius: 50%; position: absolute; z-index: 10; }
+        /* Messages */
+        .msg-row { display: flex; flex-direction: column; width: 100%; }
+        .msg-row.me { align-items: flex-end; }
+        .msg-row.other { align-items: flex-start; }
         
-        .piece { font-size: min(12vw, 10vh); color: #000; z-index: 5; user-select: none; pointer-events: none; position: absolute; }
-        .cap-badge { position: absolute; bottom: 2px; right: 2px; font-size: 10px; background: #ff3b30; color: white; border-radius: 3px; padding: 1px 3px; font-weight: bold; z-index: 15; }
-
-        #log { position: absolute; bottom: 15px; width: 100%; text-align: center; color: #34c759; font-size: 20px; font-weight: bold; pointer-events: none; }/* 1. 修改 Body 布局，由絕對定位改為彈性流向 */
-body { 
-    background: var(--bg); color: #fff; font-family: sans-serif;
-    margin: 0; padding: 0; 
-    display: flex; flex-direction: column; /* 讓內容垂直排列 */
-    height: 100vh; width: 100vw; overflow: hidden;
-}
-
-/* 2. 重寫 Header，不再使用 absolute，並放大按鈕 */
-.header { 
-    width: 100%; 
-    z-index: 1000;
-    padding: 15px 10px; /* 增加間距 */
-    background: rgba(255,255,255,0.05);
-    display: flex; 
-    justify-content: space-around; /* 均分空間 */
-    align-items: center;
-    flex-shrink: 0; /* 防止被擠壓 */
-}
-
-.stats { 
-    display: flex; 
-    flex-direction: column; 
-    gap: 5px; 
-    font-size: 16px; /* 放大文字 */
-}
-
-.controls { 
-    display: flex; 
-    gap: 10px; 
-    align-items: center; 
-}
-
-/* 3. 放大按鈕與滑桿，方便手機觸控 */
-button { 
-    padding: 10px 18px; /* 更大的點擊面積 */
-    border: none; 
-    border-radius: 8px; 
-    font-size: 16px;
-    font-weight: bold; 
-    cursor: pointer; 
-    background: #444; 
-    color: white;
-}
-
-input[type="range"] {
-    width: 80px; /* 滑桿稍微加長 */
-    height: 20px;
-}
-
-/* 4. 調整遊戲容器，移除固定 padding */
-#game-container { 
-    flex-grow: 1; /* 自動填滿剩餘空間 */
-    width: 100vw; 
-    display: flex; 
-    justify-content: center; 
-    align-items: center;
-    padding: 10px 0;
-}
-
-/* 5. 確保棋盤大小正確（不變） */
-#board { 
-    display: grid; 
-    grid-template-columns: repeat(8, 1fr); 
-    grid-template-rows: repeat(8, 1fr);
-    width: min(95vw, 70vh); /* 稍微縮小一點點點確保不溢出 */
-    height: min(95vw, 70vh);
-    border: 2px solid #000;
-    box-shadow: 0 0 30px rgba(0,0,0,0.8);
-    touch-action: none;
-}
+        .msg-info { font-size: 11px; color: var(--text-gray); margin-bottom: 4px; padding: 0 5px; }
+        .bubble { padding: 12px; border-radius: 18px; font-size: 15px; word-break: break-all; max-width: 85%; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+        .me .bubble { background: var(--me-bg); color: white; border-bottom-right-radius: 4px; }
+        .other .bubble { background: var(--other-bg); color: black; border-bottom-left-radius: 4px; }
+        
+        /* Media */
+        .chat-img { max-width: 100%; border-radius: 10px; display: block; margin-bottom: 5px; }
+        .file-card { background: rgba(0,0,0,0.05); padding: 10px; border-radius: 12px; border: 1px solid rgba(0,0,0,0.1); min-width: 160px; }
+        .me .file-card { background: rgba(255,255,255,0.2); border-color: rgba(255,255,255,0.3); }
+        .dl-btn { background: var(--me-bg); color: white; border: none; padding: 8px; border-radius: 8px; font-size: 12px; cursor: pointer; width: 100%; margin-top: 8px; font-weight: bold; }
+        
+        /* Lightbox */
+        #lightbox { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 1000; }
+        
+        /* Input */
+        .input-area { padding: 10px 15px 35px; border-top: 1px solid #eee; display: flex; gap: 10px; align-items: center; background: #fff; }
+        input[type="text"] { flex: 1; padding: 12px 16px; border: none; background: #f2f2f7; border-radius: 25px; outline: none; font-size: 16px; }
+        
+        .hidden { display: none !important; }
+        .btn-sm { padding: 6px 12px; border-radius: 8px; border: 1px solid #ddd; background: none; font-size: 12px; cursor: pointer; font-weight: bold; }
     </style>
 </head>
-<body>
-<link rel="stylesheet" href="menu.css">
-
-<div id="nav_bar"></div>
-
-<script src="menu.js"></script>
-    <div style="position: fixed; top: 5px; left: 5px; color: gray; font-size: 12px; font-family: sans-serif;">支援雲端儲存</div>
-    <div id="launcher" onclick="launchGame()">
-        <h1 style="color:#fbd38d; margin-bottom:20px">單人棋</h1>
-        <div style="background:#34c759; padding:15px 50px; border-radius:15px; font-size:20px; font-weight:bold">開始對局</div>
+<body oncontextmenu="return false;">
+<div id="app">
+    <div id="lightbox" onclick="this.style.display='none'">
+        <img id="lb-img" style="max-width:95%; max-height:80%; object-fit:contain;">
+        <button id="lb-dl" class="dl-btn" style="width:auto; padding:10px 40px; margin-top:25px;">下載圖片</button>
     </div>
 
-    <div class="header">
-        <div class="stats">
-    <p></p><p></p><br>
-    <div style="color:#fbd38d">🏆 連勝: <span id="win-count">0</span></div>
-    <div style="color:#fbd38d">⭐ 分數: <span id="score-count">0</span></div> <div style="color:#aaa">⏳ 遊玩: <span id="play-time">0m</span></div>
+    <div id="login-view" style="padding: 40px; text-align: center; flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 15px;">
+        <h2 style="color: var(--me-bg); font-size: 32px; margin: 0;">雨神聊天室</h2>
+        <input type="text" id="room-input" placeholder="房號 (705)">
+        <input type="text" id="nick-input" placeholder="暱稱">
+        <button onclick="handleJoin()" style="padding:16px; background:var(--me-bg); color:white; border:none; border-radius:15px; font-weight:bold; cursor:pointer;">進入房間</button>
+    </div>
+
+    <div id="chat-view" class="hidden" style="display:flex; flex-direction:column; height:100%;">
+        <div class="header">
+            <div><b id="room-title"></b> <small id="online-text" style="color:var(--me-bg)"></small></div>
+            <div class="header-btns">
+                <button id="del-btn" class="btn-sm hidden" style="color:var(--danger); border-color:var(--danger);" onclick="destroyRoom()">銷毀房間</button>
+                <button class="btn-sm" onclick="location.reload()">退出</button>
+            </div>
         </div>
-        <div class="controls">
-            
-            <input type="range" id="diff-slider" min="3" max="30" value="10" style="width:60px" oninput="document.getElementById('diff-val').innerText=this.value">
-            <span id="diff-val" style="width:18px; color:#fff">10</span>
-            <button style="background:#34c759" onclick="startNewGame()">新局</button>
-            <button onclick="undo()">悔棋</button><button onclick="undo30()">重新</button>
+        <div id="chat-box"></div>
+        <div class="input-area">
+            <input type="file" id="file-selector" class="hidden" onchange="sendFile(this)">
+            <button onclick="document.getElementById('file-selector').click()" style="font-size:24px; border:none; background:none;">📎</button>
+            <input type="text" id="msg-input" placeholder="輸入訊息..." onkeypress="if(event.key==='Enter') doSend()">
+            <button onclick="doSend()" style="color:var(--me-bg); font-weight:bold; border:none; background:none;">傳送</button>
         </div>
     </div>
+</div>
 
-    <div id="game-container">
-        <div id="board"></div>
-    </div>
-    <div id="log"></div>
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getDatabase, ref, set, push, onValue, remove, get, update, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-<script>
-const SAVE_KEY = 'raingod_chess_solo_v1';
-const PIECES = {
-    'K': { s: '♔', long: false, d: [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]] },
-    'Q': { s: '♛', long: true,  d: [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]] },
-    'R': { s: '♜', long: true,  d: [[1,0],[-1,0],[0,1],[0,-1]] },
-    'B': { s: '♝', long: true,  d: [[1,1],[1,-1],[-1,1],[-1,-1]] },
-    'N': { s: '♞', long: false, d: [[2,1],[2,-1],[-2,1],[-2,-1],[1,2],[1,-2],[-1,2],[-1,-2]] }
-};
+    const firebaseConfig = { apiKey: "AIzaSyDHb0o6ahdNnvlL3-QQy_yRO_mg4XMqtJk", databaseURL: "https://chat-73802-default-rtdb.firebaseio.com" };
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    let uid = localStorage.getItem('chat_uid') || 'u' + Math.random().toString(36).substr(2, 7);
+    localStorage.setItem('chat_uid', uid);
+    let currentRoom = "", myNick = "";
 
-// 遊戲狀態與存檔物件
-let state = { 
-    grid: [], 
-    history: [], 
-    selected: null 
-};
-
-let gameData = {
-    wins: 0,
-    totalTime: 0,
-    score: 0 // 新增分數變數
-};
-function undo30() {
-    for (let ii = 0; ii <= 31; ii++) {
-    undo()
-}
-}
-// --- 核心讀檔：優先讀取雲端資料 ---
-function loadGame() {
-    // 1. 啟動時先拿本地的墊底
-    const localData = localStorage.getItem(SAVE_KEY);
-    if (localData) {
-        try {
-            gameData = { ...gameData, ...JSON.parse(localData) };
-            refreshUI();
-        } catch(e) { console.error("解析本地存檔失敗", e); }
+    function formatTime(timestamp) {
+        if (!timestamp) return "";
+        const date = new Date(timestamp);
+        const now = new Date();
+        const timeStr = date.getHours().toString().padStart(2, '0') + ":" + date.getMinutes().toString().padStart(2, '0');
+        return `${date.getMonth()+1}/${date.getDate()} ${timeStr}`;
     }
 
-    // 2. 核心同步邏輯：監聽 Google 登入狀態
-    if (window.firebase) {
-        firebase.auth().onAuthStateChanged((user) => {
-            if (user) {
-                console.log("👋 已登入：" + user.displayName + "，正在同步雲端進度...");
-                firebase.database().ref('users/' + user.uid + '/game_data').once('value')
-                    .then((snapshot) => {
-                        const cloudData = snapshot.val();
-                        if (cloudData) {
-                            console.log("🚀 發現雲端進度！覆蓋本地資料...");
-                            gameData = { ...gameData, ...cloudData };
-                            localStorage.setItem(SAVE_KEY, JSON.stringify(gameData));
-                            refreshUI();
-                        } else {
-                            console.log("🆕 雲端尚無資料，將以目前進度作為初始備份。");
-                            saveGame();
-                        }
-                    })
-                    .catch(err => console.error("❌ 讀取雲端失敗：", err));
-            } else {
-                console.log("👤 目前為訪客模式，資料僅存於此瀏覽器。");
-            }
+    window.downloadFile = (dataUrl, fileName, mime) => {
+        const parts = dataUrl.split(',');
+        const byteString = atob(parts[1]);
+        const ab = new ArrayBuffer(byteString.length);
+        const ia = new Uint8Array(ab);
+        for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+        const blob = new Blob([ab], { type: mime });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = fileName;
+        document.body.appendChild(a); a.click();
+        document.body.removeChild(a); URL.revokeObjectURL(url);
+    };
+
+    window.deleteMsg = async (msgId) => {
+        if(confirm('確定要收回訊息嗎？')) await remove(ref(db, `rooms/${currentRoom}/msgs/${msgId}`));
+    };
+
+    window.handleJoin = async () => {
+        const r = document.getElementById('room-input').value.trim().toUpperCase();
+        const n = document.getElementById('nick-input').value.trim() || "訪客";
+        if(!r) return;
+        const roomRef = ref(db, `rooms/${r}`);
+        const snap = await get(roomRef);
+        if(!snap.exists()){
+            const oSnap = await get(ref(db, `owners/${uid}`));
+            if(oSnap.exists()){ alert("你已有房間："+oSnap.val()); return; }
+            await set(ref(db, `rooms/${r}/meta`), { owner: uid });
+            await set(ref(db, `owners/${uid}`), r);
+        }
+        currentRoom = r; myNick = n;
+        document.getElementById('login-view').classList.add('hidden');
+        document.getElementById('chat-view').classList.remove('hidden');
+        document.getElementById('room-title').innerText = r;
+        initChat();
+    };
+
+    window.sendFile = (el) => {
+        const file = el.files[0]; if(!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            let type = 'file';
+            if(file.type.startsWith('image/')) type = 'image';
+            else if(file.name.toLowerCase().endsWith('.pdf')) type = 'pdf';
+            else if(file.name.toLowerCase().endsWith('.mp3')) type = 'audio';
+            
+            push(ref(db, `rooms/${currentRoom}/msgs`), {
+                type: type, content: e.target.result, fileName: file.name,
+                mime: file.type || 'application/octet-stream',
+                uid: uid, name: myNick, ts: serverTimestamp()
+            });
+        };
+        reader.readAsDataURL(file);
+    };
+
+    window.doSend = () => {
+        const inp = document.getElementById('msg-input'); if(!inp.value.trim()) return;
+        push(ref(db, `rooms/${currentRoom}/msgs`), { type:'text', content: inp.value, uid: uid, name: myNick, ts: serverTimestamp() });
+        inp.value = "";
+    };
+
+    window.destroyRoom = async () => {
+        if(confirm("⚠ 注意：銷毀後所有訊息將消失，且你會釋放房主名額。確定嗎？")){
+            const up = {}; up[`/rooms/${currentRoom}`] = null; up[`/owners/${uid}`] = null;
+            await update(ref(db), up); location.reload();
+        }
+    };
+
+    function initChat() {
+        onValue(ref(db, `rooms/${currentRoom}/msgs`), snap => {
+            const box = document.getElementById('chat-box'); box.innerHTML = "";
+            snap.forEach(child => {
+                const d = child.val(); const isMe = d.uid === uid;
+                let body = "";
+                if(d.type === 'image'){
+                    body = `<img src="${d.content}" class="chat-img" onclick="event.stopPropagation(); window.showLB('${d.content}','${d.fileName}','${d.mime}')">`;
+                } else if(d.type === 'pdf'){
+                    body = `<div class="file-card">📄 ${d.fileName}<iframe src="${d.content}" style="width:100%; height:150px; border:none; margin-top:5px;"></iframe><button class="dl-btn" onclick="event.stopPropagation(); downloadFile('${d.content}','${d.fileName}','${d.mime}')">下載 PDF</button></div>`;
+                } else if(d.type === 'audio'){
+                    body = `<div class="file-card">🎵 ${d.fileName}<audio controls src="${d.content}" style="width:100%; height:30px; margin:5px 0;"></audio><button class="dl-btn" onclick="event.stopPropagation(); downloadFile('${d.content}','${d.fileName}','${d.mime}')">下載音檔</button></div>`;
+                } else if(d.type === 'file'){
+                    body = `<div class="file-card">📄 ${d.fileName}<button class="dl-btn" onclick="event.stopPropagation(); downloadFile('${d.content}','${d.fileName}','${d.mime}')">下載檔案</button></div>`;
+                } else {
+                    body = `<div style="white-space:pre-wrap;">${d.content}</div>`;
+                }
+                const div = document.createElement('div');
+                div.className = `msg-row ${isMe?'me':'other'}`;
+                div.innerHTML = `<div class="msg-info">${d.name}</div><div class="bubble" onclick="${isMe ? `deleteMsg('${child.key}')` : ''}">${body}</div>`;
+                box.appendChild(div);
+            });
+            box.scrollTop = box.scrollHeight;
         });
     }
-}
 
-// --- 核心存檔：保持原有的邏輯，只在最後追加雲端資訊紀錄 ---
-async function saveGame() {
-    // 1. 原本的本地存檔
-    localStorage.setItem(SAVE_KEY, JSON.stringify(gameData));
-
-    // 2. 雲端同步 (追加紀錄邏輯)
-    if (window.firebase && firebase.auth().currentUser) {
-        const uid = firebase.auth().currentUser.uid;
-        
-        // 抓取地理與裝置資訊
-        let location = "未知地區";
-        let ip = "0.0.0.0";
-        try {
-            const res = await fetch('https://ipapi.co/json/');
-            const data = await res.json();
-            ip = data.ip;
-            location = `${data.city}, ${data.region}`;
-        } catch (e) { console.error("無法抓取地理資訊"); }
-
-        // 準備要擴充的結構
-        const dataToUpload = {
-            ...gameData,
-            meta: {
-                ip: ip,
-                location: location,
-                device: navigator.userAgent,
-                last_save: new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' })
-            }
-        };
-
-        // 執行存檔 (路徑調整為你要的格式)
-        firebase.database().ref('users/' + uid + '/game_data/').set(dataToUpload)
-            .catch((error) => console.error("❌ 存檔失敗：", error.message));
-    }
-}
-// 刷新介面數字
-function refreshUI() {
-    document.getElementById('win-count').innerText = gameData.wins;
-    document.getElementById('score-count').innerText = gameData.score;
-    const mins = Math.floor(gameData.totalTime / 60);
-    const secs = gameData.totalTime % 60;
-    document.getElementById('play-time').innerText = `${mins}m ${secs}s`;
-}
-
-// 計時器邏輯
-setInterval(() => {
-    if (document.getElementById('launcher').style.display === 'none') {
-        gameData.totalTime++;
-        refreshUI();
-        // 每 30 秒自動備份一次雲端
-        if (gameData.totalTime % 30 === 0) saveGame();
-    }
-}, 1000);
-
-window.launchGame = () => { 
-    document.getElementById('launcher').style.display='none'; 
-    loadGame(); // 啟動時執行讀檔
-    startNewGame(); 
-};
-
-// --- 遊戲核心引擎 ---
-function getMoves(r, c, grid) {
-    const p = grid[r][c]; if (!p || p.caps >= 2) return [];
-    let moves = []; const info = PIECES[p.type];
-    for (let [dr, dc] of info.d) {
-        for (let i = 1; i < (info.long ? 8 : 2); i++) {
-            let nr = r + dr*i, nc = c + dc*i;
-            if (nr>=0 && nr<8 && nc>=0 && nc<8) { 
-                if (grid[nr][nc]) { moves.push({r: nr, c: nc}); break; } 
-            } else break;
-        }
-    }
-    return moves;
-}
-
-window.generate = (n) => {
-    let g = Array(8).fill(0).map(()=>Array(8).fill(null));
-    let kr=Math.floor(Math.random()*8), kc=Math.floor(Math.random()*8);
-    g[kr][kc]={type:'K', split:0};
-    let pList=[{r:kr,c:kc}], count=1, safety = 0;
-    while(count < n && safety < 5000) {
-        safety++;
-        let idx = Math.floor(Math.random()*pList.length);
-        let src = pList[idx];
-        if (g[src.r][src.c].split >= 2) continue;
-        let info = PIECES[g[src.r][src.c].type];
-        let d = info.d[Math.floor(Math.random()*info.d.length)];
-        let dist = info.long ? Math.floor(Math.random()*7)+1 : 1;
-        let nr = src.r + d[0]*dist, nc = src.c + d[1]*dist;
-        if(nr>=0 && nr<8 && nc>=0 && nc<8 && !g[nr][nc]) {
-            g[nr][nc] = { type: g[src.r][src.c].type, split: g[src.r][src.c].split + 1 };
-            g[src.r][src.c] = { type: ['Q','R','B','N'][Math.floor(Math.random()*4)], split: 0 };
-            pList.push({r:nr, c:nc});
-            count++;
-        }
-    }
-    return g.map(row=>row.map(p=>p?{type:p.type, caps:0}:null));
-};
-
-window.render = () => {
-    const b = document.getElementById('board'); b.innerHTML='';
-    state.grid.forEach((row,r)=>{ row.forEach((p,c)=>{
-        const cell = document.createElement('div');
-        cell.className=`cell ${(r+c)%2===0?'light':'dark'}`;
-        if(state.selected?.r===r && state.selected?.c===c) cell.classList.add('selected');
-        if(state.selected && getMoves(state.selected.r, state.selected.c, state.grid).some(m=>m.r===r&&m.c===c)) cell.classList.add('can-eat');
-        if(p) {
-            const el = document.createElement('div'); el.className='piece'; el.innerText=PIECES[p.type].s;
-            cell.appendChild(el);
-            if(p.caps>0) { const bd=document.createElement('div'); bd.className='cap-badge'; bd.innerText=p.caps; cell.appendChild(bd); }
-        }
-        cell.onclick=()=>handle(r,c); b.appendChild(cell);
-    })});
-};
-
-function handle(r,c) {
-    if(state.selected) {
-        let m = getMoves(state.selected.r, state.selected.c, state.grid).find(x=>x.r===r&&x.c===c);
-        if(m) {
-            state.history.push(JSON.stringify(state.grid));
-            state.grid[r][c] = {...state.grid[state.selected.r][state.selected.c], caps:state.grid[state.selected.r][state.selected.c].caps+1};
-            state.grid[state.selected.r][state.selected.c]=null; state.selected=null; 
-            render(); check(); return;
-        }
-    }
-    if(state.grid[r][c] && state.grid[r][c].caps < 2) state.selected={r,c}; else state.selected=null;
-    render();
-}
-
-function check() {
-    let rs = state.grid.flat().filter(x=>x);
-    if(rs.length===1 && rs[0].type==='K') { 
-        gameData.wins++; 
-        // --- 新增分數計算 ---
-        const difficulty = parseInt(document.getElementById('diff-slider').value);
-        gameData.score += (difficulty * difficulty);
-        saveGame(); // 勝利時立即存檔
-        refreshUI();
-        document.getElementById('log').innerText="挑戰成功！"; 
-        setTimeout(startNewGame, 1000); 
-    }
-}
-
-window.startNewGame = () => { 
-    state.grid = generate(parseInt(document.getElementById('diff-slider').value)); 
-    state.history=[]; state.selected=null; 
-    document.getElementById('log').innerText=""; render(); 
-};
-
-window.undo = () => { if(state.history.length) { state.grid=JSON.parse(state.history.pop()); render(); } };
+    window.showLB = (src, name, mime) => {
+        document.getElementById('lb-img').src = src;
+        document.getElementById('lightbox').style.display = 'flex';
+        document.getElementById('lb-dl').onclick = (e) => { e.stopPropagation(); downloadFile(src, name, mime); };
+    };
 </script>
 </body>
 </html>
