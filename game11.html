@@ -29,16 +29,26 @@
             padding: 2.5rem;
             border: 3px solid var(--neon-blue);
             box-shadow: 0 0 30px rgba(0, 243, 255, 0.4);
-            width: 450px; /* 加寬容器 */
+            width: 450px;
             text-align: center;
             border-radius: 10px;
+            position: relative;
+        }
+
+        /* 統計數據顯示 */
+        .stats {
+            font-size: 0.9rem;
+            color: #888;
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: space-around;
         }
 
         h1 {
-            font-size: 2.5rem; /* 標題放大 */
+            font-size: 2.5rem;
             text-transform: uppercase;
             letter-spacing: 5px;
-            margin-bottom: 2rem;
+            margin-bottom: 1rem;
             color: var(--neon-pink);
             text-shadow: 0 0 15px var(--neon-pink);
         }
@@ -53,12 +63,12 @@
             border: 2px solid var(--neon-blue);
             color: white;
             padding: 15px;
-            font-size: 2rem; /* 輸入框字體大幅度放大 */
+            font-size: 2rem;
             width: 200px;
             text-align: center;
             margin-bottom: 1.5rem;
             outline: none;
-            letter-spacing: 10px; /* 數字間距加大更易讀 */
+            letter-spacing: 10px;
         }
 
         button {
@@ -66,7 +76,7 @@
             color: black;
             border: none;
             padding: 15px 30px;
-            font-size: 1.2rem; /* 按鈕字體放大 */
+            font-size: 1.2rem;
             font-weight: bold;
             cursor: pointer;
             transition: 0.3s;
@@ -86,7 +96,7 @@
             border-top: 2px solid #333;
             padding-top: 15px;
             font-family: 'Courier New', Courier, monospace;
-            font-size: 1.3rem; /* 歷史紀錄字體放大 */
+            font-size: 1.3rem;
             text-align: left;
         }
 
@@ -107,11 +117,14 @@
 </head>
 <body>
 <link rel="stylesheet" href="menu.css">
-
 <div id="nav_bar"></div>
-
 <script src="menu.js"></script>
+
 <div class="container">
+    <div class="stats">
+        <span>累積勝場: <b id="winCount">0</b></span>
+        <span>最佳紀錄: <b id="bestScore">--</b></span>
+    </div>
     <h1>1A2B</h1>
     <p>請輸入 4 個不重複數字</p>
     
@@ -127,6 +140,14 @@
     let answer = [];
     let attempts = 0;
 
+    // 更新顯示 LocalStorage 的紀錄
+    function updateStatsDisplay() {
+        const wins = localStorage.getItem('1a2b_wins') || 0;
+        const best = localStorage.getItem('1a2b_best') || '--';
+        document.getElementById('winCount').innerText = wins;
+        document.getElementById('bestScore').innerText = best === '--' ? '--' : best + ' 次';
+    }
+
     function resetGame() {
         answer = [];
         const nums = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
@@ -138,6 +159,21 @@
         attempts = 0;
         document.getElementById('history').innerHTML = "<div style='color:#666; font-size:1rem;'>[系統已重啟，等待數據...]</div>";
         document.getElementById('userInput').value = "";
+        updateStatsDisplay(); // 重置時更新顯示
+    }
+
+    function saveToStorage(finalAttempts) {
+        // 1. 增加累積勝場
+        let wins = parseInt(localStorage.getItem('1a2b_wins') || 0);
+        localStorage.setItem('1a2b_wins', wins + 1);
+
+        // 2. 紀錄最佳成績（嘗試次數越少越好）
+        let best = localStorage.getItem('1a2b_best');
+        if (!best || finalAttempts < parseInt(best)) {
+            localStorage.setItem('1a2b_best', finalAttempts);
+        }
+        
+        updateStatsDisplay();
     }
 
     function guess() {
@@ -173,7 +209,13 @@
         
         if (aCount === 4) {
             log.innerHTML = `<span class="success">> 第 ${attempts} 次: ${inputVal} | 4A0B [解碼成功]</span>`;
-            setTimeout(() => alert(`解碼成功！總共嘗試了 ${attempts} 次。`), 100);
+            
+            // 儲存紀錄到 LocalStorage
+            saveToStorage(attempts);
+
+            setTimeout(() => {
+                alert(`解碼成功！總共嘗試了 ${attempts} 次。`);
+            }, 100);
         } else {
             log.innerHTML = `<span style="color:#aaa;">[${attempts}]</span> ${inputVal} <span style="color:var(--neon-pink); margin-left:15px;">${aCount}A${bCount}B</span>`;
         }
@@ -186,6 +228,7 @@
         if (e.key === 'Enter') guess();
     });
 
+    // 頁面加載時執行
     resetGame();
 </script>
 
