@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>極致隨機數獨</title>
+    <style>
+        :root {
+            --cell-size: 50px;
+            --border-heavy: 3px solid #2c3e50;
+            --border-light: 1px solid #bdc3c7;
+            --color-fixed: #2980b9; 
+            --color-user: #2c3e50;  
+            --color-error: #e74c3c; 
+            --accent: #3498db;
+        }
+
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: #ecf0f1; padding: 20px; }
+        
+        .header { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-bottom: 20px; }
+        .stats { font-size: 20px; font-weight: bold; color: #2c3e50; background: white; padding: 10px 30px; border-radius: 50px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+
+        .controls-top { margin-bottom: 15px; display: flex; gap: 10px; align-items: center; }
+        select { padding: 8px; border-radius: 5px; border: 1px solid #ccc; font-size: 16px; cursor: pointer; }
+
+        .number-pad { display: flex; gap: 8px; margin-bottom: 20px; }
+        .num-btn { width: 45px; height: 45px; font-size: 22px; cursor: pointer; border: 1px solid #ddd; background: white; border-radius: 8px; transition: 0.2s; }
+        .num-btn.active { background: var(--accent); color: white; transform: scale(1.1); box-shadow: 0 0 10px rgba(52,152,219,0.5); }
+        .num-btn.erase { background: #95a5a6; color: white; width: auto; padding: 0 15px; }
+
+        .grid { display: grid; grid-template-columns: repeat(9, var(--cell-size)); border: var(--border-heavy); background: white; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+        .cell { width: var(--cell-size); height: var(--cell-size); border: var(--border-light); box-sizing: border-box; display: flex; align-items: center; justify-content: center; font-size: 24px; cursor: pointer; position: relative; }
+
+        .cell:nth-child(3n):not(:nth-child(9n)) { border-right: var(--border-heavy); }
+        .cell:nth-child(n+19):nth-child(-n+27), .cell:nth-child(n+46):nth-child(-n+54) { border-bottom: var(--border-heavy); }
+
+        .cell.fixed { color: var(--color-fixed); font-weight: bold; background: #f8f9fa; cursor: default; }
+        .cell.user-val { color: var(--color-user); }
+        .cell.error { background: #fadbd8 !important; color: var(--color-error); }
+        .cell.note { display: grid; grid-template-columns: repeat(3, 1fr); font-size: 11px; color: #7f8c8d; line-height: 12px; padding: 2px; box-sizing: border-box; }
+
+        .actions { margin-top: 25px; display: flex; gap: 15px; }
+        .main-btn { padding: 12px 30px; font-size: 16px; cursor: pointer; border-radius: 8px; border: none; background: #27ae60; color: white; font-weight: bold; }
+        .reset-btn { background: #e67e22; }
+    </style>
+</head>
+<body>
+<link rel="stylesheet" href="menu.css">
+
+<div id="nav_bar"></div>
+
+<script src="menu.js"></script>
+    <div class="header">
+        <h1>數獨 Sudoku</h1>
+        <div class="stats">🏆 過關次數：<span id="winCount">0</span></div>
+    </div>
+
+    <div class="controls-top">
+        <label>選擇難度：</label>
+        <select id="difficulty">
+            <option value="30">簡單 (提示多)</option>
+            <option value="45" selected>中等</option>
+            <option value="55">困難</option>
+            <option value="64">專家 (超難)</option>
+        </select>
+    </div>
+
+    <div class="number-pad">
+        <button class="num-btn" data-val="1">1</button>
+        <button class="num-btn" data-val="2">2</button>
+        <button class="num-btn" data-val="3">3</button>
+        <button class="num-btn" data-val="4">4</button>
+        <button class="num-btn" data-val="5">5</button>
+        <button class="num-btn" data-val="6">6</button>
+        <button class="num-btn" data-val="7">7</button>
+        <button class="num-btn" data-val="8">8</button>
+        <button class="num-btn" data-val="9">9</button>
+        <button class="num-btn erase" data-val="0">清除</button>
+    </div>
+
+    <div id="grid" class="grid"></div>
+
+    <div class="actions">
+        <button class="main-btn" onclick="checkGame()">檢查答案</button>
+        <button class="main-btn reset-btn" onclick="confirmNewGame()">換題 / 重來</button>
+    </div>
+
+    <script>
+        const gridEl = document.getElementById('grid');
+        const winCountEl = document.getElementById('winCount');
+        const diffSelect = document.getElementById('difficulty');
+        const numBtns = document.querySelectorAll('.num-btn');
+        
+        let selectedNum = null;
+        let solution = [];
+        let puzzle = [];
+        let userState = [];
+        let winCount = parseInt(localStorage.getItem('sudoku_wins')) || 0;
+
+        // --- 核心演算法：生成數獨 ---
+        function generateSudoku() {
+            const board = Array(81).fill(0);
+            solve(board);
+            solution = [...board];
+            
+            // 根據難度挖洞 (選擇的值代表要挖掉幾個洞)
+            const holes = parseInt(diffSelect.value);
+            puzzle = [...solution];
+            let count = 0;
+            while (count < holes) {
+                let i = Math.floor(Math.random() * 81);
+                if (puzzle[i] !== 0) {
+                    puzzle[i] = 0;
+                    count++;
+                }
+            }
+        }
+
+        function solve(board) {
+            for (let i = 0; i < 81; i++) {
+                if (board[i] === 0) {
+                    let nums = [1,2,3,4,5,6,7,8,9].sort(() => Math.random() - 0.5);
+                    for (let n of nums) {
+                        if (isValid(board, i, n)) {
+                            board[i] = n;
+                            if (solve(board)) return true;
+                            board[i] = 0;
+                        }
+                    }
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        function isValid(board, idx, val) {
+            let r = Math.floor(idx / 9), c = idx % 9;
+            for (let i = 0; i < 9; i++) {
+                if (board[r * 9 + i] === val) return false;
+                if (board[i * 9 + c] === val) return false;
+                let br = Math.floor(r / 3) * 3 + Math.floor(i / 3);
+                let bc = Math.floor(c / 3) * 3 + (i % 3);
+                if (board[br * 9 + bc] === val) return false;
+            }
+            return true;
+        }
+
+        // --- 介面控制 ---
+        function initGame() {
+            winCountEl.innerText = winCount;
+            generateSudoku();
+            userState = puzzle.map(v => v === 0 ? [] : [v]);
+            renderGrid();
+        }
+
+        function renderGrid() {
+            gridEl.innerHTML = '';
+            for (let i = 0; i < 81; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'cell';
+                if (puzzle[i] !== 0) {
+                    cell.classList.add('fixed');
+                    cell.innerText = puzzle[i];
+                } else {
+                    cell.onclick = () => handleCellClick(i);
+                    updateCellUI(cell, userState[i]);
+                }
+                gridEl.appendChild(cell);
+            }
+        }
+
+        function handleCellClick(idx) {
+            if (selectedNum === null) {
+                alert("請先點擊上方的數字按鈕！");
+                return;
+            }
+            
+            let current = userState[idx];
+            if (selectedNum === 0) {
+                userState[idx] = [];
+            } else {
+                if (current.includes(selectedNum)) {
+                    userState[idx] = current.filter(n => n !== selectedNum);
+                } else {
+                    userState[idx].push(selectedNum);
+                    userState[idx].sort((a,b) => a-b);
+                }
+            }
+            updateCellUI(document.querySelectorAll('.cell')[idx], userState[idx]);
+        }
+
+        function updateCellUI(cell, vals) {
+            cell.classList.remove('note', 'user-val', 'error');
+            if (vals.length === 0) {
+                cell.innerText = '';
+            } else if (vals.length === 1) {
+                cell.innerText = vals[0];
+                cell.classList.add('user-val');
+            } else {
+                cell.innerText = vals.join(' ');
+                cell.classList.add('note');
+            }
+        }
+
+        function checkGame() {
+            const cells = document.querySelectorAll('.cell');
+            let isCorrect = true;
+            let isFull = true;
+
+            userState.forEach((vals, i) => {
+                if (puzzle[i] !== 0) return;
+                const cell = cells[i];
+                if (vals.length === 1 && vals[0] === solution[i]) {
+                    cell.classList.remove('error');
+                } else {
+                    if (vals.length > 0) cell.classList.add('error');
+                    isCorrect = false;
+                    if (vals.length === 0) isFull = false;
+                }
+            });
+
+            if (isCorrect && isFull) {
+                winCount++;
+                localStorage.setItem('sudoku_wins', winCount);
+                winCountEl.innerText = winCount;
+                alert("太強了！完全正確！過關數 +1");
+                initGame();
+            } else {
+                alert("有地方填錯或是筆記還沒清掉喔！紅色格子請檢查。");
+            }
+        }
+
+        function confirmNewGame() {
+            if (confirm("確定要放棄當前進度並更換題目嗎？")) {
+                initGame();
+            }
+        }
+
+        // 選號按鈕
+        numBtns.forEach(btn => {
+            btn.onclick = () => {
+                const val = parseInt(btn.dataset.val);
+                if (selectedNum === val) {
+                    selectedNum = null;
+                    btn.classList.remove('active');
+                } else {
+                    numBtns.forEach(b => b.classList.remove('active'));
+                    selectedNum = val;
+                    btn.classList.add('active');
+                }
+            };
+        });
+
+        // 啟動
+        initGame();
+    </script>
+</body>
+</html>
