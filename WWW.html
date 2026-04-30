@@ -1,216 +1,252 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PDF Viewer | Raingod</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>多人連線貪吃蛇 - Firebase 版</title>
     <style>
-        :root {
-            --bg-color: #0a0a0a;
-            --neon-blue: #00f3ff;
-            --neon-purple: #bc13fe;
-            --text-color: #e0e0e0;
-        }
-
-        body {
-            margin: 0;
-            padding: 0;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            font-family: 'Courier New', Courier, monospace;
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-            overflow: hidden;
-        }
-
-        
-
-        button {
-            background: transparent;
-            border: 1px solid var(--neon-blue);
-            color: var(--neon-blue);
-            padding: 12px 25px;
-            cursor: pointer;
-            font-family: inherit;
-            transition: 0.3s;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            font-weight: bold;
-        }
-
-        button:hover {
-            background: var(--neon-blue);
-            color: #000;
-            box-shadow: 0 0 15px var(--neon-blue);
-        }
-
-        /* 內容提示區 */
-        .viewer-container {
-            flex-grow: 1;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            background: radial-gradient(circle, #1a1a1a 0%, #0a0a0a 100%);
-            text-align: center;
-            padding: 20px;
-        }
-
-        .status-text {
-            color: var(--neon-blue);
-            font-size: 1.2rem;
-            margin-bottom: 10px;
-            text-shadow: 0 0 5px var(--neon-blue);
-        }
+        body { margin: 0; background: #1a1a1a; color: white; font-family: sans-serif; overflow: hidden; touch-action: none; }
+        canvas { display: block; }
+        .ui { position: absolute; top: 20px; width: 100%; text-align: center; pointer-events: none; z-index: 10; }
+        #score { font-size: 32px; color: #00ff88; text-shadow: 2px 2px 4px #000; }
+        #player-tag { position: absolute; top: 60px; width: 100%; text-align: center; color: #aaa; }
+        #joystick-container { position: absolute; bottom: 50px; left: 50px; width: 120px; height: 120px; background: rgba(255,255,255,0.1); border-radius: 50%; display:none; }
     </style>
 </head>
 <body>
-    
-<link rel="stylesheet" href="menu.css">
 
-<div id="nav_bar"></div>
+    <div class="ui">
+        <div id="score">分數: 0</div>
+        <div id="player-tag">正在載入玩家資訊...</div>
+    </div>
 
-<script src="menu.js"></script>
-<!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PDF Viewer | Raingod</title>
-    <style>
-        :root {
-            --bg-color: #0a0a0a;
-            --neon-blue: #00f3ff;
-            --neon-purple: #bc13fe;
-            --text-color: #e0e0e0;
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- 引入 Firebase SDK (Compat 版本較容易直接在 HTML 使用) -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
+    <script>
+        // --- 1. Firebase 設定 (請替換成你的配置) ---
+        const firebaseConfig = {
+            databaseURL: "https://game-24b43-default-rtdb.firebaseio.com/",
+            // 如果你有其餘的 apiKey, authDomain 等也請貼上
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        // --- 2. 玩家身份初始化 ---
+        let playerName = localStorage.getItem("snakePlayerName");
+        if (!playerName) {
+            playerName = prompt("歡迎來到多人貪吃蛇！請輸入你的名稱：") || "小蛇" + Math.floor(Math.random()*1000);
+            localStorage.setItem("snakePlayerName", playerName);
         }
+        document.getElementById("player-tag").innerText = "玩家名稱: " + playerName;
 
-        body {
-            margin: 0;
-            padding: 0;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            font-family: 'Courier New', Courier, monospace;
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-            overflow: hidden;
-        }
+        const myId = Math.random().toString(36).substring(2, 9);
+        const myRef = db.ref(`players/${myId}`);
+        myRef.onDisconnect().remove(); // 離線時自動刪除我的蛇
 
+        // --- 3. 遊戲核心變數 ---
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        const WORLD_SIZE = 3000;
+        const GRID_SIZE = 100;
         
+        let score = 0;
+        let otherPlayers = {};
+        
+        let snake = {
+            x: Math.random() * 2000 + 500,
+            y: Math.random() * 2000 + 500,
+            angle: Math.random() * Math.PI * 2,
+            speed: 4,
+            radius: 12,
+            history: [],
+            length: 30,
+            color: `hsl(${Math.random() * 360}, 100%, 60%)`
+        };
 
-        button {
-            background: transparent;
-            border: 1px solid var(--neon-blue);
-            color: var(--neon-blue);
-            padding: 12px 25px;
-            cursor: pointer;
-            font-family: inherit;
-            transition: 0.3s;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            font-weight: bold;
+        // 食物 (暫時維持本機生成，若要多人同步需另設 Firebase 節點)
+        let foods = [];
+        for(let i=0; i<100; i++) spawnFood();
+
+        function spawnFood() {
+            foods.push({
+                x: Math.random() * WORLD_SIZE,
+                y: Math.random() * WORLD_SIZE,
+                color: `hsl(${Math.random() * 360}, 100%, 50%)`
+            });
         }
 
-        button:hover {
-            background: var(--neon-blue);
-            color: #000;
-            box-shadow: 0 0 15px var(--neon-blue);
+        // --- 4. 監聽其他玩家 ---
+        db.ref("players").on("value", (snapshot) => {
+            otherPlayers = snapshot.val() || {};
+        });
+
+        // --- 5. 操控邏輯 (全螢幕觸控) ---
+        let isDragging = false;
+        let startX = 0, startY = 0;
+
+        const startInput = (e) => {
+            isDragging = true;
+            startX = e.touches ? e.touches[0].clientX : e.clientX;
+            startY = e.touches ? e.touches[0].clientY : e.clientY;
+        };
+
+        const handleInput = (e) => {
+            if (!isDragging) return;
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            const dx = clientX - startX;
+            const dy = clientY - startY;
+            if (Math.hypot(dx, dy) > 5) {
+                snake.angle = Math.atan2(dy, dx);
+            }
+        };
+
+        window.addEventListener("mousedown", startInput);
+        window.addEventListener("mousemove", handleInput);
+        window.addEventListener("mouseup", () => isDragging = false);
+        window.addEventListener("touchstart", (e) => { startInput(e); }, { passive: false });
+        window.addEventListener("touchmove", (e) => { if(isDragging) e.preventDefault(); handleInput(e); }, { passive: false });
+        window.addEventListener("touchend", () => isDragging = false);
+
+        // --- 6. 核心循環 ---
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        function update() {
+            // 移動自己的蛇
+            snake.x += Math.cos(snake.angle) * snake.speed;
+            snake.y += Math.sin(snake.angle) * snake.speed;
+
+            // 邊界判定
+            if (snake.x < 0 || snake.x > WORLD_SIZE || snake.y < 0 || snake.y > WORLD_SIZE) {
+                resetGame();
+                return;
+            }
+
+            // 紀錄軌跡
+            snake.history.unshift({x: snake.x, y: snake.y});
+            if (snake.history.length > snake.length) snake.history.pop();
+
+            // 食物判定
+            for (let i = foods.length - 1; i >= 0; i--) {
+                if (Math.hypot(snake.x - foods[i].x, snake.y - foods[i].y) < snake.radius + 10) {
+                    foods.splice(i, 1);
+                    score += 10;
+                    snake.length += 5;
+                    document.getElementById("score").innerText = "分數: " + score;
+                    spawnFood();
+                }
+            }
+
+            // 同步到 Firebase (每幀上傳)
+            myRef.set({
+                name: playerName,
+                x: snake.x,
+                y: snake.y,
+                angle: snake.angle,
+                color: snake.color,
+                history: snake.history,
+                score: score
+            });
         }
 
-        /* 內容提示區 */
-        .viewer-container {
-            flex-grow: 1;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            background: radial-gradient(circle, #1a1a1a 0%, #0a0a0a 100%);
-            text-align: center;
-            padding: 20px;
+        function draw() {
+            ctx.fillStyle = "#111";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const offsetX = canvas.width / 2 - snake.x;
+            const offsetY = canvas.height / 2 - snake.y;
+
+            ctx.save();
+            ctx.translate(offsetX, offsetY);
+
+            // 畫網格
+            ctx.strokeStyle = "#333";
+            ctx.lineWidth = 1;
+            for (let x = 0; x <= WORLD_SIZE; x += GRID_SIZE) {
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, WORLD_SIZE); ctx.stroke();
+            }
+            for (let y = 0; y <= WORLD_SIZE; y += GRID_SIZE) {
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(WORLD_SIZE, y); ctx.stroke();
+            }
+
+            // 畫邊框
+            ctx.strokeStyle = "#ff0066";
+            ctx.lineWidth = 5;
+            ctx.strokeRect(0, 0, WORLD_SIZE, WORLD_SIZE);
+
+            // 畫食物
+            foods.forEach(f => {
+                ctx.fillStyle = f.color;
+                ctx.beginPath(); ctx.arc(f.x, f.y, 8, 0, Math.PI * 2); ctx.fill();
+            });
+
+            // 畫其他玩家
+            for (let id in otherPlayers) {
+                if (id === myId) continue;
+                const p = otherPlayers[id];
+                if (!p.history) continue;
+
+                ctx.strokeStyle = p.color || "#ffffff";
+                ctx.globalAlpha = 0.6; // 其他人稍微透明
+                ctx.lineWidth = snake.radius * 2;
+                ctx.lineCap = "round";
+                ctx.beginPath();
+                ctx.moveTo(p.history[0].x, p.history[0].y);
+                p.history.forEach(pos => ctx.lineTo(pos.x, pos.y));
+                ctx.stroke();
+                
+                // 畫對方的名字
+                ctx.globalAlpha = 1.0;
+                ctx.fillStyle = "white";
+                ctx.font = "16px Arial";
+                ctx.fillText(p.name, p.x - 20, p.y - 25);
+            }
+
+            // 畫自己的蛇
+            ctx.strokeStyle = snake.color;
+            ctx.lineWidth = snake.radius * 2;
+            ctx.lineCap = "round";
+            ctx.beginPath();
+            if(snake.history.length > 0) {
+                ctx.moveTo(snake.history[0].x, snake.history[0].y);
+                snake.history.forEach(p => ctx.lineTo(p.x, p.y));
+            }
+            ctx.stroke();
+
+            // 畫眼睛
+            ctx.fillStyle = "white";
+            const eyeX = snake.x + Math.cos(snake.angle) * 8;
+            const eyeY = snake.y + Math.sin(snake.angle) * 8;
+            ctx.beginPath(); ctx.arc(eyeX, eyeY, 5, 0, Math.PI*2); ctx.fill();
+
+            ctx.restore();
         }
 
-        .status-text {
-            color: var(--neon-blue);
-            font-size: 1.2rem;
-            margin-bottom: 10px;
-            text-shadow: 0 0 5px var(--neon-blue);
+        function resetGame() {
+            alert("遊戲結束！ 分數: " + score);
+            score = 0;
+            document.getElementById("score").innerText = "分數: 0";
+            snake.x = Math.random() * 2000 + 500;
+            snake.y = Math.random() * 2000 + 500;
+            snake.history = [];
+            snake.length = 30;
         }
-    </style>
-</head>
-<body>
-    <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
 
-<div style="
-    position: fixed; 
-    top: 5px; 
-    left: 5px; 
-    z-index: 9999; 
-    font-size: 12px; 
-    color: #00ff00; 
-    background: rgba(0, 0, 0, 0.5); 
-    padding: 2px 6px; 
-    border-radius: 4px;
-    font-family: monospace;
-    pointer-events: none;
-">
-    Visits: <span id="busuanzi_value_site_pv">--</span> | 
-    Users: <span id="busuanzi_value_site_uv">--</span>
-</div>
-<link rel="stylesheet" href="menu.css">
-
-<div id="nav_bar"></div>
-
-<script src="menu.js"></script>
-<p></p>
- <p></p>   
-<nav>
-    <button onclick="openPDF('下冊第三章補充資料_260410_132501_compressed.pdf')">開啟補充資料</button>
-    <button onclick="openPDF('CH 3(學生版)2026翰林_260417_132236_compressed.pdf')">開啟筆記內容</button>
-</nav>
-
-<div class="viewer-container">
-    <p>請點擊上方按鈕以讀取 PDF 檔案</p>
-</div>
-
-<script>
-    function openPDF(fileName) {
-        // 使用 encodeURI 處理中文路徑
-        const encodedPath = encodeURI(fileName);
-        
-        // 直接在新分頁開啟連結
-        window.open(encodedPath, '_blank');
-        
-        console.log("Terminal redirecting to: " + encodedPath);
-    }
-</script>
-
-</body>
-</html>
-
-<p></p>
- <p></p>   
-<nav>
-    <button onclick="openPDF('下冊第三章補充資料_260410_132501_compressed.pdf')">開啟補充資料</button>
-    <button onclick="openPDF('CH 3(學生版)2026翰林_260417_132236_compressed.pdf')">開啟筆記內容</button>
-</nav>
-
-<div class="viewer-container">
-    <p>請點擊上方按鈕以讀取 PDF 檔案</p>
-</div>
-
-<script>
-    function openPDF(fileName) {
-        // 使用 encodeURI 處理中文路徑
-        const encodedPath = encodeURI(fileName);
-        
-        // 直接在新分頁開啟連結
-        window.open(encodedPath, '_blank');
-        
-        console.log("Terminal redirecting to: " + encodedPath);
-    }
-</script>
-
+        function loop() {
+            update();
+            draw();
+            requestAnimationFrame(loop);
+        }
+        loop();
+    </script>
 </body>
 </html>
