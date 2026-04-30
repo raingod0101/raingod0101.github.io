@@ -3,19 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>極速多人蛇 - Firebase 版</title>
+    <title>極速連線蛇 V3 - 高頻同步版</title>
     <style>
-        body { margin: 0; background: #111; color: white; font-family: sans-serif; overflow: hidden; touch-action: none; }
+        body { margin: 0; background: #000; color: #0f8; font-family: monospace; overflow: hidden; touch-action: none; }
         canvas { display: block; }
-        .ui { position: absolute; top: 20px; width: 100%; text-align: center; pointer-events: none; z-index: 10; }
-        #score { font-size: 28px; color: #00ff88; }
+        .ui { position: absolute; top: 10px; left: 10px; pointer-events: none; z-index: 100; background: rgba(0,0,0,0.5); padding: 10px; }
     </style>
 </head>
 <body>
 
     <div class="ui">
-        <div id="score">分數: 0</div>
-        <div id="status" style="color: #666;">同步中...</div>
+        <div>分數: <span id="score">0</span></div>
+        <div id="status">連線中...</div>
     </div>
 
     <canvas id="gameCanvas"></canvas>
@@ -24,141 +23,118 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 
     <script>
-        // --- Firebase 配置 ---
         const firebaseConfig = { databaseURL: "https://game-24b43-default-rtdb.firebaseio.com/" };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        // --- 玩家初始化 ---
-        let playerName = localStorage.getItem("snakePlayerName") || ("蛇" + Math.floor(Math.random()*1000));
-        const myId = Math.random().toString(36).substring(2, 9);
-        const myRef = db.ref(`players/${myId}`);
-        myRef.onDisconnect().remove(); // 離線立即刪除
-
-        // --- 遊戲設定 ---
         const canvas = document.getElementById("gameCanvas");
         const ctx = canvas.getContext("2d");
         const WORLD_SIZE = 3000;
-        
+        const myId = Math.random().toString(36).substring(2, 9);
+        const myRef = db.ref(`players/${myId}`);
+        const playersRef = db.ref("players");
+
         let score = 0;
-        let otherPlayers = {};
+        let others = {}; // 存放其他玩家的本地實例
+
+        // --- 自己的蛇資料 ---
         let snake = {
             x: Math.random() * 2000 + 500,
             y: Math.random() * 2000 + 500,
-            angle: Math.random() * Math.PI * 2,
-            speed: 4.5,
-            radius: 12,
+            angle: 0,
+            speed: 5,
             history: [],
-            length: 30,
-            color: `hsl(${Math.random() * 360}, 100%, 60%)`
+            length: 20,
+            color: `hsl(${Math.random() * 360}, 100%, 50%)`,
+            name: localStorage.getItem("snakePlayerName") || "Player"
         };
 
-        // --- 監聽遠端玩家 ---
-        db.ref("players").on("value", (snapshot) => {
-            otherPlayers = snapshot.val() || {};
+        // --- 監聽玩家加入與離開 (最快同步方式) ---
+        playersRef.on("child_added", (snap) => {
+            if (snap.key !== myId) others[snap.key] = snap.val();
         });
+        playersRef.on("child_changed", (snap) => {
+            if (snap.key !== myId) others[snap.key] = snap.val();
+        });
+        playersRef.on("child_removed", (snap) => {
+            delete others[snap.key];
+        });
+        myRef.onDisconnect().remove();
 
-        // --- 操作與縮放 ---
-        function resize() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-        }
-        window.addEventListener('resize', resize);
-        resize();
-
-        let isDragging = false, startX = 0, startY = 0;
-        const startInput = (e) => { isDragging = true; startX = e.touches ? e.touches[0].clientX : e.clientX; startY = e.touches ? e.touches[0].clientY : e.clientY; };
-        const handleInput = (e) => {
-            if (!isDragging) return;
-            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-            snake.angle = Math.atan2(clientY - startY, clientX - startX);
-        };
-        window.addEventListener("mousedown", startInput);
-        window.addEventListener("mousemove", handleInput);
-        window.addEventListener("mouseup", () => isDragging = false);
-        window.addEventListener("touchstart", startInput, {passive: false});
-        window.addEventListener("touchmove", (e) => { if(isDragging) e.preventDefault(); handleInput(e); }, {passive: false});
-
-        // --- 核心邏輯 ---
-        function resetGame() {
-            myRef.remove(); // 死了「立即」從資料庫刪除
-            alert("遊戲結束！ 分數: " + score);
-            location.reload(); // 重新整理是最快重置所有變數的方法
-        }
-
-        // 優化：限制上傳頻率 (節流)
-        let lastUpload = 0;
-        const UPLOAD_INTERVAL = 50; // 每 50ms 上傳一次 (每秒 20 次)
+        // --- 操控與更新 ---
+        window.addEventListener("mousemove", e => {
+            const dx = e.clientX - window.innerWidth / 2;
+            const dy = e.clientY - window.innerHeight / 2;
+            snake.angle = Math.atan2(dy, dx);
+        });
+        window.addEventListener("touchmove", e => {
+            const dx = e.touches[0].clientX - window.innerWidth / 2;
+            const dy = e.touches[0].clientY - window.innerHeight / 2;
+            snake.angle = Math.atan2(dy, dx);
+        }, { passive: false });
 
         function update() {
+            // 自己的移動
             snake.x += Math.cos(snake.angle) * snake.speed;
             snake.y += Math.sin(snake.angle) * snake.speed;
-
-            if (snake.x < 0 || snake.x > WORLD_SIZE || snake.y < 0 || snake.y > WORLD_SIZE) {
-                resetGame();
-                return;
-            }
-
+            
             snake.history.unshift({x: snake.x, y: snake.y});
             if (snake.history.length > snake.length) snake.history.pop();
 
-            // 只在間隔到達時才上傳，且只上傳必要資訊
-            const now = Date.now();
-            if (now - lastUpload > UPLOAD_INTERVAL) {
-                myRef.set({
-                    n: playerName,
-                    x: Math.round(snake.x), // 取整數減少封包大小
-                    y: Math.round(snake.y),
-                    a: snake.angle,
-                    c: snake.color,
-                    h: snake.history.filter((_,i) => i % 2 === 0), // 隔點採樣，身體資料減半
-                    s: score
-                });
-                lastUpload = now;
+            // 邊界判定
+            if (snake.x < 0 || snake.x > WORLD_SIZE || snake.y < 0 || snake.y > WORLD_SIZE) {
+                myRef.remove();
+                alert("Game Over!");
+                location.reload();
             }
+
+            // 這裡極其重要：只上傳最核心的座標與當前軌跡樣本
+            // 不要在 history 裡放幾百個點，我們只傳前 15 個點來顯示頭部流暢度
+            myRef.set({
+                x: Math.round(snake.x),
+                y: Math.round(snake.y),
+                a: snake.angle,
+                c: snake.color,
+                h: snake.history.slice(0, 15), // 只傳最新的一小段，減少 90% 流量
+                n: snake.name
+            });
         }
 
         function draw() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.fillStyle = "#111";
+            ctx.fillStyle = "#000";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            const offsetX = canvas.width / 2 - snake.x;
-            const offsetY = canvas.height / 2 - snake.y;
+            const camX = canvas.width / 2 - snake.x;
+            const camY = canvas.height / 2 - snake.y;
             ctx.save();
-            ctx.translate(offsetX, offsetY);
+            ctx.translate(camX, camY);
 
-            // 邊框
-            ctx.strokeStyle = "#444";
+            // 畫邊界
+            ctx.strokeStyle = "#222";
             ctx.strokeRect(0, 0, WORLD_SIZE, WORLD_SIZE);
 
-            // 畫其他玩家
-            for (let id in otherPlayers) {
-                if (id === myId) continue;
-                const p = otherPlayers[id];
+            // 畫其他玩家 (直接從記憶體中的 others 讀取)
+            for (let id in others) {
+                const p = others[id];
                 if (!p.h) continue;
-
-                ctx.strokeStyle = p.c;
-                ctx.lineWidth = snake.radius * 1.8;
-                ctx.lineCap = "round";
-                ctx.globalAlpha = 0.7;
                 ctx.beginPath();
+                ctx.lineWidth = 20;
+                ctx.lineCap = "round";
+                ctx.strokeStyle = p.c;
                 ctx.moveTo(p.h[0].x, p.h[0].y);
                 p.h.forEach(pt => ctx.lineTo(pt.x, pt.y));
                 ctx.stroke();
-                
-                ctx.globalAlpha = 1;
-                ctx.fillStyle = "white";
-                ctx.fillText(p.n, p.x - 10, p.y - 20);
+                ctx.fillStyle = "#fff";
+                ctx.fillText(p.n, p.x, p.y - 20);
             }
 
-            // 畫自己的蛇
-            ctx.strokeStyle = snake.color;
-            ctx.lineWidth = snake.radius * 2;
-            ctx.lineCap = "round";
+            // 畫自己
             ctx.beginPath();
-            snake.history.forEach((pt, i) => i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y));
+            ctx.lineWidth = 20;
+            ctx.lineCap = "round";
+            ctx.strokeStyle = snake.color;
+            ctx.moveTo(snake.history[0].x, snake.history[0].y);
+            snake.history.forEach(pt => ctx.lineTo(pt.x, pt.y));
             ctx.stroke();
 
             ctx.restore();
@@ -169,7 +145,16 @@
             draw();
             requestAnimationFrame(loop);
         }
+
+        window.addEventListener("resize", () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
         loop();
+        document.getElementById("status").innerText = "連線成功：ID " + myId;
     </script>
 </body>
 </html>
