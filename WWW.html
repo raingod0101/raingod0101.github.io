@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Ultra Realtime Snake</title>
+    <title>極速多人蛇 - 穩定版</title>
     <style>
-        body { margin: 0; background: #000; color: #0f0; font-family: 'Courier New', monospace; overflow: hidden; }
+        body { margin: 0; background: #000; color: #0f0; font-family: sans-serif; overflow: hidden; }
         canvas { display: block; }
-        .ui { position: absolute; top: 10px; left: 10px; pointer-events: none; }
-        #score { font-size: 20px; }
+        .ui { position: absolute; top: 10px; left: 10px; pointer-events: none; z-index: 100; }
+        #score { font-size: 24px; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -20,95 +20,129 @@
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 
 <script>
-    // --- 1. Firebase 極速初始化 ---
+    // --- 1. Firebase 配置 ---
     const config = { databaseURL: "https://game-24b43-default-rtdb.firebaseio.com/" };
     firebase.initializeApp(config);
     const db = firebase.database();
+    
+    // 確保 ID 唯一
     const myId = Math.random().toString(36).substr(2, 7);
     const myRef = db.ref(`snakes/${myId}`);
-    myRef.onDisconnect().remove();
-
+    
     // --- 2. 遊戲參數 ---
     const canvas = document.getElementById("gameCanvas");
     const ctx = canvas.getContext("2d");
     const WORLD = 3000;
-    let score = 0;
+    let isAlive = true;
     
-    // 本地蛇狀態
+    // 本地蛇：初始位置改為地圖中心，避免出生撞牆
     let me = {
-        x: Math.random() * 2000 + 500,
-        y: Math.random() * 2000 + 500,
-        angle: 0,
+        x: WORLD / 2,
+        y: WORLD / 2,
+        angle: Math.random() * Math.PI * 2,
         speed: 5,
         history: [],
         len: 20,
+        score: 0,
         color: `hsl(${Math.random()*360}, 100%, 50%)`,
         name: localStorage.getItem("snakePlayerName") || "Player"
     };
 
-    // 遠端玩家緩存
     let others = {};
+    let foods = {}; // 多人同步食物
 
-    // --- 3. 即時監聽與補間處理 ---
-    db.ref("snakes").on("value", (snap) => {
+    // --- 3. 監聽數據 ---
+    // 監聽蛇
+    db.ref("snakes").on("value", snap => {
         const data = snap.val() || {};
         for (let id in data) {
             if (id === myId) continue;
             if (!others[id]) {
                 others[id] = { ...data[id], history: [] };
             } else {
-                // 更新目標位置，不直接跳轉
                 others[id].targetX = data[id].x;
                 others[id].targetY = data[id].y;
                 others[id].angle = data[id].a;
                 others[id].len = data[id].l;
             }
         }
-        // 刪除消失的玩家
-        for (let id in others) {
-            if (!data[id]) delete others[id];
-        }
+        for (let id in others) if (!data[id]) delete others[id];
     });
 
-    // --- 4. 操控系統 ---
-    let targetAngle = 0;
-    window.addEventListener("mousemove", e => {
-        targetAngle = Math.atan2(e.clientY - window.innerHeight/2, e.clientX - window.innerWidth/2);
+    // 監聽食物
+    db.ref("foods").on("value", snap => {
+        foods = snap.val() || {};
     });
+
+    // --- 4. 操控 ---
+    let targetAngle = me.angle;
+    const updateAngle = (clientX, clientY) => {
+        targetAngle = Math.atan2(clientY - window.innerHeight/2, clientX - window.innerWidth/2);
+    };
+    window.addEventListener("mousemove", e => updateAngle(e.clientX, e.clientY));
     window.addEventListener("touchmove", e => {
-        const t = e.touches[0];
-        targetAngle = Math.atan2(t.clientY - window.innerHeight/2, t.clientX - window.innerWidth/2);
+        updateAngle(e.touches[0].clientX, e.touches[0].clientY);
     }, {passive:false});
 
     // --- 5. 核心循環 ---
     function update() {
-        // 轉向平滑化
-        me.angle += (targetAngle - me.angle) * 0.2;
+        if (!isAlive) return;
+
+        // 轉向平滑
+        let diff = targetAngle - me.angle;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        me.angle += diff * 0.15;
+
         me.x += Math.cos(me.angle) * me.speed;
         me.y += Math.sin(me.angle) * me.speed;
 
-        // 邊界檢查
-        if (me.x < 0 || me.x > WORLD || me.y < 0 || me.y > WORLD) die();
+        // 邊界檢查 (稍微縮小一點判定範圍，防止臨界點 Bug)
+        if (me.x < 5 || me.x > WORLD - 5 || me.y < 5 || me.y > WORLD - 5) {
+            die();
+            return;
+        }
 
-        // 身體紀錄
+        // 紀錄身體
         me.history.unshift({x: me.x, y: me.y});
         if (me.history.length > me.len) me.history.pop();
 
-        // 每 40ms 傳送極小數據包 (x, y, angle, length)
-        if (Date.now() % 40 < 16) {
+        // 吃到食物判定 (檢查多人同步的食物)
+        for (let fId in foods) {
+            let f = foods[fId];
+            if (Math.hypot(me.x - f.x, me.y - f.y) < 25) {
+                db.ref(`foods/${fId}`).remove(); // 從雲端移除食物
+                me.len += 5;
+                me.score += 10;
+                document.getElementById("score").innerText = "SCORE: " + me.score;
+            }
+        }
+
+        // 定時同步資料 (25ms 一次)
+        if (Date.now() % 50 < 20) {
             myRef.set({ x: Math.round(me.x), y: Math.round(me.y), a: me.angle, l: me.len, c: me.color, n: me.name });
         }
 
-        // 更新其他玩家位置 (平滑插值)
+        // 平滑處理其他人
         for (let id in others) {
             let o = others[id];
             if (o.targetX !== undefined) {
-                o.x = o.x ? o.x + (o.targetX - o.x) * 0.3 : o.targetX;
-                o.y = o.y ? o.y + (o.targetY - o.y) * 0.3 : o.targetY;
+                o.x = o.x + (o.targetX - o.x) * 0.3;
+                o.y = o.y + (o.targetY - o.y) * 0.3;
                 o.history.unshift({x: o.x, y: o.y});
                 if (o.history.length > o.len) o.history.pop();
             }
         }
+    }
+
+    function die() {
+        isAlive = false;
+        myRef.remove();
+        // 延遲重開，防止立即死循環
+        setTimeout(() => {
+            alert("遊戲結束！分數: " + me.score);
+            location.reload();
+        }, 100);
     }
 
     function draw() {
@@ -120,47 +154,62 @@
         ctx.save();
         ctx.translate(camX, camY);
 
-        // 繪製背景網格
-        ctx.strokeStyle = "#111";
-        for(let i=0; i<=WORLD; i+=100) {
-            ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,WORLD); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(WORLD,i); ctx.stroke();
+        // 世界背景與邊框
+        ctx.strokeStyle = "#222";
+        ctx.strokeRect(0, 0, WORLD, WORLD);
+        ctx.strokeStyle = "#ff0066";
+        ctx.lineWidth = 10;
+        ctx.strokeRect(-5, -5, WORLD+10, WORLD+10);
+
+        // 畫食物
+        for (let fId in foods) {
+            let f = foods[fId];
+            ctx.fillStyle = f.c;
+            ctx.beginPath(); ctx.arc(f.x, f.y, 8, 0, Math.PI*2); ctx.fill();
         }
 
-        // 畫遠端玩家
+        // 畫其他人
         for (let id in others) {
             let o = others[id];
-            drawSnake(o.history, o.c, o.n);
+            drawSnake(o.history, o.c, o.n, false);
         }
 
         // 畫自己
-        drawSnake(me.history, me.color, me.name);
+        if (isAlive) drawSnake(me.history, me.color, me.name, true);
 
         ctx.restore();
     }
 
-    function drawSnake(history, color, name) {
+    function drawSnake(history, color, name, isMe) {
         if (history.length < 2) return;
         ctx.strokeStyle = color;
-        ctx.lineWidth = 20;
+        ctx.lineWidth = 22;
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
+        
+        if (!isMe) ctx.globalAlpha = 0.6;
         ctx.beginPath();
         ctx.moveTo(history[0].x, history[0].y);
         for(let i=1; i<history.length; i++) ctx.lineTo(history[i].x, history[i].y);
         ctx.stroke();
-        
-        ctx.fillStyle = "#fff";
-        ctx.font = "14px Arial";
-        ctx.fillText(name, history[0].x - 20, history[0].y - 20);
+        ctx.globalAlpha = 1.0;
+
+        ctx.fillStyle = "white";
+        ctx.font = "bold 16px Arial";
+        ctx.fillText(name, history[0].x - 20, history[0].y - 25);
     }
 
-    function die() {
-        myRef.remove().then(() => {
-            alert("GAME OVER");
-            location.reload();
-        });
-    }
+    // --- 6. 食物生成 (僅由地圖上第一個玩家負責生成) ---
+    setInterval(() => {
+        if (Object.keys(foods).length < 50) {
+            const fId = Math.random().toString(36).substr(2, 5);
+            db.ref(`foods/${fId}`).set({
+                x: Math.random() * WORLD,
+                y: Math.random() * WORLD,
+                c: `hsl(${Math.random()*360}, 100%, 50%)`
+            });
+        }
+    }, 2000);
 
     function loop() {
         update();
@@ -168,6 +217,7 @@
         requestAnimationFrame(loop);
     }
 
+    myRef.onDisconnect().remove();
     window.addEventListener("resize", () => {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
