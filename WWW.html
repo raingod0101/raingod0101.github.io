@@ -3,158 +3,179 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>極速連線蛇 V3 - 高頻同步版</title>
+    <title>Ultra Realtime Snake</title>
     <style>
-        body { margin: 0; background: #000; color: #0f8; font-family: monospace; overflow: hidden; touch-action: none; }
+        body { margin: 0; background: #000; color: #0f0; font-family: 'Courier New', monospace; overflow: hidden; }
         canvas { display: block; }
-        .ui { position: absolute; top: 10px; left: 10px; pointer-events: none; z-index: 100; background: rgba(0,0,0,0.5); padding: 10px; }
+        .ui { position: absolute; top: 10px; left: 10px; pointer-events: none; }
+        #score { font-size: 20px; }
     </style>
 </head>
 <body>
 
-    <div class="ui">
-        <div>分數: <span id="score">0</span></div>
-        <div id="status">連線中...</div>
-    </div>
+<div class="ui"><div id="score">SCORE: 0</div></div>
+<canvas id="gameCanvas"></canvas>
 
-    <canvas id="gameCanvas"></canvas>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+<script>
+    // --- 1. Firebase 極速初始化 ---
+    const config = { databaseURL: "https://game-24b43-default-rtdb.firebaseio.com/" };
+    firebase.initializeApp(config);
+    const db = firebase.database();
+    const myId = Math.random().toString(36).substr(2, 7);
+    const myRef = db.ref(`snakes/${myId}`);
+    myRef.onDisconnect().remove();
 
-    <script>
-        const firebaseConfig = { databaseURL: "https://game-24b43-default-rtdb.firebaseio.com/" };
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.database();
+    // --- 2. 遊戲參數 ---
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    const WORLD = 3000;
+    let score = 0;
+    
+    // 本地蛇狀態
+    let me = {
+        x: Math.random() * 2000 + 500,
+        y: Math.random() * 2000 + 500,
+        angle: 0,
+        speed: 5,
+        history: [],
+        len: 20,
+        color: `hsl(${Math.random()*360}, 100%, 50%)`,
+        name: localStorage.getItem("snakePlayerName") || "Player"
+    };
 
-        const canvas = document.getElementById("gameCanvas");
-        const ctx = canvas.getContext("2d");
-        const WORLD_SIZE = 3000;
-        const myId = Math.random().toString(36).substring(2, 9);
-        const myRef = db.ref(`players/${myId}`);
-        const playersRef = db.ref("players");
+    // 遠端玩家緩存
+    let others = {};
 
-        let score = 0;
-        let others = {}; // 存放其他玩家的本地實例
-
-        // --- 自己的蛇資料 ---
-        let snake = {
-            x: Math.random() * 2000 + 500,
-            y: Math.random() * 2000 + 500,
-            angle: 0,
-            speed: 5,
-            history: [],
-            length: 20,
-            color: `hsl(${Math.random() * 360}, 100%, 50%)`,
-            name: localStorage.getItem("snakePlayerName") || "Player"
-        };
-
-        // --- 監聽玩家加入與離開 (最快同步方式) ---
-        playersRef.on("child_added", (snap) => {
-            if (snap.key !== myId) others[snap.key] = snap.val();
-        });
-        playersRef.on("child_changed", (snap) => {
-            if (snap.key !== myId) others[snap.key] = snap.val();
-        });
-        playersRef.on("child_removed", (snap) => {
-            delete others[snap.key];
-        });
-        myRef.onDisconnect().remove();
-
-        // --- 操控與更新 ---
-        window.addEventListener("mousemove", e => {
-            const dx = e.clientX - window.innerWidth / 2;
-            const dy = e.clientY - window.innerHeight / 2;
-            snake.angle = Math.atan2(dy, dx);
-        });
-        window.addEventListener("touchmove", e => {
-            const dx = e.touches[0].clientX - window.innerWidth / 2;
-            const dy = e.touches[0].clientY - window.innerHeight / 2;
-            snake.angle = Math.atan2(dy, dx);
-        }, { passive: false });
-
-        function update() {
-            // 自己的移動
-            snake.x += Math.cos(snake.angle) * snake.speed;
-            snake.y += Math.sin(snake.angle) * snake.speed;
-            
-            snake.history.unshift({x: snake.x, y: snake.y});
-            if (snake.history.length > snake.length) snake.history.pop();
-
-            // 邊界判定
-            if (snake.x < 0 || snake.x > WORLD_SIZE || snake.y < 0 || snake.y > WORLD_SIZE) {
-                myRef.remove();
-                alert("Game Over!");
-                location.reload();
+    // --- 3. 即時監聽與補間處理 ---
+    db.ref("snakes").on("value", (snap) => {
+        const data = snap.val() || {};
+        for (let id in data) {
+            if (id === myId) continue;
+            if (!others[id]) {
+                others[id] = { ...data[id], history: [] };
+            } else {
+                // 更新目標位置，不直接跳轉
+                others[id].targetX = data[id].x;
+                others[id].targetY = data[id].y;
+                others[id].angle = data[id].a;
+                others[id].len = data[id].l;
             }
+        }
+        // 刪除消失的玩家
+        for (let id in others) {
+            if (!data[id]) delete others[id];
+        }
+    });
 
-            // 這裡極其重要：只上傳最核心的座標與當前軌跡樣本
-            // 不要在 history 裡放幾百個點，我們只傳前 15 個點來顯示頭部流暢度
-            myRef.set({
-                x: Math.round(snake.x),
-                y: Math.round(snake.y),
-                a: snake.angle,
-                c: snake.color,
-                h: snake.history.slice(0, 15), // 只傳最新的一小段，減少 90% 流量
-                n: snake.name
-            });
+    // --- 4. 操控系統 ---
+    let targetAngle = 0;
+    window.addEventListener("mousemove", e => {
+        targetAngle = Math.atan2(e.clientY - window.innerHeight/2, e.clientX - window.innerWidth/2);
+    });
+    window.addEventListener("touchmove", e => {
+        const t = e.touches[0];
+        targetAngle = Math.atan2(t.clientY - window.innerHeight/2, t.clientX - window.innerWidth/2);
+    }, {passive:false});
+
+    // --- 5. 核心循環 ---
+    function update() {
+        // 轉向平滑化
+        me.angle += (targetAngle - me.angle) * 0.2;
+        me.x += Math.cos(me.angle) * me.speed;
+        me.y += Math.sin(me.angle) * me.speed;
+
+        // 邊界檢查
+        if (me.x < 0 || me.x > WORLD || me.y < 0 || me.y > WORLD) die();
+
+        // 身體紀錄
+        me.history.unshift({x: me.x, y: me.y});
+        if (me.history.length > me.len) me.history.pop();
+
+        // 每 40ms 傳送極小數據包 (x, y, angle, length)
+        if (Date.now() % 40 < 16) {
+            myRef.set({ x: Math.round(me.x), y: Math.round(me.y), a: me.angle, l: me.len, c: me.color, n: me.name });
         }
 
-        function draw() {
-            ctx.fillStyle = "#000";
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            const camX = canvas.width / 2 - snake.x;
-            const camY = canvas.height / 2 - snake.y;
-            ctx.save();
-            ctx.translate(camX, camY);
-
-            // 畫邊界
-            ctx.strokeStyle = "#222";
-            ctx.strokeRect(0, 0, WORLD_SIZE, WORLD_SIZE);
-
-            // 畫其他玩家 (直接從記憶體中的 others 讀取)
-            for (let id in others) {
-                const p = others[id];
-                if (!p.h) continue;
-                ctx.beginPath();
-                ctx.lineWidth = 20;
-                ctx.lineCap = "round";
-                ctx.strokeStyle = p.c;
-                ctx.moveTo(p.h[0].x, p.h[0].y);
-                p.h.forEach(pt => ctx.lineTo(pt.x, pt.y));
-                ctx.stroke();
-                ctx.fillStyle = "#fff";
-                ctx.fillText(p.n, p.x, p.y - 20);
+        // 更新其他玩家位置 (平滑插值)
+        for (let id in others) {
+            let o = others[id];
+            if (o.targetX !== undefined) {
+                o.x = o.x ? o.x + (o.targetX - o.x) * 0.3 : o.targetX;
+                o.y = o.y ? o.y + (o.targetY - o.y) * 0.3 : o.targetY;
+                o.history.unshift({x: o.x, y: o.y});
+                if (o.history.length > o.len) o.history.pop();
             }
+        }
+    }
 
-            // 畫自己
-            ctx.beginPath();
-            ctx.lineWidth = 20;
-            ctx.lineCap = "round";
-            ctx.strokeStyle = snake.color;
-            ctx.moveTo(snake.history[0].x, snake.history[0].y);
-            snake.history.forEach(pt => ctx.lineTo(pt.x, pt.y));
-            ctx.stroke();
+    function draw() {
+        ctx.fillStyle = "#000";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            ctx.restore();
+        const camX = canvas.width/2 - me.x;
+        const camY = canvas.height/2 - me.y;
+        ctx.save();
+        ctx.translate(camX, camY);
+
+        // 繪製背景網格
+        ctx.strokeStyle = "#111";
+        for(let i=0; i<=WORLD; i+=100) {
+            ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,WORLD); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(WORLD,i); ctx.stroke();
         }
 
-        function loop() {
-            update();
-            draw();
-            requestAnimationFrame(loop);
+        // 畫遠端玩家
+        for (let id in others) {
+            let o = others[id];
+            drawSnake(o.history, o.c, o.n);
         }
 
-        window.addEventListener("resize", () => {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
+        // 畫自己
+        drawSnake(me.history, me.color, me.name);
+
+        ctx.restore();
+    }
+
+    function drawSnake(history, color, name) {
+        if (history.length < 2) return;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 20;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.beginPath();
+        ctx.moveTo(history[0].x, history[0].y);
+        for(let i=1; i<history.length; i++) ctx.lineTo(history[i].x, history[i].y);
+        ctx.stroke();
+        
+        ctx.fillStyle = "#fff";
+        ctx.font = "14px Arial";
+        ctx.fillText(name, history[0].x - 20, history[0].y - 20);
+    }
+
+    function die() {
+        myRef.remove().then(() => {
+            alert("GAME OVER");
+            location.reload();
         });
+    }
+
+    function loop() {
+        update();
+        draw();
+        requestAnimationFrame(loop);
+    }
+
+    window.addEventListener("resize", () => {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
+    });
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    loop();
 
-        loop();
-        document.getElementById("status").innerText = "連線成功：ID " + myId;
-    </script>
+</script>
 </body>
 </html>
