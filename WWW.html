@@ -3,116 +3,62 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>多人連線貪吃蛇 - Firebase 版</title>
+    <title>極速多人蛇 - Firebase 版</title>
     <style>
-        body { margin: 0; background: #1a1a1a; color: white; font-family: sans-serif; overflow: hidden; touch-action: none; }
+        body { margin: 0; background: #111; color: white; font-family: sans-serif; overflow: hidden; touch-action: none; }
         canvas { display: block; }
         .ui { position: absolute; top: 20px; width: 100%; text-align: center; pointer-events: none; z-index: 10; }
-        #score { font-size: 32px; color: #00ff88; text-shadow: 2px 2px 4px #000; }
-        #player-tag { position: absolute; top: 60px; width: 100%; text-align: center; color: #aaa; }
-        #joystick-container { position: absolute; bottom: 50px; left: 50px; width: 120px; height: 120px; background: rgba(255,255,255,0.1); border-radius: 50%; display:none; }
+        #score { font-size: 28px; color: #00ff88; }
     </style>
 </head>
 <body>
 
     <div class="ui">
         <div id="score">分數: 0</div>
-        <div id="player-tag">正在載入玩家資訊...</div>
+        <div id="status" style="color: #666;">同步中...</div>
     </div>
 
     <canvas id="gameCanvas"></canvas>
 
-    <!-- 引入 Firebase SDK (Compat 版本較容易直接在 HTML 使用) -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 
     <script>
-        // --- 1. Firebase 設定 (請替換成你的配置) ---
-        const firebaseConfig = {
-            databaseURL: "https://game-24b43-default-rtdb.firebaseio.com/",
-            // 如果你有其餘的 apiKey, authDomain 等也請貼上
-        };
+        // --- Firebase 配置 ---
+        const firebaseConfig = { databaseURL: "https://game-24b43-default-rtdb.firebaseio.com/" };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        // --- 2. 玩家身份初始化 ---
-        let playerName = localStorage.getItem("snakePlayerName");
-        if (!playerName) {
-            playerName = prompt("歡迎來到多人貪吃蛇！請輸入你的名稱：") || "小蛇" + Math.floor(Math.random()*1000);
-            localStorage.setItem("snakePlayerName", playerName);
-        }
-        document.getElementById("player-tag").innerText = "玩家名稱: " + playerName;
-
+        // --- 玩家初始化 ---
+        let playerName = localStorage.getItem("snakePlayerName") || ("蛇" + Math.floor(Math.random()*1000));
         const myId = Math.random().toString(36).substring(2, 9);
         const myRef = db.ref(`players/${myId}`);
-        myRef.onDisconnect().remove(); // 離線時自動刪除我的蛇
+        myRef.onDisconnect().remove(); // 離線立即刪除
 
-        // --- 3. 遊戲核心變數 ---
+        // --- 遊戲設定 ---
         const canvas = document.getElementById("gameCanvas");
         const ctx = canvas.getContext("2d");
         const WORLD_SIZE = 3000;
-        const GRID_SIZE = 100;
         
         let score = 0;
         let otherPlayers = {};
-        
         let snake = {
             x: Math.random() * 2000 + 500,
             y: Math.random() * 2000 + 500,
             angle: Math.random() * Math.PI * 2,
-            speed: 4,
+            speed: 4.5,
             radius: 12,
             history: [],
             length: 30,
             color: `hsl(${Math.random() * 360}, 100%, 60%)`
         };
 
-        // 食物 (暫時維持本機生成，若要多人同步需另設 Firebase 節點)
-        let foods = [];
-        for(let i=0; i<100; i++) spawnFood();
-
-        function spawnFood() {
-            foods.push({
-                x: Math.random() * WORLD_SIZE,
-                y: Math.random() * WORLD_SIZE,
-                color: `hsl(${Math.random() * 360}, 100%, 50%)`
-            });
-        }
-
-        // --- 4. 監聽其他玩家 ---
+        // --- 監聽遠端玩家 ---
         db.ref("players").on("value", (snapshot) => {
             otherPlayers = snapshot.val() || {};
         });
 
-        // --- 5. 操控邏輯 (全螢幕觸控) ---
-        let isDragging = false;
-        let startX = 0, startY = 0;
-
-        const startInput = (e) => {
-            isDragging = true;
-            startX = e.touches ? e.touches[0].clientX : e.clientX;
-            startY = e.touches ? e.touches[0].clientY : e.clientY;
-        };
-
-        const handleInput = (e) => {
-            if (!isDragging) return;
-            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-            const dx = clientX - startX;
-            const dy = clientY - startY;
-            if (Math.hypot(dx, dy) > 5) {
-                snake.angle = Math.atan2(dy, dx);
-            }
-        };
-
-        window.addEventListener("mousedown", startInput);
-        window.addEventListener("mousemove", handleInput);
-        window.addEventListener("mouseup", () => isDragging = false);
-        window.addEventListener("touchstart", (e) => { startInput(e); }, { passive: false });
-        window.addEventListener("touchmove", (e) => { if(isDragging) e.preventDefault(); handleInput(e); }, { passive: false });
-        window.addEventListener("touchend", () => isDragging = false);
-
-        // --- 6. 核心循環 ---
+        // --- 操作與縮放 ---
         function resize() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
@@ -120,95 +66,91 @@
         window.addEventListener('resize', resize);
         resize();
 
+        let isDragging = false, startX = 0, startY = 0;
+        const startInput = (e) => { isDragging = true; startX = e.touches ? e.touches[0].clientX : e.clientX; startY = e.touches ? e.touches[0].clientY : e.clientY; };
+        const handleInput = (e) => {
+            if (!isDragging) return;
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            snake.angle = Math.atan2(clientY - startY, clientX - startX);
+        };
+        window.addEventListener("mousedown", startInput);
+        window.addEventListener("mousemove", handleInput);
+        window.addEventListener("mouseup", () => isDragging = false);
+        window.addEventListener("touchstart", startInput, {passive: false});
+        window.addEventListener("touchmove", (e) => { if(isDragging) e.preventDefault(); handleInput(e); }, {passive: false});
+
+        // --- 核心邏輯 ---
+        function resetGame() {
+            myRef.remove(); // 死了「立即」從資料庫刪除
+            alert("遊戲結束！ 分數: " + score);
+            location.reload(); // 重新整理是最快重置所有變數的方法
+        }
+
+        // 優化：限制上傳頻率 (節流)
+        let lastUpload = 0;
+        const UPLOAD_INTERVAL = 50; // 每 50ms 上傳一次 (每秒 20 次)
+
         function update() {
-            // 移動自己的蛇
             snake.x += Math.cos(snake.angle) * snake.speed;
             snake.y += Math.sin(snake.angle) * snake.speed;
 
-            // 邊界判定
             if (snake.x < 0 || snake.x > WORLD_SIZE || snake.y < 0 || snake.y > WORLD_SIZE) {
                 resetGame();
                 return;
             }
 
-            // 紀錄軌跡
             snake.history.unshift({x: snake.x, y: snake.y});
             if (snake.history.length > snake.length) snake.history.pop();
 
-            // 食物判定
-            for (let i = foods.length - 1; i >= 0; i--) {
-                if (Math.hypot(snake.x - foods[i].x, snake.y - foods[i].y) < snake.radius + 10) {
-                    foods.splice(i, 1);
-                    score += 10;
-                    snake.length += 5;
-                    document.getElementById("score").innerText = "分數: " + score;
-                    spawnFood();
-                }
+            // 只在間隔到達時才上傳，且只上傳必要資訊
+            const now = Date.now();
+            if (now - lastUpload > UPLOAD_INTERVAL) {
+                myRef.set({
+                    n: playerName,
+                    x: Math.round(snake.x), // 取整數減少封包大小
+                    y: Math.round(snake.y),
+                    a: snake.angle,
+                    c: snake.color,
+                    h: snake.history.filter((_,i) => i % 2 === 0), // 隔點採樣，身體資料減半
+                    s: score
+                });
+                lastUpload = now;
             }
-
-            // 同步到 Firebase (每幀上傳)
-            myRef.set({
-                name: playerName,
-                x: snake.x,
-                y: snake.y,
-                angle: snake.angle,
-                color: snake.color,
-                history: snake.history,
-                score: score
-            });
         }
 
         function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.fillStyle = "#111";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             const offsetX = canvas.width / 2 - snake.x;
             const offsetY = canvas.height / 2 - snake.y;
-
             ctx.save();
             ctx.translate(offsetX, offsetY);
 
-            // 畫網格
-            ctx.strokeStyle = "#333";
-            ctx.lineWidth = 1;
-            for (let x = 0; x <= WORLD_SIZE; x += GRID_SIZE) {
-                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, WORLD_SIZE); ctx.stroke();
-            }
-            for (let y = 0; y <= WORLD_SIZE; y += GRID_SIZE) {
-                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(WORLD_SIZE, y); ctx.stroke();
-            }
-
-            // 畫邊框
-            ctx.strokeStyle = "#ff0066";
-            ctx.lineWidth = 5;
+            // 邊框
+            ctx.strokeStyle = "#444";
             ctx.strokeRect(0, 0, WORLD_SIZE, WORLD_SIZE);
-
-            // 畫食物
-            foods.forEach(f => {
-                ctx.fillStyle = f.color;
-                ctx.beginPath(); ctx.arc(f.x, f.y, 8, 0, Math.PI * 2); ctx.fill();
-            });
 
             // 畫其他玩家
             for (let id in otherPlayers) {
                 if (id === myId) continue;
                 const p = otherPlayers[id];
-                if (!p.history) continue;
+                if (!p.h) continue;
 
-                ctx.strokeStyle = p.color || "#ffffff";
-                ctx.globalAlpha = 0.6; // 其他人稍微透明
-                ctx.lineWidth = snake.radius * 2;
+                ctx.strokeStyle = p.c;
+                ctx.lineWidth = snake.radius * 1.8;
                 ctx.lineCap = "round";
+                ctx.globalAlpha = 0.7;
                 ctx.beginPath();
-                ctx.moveTo(p.history[0].x, p.history[0].y);
-                p.history.forEach(pos => ctx.lineTo(pos.x, pos.y));
+                ctx.moveTo(p.h[0].x, p.h[0].y);
+                p.h.forEach(pt => ctx.lineTo(pt.x, pt.y));
                 ctx.stroke();
                 
-                // 畫對方的名字
-                ctx.globalAlpha = 1.0;
+                ctx.globalAlpha = 1;
                 ctx.fillStyle = "white";
-                ctx.font = "16px Arial";
-                ctx.fillText(p.name, p.x - 20, p.y - 25);
+                ctx.fillText(p.n, p.x - 10, p.y - 20);
             }
 
             // 畫自己的蛇
@@ -216,29 +158,10 @@
             ctx.lineWidth = snake.radius * 2;
             ctx.lineCap = "round";
             ctx.beginPath();
-            if(snake.history.length > 0) {
-                ctx.moveTo(snake.history[0].x, snake.history[0].y);
-                snake.history.forEach(p => ctx.lineTo(p.x, p.y));
-            }
+            snake.history.forEach((pt, i) => i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y));
             ctx.stroke();
 
-            // 畫眼睛
-            ctx.fillStyle = "white";
-            const eyeX = snake.x + Math.cos(snake.angle) * 8;
-            const eyeY = snake.y + Math.sin(snake.angle) * 8;
-            ctx.beginPath(); ctx.arc(eyeX, eyeY, 5, 0, Math.PI*2); ctx.fill();
-
             ctx.restore();
-        }
-
-        function resetGame() {
-            alert("遊戲結束！ 分數: " + score);
-            score = 0;
-            document.getElementById("score").innerText = "分數: 0";
-            snake.x = Math.random() * 2000 + 500;
-            snake.y = Math.random() * 2000 + 500;
-            snake.history = [];
-            snake.length = 30;
         }
 
         function loop() {
