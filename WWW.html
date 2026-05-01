@@ -3,36 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>多人蛇 - 單一裝置限定版</title>
+    <title>多人蛇 - 極速清理版</title>
     <style>
         body { margin: 0; background: #000; color: #0f0; font-family: sans-serif; overflow: hidden; touch-action: none; }
         canvas { display: block; }
         .ui-left { position: absolute; top: 20px; left: 20px; pointer-events: none; z-index: 10; }
         #score { font-size: 28px; font-weight: bold; color: #00ff88; pointer-events: auto; cursor: pointer; }
-        .ui-right { position: absolute; top: 20px; right: 20px; background: rgba(0, 0, 0, 0.8); padding: 12px; border-radius: 8px; border: 1px solid #444; min-width: 160px; pointer-events: auto; }
+        .ui-right { position: absolute; top: 20px; right: 20px; background: rgba(0, 0, 0, 0.85); padding: 12px; border-radius: 8px; border: 1px solid #444; min-width: 160px; pointer-events: auto; }
         .leaderboard-title { color: #ffcc00; font-weight: bold; text-align: center; margin-bottom: 5px; font-size: 14px; }
         .leaderboard-item { font-size: 13px; display: flex; justify-content: space-between; margin: 4px 0; border-bottom: 1px solid #222; }
-        .is-me { color: #fff; background: rgba(0,255,136,0.2); }
-        /* 阻擋層樣式 */
-        #blocker { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 9999; display: none; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: white; }
+        .is-me { color: #fff; background: rgba(0,255,136,0.3); }
+        #blocker { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 9999; display: none; flex-direction: column; align-items: center; justify-content: center; color: white; }
     </style>
 </head>
 <body>
 
-    <!-- 阻擋重複開啟的 UI -->
     <div id="blocker">
-        <h1>此裝置已在遊戲中</h1>
-        <p>請關閉其他分頁後再重新整理此頁面。</p>
-        <button onclick="location.reload()" style="padding: 10px 20px; cursor: pointer;">重新整理</button>
+        <h1>⚠️ 偵測到重複連線</h1>
+        <p>此裝置已有分頁在運行中，請關閉其他分頁。</p>
+        <button onclick="location.reload()" style="padding: 10px 20px; background:#0f0; border:none; border-radius:5px;">重新連線</button>
     </div>
 
     <div class="ui-left">
         <div id="score">SCORE: 0</div>
-        <div style="color:#666; font-size:12px;">點擊分數或排行榜改名</div>
+        <div id="status" style="color:#666; font-size:12px;">系統監控中...</div>
     </div>
 
     <div class="ui-right" onclick="changeName()">
-        <div class="leaderboard-title">🏆 TOP 5 玩家</div>
+        <div class="leaderboard-title">🏆 即時排行</div>
         <div id="leaderboard-list"></div>
     </div>
 
@@ -42,76 +40,59 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 
     <script>
-        // --- 1. 裝置唯一性檢查 (核心修復) ---
+        // --- 1. 裝置鎖定與初始化 ---
         const tabToken = Math.random().toString(36).substr(2, 9);
-        function checkDuplicateTab() {
-            const lastActive = localStorage.getItem('snake_active_time');
-            const now = Date.now();
-            
-            // 如果 2 秒內有其他分頁在活動，就判定為重複
-            if (lastActive && (now - lastActive < 2000)) {
+        function checkTab() {
+            const last = localStorage.getItem('s_active');
+            if (last && (Date.now() - last < 1500)) {
                 document.getElementById('blocker').style.display = 'flex';
-                isAlive = false;
                 return true;
             }
-            localStorage.setItem('snake_active_token', tabToken);
             return false;
         }
+        setInterval(() => { if(isAlive) localStorage.setItem('s_active', Date.now()); }, 800);
 
-        // 定時更新活動狀態 (每秒更新一次)
-        setInterval(() => {
-            if (isAlive) {
-                localStorage.setItem('snake_active_time', Date.now());
-            }
-        }, 1000);
-
-        // --- 2. Firebase 初始化 ---
         const config = { databaseURL: "https://game-24b43-default-rtdb.firebaseio.com/" };
         firebase.initializeApp(config);
         const db = firebase.database();
-        const myId = tabToken; // 使用 token 作為 ID，確保唯一性
+        const myId = tabToken;
         const myRef = db.ref(`snakes/${myId}`);
         const foodRef = db.ref("foods");
 
         const canvas = document.getElementById("gameCanvas");
         const ctx = canvas.getContext("2d");
         const WORLD = 3000;
-        let isAlive = !checkDuplicateTab(); // 檢查是否重複
+        let isAlive = !checkTab();
         let others = {};
         let foods = {};
         let isLeader = false;
 
         let me = {
-            x: Math.random() * (WORLD-200) + 100,
-            y: Math.random() * (WORLD-200) + 100,
-            angle: Math.random()*Math.PI*2,
-            speed: 5, history: [], len: 20, score: 0,
+            x: Math.random()*2000+500, y: Math.random()*2000+500,
+            angle: Math.random()*Math.PI*2, speed: 5.5,
+            history: [], len: 25, score: 0,
             color: `hsl(${Math.random()*360}, 100%, 50%)`,
-            name: localStorage.getItem("snakePlayerName") || "新玩家",
+            name: localStorage.getItem("snName") || "Player",
             protected: true
         };
-        setTimeout(() => { me.protected = false; }, 3000);
+        setTimeout(() => me.protected = false, 3000);
 
         function changeName() {
-            const newName = prompt("輸入新名字:", me.name);
-            if (newName && newName.trim()) {
-                me.name = newName.trim().substring(0, 10);
-                localStorage.setItem("snakePlayerName", me.name);
-            }
+            let n = prompt("修改名字:", me.name);
+            if(n) { me.name = n.trim().substr(0,10); localStorage.setItem("snName", me.name); }
         }
         document.getElementById("score").onclick = changeName;
 
-        // --- 3. 數據同步與清理 ---
+        // --- 2. 監聽與清理邏輯 ---
         db.ref("snakes").on("value", snap => {
             const data = snap.val() || {};
             const now = Date.now();
             others = {};
             const ids = Object.keys(data).sort();
-            isLeader = (ids[0] === myId);
-
+            isLeader = (ids[0] === myId); // 房主權限
+            
             for (let id in data) {
-                // 自動清理 6 秒沒更新的幽靈玩家
-                if (data[id].t && now - data[id].t > 6000) continue;
+                if (data[id].t && now - data[id].t > 5000) continue; // 清理幽靈
                 others[id] = data[id];
             }
             updateLeaderboard(others);
@@ -128,56 +109,37 @@
                 </div>`).join('');
         }
 
+        // --- 3. 核心運算 ---
         function die() {
-    if (!isAlive) return;
-    isAlive = false;
-
-    // --- 新增：死後屍體變食物 ---
-    // 每 4 個身體點產生一個食物，避免 Firebase 炸掉
-    me.history.forEach((pos, index) => {
-        if (index % 10 === 0) {
-            const fId = "drop_" + myId + "_" + index;
-            foodRef.child(fId).set({
-                x: pos.x,
-                y: pos.y,
-                c: me.color, // 掉落自己顏色的小型精華
-                v: 2 // 可以設定一個價值倍率，例如屍體食物加分更多（選用）
-            });
-        }
-    });
-
-    myRef.remove();
-    localStorage.removeItem('snake_active_time');
-    
-    alert("你掛了！得分: " + me.score);
-    location.reload();
-}
-
-        // 同步位置到 Firebase
-        function syncToCloud() {
             if (!isAlive) return;
-            myRef.set({
-                x: Math.round(me.x), y: Math.round(me.y), a: me.angle, 
-                l: me.len, c: me.color, n: me.name, s: me.score, 
-                h: me.history.filter((_,i)=>i%2===0), p: me.protected,
-                t: Date.now() 
+            isAlive = false;
+            // 屍體轉換食物 (TTL 設為 30 秒)
+            me.history.forEach((pos, i) => {
+                if (i % 5 === 0) {
+                    foodRef.push({ x: pos.x, y: pos.y, c: me.color, exp: Date.now() + 30000 });
+                }
             });
+            myRef.remove();
+            localStorage.removeItem('s_active');
+            alert("你死了！分數: " + me.score);
+            location.reload();
         }
 
         function update() {
             if (!isAlive) return;
 
-            // 轉向與移動
+            // 轉向
             let diff = targetAngle - me.angle;
             while (diff < -Math.PI) diff += Math.PI * 2;
             while (diff > Math.PI) diff -= Math.PI * 2;
-            me.angle += diff * 0.15;
+            me.angle += diff * 0.2; // 提高轉向靈敏度
+
             me.x += Math.cos(me.angle) * me.speed;
             me.y += Math.sin(me.angle) * me.speed;
 
             if (me.x < 0 || me.x > WORLD || me.y < 0 || me.y > WORLD) die();
 
-            // 碰撞檢測
+            // 碰撞判定
             if (!me.protected) {
                 for (let id in others) {
                     if (id === myId) continue;
@@ -190,67 +152,106 @@
                 }
             }
 
-            // 身體紀錄
             me.history.unshift({x: Math.round(me.x), y: Math.round(me.y)});
             if (me.history.length > me.len) me.history.pop();
 
-            // 吃食物並立即刪除 (減少殘留)
+            // 吃食物
             for (let fId in foods) {
                 let f = foods[fId];
                 if (Math.hypot(me.x - f.x, me.y - f.y) < 25) {
                     foodRef.child(fId).remove(); 
-                    me.len += 5; me.score += 10;
+                    me.len += 4; me.score += 10;
                     document.getElementById("score").innerText = "SCORE: " + me.score;
                 }
             }
 
-            // 限制同步頻率 (約每秒 15 次)
-            if (Date.now() % 66 < 20) syncToCloud();
+            // 同步 (頻率提高至每秒 20 次以增加及時感)
+            if (Date.now() % 50 < 25) {
+                myRef.set({
+                    x: Math.round(me.x), y: Math.round(me.y), a: me.angle, 
+                    l: me.len, c: me.color, n: me.name, s: me.score, 
+                    h: me.history.filter((_,i)=>i%2===0), p: me.protected, t: Date.now() 
+                });
+            }
         }
 
         function draw() {
             if (!isAlive) return;
-            ctx.fillStyle = "#0a0a0a";
+            ctx.fillStyle = "#050505";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             const camX = canvas.width/2 - me.x;
             const camY = canvas.height/2 - me.y;
             ctx.save();
             ctx.translate(camX, camY);
 
-            // 繪製地圖邊界
-            ctx.strokeStyle = "#444"; ctx.lineWidth = 5;
-            ctx.strokeRect(0, 0, WORLD, WORLD);
+            // 格線背景 (增加速度感)
+            ctx.strokeStyle = "#111"; ctx.lineWidth = 1;
+            for(let i=0; i<=WORLD; i+=100) {
+                ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,WORLD); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(WORLD,i); ctx.stroke();
+            }
+
+            // 邊界
+            ctx.strokeStyle = "#f04"; ctx.lineWidth = 5; ctx.strokeRect(0, 0, WORLD, WORLD);
 
             // 繪製食物
             for (let fId in foods) {
                 let f = foods[fId];
                 ctx.fillStyle = f.c;
-                ctx.beginPath(); ctx.arc(f.x, f.y, 8, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(f.x, f.y, 7, 0, Math.PI*2); ctx.fill();
             }
 
-            // 繪製所有玩家
+            // 繪製玩家
             for (let id in others) {
-                let p = others[id];
-                if (!p.h) continue;
+                let p = others[id]; if (!p.h) continue;
                 ctx.save();
                 ctx.strokeStyle = p.c; ctx.lineWidth = 22; ctx.lineCap = "round";
-                if (p.p) { // 保護盾效果
-                    ctx.globalAlpha = 0.3;
-                    ctx.beginPath(); ctx.arc(p.x, p.y, 40, 0, Math.PI*2);
-                    ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.stroke();
-                }
+                if (p.p) ctx.globalAlpha = 0.4;
                 ctx.beginPath();
                 ctx.moveTo(p.h[0].x, p.h[0].y);
                 p.h.forEach(pt => ctx.lineTo(pt.x, pt.y));
                 ctx.stroke();
-                ctx.fillStyle = "#fff"; ctx.font = "bold 14px Arial";
-                ctx.fillText(p.n, p.x-20, p.y-35);
+                // 畫眼
+                ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(p.h[0].x, p.h[0].y, 5, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = "#fff"; ctx.font = "bold 14px Arial"; ctx.fillText(p.n, p.h[0].x-20, p.h[0].y-35);
                 ctx.restore();
             }
             ctx.restore();
         }
 
-        // --- 5. 事件與啟動 ---
+        // --- 4. 自動化食物管理 (TTL 與 爆量偵測) ---
+        setInterval(() => {
+            if (!isAlive || !isLeader) return;
+
+            const now = Date.now();
+            const foodKeys = Object.keys(foods);
+            
+            // 1. 偵測爆量：超過 120 個直接全清，防止炸掉
+            if (foodKeys.length > 120) {
+                console.log("食物爆量，執行全域清理");
+                foodRef.remove();
+                return;
+            }
+
+            // 2. TTL 定期偵測：刪除過期食物 ( exp < now )
+            foodKeys.forEach(id => {
+                if (foods[id].exp && foods[id].exp < now) {
+                    foodRef.child(id).remove();
+                }
+            });
+
+            // 3. 補給食物
+            if (foodKeys.length < 50) {
+                foodRef.push({
+                    x: Math.round(Math.random()*(WORLD-100)+50),
+                    y: Math.round(Math.random()*(WORLD-100)+50),
+                    c: `hsl(${Math.random()*360}, 100%, 50%)`,
+                    exp: now + 60000 // 食物壽命 60 秒
+                });
+            }
+            document.getElementById("status").innerText = `食物數: ${foodKeys.length} | Leader: ${isLeader?'是':'否'}`;
+        }, 2000);
+
         let targetAngle = me.angle;
         window.addEventListener("mousemove", e => { targetAngle = Math.atan2(e.clientY - window.innerHeight/2, e.clientX - window.innerWidth/2); });
         window.addEventListener("touchmove", e => {
@@ -259,26 +260,9 @@
             targetAngle = Math.atan2(t.clientY - window.innerHeight/2, t.clientX - window.innerWidth/2);
         }, {passive:false});
 
-        // 穩定的食物補給
-        setInterval(() => {
-            if (isAlive && isLeader && Object.keys(foods).length < 50) {
-                foodRef.push({
-                    x: Math.round(Math.random() * (WORLD-100) + 50),
-                    y: Math.round(Math.random() * (WORLD-100) + 50),
-                    c: `hsl(${Math.random()*360}, 100%, 50%)`
-                });
-            }
-        }, 1000);
-
         function loop() { if(isAlive) { update(); draw(); } requestAnimationFrame(loop); }
-        
-        // 離開或關閉時徹底清理
         myRef.onDisconnect().remove();
-        window.onbeforeunload = () => { 
-            myRef.remove(); 
-            localStorage.removeItem('snake_active_time');
-        };
-
+        window.onbeforeunload = () => { myRef.remove(); localStorage.removeItem('s_active'); };
         window.addEventListener("resize", () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; });
         canvas.width = window.innerWidth; canvas.height = window.innerHeight;
         loop();
