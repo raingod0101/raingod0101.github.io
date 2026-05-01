@@ -3,22 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>多人蛇 - Firebase 節流修復版</title>
+    <title>多人蛇 Pro - 數據清理版</title>
     <style>
         body { margin: 0; background: #000; color: #0f0; font-family: sans-serif; overflow: hidden; touch-action: none; }
         canvas { display: block; }
         .ui-left { position: absolute; top: 20px; left: 20px; pointer-events: none; z-index: 10; }
-        #score { font-size: 28px; font-weight: bold; color: #00ff88; }
-        .ui-right { position: absolute; top: 20px; right: 20px; background: rgba(0, 0, 0, 0.7); padding: 15px; border-radius: 10px; border: 1px solid #444; min-width: 150px; pointer-events: none; }
-        .leaderboard-title { color: #ffcc00; font-weight: bold; text-align: center; margin-bottom: 5px; }
-        .leaderboard-item { font-size: 14px; display: flex; justify-content: space-between; margin: 2px 0; }
+        #score { font-size: 28px; font-weight: bold; color: #00ff88; pointer-events: auto; cursor: pointer; }
+        .ui-right { position: absolute; top: 20px; right: 20px; background: rgba(0, 0, 0, 0.8); padding: 12px; border-radius: 8px; border: 1px solid #444; min-width: 160px; pointer-events: auto; }
+        .leaderboard-title { color: #ffcc00; font-weight: bold; text-align: center; margin-bottom: 5px; font-size: 14px; }
+        .leaderboard-item { font-size: 13px; display: flex; justify-content: space-between; margin: 4px 0; border-bottom: 1px solid #222; }
+        .is-me { color: #fff; background: rgba(0,255,136,0.2); }
     </style>
 </head>
 <body>
 
-    <div class="ui-left"><div id="score">SCORE: 0</div></div>
-    <div class="ui-right">
-        <div class="leaderboard-title">排行榜</div>
+    <div class="ui-left">
+        <div id="score" title="點擊修改名字">SCORE: 0</div>
+        <div style="color:#666; font-size:12px;">點擊分數或排行榜可改名</div>
+    </div>
+
+    <div class="ui-right" onclick="changeName()">
+        <div class="leaderboard-title">🏆 TOP 5 玩家</div>
         <div id="leaderboard-list"></div>
     </div>
 
@@ -28,10 +33,11 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 
     <script>
-        // --- 1. Firebase 初始化 ---
         const config = { databaseURL: "https://game-24b43-default-rtdb.firebaseio.com/" };
         firebase.initializeApp(config);
         const db = firebase.database();
+        
+        // 玩家 ID 與基本狀態
         const myId = Math.random().toString(36).substr(2, 7);
         const myRef = db.ref(`snakes/${myId}`);
         const foodRef = db.ref("foods");
@@ -42,37 +48,53 @@
         let isAlive = true;
         let others = {};
         let foods = {};
-        let isLeader = false; // 是否為負責生成食物的領頭玩家
+        let isLeader = false;
 
-        // 玩家狀態
         let me = {
-            x: WORLD / 2, y: WORLD / 2,
-            angle: Math.random() * Math.PI * 2,
+            x: WORLD/2, y: WORLD/2, angle: Math.random()*Math.PI*2,
             speed: 5, history: [], len: 20, score: 0,
             color: `hsl(${Math.random()*360}, 100%, 50%)`,
-            name: localStorage.getItem("snakePlayerName") || "Player",
+            name: localStorage.getItem("snakePlayerName") || "新玩家",
             protected: true
         };
         setTimeout(() => { me.protected = false; }, 3000);
 
-        // --- 2. 監聽數據 ---
-        // 監聽所有玩家並判斷誰是 Leader (ID 最小的玩家負責生成食物)
+        // --- 名字修改功能 ---
+        function changeName() {
+            const newName = prompt("輸入新的名字:", me.name);
+            if (newName && newName.trim()) {
+                me.name = newName.trim().substring(0, 10);
+                localStorage.setItem("snakePlayerName", me.name);
+            }
+        }
+        document.getElementById("score").onclick = changeName;
+
+        // --- 核心同步邏輯 ---
+        // 1. 玩家列表與 Leader 判定
         db.ref("snakes").on("value", snap => {
             const data = snap.val() || {};
-            others = data;
+            const now = Date.now();
+            others = {};
+            
             const ids = Object.keys(data).sort();
-            isLeader = (ids[0] === myId); 
-            updateLeaderboard(data);
+            isLeader = (ids[0] === myId); // ID 最小的當 Leader
+
+            for (let id in data) {
+                // 心跳檢測：超過 8 秒沒更新的玩家視為已斷線（髒數據）
+                if (data[id].t && now - data[id].t > 8000) continue;
+                others[id] = data[id];
+            }
+            updateLeaderboard(others);
         });
 
-        // 食物監聽 (使用 child_removed 確保本地同步刪除)
+        // 2. 食物同步
         foodRef.on("value", snap => { foods = snap.val() || {}; });
 
         function updateLeaderboard(all) {
             const list = Object.keys(all).map(id => ({ id, n: all[id].n, s: all[id].s || 0 }))
                 .sort((a,b) => b.s - a.s).slice(0, 5);
             document.getElementById("leaderboard-list").innerHTML = list.map((p, i) => 
-                `<div class="leaderboard-item" style="color:${p.id===myId?'#0f0':'#eee'}">
+                `<div class="leaderboard-item ${p.id===myId?'is-me':''}">
                     <span>${i+1}. ${p.n}</span><span>${p.s}</span>
                 </div>`).join('');
         }
@@ -84,22 +106,22 @@
         });
         window.addEventListener("touchmove", e => {
             e.preventDefault();
-            handleInput(e.touches[0].clientX, e.touches[0].clientY);
+            const t = e.touches[0];
+            targetAngle = Math.atan2(t.clientY - window.innerHeight/2, t.clientX - window.innerWidth/2);
         }, {passive:false});
 
-        // --- 4. 核心邏輯 ---
+        // --- 4. 遊戲邏輯 ---
         function die() {
             if (!isAlive) return;
             isAlive = false;
-            myRef.remove();
-            alert("死了！分數: " + me.score);
+            myRef.remove(); // 關鍵：死掉立即刪除資料
+            alert("你死了！得分: " + me.score);
             location.reload();
         }
 
         function update() {
             if (!isAlive) return;
 
-            // 轉向
             let diff = targetAngle - me.angle;
             while (diff < -Math.PI) diff += Math.PI * 2;
             while (diff > Math.PI) diff -= Math.PI * 2;
@@ -110,41 +132,39 @@
 
             if (me.x < 0 || me.x > WORLD || me.y < 0 || me.y > WORLD) die();
 
-            // 碰撞檢查
+            // 碰撞別人身體
             if (!me.protected) {
                 for (let id in others) {
                     if (id === myId) continue;
                     let h = others[id].h;
-                    if (!h) continue;
-                    for (let i = 0; i < h.length; i += 2) {
-                        if (Math.hypot(me.x - h[i].x, me.y - h[i].y) < 18) { die(); return; }
+                    if (h) {
+                        for (let i = 0; i < h.length; i += 2) {
+                            if (Math.hypot(me.x - h[i].x, me.y - h[i].y) < 18) { die(); return; }
+                        }
                     }
                 }
             }
 
-            // 身體
             me.history.unshift({x: Math.round(me.x), y: Math.round(me.y)});
             if (me.history.length > me.len) me.history.pop();
 
-            // 吃食物：這裏是關鍵，吃掉後直接根據 key 刪除
+            // 吃到食物並刪除
             for (let fId in foods) {
                 let f = foods[fId];
                 if (Math.hypot(me.x - f.x, me.y - f.y) < 25) {
-                    // 立即從 Firebase 刪除該食物
                     foodRef.child(fId).remove(); 
-                    me.len += 5;
-                    me.score += 10;
+                    me.len += 5; me.score += 10;
                     document.getElementById("score").innerText = "SCORE: " + me.score;
                 }
             }
 
-            // 同步玩家 (限制頻率，減少 Firebase 負荷)
+            // 同步 (包含時間戳 t 用於心跳檢測)
             if (Date.now() % 60 < 20) {
                 myRef.set({
-                    x: Math.round(me.x), y: Math.round(me.y), 
-                    a: parseFloat(me.angle.toFixed(2)), 
+                    x: Math.round(me.x), y: Math.round(me.y), a: me.angle, 
                     l: me.len, c: me.color, n: me.name, s: me.score, 
-                    h: me.history.filter((_,i)=>i%2===0), p: me.protected
+                    h: me.history.filter((_,i)=>i%2===0), p: me.protected,
+                    t: Date.now() 
                 });
             }
         }
@@ -157,52 +177,54 @@
             ctx.save();
             ctx.translate(camX, camY);
 
-            // 邊界
             ctx.strokeStyle = "#ff0044"; ctx.lineWidth = 10;
             ctx.strokeRect(0, 0, WORLD, WORLD);
 
-            // 食物
             for (let fId in foods) {
                 let f = foods[fId];
                 ctx.fillStyle = f.c;
                 ctx.beginPath(); ctx.arc(f.x, f.y, 8, 0, Math.PI*2); ctx.fill();
             }
 
-            // 畫玩家
             for (let id in others) {
                 let p = others[id];
                 if (!p.h) continue;
                 ctx.save();
-                if (p.p) { // 保護盾
-                    ctx.beginPath(); ctx.arc(p.x, p.y, 40, 0, Math.PI*2);
-                    ctx.fillStyle = "rgba(255,255,255,0.1)"; ctx.fill();
-                }
                 ctx.strokeStyle = p.c; ctx.lineWidth = 22; ctx.lineCap = "round";
-                if (p.p) ctx.globalAlpha = 0.5;
+                if (p.p) {
+                    ctx.globalAlpha = 0.4;
+                    ctx.beginPath(); ctx.arc(p.x, p.y, 40, 0, Math.PI*2);
+                    ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.stroke();
+                }
                 ctx.beginPath();
                 ctx.moveTo(p.h[0].x, p.h[0].y);
                 p.h.forEach(pt => ctx.lineTo(pt.x, pt.y));
                 ctx.stroke();
-                ctx.fillStyle = "white"; ctx.fillText(p.n, p.x-20, p.y-30);
+                ctx.fillStyle = "#fff"; ctx.font = "bold 14px Arial";
+                ctx.fillText(p.n, p.x-20, p.y-35);
                 ctx.restore();
             }
             ctx.restore();
         }
 
-        // --- 5. 食物控制系統 (解決炸掉的問題) ---
+        // --- 5. 穩定的食物生成 ---
         setInterval(() => {
-            // 只有當你是 Leader 且場上食物少於 40 個時才生成
-            if (isAlive && isLeader && Object.keys(foods).length < 40) {
+            // 只有 Leader 且場上食物真的很少 (< 60) 時才補
+            if (isAlive && isLeader && Object.keys(foods).length < 60) {
                 foodRef.push({
-                    x: Math.round(Math.random() * WORLD),
-                    y: Math.round(Math.random() * WORLD),
+                    x: Math.round(Math.random() * (WORLD-100) + 50),
+                    y: Math.round(Math.random() * (WORLD-100) + 50),
                     c: `hsl(${Math.random()*360}, 100%, 50%)`
                 });
             }
-        }, 1000);
+        }, 800);
 
         function loop() { update(); draw(); requestAnimationFrame(loop); }
+        
+        // 斷線與關閉分頁處理
         myRef.onDisconnect().remove();
+        window.onbeforeunload = () => { myRef.remove(); };
+
         window.addEventListener("resize", () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; });
         canvas.width = window.innerWidth; canvas.height = window.innerHeight;
         loop();
