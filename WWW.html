@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>多人蛇 Pro - 數據清理版</title>
+    <title>多人蛇 - 單一裝置限定版</title>
     <style>
         body { margin: 0; background: #000; color: #0f0; font-family: sans-serif; overflow: hidden; touch-action: none; }
         canvas { display: block; }
@@ -13,13 +13,22 @@
         .leaderboard-title { color: #ffcc00; font-weight: bold; text-align: center; margin-bottom: 5px; font-size: 14px; }
         .leaderboard-item { font-size: 13px; display: flex; justify-content: space-between; margin: 4px 0; border-bottom: 1px solid #222; }
         .is-me { color: #fff; background: rgba(0,255,136,0.2); }
+        /* 阻擋層樣式 */
+        #blocker { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 9999; display: none; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: white; }
     </style>
 </head>
 <body>
 
+    <!-- 阻擋重複開啟的 UI -->
+    <div id="blocker">
+        <h1>此裝置已在遊戲中</h1>
+        <p>請關閉其他分頁後再重新整理此頁面。</p>
+        <button onclick="location.reload()" style="padding: 10px 20px; cursor: pointer;">重新整理</button>
+    </div>
+
     <div class="ui-left">
-        <div id="score" title="點擊修改名字">SCORE: 0</div>
-        <div style="color:#666; font-size:12px;">點擊分數或排行榜可改名</div>
+        <div id="score">SCORE: 0</div>
+        <div style="color:#666; font-size:12px;">點擊分數或排行榜改名</div>
     </div>
 
     <div class="ui-right" onclick="changeName()">
@@ -33,25 +42,49 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 
     <script>
+        // --- 1. 裝置唯一性檢查 (核心修復) ---
+        const tabToken = Math.random().toString(36).substr(2, 9);
+        function checkDuplicateTab() {
+            const lastActive = localStorage.getItem('snake_active_time');
+            const now = Date.now();
+            
+            // 如果 2 秒內有其他分頁在活動，就判定為重複
+            if (lastActive && (now - lastActive < 2000)) {
+                document.getElementById('blocker').style.display = 'flex';
+                isAlive = false;
+                return true;
+            }
+            localStorage.setItem('snake_active_token', tabToken);
+            return false;
+        }
+
+        // 定時更新活動狀態 (每秒更新一次)
+        setInterval(() => {
+            if (isAlive) {
+                localStorage.setItem('snake_active_time', Date.now());
+            }
+        }, 1000);
+
+        // --- 2. Firebase 初始化 ---
         const config = { databaseURL: "https://game-24b43-default-rtdb.firebaseio.com/" };
         firebase.initializeApp(config);
         const db = firebase.database();
-        
-        // 玩家 ID 與基本狀態
-        const myId = Math.random().toString(36).substr(2, 7);
+        const myId = tabToken; // 使用 token 作為 ID，確保唯一性
         const myRef = db.ref(`snakes/${myId}`);
         const foodRef = db.ref("foods");
 
         const canvas = document.getElementById("gameCanvas");
         const ctx = canvas.getContext("2d");
         const WORLD = 3000;
-        let isAlive = true;
+        let isAlive = !checkDuplicateTab(); // 檢查是否重複
         let others = {};
         let foods = {};
         let isLeader = false;
 
         let me = {
-            x: WORLD/2, y: WORLD/2, angle: Math.random()*Math.PI*2,
+            x: Math.random() * (WORLD-200) + 100,
+            y: Math.random() * (WORLD-200) + 100,
+            angle: Math.random()*Math.PI*2,
             speed: 5, history: [], len: 20, score: 0,
             color: `hsl(${Math.random()*360}, 100%, 50%)`,
             name: localStorage.getItem("snakePlayerName") || "新玩家",
@@ -59,9 +92,8 @@
         };
         setTimeout(() => { me.protected = false; }, 3000);
 
-        // --- 名字修改功能 ---
         function changeName() {
-            const newName = prompt("輸入新的名字:", me.name);
+            const newName = prompt("輸入新名字:", me.name);
             if (newName && newName.trim()) {
                 me.name = newName.trim().substring(0, 10);
                 localStorage.setItem("snakePlayerName", me.name);
@@ -69,25 +101,22 @@
         }
         document.getElementById("score").onclick = changeName;
 
-        // --- 核心同步邏輯 ---
-        // 1. 玩家列表與 Leader 判定
+        // --- 3. 數據同步與清理 ---
         db.ref("snakes").on("value", snap => {
             const data = snap.val() || {};
             const now = Date.now();
             others = {};
-            
             const ids = Object.keys(data).sort();
-            isLeader = (ids[0] === myId); // ID 最小的當 Leader
+            isLeader = (ids[0] === myId);
 
             for (let id in data) {
-                // 心跳檢測：超過 8 秒沒更新的玩家視為已斷線（髒數據）
-                if (data[id].t && now - data[id].t > 8000) continue;
+                // 自動清理 6 秒沒更新的幽靈玩家
+                if (data[id].t && now - data[id].t > 6000) continue;
                 others[id] = data[id];
             }
             updateLeaderboard(others);
         });
 
-        // 2. 食物同步
         foodRef.on("value", snap => { foods = snap.val() || {}; });
 
         function updateLeaderboard(all) {
@@ -99,40 +128,41 @@
                 </div>`).join('');
         }
 
-        // --- 3. 操控 ---
-        let targetAngle = me.angle;
-        window.addEventListener("mousemove", e => {
-            targetAngle = Math.atan2(e.clientY - window.innerHeight/2, e.clientX - window.innerWidth/2);
-        });
-        window.addEventListener("touchmove", e => {
-            e.preventDefault();
-            const t = e.touches[0];
-            targetAngle = Math.atan2(t.clientY - window.innerHeight/2, t.clientX - window.innerWidth/2);
-        }, {passive:false});
-
-        // --- 4. 遊戲邏輯 ---
+        // --- 4. 遊戲核心邏輯 ---
         function die() {
             if (!isAlive) return;
             isAlive = false;
-            myRef.remove(); // 關鍵：死掉立即刪除資料
-            alert("你死了！得分: " + me.score);
+            myRef.remove();
+            localStorage.removeItem('snake_active_time'); // 死掉釋放標記
+            alert("你死了！分數: " + me.score);
             location.reload();
+        }
+
+        // 同步位置到 Firebase
+        function syncToCloud() {
+            if (!isAlive) return;
+            myRef.set({
+                x: Math.round(me.x), y: Math.round(me.y), a: me.angle, 
+                l: me.len, c: me.color, n: me.name, s: me.score, 
+                h: me.history.filter((_,i)=>i%2===0), p: me.protected,
+                t: Date.now() 
+            });
         }
 
         function update() {
             if (!isAlive) return;
 
+            // 轉向與移動
             let diff = targetAngle - me.angle;
             while (diff < -Math.PI) diff += Math.PI * 2;
             while (diff > Math.PI) diff -= Math.PI * 2;
             me.angle += diff * 0.15;
-
             me.x += Math.cos(me.angle) * me.speed;
             me.y += Math.sin(me.angle) * me.speed;
 
             if (me.x < 0 || me.x > WORLD || me.y < 0 || me.y > WORLD) die();
 
-            // 碰撞別人身體
+            // 碰撞檢測
             if (!me.protected) {
                 for (let id in others) {
                     if (id === myId) continue;
@@ -145,10 +175,11 @@
                 }
             }
 
+            // 身體紀錄
             me.history.unshift({x: Math.round(me.x), y: Math.round(me.y)});
             if (me.history.length > me.len) me.history.pop();
 
-            // 吃到食物並刪除
+            // 吃食物並立即刪除 (減少殘留)
             for (let fId in foods) {
                 let f = foods[fId];
                 if (Math.hypot(me.x - f.x, me.y - f.y) < 25) {
@@ -158,18 +189,12 @@
                 }
             }
 
-            // 同步 (包含時間戳 t 用於心跳檢測)
-            if (Date.now() % 60 < 20) {
-                myRef.set({
-                    x: Math.round(me.x), y: Math.round(me.y), a: me.angle, 
-                    l: me.len, c: me.color, n: me.name, s: me.score, 
-                    h: me.history.filter((_,i)=>i%2===0), p: me.protected,
-                    t: Date.now() 
-                });
-            }
+            // 限制同步頻率 (約每秒 15 次)
+            if (Date.now() % 66 < 20) syncToCloud();
         }
 
         function draw() {
+            if (!isAlive) return;
             ctx.fillStyle = "#0a0a0a";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             const camX = canvas.width/2 - me.x;
@@ -177,22 +202,25 @@
             ctx.save();
             ctx.translate(camX, camY);
 
-            ctx.strokeStyle = "#ff0044"; ctx.lineWidth = 10;
+            // 繪製地圖邊界
+            ctx.strokeStyle = "#444"; ctx.lineWidth = 5;
             ctx.strokeRect(0, 0, WORLD, WORLD);
 
+            // 繪製食物
             for (let fId in foods) {
                 let f = foods[fId];
                 ctx.fillStyle = f.c;
                 ctx.beginPath(); ctx.arc(f.x, f.y, 8, 0, Math.PI*2); ctx.fill();
             }
 
+            // 繪製所有玩家
             for (let id in others) {
                 let p = others[id];
                 if (!p.h) continue;
                 ctx.save();
                 ctx.strokeStyle = p.c; ctx.lineWidth = 22; ctx.lineCap = "round";
-                if (p.p) {
-                    ctx.globalAlpha = 0.4;
+                if (p.p) { // 保護盾效果
+                    ctx.globalAlpha = 0.3;
                     ctx.beginPath(); ctx.arc(p.x, p.y, 40, 0, Math.PI*2);
                     ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.stroke();
                 }
@@ -207,23 +235,34 @@
             ctx.restore();
         }
 
-        // --- 5. 穩定的食物生成 ---
+        // --- 5. 事件與啟動 ---
+        let targetAngle = me.angle;
+        window.addEventListener("mousemove", e => { targetAngle = Math.atan2(e.clientY - window.innerHeight/2, e.clientX - window.innerWidth/2); });
+        window.addEventListener("touchmove", e => {
+            e.preventDefault();
+            const t = e.touches[0];
+            targetAngle = Math.atan2(t.clientY - window.innerHeight/2, t.clientX - window.innerWidth/2);
+        }, {passive:false});
+
+        // 穩定的食物補給
         setInterval(() => {
-            // 只有 Leader 且場上食物真的很少 (< 60) 時才補
-            if (isAlive && isLeader && Object.keys(foods).length < 60) {
+            if (isAlive && isLeader && Object.keys(foods).length < 50) {
                 foodRef.push({
                     x: Math.round(Math.random() * (WORLD-100) + 50),
                     y: Math.round(Math.random() * (WORLD-100) + 50),
                     c: `hsl(${Math.random()*360}, 100%, 50%)`
                 });
             }
-        }, 800);
+        }, 1000);
 
-        function loop() { update(); draw(); requestAnimationFrame(loop); }
+        function loop() { if(isAlive) { update(); draw(); } requestAnimationFrame(loop); }
         
-        // 斷線與關閉分頁處理
+        // 離開或關閉時徹底清理
         myRef.onDisconnect().remove();
-        window.onbeforeunload = () => { myRef.remove(); };
+        window.onbeforeunload = () => { 
+            myRef.remove(); 
+            localStorage.removeItem('snake_active_time');
+        };
 
         window.addEventListener("resize", () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; });
         canvas.width = window.innerWidth; canvas.height = window.innerHeight;
