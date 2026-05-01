@@ -128,15 +128,30 @@
                 </div>`).join('');
         }
 
-        // --- 4. 遊戲核心邏輯 ---
         function die() {
-            if (!isAlive) return;
-            isAlive = false;
-            myRef.remove();
-            localStorage.removeItem('snake_active_time'); // 死掉釋放標記
-            alert("你死了！分數: " + me.score);
-            location.reload();
+    if (!isAlive) return;
+    isAlive = false;
+
+    // --- 新增：死後屍體變食物 ---
+    // 每 4 個身體點產生一個食物，避免 Firebase 炸掉
+    me.history.forEach((pos, index) => {
+        if (index % 4 === 0) {
+            const fId = "drop_" + myId + "_" + index;
+            foodRef.child(fId).set({
+                x: pos.x,
+                y: pos.y,
+                c: me.color, // 掉落自己顏色的小型精華
+                v: 2 // 可以設定一個價值倍率，例如屍體食物加分更多（選用）
+            });
         }
+    });
+
+    myRef.remove();
+    localStorage.removeItem('snake_active_time');
+    
+    alert("你掛了！得分: " + me.score);
+    location.reload();
+}
 
         // 同步位置到 Firebase
         function syncToCloud() {
