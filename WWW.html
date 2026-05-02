@@ -3,318 +3,351 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>多人蛇：終極邊界與防穿透版</title>
+    <title>多人蛇：重啟版</title>
     <style>
-        body { margin: 0; background: #000; color: #fff; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; touch-action: none; }
+        body { margin: 0; background: #000; color: #fff; font-family: sans-serif; overflow: hidden; touch-action: none; }
         canvas { display: block; }
         
-        /* 邊界警告紅光 */
-        #border-warning {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            pointer-events: none;
-            box-shadow: inset 0 0 120px rgba(255, 0, 0, 0);
-            transition: box-shadow 0.3s ease;
-            z-index: 100;
-        }
-        .warning-active { box-shadow: inset 0 0 150px rgba(255, 0, 70, 0.7) !important; }
-
-        /* UI 配置 */
+        /* UI 容器 */
         .ui-container { position: absolute; top: 20px; left: 20px; right: 20px; pointer-events: none; z-index: 10; }
-        #score-board { font-size: 28px; color: #00ff88; font-weight: bold; text-shadow: 0 0 10px rgba(0,255,136,0.5); }
+        #score-board { font-size: 28px; color: #00ff88; font-weight: bold; }
         .leaderboard { 
-            position: absolute; top: 0; right: 0; 
-            background: rgba(0, 0, 0, 0.7); padding: 15px; border-radius: 10px; 
-            border: 1px solid #333; min-width: 150px; pointer-events: auto;
+            position: absolute; top: 0; right: 0; background: rgba(0,0,0,0.7); 
+            padding: 10px; border-radius: 8px; border: 1px solid #333; min-width: 120px; 
         }
-        .lb-item { font-size: 14px; display: flex; justify-content: space-between; margin: 5px 0; border-bottom: 1px solid #222; }
+        .lb-item { font-size: 13px; display: flex; justify-content: space-between; margin: 3px 0; }
         .is-me { color: #00ff88; font-weight: bold; }
+
+        /* 死亡與選單畫面 */
+        #overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85); display: flex; flex-direction: column;
+            align-items: center; justify-content: center; z-index: 1000;
+        }
+        #overlay h1 { color: #ff4444; font-size: 48px; margin-bottom: 10px; }
+        .menu-box { background: #222; padding: 30px; border-radius: 15px; text-align: center; border: 2px solid #444; }
+        input[type="text"] { 
+            padding: 10px; font-size: 18px; border-radius: 5px; border: none; 
+            width: 200px; margin-bottom: 20px; text-align: center;
+        }
+        button { 
+            padding: 12px 30px; font-size: 20px; background: #00ff88; color: #000; 
+            border: none; border-radius: 5px; cursor: pointer; font-weight: bold;
+        }
+        button:hover { background: #00cc6e; }
+
+        #joystick-base {
+            position: absolute; bottom: 50px; left: 50px; width: 100px; height: 100px;
+            background: rgba(255,255,255,0.1); border-radius: 50%; display: none; z-index: 200;
+        }
+        #joystick-stick {
+            position: absolute; top: 25px; left: 25px; width: 50px; height: 50px;
+            background: rgba(255,255,255,0.4); border-radius: 50%;
+        }
     </style>
 </head>
 <body>
 
-    <div id="border-warning"></div>
+    <!-- 蓋板：包含改名與重新開始 -->
+    <div id="overlay">
+        <div class="menu-box">
+            <h1 id="status-title">SLITHER IO</h1>
+            <p>輸入你的名字：</p>
+            <input type="text" id="playerNameInput" maxlength="12" placeholder="你的名字">
+            <br>
+            <button id="startBtn">進入遊戲</button>
+        </div>
+    </div>
+
+    <div id="joystick-base"><div id="joystick-stick"></div></div>
     
     <div class="ui-container">
         <div id="score-board">SCORE: 0</div>
-        <div class="leaderboard">
-            <div style="text-align:center; color:#ffcc00; margin-bottom:8px; font-weight:bold;">🏆 實時排行</div>
-            <div id="lb-list"></div>
-        </div>
+        <div class="leaderboard"><div id="lb-list"></div></div>
     </div>
 
     <canvas id="gameCanvas"></canvas>
 
-    <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 
     <script>
-        // 1. 初始化設定
         const config = { databaseURL: "https://game-24b43-default-rtdb.firebaseio.com/" };
         firebase.initializeApp(config);
         const db = firebase.database();
+        
+        // 核心玩家資訊 (不因死亡而刷新的變數)
         const myId = Math.random().toString(36).substr(2, 9);
         const myRef = db.ref(`snakes/${myId}`);
         const foodRef = db.ref("foods");
+        let currentName = localStorage.getItem("snakeName") || "Player_" + myId.substr(0,3);
 
         const canvas = document.getElementById("gameCanvas");
         const ctx = canvas.getContext("2d");
-        const WORLD = 3000; // 地圖大小
+        const WORLD = 3000;
+        const isTouch = 'ontouchstart' in window;
         
-        let isAlive = true;
+        let isAlive = false; // 初始為 false
         let isLeader = false;
         let others = {};
         let foods = {};
+        let zoom = 1.0;
+        let me = {};
 
-        let me = {
-            x: Math.random() * (WORLD - 800) + 400,
-            y: Math.random() * (WORLD - 800) + 400,
-            angle: Math.random() * Math.PI * 2,
-            speed: 6.5,
-            history: [],
-            len: 30,
-            score: 0,
-            color: `hsl(${Math.random() * 360}, 100%, 50%)`,
-            name: "玩家 " + myId.substring(0, 3),
-            protected: true
-        };
-
-        // 3秒保護期
-        setTimeout(() => me.protected = false, 3000);
-
-        // 2. 輔助函數：點到線段的距離 (防穿透核心)
-        function distToSegment(px, py, x1, y1, x2, y2) {
-            const l2 = (x2 - x1) ** 2 + (y2 - y1) ** 2;
-            if (l2 === 0) return Math.hypot(px - x1, py - y1);
-            let t = Math.max(0, Math.min(1, ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2));
-            return Math.hypot(px - (x1 + t * (x2 - x1)), py - (y1 + t * (y2 - y1)));
+        // 初始化/重啟玩家數據
+        function resetPlayer() {
+            me = {
+                x: Math.random()*(WORLD-800)+400, 
+                y: Math.random()*(WORLD-800)+400,
+                angle: Math.random()*Math.PI*2, 
+                speed: 6,
+                history: [], 
+                len: 30, 
+                score: 0,
+                color: `hsl(${Math.random()*360}, 100%, 50%)`,
+                name: currentName,
+                protected: true
+            };
+            document.getElementById("score-board").innerText = "SCORE: 0";
+            setTimeout(() => me.protected = false, 3000);
         }
 
-        // 3. Firebase 監聽
+        // 改名與開始邏輯
+        const overlay = document.getElementById("overlay");
+        const nameInput = document.getElementById("playerNameInput");
+        const startBtn = document.getElementById("startBtn");
+        const statusTitle = document.getElementById("status-title");
+
+        nameInput.value = currentName;
+
+        startBtn.onclick = () => {
+            currentName = nameInput.value.trim() || "Guest";
+            localStorage.setItem("snakeName", currentName);
+            resetPlayer();
+            isAlive = true;
+            overlay.style.display = "none";
+        };
+
+        function getThickness(score) {
+            return Math.min(50, 18 + score / 80);
+        }
+
+        function distToSegment(px, py, x1, y1, x2, y2) {
+            const l2 = (x2-x1)**2 + (y2-y1)**2;
+            if (l2 === 0) return Math.hypot(px-x1, py-y1);
+            let t = Math.max(0, Math.min(1, ((px-x1)*(x2-x1) + (py-y1)*(y2-y1)) / l2));
+            return Math.hypot(px - (x1 + t*(x2-x1)), py - (y1 + t*(y2-y1)));
+        }
+
+        // 監聽 Firebase
         db.ref("snakes").on("value", snap => {
             const data = snap.val() || {};
-            const ids = Object.keys(data).sort();
-            isLeader = (ids[0] === myId);
+            isLeader = (Object.keys(data).sort()[0] === myId);
             others = data;
-            
-            // 排行榜更新
-            const sorted = Object.keys(data)
-                .map(id => ({ id, n: data[id].n, s: data[id].s || 0 }))
-                .sort((a, b) => b.s - a.s).slice(0, 5);
-            
-            document.getElementById("lb-list").innerHTML = sorted.map(p => 
-                `<div class="lb-item ${p.id === myId ? 'is-me' : ''}">
-                    <span>${p.n}</span><span>${p.s}</span>
-                </div>`).join('');
+            const sorted = Object.keys(data).map(id=>({id, n:data[id].n, s:data[id].s||0})).sort((a,b)=>b.s-a.s).slice(0,5);
+            document.getElementById("lb-list").innerHTML = sorted.map(p=>`<div class="lb-item ${p.id===myId?'is-me':''}"><span>${p.n}</span><span>${p.s}</span></div>`).join('');
         });
-
         foodRef.on("value", snap => { foods = snap.val() || {}; });
 
-        // 4. 死亡邏輯
+        // --- 修正後的死亡邏輯 ---
         function die() {
-            if (!isAlive) return;
+            if(!isAlive) return;
             isAlive = false;
             
-            // 遺產掉落：每 5 個身體點產生一個 30 秒壽命的食物
+            // 1. 生成食物
+            const currentThick = getThickness(me.score);
             me.history.forEach((pos, i) => {
-                if (i % 5 === 0) {
+                if(i % 15 === 0) {
                     foodRef.push({
                         x: pos.x, y: pos.y, c: me.color,
-                        exp: Date.now() + 30000 
+                        v: Math.floor(currentThick / 5) + 1,
+                        exp: Date.now() + 25000
                     });
                 }
             });
 
+            // 2. 從 Firebase 刪除蛇資料
             myRef.remove();
-            alert("你掛了！\n得分: " + me.score);
-            location.reload();
+
+            // 3. 顯示死亡選單，不刷新頁面
+            statusTitle.innerText = "GAME OVER";
+            startBtn.innerText = "重新開始";
+            overlay.style.display = "flex";
         }
 
-        // 5. 邏輯更新
+        // 搖桿與控制邏輯
+        let joystick = { active: false, base: {x:0, y:0}, stick: {x:0, y:0} };
+        if(isTouch) {
+            const jBase = document.getElementById("joystick-base");
+            const jStick = document.getElementById("joystick-stick");
+            jBase.style.display = "block";
+            window.addEventListener("touchstart", e => {
+                if(isAlive) {
+                    const t = e.touches[0];
+                    if(t.clientX < window.innerWidth/2) {
+                        joystick.active = true;
+                        joystick.base = {x: t.clientX, y: t.clientY};
+                        jBase.style.left = (t.clientX - 50) + "px";
+                        jBase.style.top = (t.clientY - 50) + "px";
+                    }
+                }
+            });
+            window.addEventListener("touchmove", e => {
+                if(!joystick.active || !isAlive) return;
+                const t = e.touches[0];
+                const dx = t.clientX - joystick.base.x;
+                const dy = t.clientY - joystick.base.y;
+                targetAngle = Math.atan2(dy, dx);
+                jStick.style.transform = `translate(${Math.min(40, Math.abs(dx)) * Math.sign(dx)}px, ${Math.min(40, Math.abs(dy)) * Math.sign(dy)}px)`;
+            });
+            window.addEventListener("touchend", () => {
+                joystick.active = false;
+                jStick.style.transform = `translate(0px, 0px)`;
+            });
+        }
+
+        let targetAngle = 0;
+        window.addEventListener("mousemove", e => {
+            if(!isTouch && isAlive) targetAngle = Math.atan2(e.clientY - window.innerHeight/2, e.clientX - window.innerWidth/2);
+        });
+
         function update() {
-            if (!isAlive) return;
-
-            // 轉向平滑化
+            if(!isAlive) return;
+            
             let diff = targetAngle - me.angle;
-            while (diff < -Math.PI) diff += Math.PI * 2;
-            while (diff > Math.PI) diff -= Math.PI * 2;
+            while(diff < -Math.PI) diff += Math.PI*2;
+            while(diff > Math.PI) diff -= Math.PI*2;
             me.angle += diff * 0.2;
-
             me.x += Math.cos(me.angle) * me.speed;
             me.y += Math.sin(me.angle) * me.speed;
 
-            // 邊界檢查
-            if (me.x < 0 || me.x > WORLD || me.y < 0 || me.y > WORLD) {
-                die(); return;
-            }
+            if (me.x<0 || me.x>WORLD || me.y<0 || me.y>WORLD) die();
 
-            // 邊界警告 UI
-            const warn = document.getElementById("border-warning");
-            if (me.x < 250 || me.x > WORLD - 250 || me.y < 250 || me.y > WORLD - 250) {
-                warn.classList.add("warning-active");
-            } else {
-                warn.classList.remove("warning-active");
-            }
-
-            // 防穿透碰撞偵測
-            if (!me.protected) {
-                for (let id in others) {
-                    if (id === myId) continue;
+            // 碰撞檢測
+            if(!me.protected) {
+                for(let id in others) {
+                    if(id === myId) continue;
                     let body = others[id].h;
-                    if (!body || body.length < 2) continue;
-                    // 遍歷對方身體每一段線段
-                    for (let i = 0; i < body.length - 1; i++) {
-                        if (distToSegment(me.x, me.y, body[i].x, body[i].y, body[i+1].x, body[i+1].y) < 16) {
+                    let oThick = getThickness(others[id].s || 0);
+                    if(!body) continue;
+                    for(let i=0; i<body.length-1; i++) {
+                        if(distToSegment(me.x, me.y, body[i].x, body[i].y, body[i+1].x, body[i+1].y) < (oThick/2 + 5)) {
                             die(); return;
                         }
                     }
                 }
             }
 
-            // 紀錄歷史軌跡
-            me.history.unshift({ x: Math.round(me.x), y: Math.round(me.y) });
-            if (me.history.length > me.len) me.history.pop();
+            me.history.unshift({x: Math.round(me.x), y: Math.round(me.y)});
+            if(me.history.length > me.len) me.history.pop();
 
             // 吃食物
-            for (let fId in foods) {
+            for(let fId in foods) {
                 let f = foods[fId];
-                if (Math.hypot(me.x - f.x, me.y - f.y) < 26) {
+                let fSize = 8 + (f.v || 1) * 2;
+                if(Math.hypot(me.x - f.x, me.y - f.y) < (getThickness(me.score)/2 + fSize)) {
                     foodRef.child(fId).remove();
-                    me.len += 4;
-                    me.score += 10;
-                    document.getElementById("score-board").innerText = "SCORE: " + me.score;
+                    me.score += f.v || 1;
+                    me.len += (f.v || 1) * 0.5;
+                    document.getElementById("score-board").innerText = "SCORE: " + Math.floor(me.score);
                 }
             }
 
-            // 極速同步 (每 40ms)
-            if (Date.now() % 40 < 20) {
-                myRef.set({
-                    x: Math.round(me.x), y: Math.round(me.y), c: me.color,
-                    n: me.name, s: me.score, h: me.history.filter((_,i) => i%2===0),
-                    p: me.protected, t: Date.now()
-                });
+            // 同步到 Firebase
+            if(Date.now() % 45 < 25) {
+                myRef.set({ x:Math.round(me.x), y:Math.round(me.y), c:me.color, n:me.name, s:me.score, h:me.history.filter((_,i)=>i%2===0), p:me.protected, t:Date.now() });
             }
         }
 
-        // 6. 繪製畫面
-        function draw() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            const camX = canvas.width / 2 - me.x;
-            const camY = canvas.height / 2 - me.y;
-            
+        function drawSnake(history, score, color, name, isProt) {
+            if (!history || history.length < 2) return;
+            const thick = getThickness(score || 0);
             ctx.save();
-            ctx.translate(camX, camY);
+            if (isProt) ctx.globalAlpha = 0.3;
 
-            // 繪製地圖底色與網格
-            ctx.fillStyle = "#0a0a0a";
-            ctx.fillRect(0, 0, WORLD, WORLD);
+            ctx.beginPath();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = thick;
+            ctx.lineCap = "round";
+            ctx.lineJoin = "round";
+            ctx.moveTo(history[0].x, history[0].y);
+            for (let i = 1; i < history.length; i++) ctx.lineTo(history[i].x, history[i].y);
+            ctx.stroke();
+
+            ctx.fillStyle = color;
+            ctx.beginPath(); ctx.arc(history[0].x, history[0].y, thick * 0.7, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = "#fff";
+            ctx.beginPath(); ctx.arc(history[0].x, history[0].y, thick * 0.2, 0, Math.PI * 2); ctx.fill();
+
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = "#fff";
+            ctx.font = "bold 16px Arial";
+            ctx.textAlign = "center";
+            ctx.fillText(name, history[0].x, history[0].y - thick - 10);
+            ctx.restore();
+        }
+
+        function draw() {
+            ctx.clearRect(0,0,canvas.width, canvas.height);
+            const baseSize = 1000;
+            zoom = Math.min(window.innerWidth, window.innerHeight) / baseSize;
+            if(!isTouch) zoom *= 0.8;
+
+            ctx.save();
+            ctx.translate(canvas.width/2, canvas.height/2);
+            ctx.scale(zoom, zoom);
             
-            ctx.strokeStyle = "#1a1a1a";
-            ctx.lineWidth = 1;
-            for (let i = 0; i <= WORLD; i += 100) {
-                ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, WORLD); ctx.stroke();
-                ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(WORLD, i); ctx.stroke();
+            // 視角中心：如果死了就停在原地，活著就跟隨玩家
+            if(isAlive) ctx.translate(-me.x, -me.y);
+            else ctx.translate(-WORLD/2, -WORLD/2); // 死亡時看地圖中心
+
+            // 畫地圖背景
+            ctx.fillStyle = "#0a0a0a"; ctx.fillRect(0,0, WORLD, WORLD);
+            ctx.strokeStyle = "#1a1a1a"; ctx.lineWidth = 2;
+            for(let i=0; i<=WORLD; i+=100) {
+                ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,WORLD); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(WORLD,i); ctx.stroke();
             }
+            ctx.strokeStyle = "#ff0044"; ctx.lineWidth = 20; ctx.strokeRect(0,0, WORLD, WORLD);
 
-            // 繪製強光邊界牆
-            ctx.strokeStyle = "#ff0044";
-            ctx.lineWidth = 15;
-            ctx.shadowBlur = 20;
-            ctx.shadowColor = "#ff0044";
-            ctx.strokeRect(0, 0, WORLD, WORLD);
-            ctx.shadowBlur = 0; // 關閉發光以提升效能
-
-            // 繪製食物
-            for (let fId in foods) {
+            // 畫食物
+            for(let fId in foods) {
                 let f = foods[fId];
                 ctx.fillStyle = f.c;
-                ctx.beginPath(); ctx.arc(f.x, f.y, 8, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(f.x, f.y, 6+(f.v||1)*2, 0, Math.PI*2); ctx.fill();
             }
 
-            // 繪製其他蛇
-            for (let id in others) {
-                if (id === myId) continue;
-                drawSnake(others[id].h, others[id].c, others[id].n, others[id].p);
+            // 畫其他蛇
+            for(let id in others) {
+                if(id !== myId) drawSnake(others[id].h, others[id].s, others[id].c, others[id].n, others[id].p);
             }
-
-            // 繪製自己
-            drawSnake(me.history, me.color, me.name, me.protected);
+            // 畫自己
+            if(isAlive) drawSnake(me.history, me.score, me.color, me.name, me.protected);
 
             ctx.restore();
             requestAnimationFrame(draw);
         }
 
-        function drawSnake(history, color, name, isProtected) {
-            if (!history || history.length < 2) return;
-            ctx.save();
-            ctx.strokeStyle = color;
-            ctx.lineWidth = 22;
-            ctx.lineCap = "round";
-            ctx.lineJoin = "round";
-            
-            if (isProtected) ctx.globalAlpha = 0.3;
-            
-            ctx.beginPath();
-            ctx.moveTo(history[0].x, history[0].y);
-            for (let i = 1; i < history.length; i++) {
-                ctx.lineTo(history[i].x, history[i].y);
-            }
-            ctx.stroke();
-
-            // 畫名字
-            ctx.globalAlpha = 1;
-            ctx.fillStyle = "#fff";
-            ctx.font = "bold 14px Arial";
-            ctx.fillText(name, history[0].x - 20, history[0].y - 35);
-            ctx.restore();
-        }
-
-        // 7. 管理與同步
-        let targetAngle = me.angle;
-        window.addEventListener("mousemove", e => {
-            targetAngle = Math.atan2(e.clientY - window.innerHeight / 2, e.clientX - window.innerWidth / 2);
-        });
-        window.addEventListener("touchmove", e => {
-            e.preventDefault();
-            const t = e.touches[0];
-            targetAngle = Math.atan2(t.clientY - window.innerHeight / 2, t.clientX - window.innerWidth / 2);
-        }, { passive: false });
-
-        // Leader 負責環境維護
+        // 食物生成邏輯 (僅房長執行)
         setInterval(() => {
-            if (!isAlive || !isLeader) return;
-            const keys = Object.keys(foods);
-            const now = Date.now();
-
-            // 清理過期食物或爆量
-            if (keys.length > 150) { foodRef.remove(); return; }
-            keys.forEach(k => {
-                if (foods[k].exp && foods[k].exp < now) foodRef.child(k).remove();
-            });
-
-            // 補充隨機食物
-            if (keys.length < 60) {
-                foodRef.push({
-                    x: Math.random() * WORLD,
-                    y: Math.random() * WORLD,
-                    c: `hsl(${Math.random() * 360}, 100%, 50%)`,
-                    exp: now + 60000
-                });
+            if (isAlive && isLeader) {
+                const keys = Object.keys(foods);
+                if (keys.length < 80) {
+                    foodRef.push({
+                        x: Math.random()*WORLD, y: Math.random()*WORLD,
+                        c: `hsl(${Math.random()*360},100%,50%)`,
+                        v: Math.floor(Math.random()*10) + 1,
+                        exp: Date.now() + 45000
+                    });
+                }
+                keys.forEach(k => { if(foods[k].exp && foods[k].exp < Date.now()) foodRef.child(k).remove(); });
             }
-        }, 1500);
+        }, 1000);
 
-        // 啟動
-        myRef.onDisconnect().remove();
-        window.addEventListener("resize", () => {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-        });
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-
-        setInterval(update, 1000 / 60); // 60 FPS update
-        draw(); // Animation loop
+        window.addEventListener("resize", () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; });
+        canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+        setInterval(update, 1000/60);
+        draw();
     </script>
 </body>
 </html>
