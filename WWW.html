@@ -3,30 +3,49 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>多人蛇：修正強化版</title>
+    <title>多人蛇：修正重複與刪除版</title>
     <style>
         body { margin: 0; background: #000; color: #fff; font-family: sans-serif; overflow: hidden; touch-action: none; }
         canvas { display: block; }
+        
+        .ui-container { position: absolute; top: 20px; left: 20px; right: 20px; pointer-events: none; z-index: 10; }
+        #score-board { font-size: 24px; color: #00ff88; font-weight: bold; }
+        .leaderboard { 
+            position: absolute; top: 0; right: 0; background: rgba(0,0,0,0.7); 
+            padding: 12px; border-radius: 8px; border: 1px solid #444; min-width: 150px; 
+        }
+        .lb-item { font-size: 14px; display: flex; justify-content: space-between; margin: 4px 0; }
+        .is-me { color: #00ff88; font-weight: bold; }
+
         #overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center; z-index: 1000;
         }
-        .menu-box { background: #1a1a1a; padding: 30px; border-radius: 15px; text-align: center; border: 2px solid #00ff88; width: 300px; }
-        #status-title { color: #ff4444; font-size: 28px; margin-bottom: 10px; }
-        #score-info { color: #00ff88; font-size: 20px; margin-bottom: 20px; display: none; }
-        input { 
-            width: 80%; padding: 10px; margin-bottom: 15px; border-radius: 5px; border: none; 
-            text-align: center; font-size: 16px; 
+        .menu-box { 
+            background: #1a1a1a; padding: 30px; border-radius: 15px; text-align: center; 
+            border: 2px solid #00ff88; width: 300px;
         }
-        button { 
-            width: 85%; padding: 12px; background: #00ff88; border: none; border-radius: 5px; 
-            font-weight: bold; cursor: pointer; font-size: 16px;
-        }
-        #error-msg { color: #ff9900; font-size: 12px; margin-bottom: 10px; height: 18px; }
+        #final-score-display { font-size: 18px; color: #00ff88; margin-bottom: 15px; display: none; }
         
-        .ui-container { position: absolute; top: 20px; left: 20px; right: 20px; pointer-events: none; z-index: 10; }
-        #score-board { font-size: 24px; color: #00ff88; font-weight: bold; }
-        .leaderboard { position: absolute; top: 0; right: 0; background: rgba(0,0,0,0.6); padding: 10px; border-radius: 8px; font-size: 13px; }
+        input[type="text"] { 
+            padding: 12px; font-size: 16px; border-radius: 8px; border: 1px solid #444; 
+            width: 100%; margin-bottom: 20px; text-align: center; background: #222; color: #fff;
+            box-sizing: border-box;
+        }
+        
+        button { 
+            width: 100%; padding: 12px; font-size: 18px; background: #00ff88; color: #000; 
+            border: none; border-radius: 8px; cursor: pointer; font-weight: bold;
+        }
+
+        #joystick-base {
+            position: absolute; bottom: 60px; left: 60px; width: 100px; height: 100px;
+            background: rgba(255,255,255,0.1); border-radius: 50%; display: none; z-index: 200;
+        }
+        #joystick-stick {
+            position: absolute; top: 25px; left: 25px; width: 50px; height: 50px;
+            background: rgba(255,255,255,0.3); border-radius: 50%;
+        }
     </style>
 </head>
 <body>
@@ -34,13 +53,14 @@
     <div id="overlay">
         <div class="menu-box">
             <h1 id="status-title">SLITHER</h1>
-            <div id="score-info">SCORE: <span id="final-score">0</span></div>
-            <div id="error-msg"></div>
-            <input type="text" id="nameInput" maxlength="15" placeholder="輸入名字 (限15字)">
-            <button id="startBtn">開始遊戲</button>
+            <div id="final-score-display">SCORE: <span id="final-score">0</span></div>
+            <input type="text" id="playerNameInput" maxlength="15" placeholder="輸入名字 (限15字)">
+            <button id="startBtn">進入遊戲</button>
         </div>
     </div>
 
+    <div id="joystick-base"><div id="joystick-stick"></div></div>
+    
     <div class="ui-container">
         <div id="score-board">SCORE: 0</div>
         <div class="leaderboard"><div id="lb-list"></div></div>
@@ -55,202 +75,234 @@
         const config = { databaseURL: "https://game-24b43-default-rtdb.firebaseio.com/" };
         firebase.initializeApp(config);
         const db = firebase.database();
+        
         const myId = Math.random().toString(36).substr(2, 9);
         const myRef = db.ref(`snakes/${myId}`);
         const foodRef = db.ref("foods");
         const allSnakesRef = db.ref("snakes");
 
-        // 離線保護：如果玩家斷線，Firebase 會自動刪除該節點
-        myRef.onDisconnect().remove();
-
         const canvas = document.getElementById("gameCanvas");
         const ctx = canvas.getContext("2d");
         const WORLD = 3000;
+        const isTouch = 'ontouchstart' in window;
+        
         let isAlive = false;
         let isLeader = false;
         let others = {};
         let foods = {};
-        let me = { x: 0, y: 0, score: 0 };
+        let me = { x: WORLD/2, y: WORLD/2, score: 0 };
 
-        // 1. 名字重複檢查與開始
-        const startBtn = document.getElementById("startBtn");
-        const nameInput = document.getElementById("nameInput");
-        const errorMsg = document.getElementById("error-msg");
-
-        nameInput.value = localStorage.getItem("snakeName") || "";
-
-        startBtn.onclick = async () => {
-            const inputName = nameInput.value.trim();
-            if (!inputName) return errorMsg.innerText = "請輸入名字！";
-            
-            // 檢查名字是否重複
-            const snapshot = await allSnakesRef.once('value');
-            const data = snapshot.val() || {};
-            const isNameTaken = Object.values(data).some(s => s.n === inputName && s.id !== myId);
-
-            if (isNameTaken) {
-                errorMsg.innerText = "名字已有人使用，請換一個";
-                return;
+        // 1. 處理重複名字檢查
+        function getUniqueName(targetName) {
+            let nameExists = Object.values(others).some(s => s.n === targetName);
+            if (nameExists) {
+                return targetName + "_" + Math.floor(Math.random() * 100);
             }
+            return targetName;
+        }
 
-            errorMsg.innerText = "";
-            localStorage.setItem("snakeName", inputName);
-            initGame(inputName);
-        };
+        const overlay = document.getElementById("overlay");
+        const nameInput = document.getElementById("playerNameInput");
+        const startBtn = document.getElementById("startBtn");
 
-        function initGame(name) {
+        startBtn.onclick = () => {
+            let inputName = nameInput.value.trim() || "Snake";
+            // 檢查重複並截斷名字
+            let finalName = getUniqueName(inputName.substring(0, 15));
+            
             me = {
-                id: myId,
-                x: Math.random()*(WORLD-400)+200,
+                x: Math.random()*(WORLD-400)+200, 
                 y: Math.random()*(WORLD-400)+200,
-                angle: Math.random()*Math.PI*2,
+                angle: Math.random()*Math.PI*2, 
                 speed: 6,
-                history: [],
-                len: 30,
+                history: [], 
+                len: 30, 
                 score: 0,
                 color: `hsl(${Math.random()*360}, 100%, 50%)`,
-                n: name,
-                p: true
+                name: finalName,
+                protected: true
             };
+            
             isAlive = true;
-            document.getElementById("overlay").style.display = "none";
-            setTimeout(() => me.p = false, 3000);
-        }
+            overlay.style.display = "none";
+            setTimeout(() => me.protected = false, 3000);
+        };
 
-        // 2. 死亡處理：確保立即刪除
+        // 2. 強化死亡刪除邏輯
         function die() {
-            if (!isAlive) return;
+            if(!isAlive) return;
             isAlive = false;
             
-            // 立即執行刪除，不等待
+            // 立即執行 Firebase 刪除指令並斷開連結
             myRef.remove().then(() => {
-                console.log("Player data removed from DB");
+                console.log("Player removed from DB successfully.");
+            }).catch(e => {
+                // 如果失敗則強制使用 set(null)
+                myRef.set(null);
             });
 
-            // 生成食物
-            const thick = 18 + me.score / 80;
-            me.history.forEach((pos, i) => {
-                if (i % 10 === 0) {
-                    foodRef.push({ x: pos.x, y: pos.y, c: me.color, v: Math.floor(thick/5)+1, exp: Date.now()+15000 });
-                }
-            });
-
-            // 顯示結算
+            // 結算畫面
+            document.getElementById("status-title").innerText = "DIED";
             document.getElementById("final-score").innerText = Math.floor(me.score);
-            document.getElementById("score-info").style.display = "block";
-            document.getElementById("status-title").innerText = "GAME OVER";
-            document.getElementById("overlay").style.display = "flex";
+            document.getElementById("final-score-display").style.display = "block";
+            startBtn.innerText = "重新加入";
+            overlay.style.display = "flex";
         }
 
-        // Firebase 監聽
+        // Firebase 數據監聽
         allSnakesRef.on("value", snap => {
-            others = snap.val() || {};
-            isLeader = (Object.keys(others).sort()[0] === myId);
-            const sorted = Object.values(others).sort((a,b)=>b.s-a.s).slice(0,5);
-            document.getElementById("lb-list").innerHTML = sorted.map(p=>`<div>${p.n}: ${Math.floor(p.s)}</div>`).join('');
+            const data = snap.val() || {};
+            others = data;
+            isLeader = (Object.keys(data).sort()[0] === myId);
+            
+            const sorted = Object.keys(data)
+                .map(id => ({id, n:data[id].n, s:data[id].s||0}))
+                .sort((a,b) => b.s - a.s).slice(0,5);
+            document.getElementById("lb-list").innerHTML = sorted.map(p => 
+                `<div class="lb-item ${p.id===myId?'is-me':''}"><span>${p.n}</span><span>${Math.floor(p.s)}</span></div>`
+            ).join('');
         });
         foodRef.on("value", snap => { foods = snap.val() || {}; });
 
-        // 移動與碰撞
+        // 以下為遊戲控制與繪製邏輯 (保持穩定版本)
+        let joystick = { active: false, base: {x:0, y:0} };
         let targetAngle = 0;
-        window.onmousemove = e => {
-            if(isAlive) targetAngle = Math.atan2(e.clientY - window.innerHeight/2, e.clientX - window.innerWidth/2);
-        };
+
+        if(isTouch) {
+            const jBase = document.getElementById("joystick-base");
+            const jStick = document.getElementById("joystick-stick");
+            jBase.style.display = "block";
+            window.addEventListener("touchstart", e => {
+                if(!isAlive) return;
+                const t = e.touches[0];
+                if(t.clientX < window.innerWidth/2) {
+                    joystick.active = true;
+                    joystick.base = {x: t.clientX, y: t.clientY};
+                    jBase.style.left = (t.clientX - 50) + "px";
+                    jBase.style.top = (t.clientY - 50) + "px";
+                }
+            });
+            window.addEventListener("touchmove", e => {
+                if(!joystick.active || !isAlive) return;
+                const t = e.touches[0];
+                const dx = t.clientX - joystick.base.x;
+                const dy = t.clientY - joystick.base.y;
+                targetAngle = Math.atan2(dy, dx);
+                jStick.style.transform = `translate(${Math.min(40, Math.abs(dx)) * Math.sign(dx)}px, ${Math.min(40, Math.abs(dy)) * Math.sign(dy)}px)`;
+            });
+            window.addEventListener("touchend", () => {
+                joystick.active = false;
+                jStick.style.transform = `translate(0px, 0px)`;
+            });
+        }
+
+        window.addEventListener("mousemove", e => {
+            if(!isTouch && isAlive) targetAngle = Math.atan2(e.clientY - window.innerHeight/2, e.clientX - window.innerWidth/2);
+        });
 
         function update() {
-            if (!isAlive) return;
+            if(!isAlive) return; // 死亡後絕對不執行 update
 
             let diff = targetAngle - me.angle;
             while(diff < -Math.PI) diff += Math.PI*2;
             while(diff > Math.PI) diff -= Math.PI*2;
-            me.angle += diff * 0.15;
+            me.angle += diff * 0.2;
             me.x += Math.cos(me.angle) * me.speed;
             me.y += Math.sin(me.angle) * me.speed;
 
             if (me.x<0 || me.x>WORLD || me.y<0 || me.y>WORLD) die();
 
             // 碰撞檢測
-            if (!me.p) {
-                for (let id in others) {
-                    if (id === myId) continue;
-                    let h = others[id].h || [];
-                    let oThick = 18 + (others[id].s||0)/80;
-                    for (let i=0; i<h.length-1; i++) {
-                        let dx = me.x - h[i].x;
-                        let dy = me.y - h[i].y;
-                        if (Math.hypot(dx, dy) < oThick/2 + 5) { die(); return; }
+            if(!me.protected) {
+                for(let id in others) {
+                    if(id === myId) continue;
+                    let body = others[id].h || [];
+                    let oThick = Math.min(50, 18 + (others[id].s||0) / 80);
+                    for(let i=0; i<body.length-1; i++) {
+                        let d = Math.hypot(me.x - body[i].x, me.y - body[i].y);
+                        if(d < (oThick/2 + 5)) { die(); return; }
                     }
                 }
             }
 
             me.history.unshift({x: Math.round(me.x), y: Math.round(me.y)});
-            if (me.history.length > me.len) me.history.pop();
+            if(me.history.length > me.len) me.history.pop();
 
             // 吃食物
-            for (let fId in foods) {
+            for(let fId in foods) {
                 let f = foods[fId];
-                if (Math.hypot(me.x - f.x, me.y - f.y) < 25) {
+                if(Math.hypot(me.x - f.x, me.y - f.y) < 30) {
                     foodRef.child(fId).remove();
                     me.score += f.v || 1;
-                    me.len += (f.v || 1) * 0.5;
+                    me.len += (f.v || 1) * 0.4;
                     document.getElementById("score-board").innerText = "SCORE: " + Math.floor(me.score);
                 }
             }
 
             // 同步
-            myRef.set({ id: myId, x: Math.round(me.x), y: Math.round(me.y), c: me.color, n: me.n, s: me.score, h: me.history.filter((_,i)=>i%2===0), p: me.p });
+            if(Date.now() % 50 < 30) {
+                myRef.set({ x:Math.round(me.x), y:Math.round(me.y), c:me.color, n:me.name, s:me.score, h:me.history.filter((_,i)=>i%2===0), p:me.protected });
+            }
         }
 
         function draw() {
             ctx.clearRect(0,0,canvas.width, canvas.height);
             let zoom = Math.min(window.innerWidth, window.innerHeight) / 1000;
+
             ctx.save();
             ctx.translate(canvas.width/2, canvas.height/2);
             ctx.scale(zoom, zoom);
             ctx.translate(-me.x, -me.y);
 
-            // 邊界
-            ctx.strokeStyle = "#ff0044"; ctx.lineWidth = 10; ctx.strokeRect(0,0,WORLD,WORLD);
+            // 繪製地圖邊界
+            ctx.strokeStyle = "#ff0044"; ctx.lineWidth = 10; ctx.strokeRect(0,0, WORLD, WORLD);
 
-            // 食物
-            for(let id in foods) {
-                ctx.fillStyle = foods[id].c;
-                ctx.beginPath(); ctx.arc(foods[id].x, foods[id].y, 8, 0, 7); ctx.fill();
+            // 畫食物
+            for(let fId in foods) {
+                let f = foods[fId];
+                ctx.fillStyle = f.c;
+                ctx.beginPath(); ctx.arc(f.x, f.y, 6+(f.v||1), 0, Math.PI*2); ctx.fill();
             }
 
-            // 蛇
-            const drawS = (s) => {
-                if(!s.h) return;
+            // 畫蛇函式
+            const renderSnake = (s, history, isMe) => {
+                if(!history || history.length < 2) return;
+                let thick = Math.min(50, 18 + (s.s||0) / 80);
+                ctx.save();
+                if(s.p) ctx.globalAlpha = 0.3;
                 ctx.beginPath();
-                ctx.strokeStyle = s.c;
-                ctx.lineWidth = 18 + (s.s||0)/80;
-                ctx.lineCap = "round";
-                ctx.moveTo(s.h[0].x, s.h[0].y);
-                s.h.forEach(p => ctx.lineTo(p.x, p.y));
+                ctx.strokeStyle = s.c; ctx.lineWidth = thick; ctx.lineCap = "round";
+                ctx.moveTo(history[0].x, history[0].y);
+                for(let p of history) ctx.lineTo(p.x, p.y);
                 ctx.stroke();
+                
                 ctx.fillStyle = "#fff";
-                ctx.fillText(s.n, s.h[0].x, s.h[0].y - 20);
+                ctx.font = "bold 20px Arial"; ctx.textAlign = "center";
+                ctx.fillText(s.n, history[0].x, history[0].y - thick);
+                ctx.restore();
             };
 
-            for(let id in others) if(id !== myId) drawS(others[id]);
-            if(isAlive) drawS(me);
+            for(let id in others) if(id !== myId) renderSnake(others[id], others[id].h, false);
+            if(isAlive) renderSnake(me, me.history, true);
 
             ctx.restore();
             requestAnimationFrame(draw);
         }
 
-        setInterval(update, 1000/60);
-        draw();
-        
-        // 房長負責食物生成
+        // 食物生成 (房長邏輯)
         setInterval(() => {
-            if (isAlive && isLeader && Object.keys(foods).length < 50) {
-                foodRef.push({ x: Math.random()*WORLD, y: Math.random()*WORLD, c: `hsl(${Math.random()*360},100%,50%)`, v: 2, exp: Date.now()+30000 });
+            if (isAlive && isLeader && Object.keys(foods).length < 60) {
+                foodRef.push({
+                    x: Math.random()*WORLD, y: Math.random()*WORLD,
+                    c: `hsl(${Math.random()*360},100%,50%)`, v: Math.floor(Math.random()*5)+1
+                });
             }
-        }, 2000);
+        }, 1000);
 
         window.onresize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
-        canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+        window.onresize();
+        setInterval(update, 1000/60);
+        draw();
     </script>
 </body>
 </html>
