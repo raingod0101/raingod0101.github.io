@@ -8,28 +8,21 @@
         body { margin: 0; background: #000; color: #fff; font-family: sans-serif; overflow: hidden; touch-action: none; }
         canvas { display: block; }
         
-        /* UI */
+        /* UI 介面 */
         .ui-container { position: absolute; top: 20px; left: 20px; right: 20px; pointer-events: none; z-index: 10; }
         #score-board { font-size: 24px; color: #00ff88; font-weight: bold; }
         .leaderboard { position: absolute; top: 0; right: 0; background: rgba(0,0,0,0.7); padding: 12px; border-radius: 8px; border: 1px solid #444; min-width: 140px; }
         .lb-item { font-size: 13px; display: flex; justify-content: space-between; margin: 3px 0; }
 
-        /* 菜單 */
+        /* 選單 */
         #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: flex; align-items: center; justify-content: center; z-index: 1000; }
         .menu-box { background: #1a1a1a; padding: 30px; border-radius: 15px; text-align: center; border: 2px solid #00ff88; width: 280px; }
         input { padding: 12px; font-size: 16px; border-radius: 8px; border: 1px solid #444; width: 100%; margin-bottom: 20px; text-align: center; background: #222; color: #fff; box-sizing: border-box; }
         button { width: 100%; padding: 12px; font-size: 18px; background: #00ff88; color: #000; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
 
         /* 手機搖桿 */
-        #joystick-base {
-            position: absolute; bottom: 40px; left: 40px; width: 120px; height: 120px;
-            background: rgba(255,255,255,0.1); border-radius: 50%; display: none; z-index: 200;
-            border: 2px solid rgba(255,255,255,0.2);
-        }
-        #joystick-stick {
-            position: absolute; top: 35px; left: 35px; width: 50px; height: 50px;
-            background: rgba(255,255,255,0.3); border-radius: 50%;
-        }
+        #joystick-base { position: absolute; bottom: 40px; left: 40px; width: 120px; height: 120px; background: rgba(255,255,255,0.1); border-radius: 50%; display: none; z-index: 200; border: 2px solid rgba(255,255,255,0.2); }
+        #joystick-stick { position: absolute; top: 35px; left: 35px; width: 50px; height: 50px; background: rgba(255,255,255,0.3); border-radius: 50%; }
     </style>
 </head>
 <body>
@@ -55,10 +48,18 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 
     <script>
+        // Firebase 設定
         const config = { databaseURL: "https://game-24b43-default-rtdb.firebaseio.com/" };
         firebase.initializeApp(config);
         const db = firebase.database();
-        const myId = Math.random().toString(36).substring(2, 11);
+
+        // 修正：使用 sessionStorage 鎖定 ID，防止重新整理產生多隻蛇
+        let myId = sessionStorage.getItem('snakeSessionId');
+        if (!myId) {
+            myId = Math.random().toString(36).substring(2, 11);
+            sessionStorage.setItem('snakeSessionId', myId);
+        }
+
         const myRef = db.ref(`snakes/${myId}`);
         const allRef = db.ref("snakes");
         const foodRef = db.ref("foods");
@@ -73,56 +74,46 @@
         let isAlive = false;
         let others = {};
         let foods = {};
-        let me = { x: WORLD/2, y: WORLD/2, score: 0, history: [], name: "" };
+        let me = { x: WORLD/2, y: WORLD/2, score: 0, history: [], name: "", color: "#00ff88" };
         let targetAngle = 0;
 
-        // 手機搖桿邏輯
+        // 控制邏輯
         if(isTouch) {
             document.getElementById("joystick-base").style.display = "block";
             const jStick = document.getElementById("joystick-stick");
             const jBase = document.getElementById("joystick-base");
-            
             window.addEventListener("touchmove", e => {
                 if(!isAlive) return;
                 const touch = e.touches[0];
                 const rect = jBase.getBoundingClientRect();
                 const centerX = rect.left + rect.width/2;
                 const centerY = rect.top + rect.height/2;
-                const dx = touch.clientX - centerX;
-                const dy = touch.clientY - centerY;
-                const dist = Math.hypot(dx, dy);
-                targetAngle = Math.atan2(dy, dx);
-                const moveDist = Math.min(dist, 40);
-                jStick.style.transform = `translate(${Math.cos(targetAngle)*moveDist}px, ${Math.sin(targetAngle)*moveDist}px)`;
+                targetAngle = Math.atan2(touch.clientY - centerY, touch.clientX - centerX);
+                const dist = Math.min(Math.hypot(touch.clientX - centerX, touch.clientY - centerY), 40);
+                jStick.style.transform = `translate(${Math.cos(targetAngle)*dist}px, ${Math.sin(targetAngle)*dist}px)`;
             });
-            window.addEventListener("touchend", () => { jStick.style.transform = `translate(0px, 0px)`; });
+            window.addEventListener("touchend", () => { document.getElementById("joystick-stick").style.transform = `translate(0,0)`; });
         }
 
         window.addEventListener("mousemove", e => {
             if(!isTouch && isAlive) targetAngle = Math.atan2(e.clientY - window.innerHeight/2, e.clientX - window.innerWidth/2);
         });
 
-        // 開始遊戲
+        // 開始遊戲按鈕
         document.getElementById("startBtn").onclick = () => {
-            let inputName = document.getElementById("playerNameInput").value.trim() || "Snake";
-            
+            let n = document.getElementById("playerNameInput").value.trim() || "Snake";
             me = {
-                x: Math.random()*(WORLD-600)+300, 
-                y: Math.random()*(WORLD-600)+300,
-                angle: Math.random()*Math.PI*2, 
-                speed: 6,
-                history: [], 
-                len: 30, 
-                score: 0,
+                x: Math.random()*(WORLD-600)+300, y: Math.random()*(WORLD-600)+300,
+                angle: Math.random()*Math.PI*2, speed: 6,
+                history: [], len: 30, score: 0,
                 color: `hsl(${Math.random()*360}, 100%, 50%)`,
-                name: inputName, // 確保名稱被存入
-                protected: true
+                name: n.substring(0,15), protected: true
             };
             
             myRef.set({ n: me.name, c: me.color, x: me.x, y: me.y, s: 0, p: true }).then(() => {
                 isAlive = true;
                 document.getElementById("overlay").style.display = "none";
-                setTimeout(() => { me.protected = false; }, 3000);
+                setTimeout(() => me.protected = false, 3000);
             });
         };
 
@@ -131,10 +122,10 @@
         function die() {
             if(!isAlive) return;
             isAlive = false;
-            const deathThick = getThick(me.score);
+            const thick = getThick(me.score);
             me.history.forEach((p, i) => {
-                if(i % 20 === 0) {
-                    foodRef.push({ x: p.x, y: p.y, c: me.color, v: Math.floor(deathThick/5), exp: Date.now() + 15000 });
+                if(i % 15 === 0) {
+                    foodRef.push({ x: p.x, y: p.y, c: me.color, v: Math.floor(thick/5), exp: Date.now() + 15000 });
                 }
             });
             myRef.remove();
@@ -144,9 +135,11 @@
             document.getElementById("overlay").style.display = "flex";
         }
 
+        // 監聽 Firebase
         allRef.on("value", snap => { others = snap.val() || {}; });
         foodRef.on("value", snap => { foods = snap.val() || {}; });
 
+        // 更新物理邏輯
         function update() {
             if(!isAlive) return;
 
@@ -160,13 +153,14 @@
 
             if (me.x<0 || me.x>WORLD || me.y<0 || me.y>WORLD) die();
 
+            // 碰撞檢測
             if(!me.protected) {
                 for(let id in others) {
-                    if(id === myId) continue;
+                    if(id === myId) continue; // 核心修正：不跟資料庫中舊的自己碰撞
                     const o = others[id];
                     if(!o.h) continue;
                     const oThick = getThick(o.s);
-                    for(let i=0; i<o.h.length; i++) {
+                    for(let i=0; i<o.h.length; i+=2) {
                         if(Math.hypot(me.x - o.h[i].x, me.y - o.h[i].y) < (oThick/2 + 5)) {
                             die(); return;
                         }
@@ -177,10 +171,10 @@
             me.history.unshift({x: Math.round(me.x), y: Math.round(me.y)});
             if(me.history.length > me.len) me.history.pop();
 
+            // 吃食物
             for(let fId in foods) {
                 let f = foods[fId];
-                let fRadius = 5 + (f.v || 1); 
-                if(Math.hypot(me.x - f.x, me.y - f.y) < (getThick(me.score)/2 + fRadius)) {
+                if(Math.hypot(me.x - f.x, me.y - f.y) < (getThick(me.score)/2 + 8)) {
                     foodRef.child(fId).remove();
                     me.score += f.v || 1;
                     me.len += (f.v || 1) * 0.3;
@@ -188,26 +182,25 @@
                 }
             }
 
+            // 同步回 Firebase
             myRef.update({
                 x: Math.round(me.x), y: Math.round(me.y),
-                s: me.score, 
-                h: me.history.filter((_,i)=>i%2===0),
-                p: me.protected,
-                n: me.name // 持續同步名稱
+                s: me.score, h: me.history.filter((_,i)=>i%2===0),
+                p: me.protected, n: me.name
             });
         }
 
+        // 渲染畫面
         function draw() {
             ctx.clearRect(0,0,canvas.width, canvas.height);
-            let baseZoom = isTouch ? 0.6 : 0.85;
-            let zoom = (Math.min(window.innerWidth, window.innerHeight) / 1000) * baseZoom;
+            let zoom = (Math.min(window.innerWidth, window.innerHeight) / 1000) * (isTouch ? 0.6 : 0.85);
 
             ctx.save();
             ctx.translate(canvas.width/2, canvas.height/2);
             ctx.scale(zoom, zoom);
             ctx.translate(-me.x, -me.y);
 
-            // 背景
+            // 網格背景
             ctx.fillStyle = "#0a0a0a"; ctx.fillRect(0,0, WORLD, WORLD);
             ctx.strokeStyle = "#222"; ctx.lineWidth = 2;
             for(let i=0; i<=WORLD; i+=100) {
@@ -216,20 +209,22 @@
             }
             ctx.strokeStyle = "#ff0044"; ctx.lineWidth = 10; ctx.strokeRect(0,0, WORLD, WORLD);
 
+            // 食物
             for(let fId in foods) {
                 let f = foods[fId];
                 ctx.fillStyle = f.c;
                 ctx.beginPath(); ctx.arc(f.x, f.y, 5 + (f.v || 1), 0, Math.PI*2); ctx.fill();
             }
 
+            // 畫蛇函式
             const renderSnake = (data, isMe) => {
                 const hist = isMe ? me.history : data.h;
-                const name = isMe ? me.name : data.n; // 修正：優先使用正確的名稱變數
+                const name = isMe ? me.name : data.n;
                 if(!hist || hist.length < 2) return;
                 
                 const thick = getThick(isMe ? me.score : data.s);
                 ctx.save();
-                if(isMe ? me.protected : data.p) ctx.globalAlpha = 0.3;
+                ctx.globalAlpha = (isMe ? me.protected : data.p) ? 0.3 : 1;
                 
                 ctx.beginPath();
                 ctx.strokeStyle = isMe ? me.color : data.c;
@@ -241,43 +236,36 @@
 
                 // 頭部
                 ctx.fillStyle = isMe ? me.color : data.c;
-                ctx.beginPath();
-                ctx.arc(hist[0].x, hist[0].y, thick * 0.6, 0, Math.PI*2);
-                ctx.fill();
+                ctx.beginPath(); ctx.arc(hist[0].x, hist[0].y, thick * 0.6, 0, Math.PI*2); ctx.fill();
                 
-                // 眼睛
-                ctx.fillStyle = "#fff";
-                ctx.beginPath(); ctx.arc(hist[0].x, hist[0].y, thick * 0.2, 0, Math.PI*2); ctx.fill();
-
-                ctx.globalAlpha = 1;
-                ctx.fillStyle = "#fff";
-                ctx.font = `bold ${Math.max(14, thick*0.7)}px Arial`;
-                ctx.textAlign = "center";
+                // 名字
+                ctx.globalAlpha = 1; ctx.fillStyle = "#fff";
+                ctx.font = `bold ${Math.max(14, thick*0.7)}px Arial`; ctx.textAlign = "center";
                 ctx.fillText(name || "Snake", hist[0].x, hist[0].y - thick);
                 ctx.restore();
             };
 
-            for(let id in others) if(id !== myId) renderSnake(others[id], false);
+            // 核心修正：畫別人時過濾掉 myId
+            for(let id in others) {
+                if(id !== myId) renderSnake(others[id], false);
+            }
             if(isAlive) renderSnake(me, true);
 
             ctx.restore();
             
-            const sorted = Object.values(others).concat(isAlive?me:[]).sort((a,b)=>b.s-a.s).slice(0,5);
+            // 排行榜
+            const sorted = Object.values(others).concat(isAlive?{n:me.name, s:me.score}:[]).sort((a,b)=>b.s-a.s).slice(0,5);
             document.getElementById("lb-list").innerHTML = sorted.map(s => 
-                `<div class="lb-item"><span>${s.n||s.name||'Snake'}</span><span>${Math.floor(s.s||s.score||0)}</span></div>`
+                `<div class="lb-item"><span>${s.n||'---'}</span><span>${Math.floor(s.s||0)}</span></div>`
             ).join('');
 
             requestAnimationFrame(draw);
         }
 
+        // 定時生成食物
         setInterval(() => {
-            if (isAlive && Object.keys(foods).length < 100) {
-                foodRef.push({
-                    x: Math.random()*WORLD, y: Math.random()*WORLD,
-                    c: `hsl(${Math.random()*360},100%,70%)`,
-                    v: Math.floor(Math.random()*10) + 1,
-                    exp: Date.now() + 30000
-                });
+            if (isAlive && Object.keys(foods).length < 80) {
+                foodRef.push({ x: Math.random()*WORLD, y: Math.random()*WORLD, c: `hsl(${Math.random()*360},100%,70%)`, v: Math.floor(Math.random()*10)+1 });
             }
         }, 1000);
 
