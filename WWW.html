@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>多人蛇：終極修復版</title>
+    <title>多人蛇：終極穩定版</title>
     <style>
         body { margin: 0; background: #000; color: #fff; font-family: sans-serif; overflow: hidden; touch-action: none; }
         canvas { display: block; }
@@ -12,9 +12,8 @@
         .leaderboard { position: absolute; top: 0; right: 0; background: rgba(0,0,0,0.7); padding: 12px; border-radius: 8px; border: 1px solid #444; min-width: 150px; }
         .lb-item { font-size: 14px; display: flex; justify-content: space-between; margin: 4px 0; }
         .is-me { color: #00ff88; font-weight: bold; }
-        #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: flex; align-items: center; justify-content: center; z-index: 1000; }
         .menu-box { background: #1a1a1a; padding: 30px; border-radius: 15px; text-align: center; border: 2px solid #00ff88; width: 300px; }
-        #final-score-display { font-size: 18px; color: #00ff88; margin-bottom: 15px; display: none; }
         input[type="text"] { padding: 12px; font-size: 16px; border-radius: 8px; border: 1px solid #444; width: 100%; margin-bottom: 20px; text-align: center; background: #222; color: #fff; box-sizing: border-box; }
         button { width: 100%; padding: 12px; font-size: 18px; background: #00ff88; color: #000; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
     </style>
@@ -23,10 +22,10 @@
 
     <div id="overlay">
         <div class="menu-box">
-            <h1>SLITHER.IO</h1>
-            <div id="final-score-display">SCORE: <span id="final-score">0</span></div>
-            <input type="text" id="playerNameInput" maxlength="15" placeholder="輸入名字">
-            <button id="startBtn">進入遊戲</button>
+            <h2 id="status-title">多人大冒險</h2>
+            <p id="death-stat" style="color:#00ff88; display:none;">上次分數: <span id="final-score">0</span></p>
+            <input type="text" id="playerNameInput" maxlength="15" placeholder="你的暱稱">
+            <button id="startBtn">開始狩獵</button>
         </div>
     </div>
 
@@ -45,13 +44,13 @@
         firebase.initializeApp(config);
         const db = firebase.database();
         
-        // 使用隨機 ID，並確保「重整」時會清理舊數據
-        const myId = Math.random().toString(36).substr(2, 9);
+        // 使用更穩定的 ID
+        const myId = Math.random().toString(36).substring(2, 11);
         const myRef = db.ref(`snakes/${myId}`);
+        const allRef = db.ref("snakes");
         const foodRef = db.ref("foods");
 
-        // --- 重點修復 1: 斷線自動清理 ---
-        // 當使用者關閉網頁或重整，Firebase 會自動移除這條蛇
+        // 強制在網頁關閉或重新整理時刪除資料 (解決幽靈蛇)
         myRef.onDisconnect().remove();
 
         const canvas = document.getElementById("gameCanvas");
@@ -59,72 +58,54 @@
         const WORLD = 3000;
         
         let isAlive = false;
-        let isLeader = false;
         let others = {};
         let foods = {};
-        let me = { x: WORLD/2, y: WORLD/2, score: 0 };
+        let me = { x: WORLD/2, y: WORLD/2, score: 0, history: [], name: "" };
 
+        // 啟動按鈕
         const overlay = document.getElementById("overlay");
         const nameInput = document.getElementById("playerNameInput");
         const startBtn = document.getElementById("startBtn");
 
         startBtn.onclick = () => {
-            let baseName = nameInput.value.trim() || "Snake";
+            let n = nameInput.value.trim() || "無名蛇";
+            // 檢查重複名
+            if (Object.values(others).some(s => s.n === n)) n += "_" + Math.floor(Math.random()*99);
             
-            // --- 重點修復 2: 名字重複處理 ---
-            let finalName = baseName;
-            let existingNames = Object.values(others).map(s => s.n);
-            if (existingNames.includes(finalName)) {
-                finalName += "_" + Math.floor(Math.random()*99);
-            }
-
             me = {
-                x: Math.random()*(WORLD-600)+300, 
-                y: Math.random()*(WORLD-600)+300,
+                x: Math.random()*(WORLD-400)+200, 
+                y: Math.random()*(WORLD-400)+200,
                 angle: Math.random()*Math.PI*2, 
                 speed: 6,
                 history: [], 
                 len: 30, 
                 score: 0,
                 color: `hsl(${Math.random()*360}, 100%, 50%)`,
-                name: finalName,
+                name: n,
                 protected: true
             };
             
-            isAlive = true;
-            overlay.style.display = "none";
-            setTimeout(() => me.protected = false, 3000);
+            // 確保先同步再開始畫 (解決看不到自己的問題)
+            myRef.set({ n: me.name, c: me.color, x: me.x, y: me.y, s: 0, p: true }).then(() => {
+                isAlive = true;
+                overlay.style.display = "none";
+                setTimeout(() => me.protected = false, 3000);
+            });
         };
 
         function die() {
             if(!isAlive) return;
             isAlive = false;
+            myRef.remove(); // 死亡立即刪除
             
-            // 立即刪除
-            myRef.remove();
-
-            document.getElementById("status-title") ? document.getElementById("status-title").innerText = "DIED" : null;
+            document.getElementById("status-title").innerText = "你被吃掉了！";
             document.getElementById("final-score").innerText = Math.floor(me.score);
-            document.getElementById("final-score-display").style.display = "block";
+            document.getElementById("death-stat").style.display = "block";
             overlay.style.display = "flex";
         }
 
-        // 監聽所有蛇
-        db.ref("snakes").on("value", snap => {
-            const data = snap.val() || {};
-            others = data;
-            isLeader = (Object.keys(data).sort()[0] === myId);
-            
-            // 排行榜處理
-            const sorted = Object.keys(data)
-                .map(id => ({ id, n: data[id].n || "Joining...", s: data[id].s || 0 }))
-                .sort((a,b) => b.s - a.s).slice(0,5);
-            
-            document.getElementById("lb-list").innerHTML = sorted.map(p => 
-                `<div class="lb-item ${p.id===myId?'is-me':''}"><span>${p.n}</span><span>${Math.floor(p.s)}</span></div>`
-            ).join('');
-        });
-
+        // 監聽 Firebase
+        allRef.on("value", snap => { others = snap.val() || {}; });
         foodRef.on("value", snap => { foods = snap.val() || {}; });
 
         let targetAngle = 0;
@@ -144,19 +125,19 @@
             me.y += Math.sin(me.angle) * me.speed;
 
             // 邊界檢查
-            if (me.x<0 || me.x>WORLD || me.y<0 || me.y>WORLD) die();
+            if (me.x<0 || me.x>WORLD || me.y<0 || me.y>WORLD) { die(); return; }
 
-            // 碰撞檢查
+            // 碰撞檢測 (修正看不到自己導致的 undefined 錯誤)
             if(!me.protected) {
                 for(let id in others) {
                     if(id === myId) continue;
-                    let body = others[id].h || [];
-                    let score = others[id].s || 0;
-                    let thick = Math.min(50, 18 + score / 80);
-                    
-                    for(let i=0; i<body.length; i++) {
-                        let d = Math.hypot(me.x - body[i].x, me.y - body[i].y);
-                        if(d < (thick/2 + 5)) { die(); return; }
+                    const o = others[id];
+                    if(!o.h) continue;
+                    const thick = Math.min(50, 18 + (o.s||0)/80);
+                    for(let i=0; i<o.h.length; i++) {
+                        if(Math.hypot(me.x - o.h[i].x, me.y - o.h[i].y) < thick/2 + 5) {
+                            die(); return;
+                        }
                     }
                 }
             }
@@ -175,22 +156,16 @@
                 }
             }
 
-            // 同步到雲端 (增加防護：只有活著才同步)
-            if(isAlive) {
-                myRef.set({
-                    x: Math.round(me.x),
-                    y: Math.round(me.y),
-                    c: me.color,
-                    n: me.name,
-                    s: me.score,
-                    h: me.history.filter((_,i) => i%2 === 0),
-                    p: me.protected
-                });
-            }
+            // 同步到雲端
+            myRef.update({
+                x: Math.round(me.x), y: Math.round(me.y),
+                s: me.score, h: me.history.filter((_,i)=>i%2===0),
+                p: me.protected
+            });
         }
 
         function draw() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.clearRect(0,0,canvas.width, canvas.height);
             let zoom = Math.min(window.innerWidth, window.innerHeight) / 1000;
 
             ctx.save();
@@ -199,70 +174,56 @@
             ctx.translate(-me.x, -me.y);
 
             // 背景與邊界
-            ctx.fillStyle = "#0f0f0f"; ctx.fillRect(0,0, WORLD, WORLD);
-            ctx.strokeStyle = "#444"; ctx.lineWidth = 2;
-            for(let i=0; i<=WORLD; i+=100) {
-                ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,WORLD); ctx.stroke();
-                ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(WORLD,i); ctx.stroke();
-            }
+            ctx.fillStyle = "#0a0a0a"; ctx.fillRect(0,0, WORLD, WORLD);
+            ctx.strokeStyle = "#ff0044"; ctx.lineWidth = 10; ctx.strokeRect(0,0, WORLD, WORLD);
 
-            // 食物
+            // 畫食物
             for(let fId in foods) {
                 let f = foods[fId];
                 ctx.fillStyle = f.c;
                 ctx.beginPath(); ctx.arc(f.x, f.y, 8, 0, Math.PI*2); ctx.fill();
             }
 
-            // 畫蛇
-            const drawOneSnake = (data, isMe) => {
-                let history = data.h || [];
-                if(history.length < 2) return;
+            // 畫蛇的通用函式
+            const drawSnake = (data, isMe) => {
+                const hist = isMe ? me.history : data.h;
+                if(!hist || hist.length < 2) return;
                 
-                // --- 重點修復 3: 防止 undefined 名字 ---
-                let displayName = data.n || (isMe ? me.name : "Joining...");
-                
-                let score = data.s || 0;
-                let thick = Math.min(50, 18 + score / 80);
-                
+                const thick = Math.min(50, 18 + (data.s||0)/80);
                 ctx.save();
                 if(data.p) ctx.globalAlpha = 0.3;
                 
                 ctx.beginPath();
-                ctx.strokeStyle = data.c || "#fff";
+                ctx.strokeStyle = isMe ? me.color : data.c;
                 ctx.lineWidth = thick;
                 ctx.lineCap = "round";
                 ctx.lineJoin = "round";
-                ctx.moveTo(history[0].x, history[0].y);
-                for(let p of history) ctx.lineTo(p.x, p.y);
+                ctx.moveTo(hist[0].x, hist[0].y);
+                hist.forEach(p => ctx.lineTo(p.x, p.y));
                 ctx.stroke();
 
-                // 畫名字
+                // 畫名字 (解決 undefined 問題)
                 ctx.globalAlpha = 1;
                 ctx.fillStyle = "#fff";
                 ctx.font = "bold 20px Arial";
                 ctx.textAlign = "center";
-                ctx.fillText(displayName, history[0].x, history[0].y - thick);
+                ctx.fillText(data.n || (isMe ? me.name : "未知"), hist[0].x, hist[0].y - thick);
                 ctx.restore();
             };
 
-            for(let id in others) if(id !== myId) drawOneSnake(others[id], false);
-            if(isAlive) drawOneSnake(me, true);
+            for(let id in others) if(id !== myId) drawSnake(others[id], false);
+            if(isAlive) drawSnake(me, true);
 
             ctx.restore();
+            
+            // 排行榜更新
+            const sorted = Object.values(others).sort((a,b)=>b.s-a.s).slice(0,5);
+            document.getElementById("lb-list").innerHTML = sorted.map(s => 
+                `<div class="lb-item"><span>${s.n||'Loading'}</span><span>${Math.floor(s.s||0)}</span></div>`
+            ).join('');
+
             requestAnimationFrame(draw);
         }
-
-        // 食物生成
-        setInterval(() => {
-            if (isAlive && isLeader && Object.keys(foods).length < 50) {
-                foodRef.push({
-                    x: Math.random()*WORLD,
-                    y: Math.random()*WORLD,
-                    c: `hsl(${Math.random()*360},100%,50%)`,
-                    v: 1
-                });
-            }
-        }, 1000);
 
         window.onresize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
         window.onresize();
