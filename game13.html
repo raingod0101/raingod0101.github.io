@@ -1,278 +1,420 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html>
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>貪吃蛇 | Raingod</title>
+    <link rel="icon" href="/icon.ico">
+    <link rel="stylesheet" href="/menu_nav.css">
+    <link rel="stylesheet" href="/page_theme.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
     <style>
-        body { margin: 0; background: #000; color: #fff; font-family: sans-serif; overflow: hidden; touch-action: none; }
-        canvas { display: block; }
-        
-        /* UI 介面 */
-        .ui-container { position: absolute; top: 20px; left: 20px; right: 20px; pointer-events: none; z-index: 10; }
-        #score-board { font-size: 24px; color: #00ff88; font-weight: bold; }
-        .leaderboard { position: absolute; top: 0; right: 0; background: rgba(0,0,0,0.7); padding: 12px; border-radius: 8px; border: 1px solid #444; min-width: 140px; }
-        .lb-item { font-size: 13px; display: flex; justify-content: space-between; margin: 3px 0; }
+        body {
+            margin: 0;
+            overflow: hidden;
+            /* 1. 修改為白色背景，以配合黑色光暈 */
+            background: #ffffff;
+            font-family: sans-serif;
+            overflow-y: hidden;
+        }
 
-        /* 選單 */
-        #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: flex; align-items: center; justify-content: center; z-index: 1000; }
-        .menu-box { background: #1a1a1a; padding: 30px; border-radius: 15px; text-align: center; border: 2px solid #00ff88; width: 280px; }
-        input { padding: 12px; font-size: 16px; border-radius: 8px; border: 1px solid #444; width: 100%; margin-bottom: 20px; text-align: center; background: #222; color: #fff; box-sizing: border-box; }
-        button { width: 100%; padding: 12px; font-size: 18px; background: #00ff88; color: #000; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
+        /* 2. 新增光暈圖層樣式 */
+        #cursor-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            pointer-events: none;
+            z-index: 999;
+            background: radial-gradient(circle 750px at var(--x, 0) var(--y, 0),
+                    rgba(255, 255, 255, 0.15) 0%,
+                    transparent 70%);
+        }
 
-        /* 手機搖桿 */
-        #joystick-base { position: absolute; bottom: 40px; left: 40px; width: 120px; height: 120px; background: rgba(255,255,255,0.1); border-radius: 50%; display: none; z-index: 200; border: 2px solid rgba(255,255,255,0.2); }
-        #joystick-stick { position: absolute; top: 35px; left: 35px; width: 50px; height: 50px; background: rgba(255,255,255,0.3); border-radius: 50%; }
+        canvas {
+            display: block;
+            cursor: crosshair;
+            width: 100vw;
+            height: 100vh;
+            position: fixed;
+            left: 0;
+            top: 0;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-drag: none;
+        }
+
+        .ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            pointer-events: none;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        #deathScreen {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: #ff444467;
+            color: white;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            font-family: "Poppins", sans-serif;
+        }
+
+        #deathScreen button {
+            /* 核心：膠囊形狀 */
+            padding: 12px 32px;
+            border-radius: 50px;
+            /* 足夠大的圓角 */
+
+            /* 外觀設定 */
+            border: none;
+            background: linear-gradient(135deg, #6e8efb, #a777e3);
+            /* 漸層色 */
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+            letter-spacing: 1px;
+            cursor: pointer;
+
+            /* 動畫過渡 */
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(110, 142, 251, 0.4);
+            outline: none;
+        }
+
+        /* 懸停效果 (Hover) */
+        #deathScreen button:hover {
+            transform: translateY(-2px);
+            /* 輕微上浮 */
+            box-shadow: 0 6px 20px rgba(110, 142, 251, 0.6);
+            filter: brightness(1.1);
+            /* 稍微變亮 */
+        }
+
+        /* 點擊效果 (Active) */
+        #deathScreen button:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 10px rgba(110, 142, 251, 0.4);
+        }
+
+        #chatContainer {
+            position: fixed;
+            top: 2cm;
+            left: 20px;
+            z-index: 100;
+            pointer-events: none;
+            /* Allows clicking through to the game */
+        }
+
+        #chatMessages {
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            width: 90vw;
+            max-height: 300px;
+            overflow: hidden;
+            margin-bottom: 5px;
+        }
+
+        /* Individual Message Popup */
+        .mc-message {
+            background: rgba(0, 0, 0, 0.5);
+            /* Semi-transparent black like MC */
+            color: white;
+            padding: 2px 6px;
+            margin-bottom: 2px;
+            font-family: 'Poppins', sans-serif;
+            font-size: 16px;
+            width: fit-content;
+            animation: mcFadeOut 8s forwards;
+            /* Visible for 8 seconds */
+            text-shadow: 1px 1px #000;
+        }
+
+        #chatInput {
+            pointer-events: auto;
+            width: 300px;
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid #555;
+            outline: none;
+            border-radius: 10px;
+            color: white;
+            font-family: 'Poppins', sans-serif;
+            font-size: 20px;
+            padding: 5px 15px;
+            opacity: 0.25;
+            transition: opacity 0.2s;
+        }
+
+        #chatContainer:hover #chatInput,
+        #chatInput:focus {
+            opacity: 1;
+        }
+
+        @keyframes mcFadeOut {
+            0% {
+                opacity: 1;
+            }
+
+            80% {
+                opacity: 1;
+            }
+
+            100% {
+                opacity: 0;
+            }
+        }
+
+        #startDialog {
+            display: flex;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: #ffffff60;
+            color: white;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            font-family: "Poppins", sans-serif;
+        }
+
+        #startDialog input {
+            padding: 15px 20px;
+            border-radius: 50px;
+
+            border: none;
+            background: linear-gradient(135deg, #94adff, #b07cef);
+            color: white;
+            font-size: 20px;
+            font-family: 'Poppins', sans-serif;
+            min-width: 200px;
+            width: 35%;
+            margin-bottom: 10px;
+            text-align: center;
+
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(110, 142, 251, 0.4);
+            outline: none;
+        }
+
+        #startDialog input::placeholder {
+            color: rgb(204, 204, 204);
+        }
+
+        #startDialog button {
+            padding: 12px 32px;
+            border-radius: 50px;
+
+            border: none;
+            background: linear-gradient(135deg, #6e8efb, #a777e3);
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+            letter-spacing: 1px;
+            cursor: pointer;
+
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(110, 142, 251, 0.4);
+            outline: none;
+        }
+
+        #startDialog button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(110, 142, 251, 0.6);
+            filter: brightness(1.1);
+        }
+
+        #startDialog button:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 10px rgba(110, 142, 251, 0.4);
+        }
+
+        .leaderboard {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            font-family: 'Poppins', sans-serif;
+            min-width: 150px;
+            width: fit-content;
+            pointer-events: none;
+            /* Allows mouse to click through to the game */
+            z-index: 100;
+        }
+
+        .lb-title {
+            border-bottom: 1px solid #444;
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            font-weight: bold;
+            color: #00ff88;
+            text-align: center;
+        }
+
+        .lb-item {
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+            margin: 4px 0;
+        }
+
+        .lb-me {
+            color: #00ff88;
+            /* Highlight the local player */
+            font-weight: bold;
+        }
     </style>
 </head>
-<body>
-    <div id="overlay">
-        <div class="menu-box">
-            <h2 id="status-title">SLITHER PRO</h2>
-            <p id="death-stat" style="display:none; color:#00ff88;">SCORE: <span id="final-score">0</span></p>
-            <input type="text" id="playerNameInput" maxlength="15" placeholder="暱稱 (15字內)">
-            <button id="startBtn">開始遊戲</button>
-        </div>
-    </div>
 
-    <div id="joystick-base"><div id="joystick-stick"></div></div>
-    
-    <div class="ui-container">
-        <div id="score-board">SCORE: 0</div>
-        <div class="leaderboard"><div id="lb-list"></div></div>
-    </div>
+<body>
+<link rel="stylesheet" href="menu.css">
+
+<div id="nav_bar"></div>
+
+<script src="menu.js"></script>
+    <div id="cursor-overlay"></div>
 
     <canvas id="gameCanvas"></canvas>
 
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <div class="ui">
+        <h3 id="score">分數: 0</h3>
+    </div>
 
+    <div class="leaderboard" id="leaderboard" style="display: none;">
+        <div class="lb-title">排行榜</div>
+        <div id="lb-list"></div>
+    </div>
+
+    <div id="chatContainer">
+        <input type="text" id="chatInput" placeholder="說些什麼..." maxlength="50">
+        <div id="chatMessages"></div>
+    </div>
+
+    <div id="deathScreen">
+        <h1 style=" margin-bottom: 10px;">您死了!</h1>
+        <p id="finalScore" style="font-size: 24px; margin-bottom: 30px;"></p>
+        <button onclick="respawn()">重生</button>
+    </div>
+
+    <div id="startDialog">
+        <h1>線上貪吃蛇 v1.0</h1>
+        <h4>↓ 輸入您的玩家名稱即可開始遊戲! ↓</h4>
+        <input maxlength="20" placeholder="您的玩家名稱..." id="playerName" autofocus />
+        <button onclick="startGame()">開始遊戲!</button>
+    </div>
+
+    <script src="/page_code.js"></script>
+    <script src="/games/snake/snake.js"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script>
-        // Firebase 設定
-        const config = { databaseURL: "https://game-24b43-default-rtdb.firebaseio.com/" };
-        firebase.initializeApp(config);
-        const db = firebase.database();
+        if (typeof auto_hide_navbar === 'function') auto_hide_navbar(true);
 
-        // 修正：使用 sessionStorage 鎖定 ID，防止重新整理產生多隻蛇
-        let myId = sessionStorage.getItem('snakeSessionId');
-        if (!myId) {
-            myId = Math.random().toString(36).substring(2, 11);
-            sessionStorage.setItem('snakeSessionId', myId);
-        }
-
-        const myRef = db.ref(`snakes/${myId}`);
-        const allRef = db.ref("snakes");
-        const foodRef = db.ref("foods");
-
-        myRef.onDisconnect().remove();
-
-        const canvas = document.getElementById("gameCanvas");
-        const ctx = canvas.getContext("2d");
-        const WORLD = 3000;
-        const isTouch = 'ontouchstart' in window;
-        
-        let isAlive = false;
-        let others = {};
-        let foods = {};
-        let me = { x: WORLD/2, y: WORLD/2, score: 0, history: [], name: "", color: "#00ff88" };
-        let targetAngle = 0;
-
-        // 控制邏輯
-        if(isTouch) {
-            document.getElementById("joystick-base").style.display = "block";
-            const jStick = document.getElementById("joystick-stick");
-            const jBase = document.getElementById("joystick-base");
-            window.addEventListener("touchmove", e => {
-                if(!isAlive) return;
-                const touch = e.touches[0];
-                const rect = jBase.getBoundingClientRect();
-                const centerX = rect.left + rect.width/2;
-                const centerY = rect.top + rect.height/2;
-                targetAngle = Math.atan2(touch.clientY - centerY, touch.clientX - centerX);
-                const dist = Math.min(Math.hypot(touch.clientX - centerX, touch.clientY - centerY), 40);
-                jStick.style.transform = `translate(${Math.cos(targetAngle)*dist}px, ${Math.sin(targetAngle)*dist}px)`;
-            });
-            window.addEventListener("touchend", () => { document.getElementById("joystick-stick").style.transform = `translate(0,0)`; });
-        }
-
-        window.addEventListener("mousemove", e => {
-            if(!isTouch && isAlive) targetAngle = Math.atan2(e.clientY - window.innerHeight/2, e.clientX - window.innerWidth/2);
+        const overlay = document.getElementById('cursor-overlay');
+        window.addEventListener('mousemove', (e) => {
+            overlay.style.setProperty('--x', e.clientX + 'px');
+            overlay.style.setProperty('--y', e.clientY + 'px');
         });
 
-        // 開始遊戲按鈕
-        document.getElementById("startBtn").onclick = () => {
-            let n = document.getElementById("playerNameInput").value.trim() || "Snake";
-            me = {
-                x: Math.random()*(WORLD-600)+300, y: Math.random()*(WORLD-600)+300,
-                angle: Math.random()*Math.PI*2, speed: 6,
-                history: [], len: 30, score: 0,
-                color: `hsl(${Math.random()*360}, 100%, 50%)`,
-                name: n.substring(0,15), protected: true
-            };
-            
-            myRef.set({ n: me.name, c: me.color, x: me.x, y: me.y, s: 0, p: true }).then(() => {
-                isAlive = true;
-                document.getElementById("overlay").style.display = "none";
-                setTimeout(() => me.protected = false, 3000);
-            });
+        let started = false;
+        async function startGame() {
+            show_loading("正在尋找伺服器...", "應該很快就會完成!");
+
+            await fetch('https://geometricgame-studio-snake-online.hf.space');
+
+            document.getElementById("startDialog").style.display = 'none';
+            document.getElementById("cursor-overlay").style.display = 'none';
+
+            let serverState = await checkServerState();
+            if (serverState !== "RUNNING") {
+                if (serverState === "RUNTIME_ERROR") {
+                    show_dialog("伺服器發生問題", "請稍後再試一次");
+
+                    document.getElementById("startDialog").style.display = 'flex';
+                    document.getElementById("cursor-overlay").style.display = '';
+                }
+                else {
+                    show_loading("伺服器正在啟動...", "很快就會完成了!\n請耐心等候...");
+                    const interval = setInterval(async () => {
+                        serverState = await checkServerState(true);
+
+                        close_loading();
+                        show_loading("伺服器正在啟動...", "狀態: " + serverState + "\n請耐心等候...");
+
+                        if (serverState === "線上") {
+                            clearInterval(interval);
+                            startGame();
+
+                            return;
+                        }
+                    }, 2500);
+                }
+            }
+            else {
+                close_loading();
+
+                document.getElementById("leaderboard").style.display = '';
+
+                const game = new ModernSnake('gameCanvas', document.getElementById("playerName").value);
+                game.start();
+            }
+        }
+
+        window.onload = () => {
+            setTimeout(() => {
+                document.getElementById("playerName").focus();
+            }, 100);
         };
 
-        function getThick(score) { return Math.min(55, 18 + (score || 0) / 10); }
-
-        function die() {
-            if(!isAlive) return;
-            isAlive = false;
-            const thick = getThick(me.score);
-            me.history.forEach((p, i) => {
-                if(i % 15 === 0) {
-                    foodRef.push({ x: p.x, y: p.y, c: me.color, v: Math.floor(thick/5), exp: Date.now() + 15000 });
-                }
-            });
-            myRef.remove();
-            document.getElementById("status-title").innerText = "遊戲結束";
-            document.getElementById("final-score").innerText = Math.floor(me.score);
-            document.getElementById("death-stat").style.display = "block";
-            document.getElementById("overlay").style.display = "flex";
-        }
-
-        // 監聽 Firebase
-        allRef.on("value", snap => { others = snap.val() || {}; });
-        foodRef.on("value", snap => { foods = snap.val() || {}; });
-
-        // 更新物理邏輯
-        function update() {
-            if(!isAlive) return;
-
-            let diff = targetAngle - me.angle;
-            while(diff < -Math.PI) diff += Math.PI*2;
-            while(diff > Math.PI) diff -= Math.PI*2;
-            me.angle += diff * 0.15;
-            
-            me.x += Math.cos(me.angle) * me.speed;
-            me.y += Math.sin(me.angle) * me.speed;
-
-            if (me.x<0 || me.x>WORLD || me.y<0 || me.y>WORLD) die();
-
-            // 碰撞檢測
-            if(!me.protected) {
-                for(let id in others) {
-                    if(id === myId) continue; // 核心修正：不跟資料庫中舊的自己碰撞
-                    const o = others[id];
-                    if(!o.h) continue;
-                    const oThick = getThick(o.s);
-                    for(let i=0; i<o.h.length; i+=2) {
-                        if(Math.hypot(me.x - o.h[i].x, me.y - o.h[i].y) < (oThick/2 + 5)) {
-                            die(); return;
-                        }
-                    }
-                }
+        document.getElementById("playerName").addEventListener("keydown", function (e) {
+            if (e.key == 'Enter') {
+                e.preventDefault();
+                startGame();
             }
+        }, false);
 
-            me.history.unshift({x: Math.round(me.x), y: Math.round(me.y)});
-            if(me.history.length > me.len) me.history.pop();
-
-            // 吃食物
-            for(let fId in foods) {
-                let f = foods[fId];
-                if(Math.hypot(me.x - f.x, me.y - f.y) < (getThick(me.score)/2 + 8)) {
-                    foodRef.child(fId).remove();
-                    me.score += f.v || 1;
-                    me.len += (f.v || 1) * 0.3;
-                    document.getElementById("score-board").innerText = "SCORE: " + Math.floor(me.score);
-                }
+        document.addEventListener("keydown", function (e) {
+            const disabledKeys = ["s", "o", "w"];
+            if (disabledKeys.includes(e.key) && (navigator.platform.match("Mac") ? e.metaKey : e.ctrlKey)) {
+                e.preventDefault();
             }
-
-            // 同步回 Firebase
-            myRef.update({
-                x: Math.round(me.x), y: Math.round(me.y),
-                s: me.score, h: me.history.filter((_,i)=>i%2===0),
-                p: me.protected, n: me.name
-            });
-        }
-
-        // 渲染畫面
-        function draw() {
-            ctx.clearRect(0,0,canvas.width, canvas.height);
-            let zoom = (Math.min(window.innerWidth, window.innerHeight) / 1000) * (isTouch ? 0.6 : 0.85);
-
-            ctx.save();
-            ctx.translate(canvas.width/2, canvas.height/2);
-            ctx.scale(zoom, zoom);
-            ctx.translate(-me.x, -me.y);
-
-            // 網格背景
-            ctx.fillStyle = "#0a0a0a"; ctx.fillRect(0,0, WORLD, WORLD);
-            ctx.strokeStyle = "#222"; ctx.lineWidth = 2;
-            for(let i=0; i<=WORLD; i+=100) {
-                ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,WORLD); ctx.stroke();
-                ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(WORLD,i); ctx.stroke();
+            else if (e.key == 'Enter' && started) {
+                document.getElementById("chatInput").focus();
             }
-            ctx.strokeStyle = "#ff0044"; ctx.lineWidth = 10; ctx.strokeRect(0,0, WORLD, WORLD);
+        }, false);
 
-            // 食物
-            for(let fId in foods) {
-                let f = foods[fId];
-                ctx.fillStyle = f.c;
-                ctx.beginPath(); ctx.arc(f.x, f.y, 5 + (f.v || 1), 0, Math.PI*2); ctx.fill();
-            }
+        async function checkServerState(translated = false) {
+            const response = await fetch('https://huggingface.co/api/spaces/Geometricgame-studio/snake-online');
+            const data = await response.json();
 
-            // 畫蛇函式
-            const renderSnake = (data, isMe) => {
-                const hist = isMe ? me.history : data.h;
-                const name = isMe ? me.name : data.n;
-                if(!hist || hist.length < 2) return;
-                
-                const thick = getThick(isMe ? me.score : data.s);
-                ctx.save();
-                ctx.globalAlpha = (isMe ? me.protected : data.p) ? 0.3 : 1;
-                
-                ctx.beginPath();
-                ctx.strokeStyle = isMe ? me.color : data.c;
-                ctx.lineWidth = thick;
-                ctx.lineCap = "round"; ctx.lineJoin = "round";
-                ctx.moveTo(hist[0].x, hist[0].y);
-                hist.forEach(p => ctx.lineTo(p.x, p.y));
-                ctx.stroke();
-
-                // 頭部
-                ctx.fillStyle = isMe ? me.color : data.c;
-                ctx.beginPath(); ctx.arc(hist[0].x, hist[0].y, thick * 0.6, 0, Math.PI*2); ctx.fill();
-                
-                // 名字
-                ctx.globalAlpha = 1; ctx.fillStyle = "#fff";
-                ctx.font = `bold ${Math.max(14, thick*0.7)}px Arial`; ctx.textAlign = "center";
-                ctx.fillText(name || "Snake", hist[0].x, hist[0].y - thick);
-                ctx.restore();
+            const rawStage = data.runtime.stage;
+            const statusMap = {
+                "RUNNING_APP_STARTING": "正在啟動...",
+                "BUILDING": "正在建構伺服器...",
+                "RUNNING": "線上",
+                "PAUSED": "休眠中",
+                "STOPPED": "離線"
             };
 
-            // 核心修正：畫別人時過濾掉 myId
-            for(let id in others) {
-                if(id !== myId) renderSnake(others[id], false);
-            }
-            if(isAlive) renderSnake(me, true);
-
-            ctx.restore();
-            
-            // 排行榜
-            const sorted = Object.values(others).concat(isAlive?{n:me.name, s:me.score}:[]).sort((a,b)=>b.s-a.s).slice(0,5);
-            document.getElementById("lb-list").innerHTML = sorted.map(s => 
-                `<div class="lb-item"><span>${s.n||'---'}</span><span>${Math.floor(s.s||0)}</span></div>`
-            ).join('');
-
-            requestAnimationFrame(draw);
+            return translated ? statusMap[rawStage] : rawStage;
         }
-
-        // 定時生成食物
-        setInterval(() => {
-            if (isAlive && Object.keys(foods).length < 80) {
-                foodRef.push({ x: Math.random()*WORLD, y: Math.random()*WORLD, c: `hsl(${Math.random()*360},100%,70%)`, v: Math.floor(Math.random()*10)+1 });
-            }
-        }, 1000);
-
-        window.onresize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
-        window.onresize();
-        setInterval(update, 1000/60);
-        draw();
     </script>
 </body>
+
 </html>
