@@ -86,19 +86,10 @@
         <div id="lobby-nav" style="display:flex; justify-content:center; margin-bottom:12px;">
             <button class="main-btn small" onclick="GameEngine.showSection('stages')">關卡</button>
             <button class="main-btn small" onclick="GameEngine.showSection('talents')">天賦</button>
-            <button class="main-btn small" onclick="GameEngine.showSection('skins')">造型</button>
-
         </div>
         <div id="section-talents" class="lobby-section" style="display:none;">
             <h3>天賦</h3>
             <div id="upgrade-list" class="glass-panel"></div>
-        </div>
-        <div id="section-skins" class="lobby-section" style="display:none;">
-            <h3>造型 Skin</h3>
-            <div id="skin-gacha" class="glass-panel" style="padding:8px; margin-bottom:6px;"></div>
-            <div id="skin-preview" class="glass-panel" style="padding:8px; margin-bottom:6px;"></div>
-            <div id="skin-list" class="glass-panel" style="padding:8px;"></div>
-            <div id="skin-owned" class="glass-panel" style="padding:8px; margin-top:6px;"></div>
         </div>
         <div id="section-stages" class="lobby-section" style="display:none;">
             <h3>關卡 (通關解鎖下一關，進度會儲存)</h3>
@@ -135,20 +126,6 @@
 // ─── 常數 ─────────────────────────────────────────────────────────────────────
 const MAP_RADIUS = 3200;
 const MAX_STAGES = 18;
-const SKINS = {
-    classic: { name:'經典藍', color:'#00d2ff', outline:'rgba(0,255,255,0.7)', glow:'#00d2ff', rarity:'N', shape:'arrow' },
-    neon:    { name:'綠光巡航', color:'#00ff88', outline:'rgba(200,255,200,0.9)', glow:'#00ff88', rarity:'R', shape:'orb' },
-    crimson: { name:'烈焰尖鋒', color:'#ff3366', outline:'rgba(255,120,140,0.9)', glow:'#ff3366', rarity:'R', shape:'spike' },
-    void:    { name:'虛空魔晶', color:'#a855ff', outline:'rgba(230,200,255,0.9)', glow:'#a855ff', rarity:'SR', shape:'gem' },
-    nebula:  { name:'星雲翼刃', color:'#7c4dff', outline:'rgba(150,80,255,0.9)', glow:'#c27cff', rarity:'SR', shape:'wing' },
-    ember:   { name:'熔火獵手', color:'#ff5722', outline:'rgba(255,150,90,0.9)', glow:'#ff8a50', rarity:'R', shape:'flame' },
-    chrome:  { name:'鋼鐵軍艦', color:'#cfd8dc', outline:'rgba(255,255,255,0.7)', glow:'#90a4ae', rarity:'SR', shape:'metal' },
-    rainbow: { name:'極光彩虹', color:'#ffffff', outline:'rgba(255,255,255,0.95)', glow:'rgba(255,255,255,0.9)', rarity:'SSS', shape:'rainbow' }
-};
-const SKIN_GACHA_COST_SINGLE = 350;
-const SKIN_GACHA_COST_TEN = 3000;
-const SKIN_GACHA_RARITY = { N: 0.55, R: 0.25, SR: 0.12, SS: 0.0799, SSS: 0.0001 };
-const SKIN_RARITY_LABEL = { N:'普通', R:'稀有', SR:'超稀有', SS:'傳說', SSS:'極稀有' };
 const STAGES = [
     { name: '1. 荒原', spawnCd: 85, bossHp: 800, bossAt: 55 },
     { name: '2. 廢墟', spawnCd: 72, bossHp: 1100, bossAt: 50 },
@@ -192,12 +169,21 @@ const ACTIVE_SKILLS = {
     singularity:  { name:'奇點',       passiveEvo:'dmgReduct',   evoName:'終焉奇點' },
     flare:        { name:'熾焰爆裂',   passiveEvo:'cooldown',   evoName:'熾焰終焰' },
     pulse:        { name:'能量脈衝',   passiveEvo:'critBoost',  evoName:'脈衝爆裂' },
-    gravity:      { name:'重力投射',   passiveEvo:'lifesteal',  evoName:'重力崩壞' }
+    gravity:      { name:'重力投射',   passiveEvo:'lifesteal',  evoName:'重力崩壞' },
+    ionBeam:      { name:'離子光束',   passiveEvo:'energyBlock', evoName:'極限離子光' },
+    plasmaOrb:    { name:'等離子球',   passiveEvo:'cooldown',    evoName:'核爆等離子' },
+    chainSpark:   { name:'鏈式電擊',   passiveEvo:'critBoost',  evoName:'電弧磁爆' },
+    voidBomb:     { name:'虛空炸彈',   passiveEvo:'magnet',      evoName:'虛空裂縫' },
+    bladeDance:   { name:'刀鋒旋舞',   passiveEvo:'atk',         evoName:'終焰刀陣' },
+    arcWave:      { name:'弧形波',     passiveEvo:'dmgReduct',   evoName:'裂界弧波' },
+    gravityPulse: { name:'重力脈衝',   passiveEvo:'lifesteal',   evoName:'黑洞脈衝' },
+    solarFlare:   { name:'日耀爆發',   passiveEvo:'fireAura',    evoName:'恆星焚爆' }
 };
 const PASSIVE_SKILLS = {
     expBook:'能量書', runShoe:'速度鞋', energyBlock:'能量方塊', exoskeleton:'外骨骼',
     drink:'飲料', bloodVial:'健身指南', atk:'強力彈頭', dmgReduct:'護甲', magnet:'磁鐵',
-    droneB:'戰鬥陀螺', droneA:'守護機甲', coinBox:'金幣箱', cooldown:'冷卻縮減', critBoost:'暴擊提升', lifesteal:'吸血'
+    droneB:'戰鬥陀螺', droneA:'守護機甲', coinBox:'金幣箱', cooldown:'冷卻縮減', critBoost:'暴擊提升', lifesteal:'吸血',
+    fireAura:'火焰光環', fastRegen:'迅速再生', pierce:'穿透彈', burst:'爆裂能量'
 };
 
 // ─── 存檔系統 ─────────────────────────────────────────────────────────────────
@@ -206,8 +192,6 @@ const SaveSystem = {
         resources: { gold:0 },
         talents: { ATK:0, HP:0, SPD:0, REC:0 },
         unlockedStage: 1,
-        unlockedSkins: ['classic'],
-        skinId: 'classic',
         version: '7.0.0'
     },
     init() {
@@ -216,8 +200,6 @@ const SaveSystem = {
             if (s) this.currentData = { ...this.currentData, ...JSON.parse(s) };
         } catch(e) {}
         if (typeof this.currentData.unlockedStage !== 'number') this.currentData.unlockedStage = 1;
-        if (!Array.isArray(this.currentData.unlockedSkins)) this.currentData.unlockedSkins = ['classic'];
-        if (!this.currentData.unlockedSkins.includes('classic')) this.currentData.unlockedSkins.push('classic');
         this.save();
     },
     save() { localStorage.setItem('RAINGOD_SAVE', JSON.stringify(this.currentData)); }
@@ -552,13 +534,13 @@ class Enemy {
             ELITE:  { r:30, hp:360, speed:2.3, dmg:1.8,  exp:40, color:'#ff9100', eye:'#fff' }
         };
         const s = stats[type] || stats.MELEE;
-        const stageMul = 1 + (stageIndex - 1) * 0.22;
-        const timeMul = 1 + (timeFactor * 0.35);
+        const stageMul = 1 + (stageIndex - 1) * 0.32;
+        const timeMul = 1 + (timeFactor * 0.4);
         this.r = s.r;
-        this.hp = s.hp * stageMul * timeMul;
+        this.hp = s.hp * stageMul * timeMul * 1.08;
         this.maxHp = this.hp;
         this.speed = s.speed * (1 + (stageIndex - 1) * 0.03);
-        this.dmg = s.dmg * stageMul * (1 + timeFactor * 0.2);
+        this.dmg = s.dmg * stageMul * (1 + timeFactor * 0.25) * (1 + (stageIndex - 1) * 0.03);
         this.expValue = Math.round(s.exp * stageMul * (0.8 + timeFactor * 0.4));
         this.color = s.color;
         this.eyeColor = s.eye;
@@ -942,126 +924,20 @@ class Player {
     draw(ctx, cam) {
         ctx.save();
         ctx.translate(this.x, this.y);
-        const skinConf = SKINS[SaveSystem.currentData.skinId] || SKINS.classic;
-        ctx.strokeStyle = skinConf.outline;
+        ctx.strokeStyle = '#00d2ff';
         ctx.lineWidth = 2.5;
-        ctx.shadowColor = skinConf.glow;
+        ctx.shadowColor = '#00d2ff';
         ctx.shadowBlur = 14;
-        const shape = skinConf.shape || 'arrow';
-        if (shape === 'arrow') {
-            ctx.fillStyle = skinConf.color;
-            ctx.beginPath();
-            ctx.moveTo(0, -22);
-            ctx.lineTo(18, 8);
-            ctx.lineTo(8, 22);
-            ctx.lineTo(-8, 22);
-            ctx.lineTo(-18, 8);
-            ctx.closePath();
-            ctx.fill();
-            ctx.stroke();
-        } else if (shape === 'orb') {
-            const grad = ctx.createRadialGradient(0, 0, 2, 0, 0, 32);
-            grad.addColorStop(0, '#ffffff');
-            grad.addColorStop(0.25, skinConf.color);
-            grad.addColorStop(1, 'rgba(0,0,0,0)');
-            ctx.fillStyle = grad;
-            ctx.beginPath();
-            ctx.arc(0, 0, 24, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.stroke();
-        } else if (shape === 'spike') {
-            ctx.fillStyle = skinConf.color;
-            ctx.beginPath();
-            for (let i = 0; i < 10; i++) {
-                const r = i % 2 === 0 ? 26 : 12;
-                const ang = Math.PI * 2 * i / 10;
-                const x = Math.cos(ang) * r;
-                const y = Math.sin(ang) * r;
-                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-            }
-            ctx.closePath();
-            ctx.fill();
-            ctx.stroke();
-        } else if (shape === 'gem') {
-            ctx.fillStyle = skinConf.color;
-            const grad = ctx.createLinearGradient(-18, -18, 18, 18);
-            grad.addColorStop(0, '#ffffff');
-            grad.addColorStop(0.4, skinConf.color);
-            grad.addColorStop(1, '#000000');
-            ctx.fillStyle = grad;
-            ctx.beginPath();
-            ctx.moveTo(0, -24);
-            ctx.lineTo(22, 0);
-            ctx.lineTo(0, 24);
-            ctx.lineTo(-22, 0);
-            ctx.closePath();
-            ctx.fill();
-            ctx.stroke();
-        } else if (shape === 'wing') {
-            ctx.fillStyle = skinConf.color;
-            ctx.beginPath();
-            ctx.moveTo(0, -18);
-            ctx.bezierCurveTo(24, -20, 34, 14, 6, 18);
-            ctx.lineTo(12, 24);
-            ctx.lineTo(0, 14);
-            ctx.lineTo(-12, 24);
-            ctx.lineTo(-6, 18);
-            ctx.bezierCurveTo(-34, 14, -24, -20, 0, -18);
-            ctx.closePath();
-            ctx.fill();
-            ctx.stroke();
-        } else if (shape === 'flame') {
-            ctx.fillStyle = skinConf.color;
-            ctx.beginPath();
-            ctx.moveTo(0, 22);
-            ctx.bezierCurveTo(18, 14, 16, -4, 0, -20);
-            ctx.bezierCurveTo(-14, -4, -18, 14, 0, 22);
-            ctx.fill();
-            ctx.stroke();
-        } else if (shape === 'metal') {
-            ctx.fillStyle = skinConf.color;
-            const grad = ctx.createLinearGradient(-20, -20, 20, 20);
-            grad.addColorStop(0, '#ffffff');
-            grad.addColorStop(0.5, '#b0bec5');
-            grad.addColorStop(1, '#607d8b');
-            ctx.fillStyle = grad;
-            ctx.beginPath();
-            for (let i = 0; i < 6; i++) {
-                const ang = Math.PI / 3 * i - Math.PI / 6;
-                const x = Math.cos(ang) * 22;
-                const y = Math.sin(ang) * 22;
-                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-            }
-            ctx.closePath();
-            ctx.fill();
-            ctx.stroke();
-        } else if (shape === 'rainbow') {
-            for (let i = 0; i < 8; i++) {
-                const angle = Math.PI * 2 * i / 8;
-                const hue = i * 45;
-                ctx.strokeStyle = 'hsl(' + hue + ', 100%, 70%)';
-                ctx.lineWidth = 4;
-                ctx.beginPath();
-                ctx.arc(0, 0, 18 + i * 2, angle, angle + 0.25);
-                ctx.stroke();
-            }
-            ctx.strokeStyle = skinConf.outline;
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.arc(0, 0, 16, 0, Math.PI * 2);
-            ctx.stroke();
-        } else {
-            ctx.fillStyle = skinConf.color;
-            ctx.beginPath();
-            ctx.moveTo(0, -22);
-            ctx.lineTo(18, 8);
-            ctx.lineTo(8, 22);
-            ctx.lineTo(-8, 22);
-            ctx.lineTo(-18, 8);
-            ctx.closePath();
-            ctx.fill();
-            ctx.stroke();
-        }
+        ctx.fillStyle = '#00d2ff';
+        ctx.beginPath();
+        ctx.moveTo(0, -22);
+        ctx.lineTo(18, 8);
+        ctx.lineTo(8, 22);
+        ctx.lineTo(-8, 22);
+        ctx.lineTo(-18, 8);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
         if (BattleSkills.hasPassive('magnet')) {
             ctx.strokeStyle = 'rgba(80,220,255,0.45)';
             ctx.lineWidth = 3;
@@ -1154,7 +1030,7 @@ function fireWeapon(skillId, player, projectiles, enemies, stats) {
     const skillScale = 1 + a.stars * 0.08;
     const dmg = baseDmg * evoBonus * skillScale * 1.2;
     const crit = ((player.critRate || 0) + (stats.crit || 0)) > Math.random() ? 2 : 1;
-    const finalDmg = dmg * crit;
+    const finalDmg = dmg * crit * (1 + (stats.burst || 0));
     const spd = 10 + (stats.range ? 2 : 0);
 
     if (skillId === 'kunai') {
@@ -1316,6 +1192,67 @@ function fireWeapon(skillId, player, projectiles, enemies, stats) {
             projectiles.push(new Projectile(startX, startY, Math.cos(ang)*sp2, Math.sin(ang)*sp2, finalDmg*1.8, '#ffca28', {
                 r: 10, shape:'diamond', skillId, life:520
             }));
+        }
+        return;
+    }
+    if (skillId === 'ionBeam') {
+        const target = enemies.filter(e => !e.isDead)[0] || null;
+        const ang = target ? Math.atan2(target.y - player.y, target.x - player.x) : Math.random() * Math.PI * 2;
+        const sp2 = spd * 1.8;
+        projectiles.push(new Projectile(player.x, player.y, Math.cos(ang)*sp2, Math.sin(ang)*sp2, finalDmg * 1.5, '#64ffda', { r: a.evo ? 12 : 8, shape:'lightning', skillId, life:520 }));
+        return;
+    }
+    if (skillId === 'plasmaOrb') {
+        const count = a.evo ? 4 : 3;
+        for (let i = 0; i < count; i++) {
+            const ang = Math.PI * 2 * i / count + (Date.now() / 240);
+            projectiles.push(new Projectile(player.x, player.y, Math.cos(ang) * spd * 0.9, Math.sin(ang) * spd * 0.9, finalDmg * 0.85, '#80deea', { homing:true, r: a.evo ? 10 : 8, shape:'orb', skillId, life:420 }));
+        }
+        return;
+    }
+    if (skillId === 'chainSpark') {
+        const bolts = 6 + a.stars * 1;
+        for (let i = 0; i < bolts; i++) {
+            const ang = Math.random() * Math.PI * 2;
+            projectiles.push(new Projectile(player.x, player.y, Math.cos(ang) * spd * 1.2, Math.sin(ang) * spd * 1.2, finalDmg * 0.9, '#b2ff59', { r: 6, shape:'lightning', skillId, life:340 }));
+        }
+        return;
+    }
+    if (skillId === 'voidBomb') {
+        const ang = Math.random() * Math.PI * 2;
+        projectiles.push(new Projectile(player.x + Math.cos(ang) * 60, player.y + Math.sin(ang) * 60, 0, 0, finalDmg * 1.8, '#7c4dff', { r: a.evo ? 16 : 12, shape:'hex', skillId, life:420 }));
+        return;
+    }
+    if (skillId === 'bladeDance') {
+        const blades = a.evo ? 10 : 8;
+        for (let i = 0; i < blades; i++) {
+            const ang = Math.PI * 2 * i / blades + (Date.now() / 360);
+            projectiles.push(new Projectile(player.x, player.y, Math.cos(ang) * spd * 1.1, Math.sin(ang) * spd * 1.1, finalDmg * 0.8, '#ce93d8', { r: 7, shape:'blade', skillId, life:340 }));
+        }
+        return;
+    }
+    if (skillId === 'arcWave') {
+        const count = a.evo ? 7 : 5;
+        const start = Math.random() * Math.PI * 2;
+        for (let i = 0; i < count; i++) {
+            const ang = start + ((Math.PI * 0.8) * (i / Math.max(count - 1, 1))) - (Math.PI * 0.4);
+            projectiles.push(new Projectile(player.x, player.y, Math.cos(ang) * spd * 1.1, Math.sin(ang) * spd * 1.1, finalDmg * 0.95, '#64b5f6', { r: 6, shape:'diamond', skillId, life:360 }));
+        }
+        return;
+    }
+    if (skillId === 'gravityPulse') {
+        const orbs = a.evo ? 7 : 5;
+        for (let i = 0; i < orbs; i++) {
+            const ang = Math.PI * 2 * i / orbs;
+            projectiles.push(new Projectile(player.x + Math.cos(ang) * 80, player.y + Math.sin(ang) * 80, 0, 0, finalDmg * 1.05, '#536dfe', { r: a.evo ? 12 : 10, shape:'orb', skillId, life:400 }));
+        }
+        return;
+    }
+    if (skillId === 'solarFlare') {
+        const bolts = a.evo ? 12 : 8;
+        for (let i = 0; i < bolts; i++) {
+            const ang = Math.PI * 2 * i / bolts;
+            projectiles.push(new Projectile(player.x, player.y, Math.cos(ang) * spd * 1.4, Math.sin(ang) * spd * 1.4, finalDmg * 1.1, '#ffd54f', { r: a.evo ? 10 : 8, shape:'orb', skillId, life:380 }));
         }
         return;
     }
@@ -1670,6 +1607,7 @@ window.GameEngine = {
             cdReduct: (BattleSkills.hasPassive('energyBlock') ? 10 : 0) + (BattleSkills.hasPassive('cooldown') ? 5 : 0),
             range: BattleSkills.hasPassive('atk') ? 1 : 0,
             crit: BattleSkills.hasPassive('critBoost') ? 0.15 : 0,
+            burst: BattleSkills.hasPassive('burst') ? 0.2 : 0,
             lifesteal: BattleSkills.hasPassive('lifesteal') ? 0.08 : 0
         };
         this.player.lifesteal = stats.lifesteal;
@@ -1948,66 +1886,6 @@ window.GameEngine = {
             card.innerHTML = '<span>' + t.name + ' Lv.' + lv + '</span><button class="main-btn small" onclick="GameEngine.buyTalent(\'' + t.id + '\',' + cost + ')">' + cost + '💰</button>';
             list.appendChild(card);
         });
-        const unlockedSkins = SaveSystem.currentData.unlockedSkins || ['classic'];
-        const currentSkin = SaveSystem.currentData.skinId || 'classic';
-
-        const skinGachaDiv = document.getElementById('skin-gacha');
-        if (skinGachaDiv) {
-            skinGachaDiv.innerHTML = '<div class="talent-row"><span>抽取造型：' + SKIN_GACHA_COST_SINGLE + '💰</span><button class="main-btn small" onclick="GameEngine.skinGacha(1)">抽 1 次</button></div>' +
-                '<div class="talent-row"><span>10 連抽：' + SKIN_GACHA_COST_TEN + '💰</span><button class="main-btn small" onclick="GameEngine.skinGacha(10)">抽 10 次</button></div>' +
-                '<div style="font-size:0.85rem;color:#ccc;margin-top:6px;">機率：SSS 0.01% / SS 7.99% / SR 12% / R 25% / N 55%</div>';
-        }
-
-        const skinList = document.getElementById('skin-list');
-        if (skinList) {
-            skinList.innerHTML = '';
-            const sortedSkins = Object.keys(SKINS).sort((a, b) => {
-                const ra = RARITY_ORDER[SKINS[a].rarity] || 0;
-                const rb = RARITY_ORDER[SKINS[b].rarity] || 0;
-                if (ra !== rb) return rb - ra;
-                return SKINS[a].name.localeCompare(SKINS[b].name);
-            });
-            let lastRarity = null;
-            sortedSkins.forEach(id => {
-                const s = SKINS[id];
-                const owned = unlockedSkins.includes(id);
-                if (s.rarity !== lastRarity) {
-                    lastRarity = s.rarity;
-                    const header = document.createElement('div');
-                    header.style.margin = '10px 0 4px';
-                    header.style.fontSize = '0.9rem';
-                    header.style.color = '#ffd966';
-                    header.textContent = '【' + SKIN_RARITY_LABEL[s.rarity] + '】';
-                    skinList.appendChild(header);
-                }
-                const btn = document.createElement('button');
-                btn.className = 'main-btn small';
-                btn.style.marginRight = '6px';
-                btn.style.marginBottom = '6px';
-                btn.style.borderColor = s.outline || '#00d2ff';
-                btn.textContent = s.name + ' [' + SKIN_RARITY_LABEL[s.rarity] + ']' + (currentSkin === id ? ' ✓ 已裝備' : '');
-                if (owned) {
-                    if (currentSkin !== id) btn.onclick = () => GameEngine.setSkin(id);
-                    else btn.onclick = null;
-                } else btn.onclick = () => alert('此造型需透過抽獎解鎖。');
-                skinList.appendChild(btn);
-            });
-        }
-
-        const skinPreview = document.getElementById('skin-preview');
-        if (skinPreview) {
-            const previewSkin = SKINS[currentSkin] || SKINS.classic;
-            skinPreview.innerHTML = '<div style="display:flex;align-items:center;gap:10px;">' +
-                '<div style="width:48px;height:48px;border-radius:10px;background:' + previewSkin.color + ';border:2px solid ' + previewSkin.outline + ';box-shadow:0 0 14px ' + previewSkin.glow + ';"></div>' +
-                '<div><div style="font-size:1rem;font-weight:600;">當前造型：' + previewSkin.name + '</div>' +
-                '<div style="font-size:0.88rem;color:#ccc;">稀有度：' + SKIN_RARITY_LABEL[previewSkin.rarity] + ' (' + previewSkin.rarity + ')</div></div>' +
-                '</div>';
-        }
-        const skinOwned = document.getElementById('skin-owned');
-        if (skinOwned) {
-            skinOwned.innerHTML = '<div style="font-size:0.9rem;color:rgba(255,255,255,0.8);">已解鎖：' + unlockedSkins.length + ' / ' + Object.keys(SKINS).length + ' 個造型</div>';
-        }
-
         const stageList = document.getElementById('stage-list');
         stageList.innerHTML = '';
         const unlocked = Math.min(SaveSystem.currentData.unlockedStage || 1, MAX_STAGES);
@@ -2025,7 +1903,7 @@ window.GameEngine = {
         }
     },
     showSection(section) {
-        const sections = ['talents', 'skins', 'stages'];
+        const sections = ['talents', 'stages'];
         sections.forEach(s => {
             const el = document.getElementById('section-' + s);
             if (el) el.style.display = s === section ? 'block' : 'none';
@@ -2040,61 +1918,6 @@ window.GameEngine = {
             this.renderLobby();
         } else alert('金幣不足');
     },
-    setSkin(id) {
-        if (!SKINS[id]) return;
-        const unlocked = SaveSystem.currentData.unlockedSkins || ['classic'];
-        if (!unlocked.includes(id)) { alert('尚未解鎖此造型，請先抽獎。'); return; }
-        SaveSystem.currentData.skinId = id;
-        SaveSystem.save();
-        this.renderLobby();
-    },
-    skinGacha(count = 1) {
-        const d = SaveSystem.currentData;
-        const cost = count === 10 ? SKIN_GACHA_COST_TEN : SKIN_GACHA_COST_SINGLE;
-        if (d.resources.gold < cost) { alert('金幣不足'); return; }
-        d.resources.gold -= cost;
-        d.unlockedSkins = d.unlockedSkins || ['classic'];
-        const locked = Object.keys(SKINS).filter(id => !d.unlockedSkins.includes(id));
-        const got = [];
-        for (let i = 0; i < count; i++) {
-            const pool = locked.length ? locked : Object.keys(SKINS);
-            const pick = this.pickSkinFromPool(pool);
-            if (!d.unlockedSkins.includes(pick)) {
-                d.unlockedSkins.push(pick);
-                got.push(pick);
-                const idx = locked.indexOf(pick);
-                if (idx >= 0) locked.splice(idx, 1);
-            } else if (!got.length) {
-                got.push(pick);
-            }
-        }
-        SaveSystem.save();
-        this.renderLobby();
-        const names = got.map(id => SKINS[id]?.name || id).join('、');
-        alert('抽到：' + names);
-    },
-    pickSkinFromPool(pool) {
-        const rarity = this.sampleSkinRarity();
-        let candidates = pool.filter(id => SKINS[id]?.rarity === rarity);
-        if (!candidates.length) {
-            const order = ['SSS','SS','SR','R','N'];
-            for (const r of order) {
-                candidates = pool.filter(id => SKINS[id]?.rarity === r);
-                if (candidates.length) break;
-            }
-        }
-        return candidates[Math.floor(Math.random() * candidates.length)];
-    },
-    sampleSkinRarity() {
-        const rand = Math.random();
-        let cumulative = 0;
-        const rarities = ['N','R','SR','SS','SSS'];
-        for (const rarity of rarities) {
-            cumulative += SKIN_GACHA_RARITY[rarity] || 0;
-            if (rand < cumulative) return rarity;
-        }
-        return 'N';
-    }
 };
 
 window.onload = () => GameEngine.init();
