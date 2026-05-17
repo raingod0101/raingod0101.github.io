@@ -96,6 +96,7 @@
         <div id="section-skins" class="lobby-section" style="display:none;">
             <h3>造型 Skin</h3>
             <div id="skin-gacha" class="glass-panel" style="padding:8px; margin-bottom:6px;"></div>
+            <div id="skin-preview" class="glass-panel" style="padding:8px; margin-bottom:6px;"></div>
             <div id="skin-list" class="glass-panel" style="padding:8px;"></div>
             <div id="skin-owned" class="glass-panel" style="padding:8px; margin-top:6px;"></div>
         </div>
@@ -653,7 +654,7 @@ class Boss {
     constructor(x, y, hp = 900, index = 1) {
         this.x = x; this.y = y; this.r = 52;
         const stageMul = 1 + (index - 1) * 0.28;
-        this.maxHp = hp * stageMul * 1.4;
+        this.maxHp = hp * stageMul * 1.8;
         this.hp = this.maxHp;
         this.speed = 1.4 + (index - 1) * 0.05;
         this.baseDmg = 3.6 + (index - 1) * 0.35;
@@ -1151,7 +1152,7 @@ function fireWeapon(skillId, player, projectiles, enemies, stats) {
     const baseDmg = 30 + a.stars * 14 + (stats.atk || 0) + (player.equipAtk || 0);
     const evoBonus = a.evo ? 2.6 : 1;
     const skillScale = 1 + a.stars * 0.08;
-    const dmg = baseDmg * evoBonus * skillScale;
+    const dmg = baseDmg * evoBonus * skillScale * 1.2;
     const crit = ((player.critRate || 0) + (stats.crit || 0)) > Math.random() ? 2 : 1;
     const finalDmg = dmg * crit;
     const spd = 10 + (stats.range ? 2 : 0);
@@ -1953,7 +1954,8 @@ window.GameEngine = {
         const skinGachaDiv = document.getElementById('skin-gacha');
         if (skinGachaDiv) {
             skinGachaDiv.innerHTML = '<div class="talent-row"><span>抽取造型：' + SKIN_GACHA_COST_SINGLE + '💰</span><button class="main-btn small" onclick="GameEngine.skinGacha(1)">抽 1 次</button></div>' +
-                '<div class="talent-row"><span>10 連抽：' + SKIN_GACHA_COST_TEN + '💰</span><button class="main-btn small" onclick="GameEngine.skinGacha(10)">抽 10 次</button></div>';
+                '<div class="talent-row"><span>10 連抽：' + SKIN_GACHA_COST_TEN + '💰</span><button class="main-btn small" onclick="GameEngine.skinGacha(10)">抽 10 次</button></div>' +
+                '<div style="font-size:0.85rem;color:#ccc;margin-top:6px;">機率：SSS 0.01% / SS 7.99% / SR 12% / R 25% / N 55%</div>';
         }
 
         const skinList = document.getElementById('skin-list');
@@ -1962,7 +1964,7 @@ window.GameEngine = {
             const sortedSkins = Object.keys(SKINS).sort((a, b) => {
                 const ra = RARITY_ORDER[SKINS[a].rarity] || 0;
                 const rb = RARITY_ORDER[SKINS[b].rarity] || 0;
-                if (ra !== rb) return ra - rb;
+                if (ra !== rb) return rb - ra;
                 return SKINS[a].name.localeCompare(SKINS[b].name);
             });
             let lastRarity = null;
@@ -1983,13 +1985,24 @@ window.GameEngine = {
                 btn.style.marginRight = '6px';
                 btn.style.marginBottom = '6px';
                 btn.style.borderColor = s.outline || '#00d2ff';
-                btn.textContent = s.name + ' [' + SKIN_RARITY_LABEL[s.rarity] + ']' + (currentSkin === id ? ' ✓' : '') + (owned ? '' : ' 🔒');
-                if (owned) btn.onclick = () => GameEngine.setSkin(id);
-                else btn.onclick = () => alert('此造型需透過抽獎解鎖。');
+                btn.textContent = s.name + ' [' + SKIN_RARITY_LABEL[s.rarity] + ']' + (currentSkin === id ? ' ✓ 已裝備' : '');
+                if (owned) {
+                    if (currentSkin !== id) btn.onclick = () => GameEngine.setSkin(id);
+                    else btn.onclick = null;
+                } else btn.onclick = () => alert('此造型需透過抽獎解鎖。');
                 skinList.appendChild(btn);
             });
         }
 
+        const skinPreview = document.getElementById('skin-preview');
+        if (skinPreview) {
+            const previewSkin = SKINS[currentSkin] || SKINS.classic;
+            skinPreview.innerHTML = '<div style="display:flex;align-items:center;gap:10px;">' +
+                '<div style="width:48px;height:48px;border-radius:10px;background:' + previewSkin.color + ';border:2px solid ' + previewSkin.outline + ';box-shadow:0 0 14px ' + previewSkin.glow + ';"></div>' +
+                '<div><div style="font-size:1rem;font-weight:600;">當前造型：' + previewSkin.name + '</div>' +
+                '<div style="font-size:0.88rem;color:#ccc;">稀有度：' + SKIN_RARITY_LABEL[previewSkin.rarity] + ' (' + previewSkin.rarity + ')</div></div>' +
+                '</div>';
+        }
         const skinOwned = document.getElementById('skin-owned');
         if (skinOwned) {
             skinOwned.innerHTML = '<div style="font-size:0.9rem;color:rgba(255,255,255,0.8);">已解鎖：' + unlockedSkins.length + ' / ' + Object.keys(SKINS).length + ' 個造型</div>';
@@ -2043,14 +2056,7 @@ window.GameEngine = {
         d.unlockedSkins = d.unlockedSkins || ['classic'];
         const locked = Object.keys(SKINS).filter(id => !d.unlockedSkins.includes(id));
         const got = [];
-        // 10連保底一個新造型
-        if (count >= 10 && locked.length) {
-            const pick = locked[Math.floor(Math.random() * locked.length)];
-            d.unlockedSkins.push(pick);
-            got.push(pick);
-            locked.splice(locked.indexOf(pick), 1);
-        }
-        for (let i = 0; i < count - got.length; i++) {
+        for (let i = 0; i < count; i++) {
             const pool = locked.length ? locked : Object.keys(SKINS);
             const pick = this.pickSkinFromPool(pool);
             if (!d.unlockedSkins.includes(pick)) {
@@ -2068,15 +2074,26 @@ window.GameEngine = {
         alert('抽到：' + names);
     },
     pickSkinFromPool(pool) {
-        if (pool.includes('rainbow') && Math.random() < 0.0001) return 'rainbow';
-        const weights = { N: 60, R: 30, SR: 9, SS: 1, SSS: 1 };
-        const weighted = [];
-        pool.forEach(id => {
-            const r = SKINS[id]?.rarity || 'N';
-            const w = r === 'SSS' ? 0 : (weights[r] || 5);
-            for (let i = 0; i < w; i++) weighted.push(id);
-        });
-        return weighted[Math.floor(Math.random() * weighted.length)];
+        const rarity = this.sampleSkinRarity();
+        let candidates = pool.filter(id => SKINS[id]?.rarity === rarity);
+        if (!candidates.length) {
+            const order = ['SSS','SS','SR','R','N'];
+            for (const r of order) {
+                candidates = pool.filter(id => SKINS[id]?.rarity === r);
+                if (candidates.length) break;
+            }
+        }
+        return candidates[Math.floor(Math.random() * candidates.length)];
+    },
+    sampleSkinRarity() {
+        const rand = Math.random();
+        let cumulative = 0;
+        const rarities = ['N','R','SR','SS','SSS'];
+        for (const rarity of rarities) {
+            cumulative += SKIN_GACHA_RARITY[rarity] || 0;
+            if (rand < cumulative) return rarity;
+        }
+        return 'N';
     }
 };
 
