@@ -74,6 +74,11 @@
         .skin-card { width: 128px; border: 1px solid rgba(0,210,255,0.18); border-radius: 12px; padding: 8px; background: rgba(255,255,255,0.04); text-align:center; }
         .skin-card img { width: 100%; height: 100px; object-fit: contain; border-radius: 10px; }
         .skin-card .status { margin-top: 6px; font-size: 0.82rem; color: #ccc; }
+        #lottery-overlay { position: fixed; inset: 0; display:none; align-items:center; justify-content:center; z-index:400; pointer-events:none; }
+        #lottery-overlay.show { display:flex; pointer-events:auto; }
+        #lottery-overlay .panel { width:360px; max-width:90%; padding:18px; border-radius:12px; text-align:center; background:linear-gradient(180deg, rgba(0,0,0,0.75), rgba(0,0,0,0.9)); border:1px solid rgba(255,255,255,0.06); box-shadow:0 12px 40px rgba(0,0,0,0.6); }
+        #lottery-overlay .panel h3 { margin:6px 0 10px 0; color:#ffd54f; font-size:1.1rem; }
+        #lottery-overlay .panel img { max-width:160px; max-height:160px; display:block; margin:6px auto; }
         .choice-btn:hover { background: rgba(0,210,255,0.28); }
         .choice-btn.evo { border-color: #ff0; background: rgba(255,255,0,0.12); color: #ffd700; }
         #gameover-panel { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 150; align-items: center; justify-content: center; }
@@ -89,7 +94,7 @@
 
 <script src="menu.js"></script>
     <div style="position: fixed; top: 5px; left: 5px; color: gray; font-size: 12px; font-family: sans-serif;">不支援雲端儲存</div>
-<div id="game-container">
+<div id="game-container">1
     <canvas id="bg-canvas"></canvas>
     <canvas id="main-canvas"></canvas>
 
@@ -101,6 +106,27 @@
         <div id="lobby-nav" style="display:flex; justify-content:center; margin-bottom:12px;">
             <button class="main-btn small" onclick="GameEngine.showSection('stages')">關卡</button>
             <button class="main-btn small" onclick="GameEngine.showSection('talents')">天賦</button>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center; justify-content:center; flex-wrap:wrap; margin-bottom:6px;">
+            <div style="color:#ccddee; font-size:0.92rem;">快速搖桿設定：</div>
+            <input id="joy-base-x-quick" type="number" placeholder="baseX (左邊距離)" style="width:92px;padding:6px;border-radius:8px;border:1px solid rgba(0,210,255,0.12);background:rgba(0,0,0,0.45);color:#fff;">
+            <input id="joy-base-yoffset-quick" type="number" placeholder="yOffset (底部距離)" style="width:110px;padding:6px;border-radius:8px;border:1px solid rgba(0,210,255,0.12);background:rgba(0,0,0,0.45);color:#fff;">
+            <input id="joy-radius-quick" type="number" placeholder="radius (半徑)" style="width:92px;padding:6px;border-radius:8px;border:1px solid rgba(0,210,255,0.12);background:rgba(0,0,0,0.45);color:#fff;">
+            <button class="main-btn small" onclick="(function(){
+                try{
+                    const bx = Math.max(0, parseInt(document.getElementById('joy-base-x-quick').value||SaveSystem.currentData.joystickSettings.baseX||90,10));
+                    const by = Math.max(0, parseInt(document.getElementById('joy-base-yoffset-quick').value||SaveSystem.currentData.joystickSettings.baseYOffset||100,10));
+                    const jr = Math.max(10, parseInt(document.getElementById('joy-radius-quick').value||SaveSystem.currentData.joystickSettings.maxRadius||90,10));
+                    SaveSystem.currentData.joystickSettings = { baseX:bx, baseYOffset:by, maxRadius:jr };
+                    SaveSystem.save();
+                    Input.joystick.baseX = bx; Input.joystick.baseY = window.innerHeight - by; Input.joystick.maxRadius = jr;
+                    GameEngine.showAlert('搖桿設定已儲存 (大廳快速)');
+                }catch(e){GameEngine.showAlert('儲存失敗');}
+            })()">儲存</button>
+            <button class="main-btn small" onclick="GameEngine.fillJoystickQuickSettings()">讀取目前設定</button>
+        </div>
+        <div style="display:flex; justify-content:center; gap:8px; color:#a8d8ff; font-size:0.82rem; margin-bottom:12px;">
+            <div>提示：baseX=左側距離, yOffset=距離底部, radius=搖桿半徑</div>
         </div>
         <div id="section-talents" class="lobby-section" style="display:none;">
             <h3>天賦</h3>
@@ -114,7 +140,7 @@
             <h3>造型抽獎</h3>
             <div class="glass-panel" style="padding:14px; display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px;">
                 <div style="flex:1; min-width:240px;">
-                    <div>花費 100💰 進行造型抽獎，10% 機率獲得碎片，累積 50 片可解鎖 CD、meowl 或五條悟。</div>
+                    <div>花費 100💰 進行造型抽獎，1% 機率獲得碎片，累積 5 片可解鎖造型。每 20 抽保底必得 1 片。抽獎有特效顯示。</div>
                     <div id="skin-lottery-msg" style="margin-top:8px; color:#ffea00; min-height:20px;"></div>
                 </div>
                 <button class="main-btn small" onclick="GameEngine.drawSkin()">抽造型 100💰</button>
@@ -136,11 +162,22 @@
     <div id="evo-modal"><div class="modal-panel"><h2>✨ 超武進化 EVO</h2><div id="evo-choices"></div></div></div>
     <div id="pause-panel"><div class="modal-panel"><h2>暫停 (ESC 繼續)</h2><button class="main-btn" onclick="GameEngine.togglePause()">繼續</button></div></div>
     <div id="gameover-panel"><h2 id="gameover-title">戰鬥結束</h2><div class="reward" id="gameover-reward"></div><button class="main-btn" id="gameover-btn" onclick="location.reload()">返回大廳</button></div>
+    <div id="lottery-overlay" aria-hidden="true">
+        <div class="panel"><h3>抽獎結果</h3><div style="height:120px;"></div></div>
+    </div>
     <div id="test-panel"><div class="modal-panel"><h2>測試模式</h2>
             
             <div class="test-row"><p></p></div><div class="test-row"><p></p></div><div class="test-row"><p></p></div><div class="test-row"><p></p></div><div class="test-row"><p></p></div><div class="test-row"><p></p></div><div class="test-row"><p></p></div><div class="test-row"><p></p></div><div class="test-row"><p></p></div><div class="test-row"><p></p></div><div class="test-row"><p></p></div><div class="test-row"><label>敵人目標：</label><div><label><input type="radio" name="test-target" value="monster"> 一般怪</label><label><input type="radio" name="test-target" value="boss"> BOSS</label></div></div>
             <div class="test-row"><label>選擇關卡：</label><select id="test-stage-select" style="width:180px; padding:8px; border-radius:10px; border:1px solid rgba(0,210,255,0.25); background:rgba(0,0,0,0.6); color:#fff;"></select></div>
             <div class="test-row"><label>自訂金幣：</label><input id="test-gold-input" type="number" min="0" value="0" style="width:120px; padding:8px; border-radius:10px; border:1px solid rgba(0,210,255,0.25); background:rgba(0,0,0,0.6); color:#fff;"></div>
+            <div class="test-row"><label>搖桿設定：</label>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                    <input id="joy-base-x" type="number" min="0" style="width:84px;padding:8px;border-radius:8px;border:1px solid rgba(0,210,255,0.25);background:rgba(0,0,0,0.6);color:#fff;" placeholder="baseX(px)">
+                    <input id="joy-base-yoffset" type="number" min="0" style="width:84px;padding:8px;border-radius:8px;border:1px solid rgba(0,210,255,0.25);background:rgba(0,0,0,0.6);color:#fff;" placeholder="底部間距(px)">
+                    <input id="joy-radius" type="number" min="10" style="width:84px;padding:8px;border-radius:8px;border:1px solid rgba(0,210,255,0.25);background:rgba(0,0,0,0.6);color:#fff;" placeholder="半徑(px)">
+                    <button class="main-btn small" onclick="GameEngine.saveJoystickSettings()">儲存搖桿設定</button>
+                </div>
+            </div>
             <div class="test-row"><label>自選造型：</label><select id="test-skin-select" style="width:180px; padding:8px; border-radius:10px; border:1px solid rgba(0,210,255,0.25); background:rgba(0,0,0,0.6); color:#fff;"><option value="default">預設</option><option value="CD">CD</option><option value="meowl">meowl</option><option value="gojo">五條悟</option></select></div>
             <div class="test-row"><button class="main-btn small" onclick="GameEngine.selectAllTestSkills()">全選全部技能</button><button class="main-btn small" onclick="GameEngine.deselectAllTestSkills()">全部不選</button><button class="main-btn small" onclick="GameEngine.applyTestSettings()">套用設定</button><button class="main-btn small" onclick="GameEngine.startTestBattle()">開始模擬戰鬥</button><button class="main-btn small" onclick="GameEngine.closeTestMode()">關閉測試模式</button></div>
             <div style="margin-top:8px;color:#fff;font-size:0.92rem;">按 <strong>R + A + I + N + Ctrl</strong> 再按一次返回原本模式。</div>
@@ -164,27 +201,17 @@
 
 // ─── 常數 ─────────────────────────────────────────────────────────────────────
 const MAP_RADIUS = 3200;
-const MAX_STAGES = 18;
-const STAGES = [
-    { name: '1. 荒原', spawnCd: 85, bossHp: 800, bossAt: 90 },
-    { name: '2. 廢墟', spawnCd: 72, bossHp: 1100, bossAt: 90 },
-    { name: '3. 暗巷', spawnCd: 65, bossHp: 1500, bossAt: 90 },
-    { name: '4. 工廠', spawnCd: 58, bossHp: 2000, bossAt: 90 },
-    { name: '5. 實驗室', spawnCd: 52, bossHp: 2600, bossAt: 90 },
-    { name: '6. 深淵', spawnCd: 46, bossHp: 3300, bossAt: 90 },
-    { name: '7. 虛空', spawnCd: 42, bossHp: 4100, bossAt: 90 },
-    { name: '8. 裂隙', spawnCd: 38, bossHp: 5000, bossAt: 90 },
-    { name: '9. 終焉', spawnCd: 34, bossHp: 6200, bossAt: 90 },
-    { name: '10. 創世', spawnCd: 30, bossHp: 7500, bossAt: 90 },
-    { name: '11. 星輝', spawnCd: 26, bossHp: 9500, bossAt: 90 },
-    { name: '12. 究極', spawnCd: 22, bossHp: 12000, bossAt: 90 },
-    { name: '13. 混沌邊境', spawnCd: 22, bossHp: 15000, bossAt: 90 },
-    { name: '14. 黑洞外環', spawnCd: 20, bossHp: 18500, bossAt: 90 },
-    { name: '15. 星核走廊', spawnCd: 20, bossHp: 22000, bossAt: 90 },
-    { name: '16. 失控矩陣', spawnCd: 18, bossHp: 26000, bossAt: 90 },
-    { name: '17. 深度侵蝕', spawnCd: 18, bossHp: 31000, bossAt: 90 },
-    { name: '18. 神滅終局', spawnCd: 16, bossHp: 38000, bossAt: 90 }
-];
+const MAX_STAGES = 100;
+const STAGES = (function buildStages(n) {
+    const arr = [];
+    const baseHp = 800;
+    for (let i = 1; i <= n; i++) {
+        const spawnCd = Math.max(10, 90 - Math.floor((i - 1) * 0.75));
+        const bossHp = Math.round(baseHp * Math.pow(1.1, i - 1));
+        arr.push({ name: i + '. 關卡', spawnCd: spawnCd, bossHp: bossHp, bossAt: 90 });
+    }
+    return arr;
+})(MAX_STAGES);
 
 // ─── 主動技能 (id, 名稱, 對應被動, 超武名) ─────────────────────────────────────
 const ACTIVE_SKILLS = {
@@ -291,6 +318,9 @@ const SaveSystem = {
         unlockedStage: 1,
         skinsUnlocked: { CD:false, meowl:false, gojo:false },
         skinFragments: { CD:0, meowl:0, gojo:0 },
+        // joystick and lottery settings persisted
+        joystickSettings: { baseX: 90, baseYOffset: 100, maxRadius: 90 },
+        skinLottery: { drawsSinceLastFragment: 0 },
         version: '7.0.0'
     },
     init() {
@@ -346,9 +376,19 @@ const Input = {
             this.mouseActive = false;
         });
 
-        // 更新搖桿位置
+        // 更新搖桿位置（會使用儲存的設定）
         const updateJoystickPos = () => {
-            this.joystick.baseY = window.innerHeight - 100;
+            try {
+                const s = (SaveSystem && SaveSystem.currentData && SaveSystem.currentData.joystickSettings) || {};
+                this.joystick.baseX = typeof s.baseX === 'number' ? s.baseX : 90;
+                const yOffset = typeof s.baseYOffset === 'number' ? s.baseYOffset : 100;
+                this.joystick.baseY = window.innerHeight - yOffset;
+                this.joystick.maxRadius = typeof s.maxRadius === 'number' ? s.maxRadius : 90;
+            } catch (e) {
+                this.joystick.baseX = 90;
+                this.joystick.baseY = window.innerHeight - 100;
+                this.joystick.maxRadius = 90;
+            }
         };
         window.addEventListener('resize', updateJoystickPos);
         updateJoystickPos();
@@ -358,8 +398,8 @@ const Input = {
             const t = e.changedTouches[0];
             if (!t) return;
             
-            // 搖桿固定在左下角
-            const joyX = 90, joyY = window.innerHeight - 100;
+            // 搖桿預設或儲存在設定中
+            const joyX = this.joystick.baseX, joyY = this.joystick.baseY;
             const dist = Math.hypot(t.clientX - joyX, t.clientY - joyY);
             
             // 只有在搖桿區域內(半徑140)觸碰才激活
@@ -694,7 +734,7 @@ class Enemy {
             ELITE:  { r:30, hp:360, speed:2.3, dmg:1.8,  exp:40, color:'#ff9100', eye:'#fff' }
         };
         const s = stats[type] || stats.MELEE;
-        const stageMul = 1 + (stageIndex - 1) * 0.32;
+        const stageMul = 1 + (stageIndex - 1) * 0.28;
         const timeMul = 1 + (timeFactor * 0.4);
         this.r = s.r;
         this.hp = s.hp * stageMul * timeMul * 1.08 * 2;
@@ -1073,10 +1113,13 @@ class Player {
     }
     applyTalents() {
         const t = SaveSystem.currentData.talents;
+        this.equipAtk = (t.ATK || 0) * 6;
         this.maxHp += (t.HP || 0) * 22;
         this.hp = this.maxHp;
-        this.speed += (t.SPD || 0) * 0.5;
-        this.regenPerSec = (t.REC || 0) * 2;
+        const speedLevel = Math.min(t.SPD || 0, 10);
+        this.speed += speedLevel * 0.4;
+        const recLevel = Math.min(t.REC || 0, 10);
+        this.regenPerSec = recLevel * 1.2;
     }
     update(dt, projectiles, enemies) {
         const canMove = !GameEngine.pendingLevelUp && !GameEngine.pendingEvo;
@@ -1399,7 +1442,7 @@ function fireWeapon(skillId, player, projectiles, enemies, stats) {
     const baseDmg = 28 + a.stars * 24 + (stats.atk || 0) + (player.equipAtk || 0);
     const dmg = baseDmg * skillLevelDamageMult(a.stars, a.evo) * 1.15;
     const crit = ((player.critRate || 0) + (stats.crit || 0)) > Math.random() ? 2 : 1;
-    const finalDmg = dmg * crit * (1 + (stats.burst || 0));
+    const finalDmg = dmg * crit * (1 + (stats.burst || 0)) * (GameEngine.skillBuff || 1);
     const spd = 10 + (stats.range ? 2 : 0);
 
     if (skillId === 'kunai') {
@@ -1547,17 +1590,17 @@ function fireWeapon(skillId, player, projectiles, enemies, stats) {
         return;
     }
     if (skillId === 'meteor') {
-        const dropCount = skillProjCount(3, a.stars, a.evo, 2);
+        const dropCount = skillProjCount(2, a.stars, a.evo, 1);
         for (let i = 0; i < dropCount; i++) {
             const target = enemies[Math.floor(Math.random()*enemies.length)] || null;
-            const baseX = target ? target.x : player.x + (Math.random()-0.5)*400;
-            const baseY = target ? target.y : player.y + (Math.random()-0.5)*400;
-            const startX = baseX + (Math.random()-0.5)*120;
-            const startY = baseY - 480 - Math.random()*160;
+            const baseX = target ? target.x : player.x + (Math.random()-0.5)*320;
+            const baseY = target ? target.y : player.y + (Math.random()-0.5)*320;
+            const startX = baseX + (Math.random()-0.5)*80;
+            const startY = baseY - 380 - Math.random()*120;
             const ang = Math.atan2(baseY - startY, baseX - startX);
-            const sp2 = spd * 1.1;
-            projectiles.push(new Projectile(startX, startY, Math.cos(ang)*sp2, Math.sin(ang)*sp2, finalDmg*1.8, '#ffca28', {
-                r: 10, shape:'diamond', skillId, life:520
+            const sp2 = spd * 0.95;
+            projectiles.push(new Projectile(startX, startY, Math.cos(ang)*sp2, Math.sin(ang)*sp2, finalDmg*1.25, '#ffca28', {
+                r: 8, shape:'diamond', skillId, life:470
             }));
         }
         return;
@@ -1825,6 +1868,7 @@ window.GameEngine = {
     shakeTime: 0, shakeDuration: 0, shakeMagnitude: 0,
     testMode: false,
     testSettings: { enemyTarget:'monster', selectedStage:1, customGold:0, selectedSkin:'default', selectedActives:[], selectedPassives:[] },
+    skillBuff: 1.08,
     _forceBossOnly: false,
     _forceMonsterOnly: false,
     _testModePaused: false,
@@ -1915,7 +1959,7 @@ window.GameEngine = {
     },
     calcRunGold(kills, timerSec, stageBonus) {
         if (!this.canEarnGoldThisRun()) return 0;
-        return kills * 2 + Math.floor(timerSec) * 2 + (stageBonus || 0);
+        return Math.max(0, Math.round(kills * 1.1 + Math.floor(timerSec) * 0.85 + (stageBonus || 0)));
     },
     buildRunSkillPools(fromTest) {
         const skinLimited = { cdSurge: 'CD', meowClaw: 'meowl', purrWave: 'meowl', gojoDomain: 'gojo' };
@@ -2439,7 +2483,7 @@ window.GameEngine = {
         const evoModal = document.getElementById('evo-modal');
         if (lvModal) lvModal.classList.remove('show');
         if (evoModal) evoModal.classList.remove('show');
-        const gold = this.calcRunGold(this.kills, this.timer, this.currentStage * 20);
+        const gold = this.calcRunGold(this.kills, this.timer, this.currentStage * 15);
         if (gold > 0) SaveSystem.currentData.resources.gold += gold;
         SaveSystem.save();
         document.getElementById('gameover-title').textContent = '通關成功！';
@@ -2472,12 +2516,17 @@ window.GameEngine = {
         document.getElementById('lobby-gold').textContent = SaveSystem.currentData.resources.gold;
         const list = document.getElementById('upgrade-list');
         list.innerHTML = '';
-        [{ id:'ATK', name:'攻擊', cost:100 }, { id:'HP', name:'血量', cost:100 }, { id:'SPD', name:'速度', cost:150 }, { id:'REC', name:'恢復', cost:120 }].forEach(t => {
+        [{ id:'ATK', name:'攻擊', cost:100 }, { id:'HP', name:'血量', cost:100 }, { id:'SPD', name:'速度', cost:150, max:10 }, { id:'REC', name:'恢復', cost:120, max:10 }].forEach(t => {
             const lv = SaveSystem.currentData.talents[t.id] || 0;
             const cost = t.cost + lv * 50;
+            const maxLevel = t.max || Infinity;
+            const isMaxed = lv >= maxLevel;
             const card = document.createElement('div');
             card.className = 'talent-row glass-panel';
-            card.innerHTML = '<span>' + t.name + ' Lv.' + lv + '</span><button class="main-btn small" onclick="GameEngine.buyTalent(\'' + t.id + '\',' + cost + ')">' + cost + '💰</button>';
+            const label = t.name + ' Lv.' + lv + (isMaxed ? '（已達上限）' : '');
+            const btnLabel = isMaxed ? '已滿級' : cost + '💰';
+            const btnDisabled = isMaxed || SaveSystem.currentData.resources.gold < cost;
+            card.innerHTML = '<span>' + label + '</span><button class="main-btn small" onclick="GameEngine.buyTalent(\'' + t.id + '\',' + cost + ')"' + (btnDisabled ? ' disabled' : '') + '>' + btnLabel + '</button>';
             list.appendChild(card);
         });
         const stageList = document.getElementById('stage-list');
@@ -2521,7 +2570,7 @@ window.GameEngine = {
             card.appendChild(title);
             const status = document.createElement('div');
             status.className = 'status';
-            status.textContent = unlocked ? (id === 'default' ? '預設造型' : '已解鎖') : ('碎片 ' + (d.skinFragments[id] || 0) + '/50');
+            status.textContent = unlocked ? (id === 'default' ? '預設造型' : '已解鎖') : ('碎片 ' + (d.skinFragments[id] || 0) + '/5');
             card.appendChild(status);
             const btn = document.createElement('button');
             btn.className = 'main-btn small';
@@ -2546,22 +2595,63 @@ window.GameEngine = {
         }
         d.resources.gold -= 100;
         const msgEl = document.getElementById('skin-lottery-msg');
-        const gotFragment = Math.random() < 0.1;
+        // show overlay "rolling"
+        try {
+            const ol = document.getElementById('lottery-overlay');
+            if (ol) {
+                ol.setAttribute('aria-hidden','false');
+                ol.innerHTML = '<div class="panel"><h3>抽獎中...</h3><div style="height:120px;"><svg width="80" height="80" viewBox="0 0 24 24" style="margin:12px auto;display:block;"><circle cx="12" cy="12" r="10" stroke="#ffd54f" stroke-width="3" fill="none" stroke-linecap="round"><animate attributeName="stroke-dasharray" values="1 150;100 50;1 150" dur="1.2s" repeatCount="indefinite"/></circle></svg></div></div>';
+                ol.classList.add('show');
+            }
+        } catch (e) {}
+        // gacha: 1% base drop chance, require 5 fragments. Pity: guaranteed 1 fragment every 20 draws.
+        const FRAG_NEED = 5;
+        const BASE_CHANCE = 0.01;
+        // check pity
+        const pity = d.skinLottery = d.skinLottery || { drawsSinceLastFragment: 0 };
+        let gotFragment = false;
+        if ((pity.drawsSinceLastFragment || 0) >= 19) {
+            gotFragment = true; // pity triggers on 20th draw (0-based count)
+        } else {
+            gotFragment = Math.random() < BASE_CHANCE;
+        }
         if (gotFragment) {
             const chosen = lockedSkins[Math.floor(Math.random() * lockedSkins.length)];
-            d.skinFragments[chosen] = Math.min(50, (d.skinFragments[chosen] || 0) + 1);
-            let msg = '獲得 ' + PLAYER_SKINS[chosen].name + ' 碎片！(' + d.skinFragments[chosen] + '/50)';
-            if (d.skinFragments[chosen] >= 50) {
+            d.skinFragments[chosen] = Math.min(FRAG_NEED, (d.skinFragments[chosen] || 0) + 1);
+            pity.drawsSinceLastFragment = 0;
+            // visual effect
+            this.spawnParticles(window.innerWidth / 2, window.innerHeight / 2 - 80, '#ffd54f', 36, 4);
+            this.shake(12, 0.45);
+            let msg = '獲得 ' + PLAYER_SKINS[chosen].name + ' 碎片！(' + d.skinFragments[chosen] + '/' + FRAG_NEED + ')';
+            if (d.skinFragments[chosen] >= FRAG_NEED) {
                 d.skinsUnlocked[chosen] = true;
                 msg = '恭喜！已解鎖 ' + PLAYER_SKINS[chosen].name + ' 造型！';
+                this.spawnParticles(window.innerWidth / 2, window.innerHeight / 2 - 40, '#8c9eff', 48, 5);
             }
             SaveSystem.save();
             this.drawSkinCollection();
             if (msgEl) msgEl.textContent = msg;
+            // show success overlay
+            try {
+                const ol = document.getElementById('lottery-overlay');
+                if (ol) {
+                    ol.innerHTML = '<div class="panel"><h3>獲得碎片</h3><img src="' + (PLAYER_SKINS[chosen].img || '') + '" alt="skin"><div style="color:#fff;margin-top:8px;">' + PLAYER_SKINS[chosen].name + ' 碎片 (' + d.skinFragments[chosen] + '/' + FRAG_NEED + ')</div></div>';
+                    setTimeout(() => { ol.classList.remove('show'); ol.setAttribute('aria-hidden','true'); }, 1400);
+                }
+            } catch (e) {}
             this.showAlert(msg);
         } else {
-            if (msgEl) msgEl.textContent = '未抽到碎片，再試一次吧。';
+            pity.drawsSinceLastFragment = (pity.drawsSinceLastFragment || 0) + 1;
+            if (msgEl) msgEl.textContent = '未抽到碎片，再試一次吧。（保底 ' + (20 - pity.drawsSinceLastFragment) + ' 抽）';
             this.showAlert('抽獎失敗。');
+            // show fail overlay briefly
+            try {
+                const ol = document.getElementById('lottery-overlay');
+                if (ol) {
+                    ol.innerHTML = '<div class="panel"><h3>未抽中</h3><div style="color:#ddd;margin-top:6px;">再接再厲！保底 ' + (20 - pity.drawsSinceLastFragment) + ' 抽</div></div>';
+                    setTimeout(() => { ol.classList.remove('show'); ol.setAttribute('aria-hidden','true'); }, 900);
+                }
+            } catch (e) {}
         }
         this.renderLobby();
     },
@@ -2604,7 +2694,7 @@ window.GameEngine = {
         for (let i = 1; i <= MAX_STAGES; i++) {
             const opt = document.createElement('option');
             opt.value = i;
-            opt.textContent = i + '. ' + STAGES[i - 1].name;
+            opt.textContent = STAGES[i - 1].name;
             stageSelect.appendChild(opt);
         }
         activeBox.innerHTML = '';
@@ -2620,6 +2710,16 @@ window.GameEngine = {
             passiveBox.appendChild(label);
         });
         this.refreshTestPanel();
+        // populate joystick inputs
+        try {
+            const s = SaveSystem.currentData.joystickSettings || { baseX:90, baseYOffset:100, maxRadius:90 };
+            const bx = document.getElementById('joy-base-x');
+            const by = document.getElementById('joy-base-yoffset');
+            const jr = document.getElementById('joy-radius');
+            if (bx) bx.value = s.baseX || 90;
+            if (by) by.value = s.baseYOffset || 100;
+            if (jr) jr.value = s.maxRadius || 90;
+        } catch (e) {}
     },
     refreshTestPanel() {
         const settings = this.testSettings;
@@ -2674,6 +2774,40 @@ window.GameEngine = {
         this.renderLobby();
         this.showAlert('測試設定已套用');
     },
+    saveJoystickSettings() {
+        try {
+            const bx = Math.max(0, parseInt((document.getElementById('joy-base-x') || {}).value || 90, 10));
+            const by = Math.max(0, parseInt((document.getElementById('joy-base-yoffset') || {}).value || 100, 10));
+            const jr = Math.max(10, parseInt((document.getElementById('joy-radius') || {}).value || 90, 10));
+            SaveSystem.currentData.joystickSettings = { baseX: bx, baseYOffset: by, maxRadius: jr };
+            SaveSystem.save();
+            // apply immediately
+            if (Input && Input.init) {
+                // recalc joystick pos
+                const update = () => {
+                    try {
+                        const s = SaveSystem.currentData.joystickSettings || {};
+                        Input.joystick.baseX = s.baseX || 90;
+                        Input.joystick.baseY = window.innerHeight - (s.baseYOffset || 100);
+                        Input.joystick.maxRadius = s.maxRadius || 90;
+                    } catch (e) {}
+                };
+                update();
+            }
+            this.showAlert('搖桿設定已儲存');
+        } catch (e) { this.showAlert('儲存失敗'); }
+    },
+    fillJoystickQuickSettings() {
+        try {
+            const s = SaveSystem.currentData.joystickSettings || {};
+            document.getElementById('joy-base-x-quick').value = s.baseX != null ? s.baseX : 90;
+            document.getElementById('joy-base-yoffset-quick').value = s.baseYOffset != null ? s.baseYOffset : 100;
+            document.getElementById('joy-radius-quick').value = s.maxRadius != null ? s.maxRadius : 90;
+            this.showAlert('已讀取目前搖桿設定');
+        } catch (e) {
+            this.showAlert('讀取失敗');
+        }
+    },
     selectAllTestSkills() {
         this.testSettings.selectedActives = Object.keys(ACTIVE_SKILLS);
         this.testSettings.selectedPassives = Object.keys(PASSIVE_SKILLS);
@@ -2693,12 +2827,20 @@ window.GameEngine = {
     },
     buyTalent(id, cost) {
         const d = SaveSystem.currentData;
+        const caps = { SPD: 10, REC: 10 };
+        const currentLv = d.talents[id] || 0;
+        if (caps[id] && currentLv >= caps[id]) {
+            this.showAlert('此屬性已達最大等級');
+            return;
+        }
         if (d.resources.gold >= cost) {
             d.resources.gold -= cost;
-            d.talents[id] = (d.talents[id] || 0) + 1;
+            d.talents[id] = currentLv + 1;
             SaveSystem.save();
             this.renderLobby();
-        } else alert('金幣不足');
+        } else {
+            alert('金幣不足');
+        }
     },
 };
 
