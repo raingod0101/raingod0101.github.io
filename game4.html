@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
@@ -284,8 +285,10 @@ function skillLevelDamageMult(stars, evo) {
     const s = stars || 1;
     return (1 + (s - 1) * 0.22) * (evo ? 2.6 : 1);
 }
-function skillLevelCdBonus(stars) {
-    return Math.max(0, ((stars || 1) - 1) * 5);
+function skillLevelCdBonus(skillId, stars) {
+    // 流光飛刃 (kunai) 冷卻成長大幅下調 (5 -> 1.8)，防止高等級鬼畜發射
+    const bonusPerStar = (skillId === 'kunai') ? 1.8 : 5;
+    return Math.max(0, ((stars || 1) - 1) * bonusPerStar);
 }
 const PLAYER_SKINS = {
     default:{ name:'預設', img:null, description:'基本造型' },
@@ -562,15 +565,33 @@ class Projectile {
         this.shape = opts.shape || 'diamond';
         this.skillId = opts.skillId || null;
         this.lockTarget = opts.lockTarget || null;
+        this.isPuddle = opts.isPuddle || false;
+        this.gravityPull = opts.gravityPull || 0;
+        this.returning = false;
         this.burn = opts.burn || false;
         this.burnDmg = opts.burnDmg || 0;
         this.pierceLeft = opts.pierceLeft != null ? opts.pierceLeft : (BattleSkills.hasPassive('pierce') ? 1 : 0);
         this.hostile = !!opts.hostile;
     }
     update(dt, player, enemies) {
-        this.x += this.vx * dt; this.y += this.vy * dt;
+        if (!this.isPuddle) {
+            this.x += this.vx * dt; this.y += this.vy * dt;
+        }
         this.life--;
         if (this.life <= 0) { this.isDead = true; return; }
+
+        // 重力吸附邏輯
+        if (this.gravityPull > 0) {
+            enemies.forEach(e => {
+                const d = Math.hypot(e.x - this.x, e.y - this.y);
+                if (d < this.r * 4 && !e.isDead) {
+                    const pull = this.gravityPull * dt;
+                    e.x += (this.x - e.x) / d * pull;
+                    e.y += (this.y - e.y) / d * pull;
+                }
+            });
+        }
+
         if (this.hostile && player) {
             if (this.homing) {
                 const ang = Math.atan2(player.y - this.y, player.x - this.x);
@@ -619,7 +640,16 @@ class Projectile {
             if (Math.hypot(this.x - e.x, this.y - e.y) < e.r + this.r) {
                 let dmg = this.dmg;
                 if (e instanceof Boss && e.shield) dmg *= 0.5;
-                e.hp -= dmg;
+                e.hp -= (this.isPuddle ? dmg * dt / 60 : dmg);
+
+                // 觸發物理擊退
+                if (this.knockback > 0) {
+                    const ang = Math.atan2(e.y - (player ? player.y : this.y), e.x - (player ? player.x : this.x));
+                    const kbMult = (e instanceof Boss ? 0.2 : 1);
+                    e.kx += Math.cos(ang) * this.knockback * kbMult;
+                    e.ky += Math.sin(ang) * this.knockback * kbMult;
+                }
+
                 if (player && player.lifesteal) {
                     player.hp = Math.min(player.maxHp, player.hp + dmg * player.lifesteal);
                 }
@@ -759,6 +789,14 @@ class Enemy {
             }
             return;
         }
+        // 擊退物理更新
+        if (Math.abs(this.kx) > 0.1 || Math.abs(this.ky) > 0.1) {
+            this.x += this.kx * dt;
+            this.y += this.ky * dt;
+            this.kx *= 0.85;
+            this.ky *= 0.85;
+        }
+
         const ang = Math.atan2(player.y - this.y, player.x - this.x);
         this.x += Math.cos(ang) * this.speed * dt;
         this.y += Math.sin(ang) * this.speed * dt;
@@ -852,10 +890,12 @@ class Boss {
         this.x = x; this.y = y; this.r = 58;
         const stageMul = 1 + (index - 1) * 0.28;
         const tf = Math.max(1, timeFactor);
-        this.maxHp = hp * stageMul * 8.5 * tf;
+        // 再次削減 Boss 血量與傷害，防止秒殺
+        this.maxHp = hp * stageMul * 1.4 * tf;
         this.hp = this.maxHp;
         this.speed = (2.8 + (index - 1) * 0.12) * (0.9 + tf * 0.15);
-        this.baseDmg = (10 + (index - 1) * 0.85) * tf;
+        this.baseDmg = (1.2 + (index - 1) * 0.15) * tf;
+        this.kx = 0; this.ky = 0;
         this.isDead = false;
         this.index = index;
         this.timeFactor = tf;
@@ -870,6 +910,8 @@ class Boss {
         this.burnDmg = 0;
         this.skillTextTimer = 0;
         this.frozenTime = 0;
+        this.warningLine = null;
+        this.warningTimer = 0;
     }
     update(dt, player, projectiles) {
         if (this.frozenTime > 0) {
@@ -918,9 +960,20 @@ class Boss {
             }
         }
         if (this.skillTextTimer > 0) this.skillTextTimer = Math.max(0, this.skillTextTimer - dt);
+        
+        // 預警紅線邏輯
+        if (this.warningTimer > 0) {
+            this.warningTimer -= dt;
+            this.warningLine = { tx: player.x, ty: player.y };
+            return; // 預警期間停止移動與攻擊
+        }
+
         if (this.skillTimer > skillInterval) {
-            this.skillTimer = 0;
-            this.chargeAlpha = 0;
+            if (this.warningTimer <= 0 && !this.warningLine) {
+                this.warningTimer = 60; // 1秒預警 (60幀)
+                return;
+            }
+            this.skillTimer = 0; this.chargeAlpha = 0; this.warningTimer = 0; this.warningLine = null;
             const roll = Math.random();
             const hitDmg = (18 + this.index * 3.2) * this.timeFactor * (this.enraged ? 1.35 : 1);
             const aimAng = Math.atan2(player.y - this.y, player.x - this.x);
@@ -1005,6 +1058,16 @@ class Boss {
         ctx.fillStyle = this.hp > this.maxHp * 0.5 ? '#c5e1a5' : this.hp > this.maxHp * 0.25 ? '#ffe082' : '#ef9a9a';
         ctx.fillRect(this.x - barW/2, this.y - this.r - barH - 10, barW * (this.hp / this.maxHp), barH);
         ctx.save();
+        
+        // 繪製紅線預警
+        if (this.warningTimer > 0 && this.warningLine) {
+            ctx.strokeStyle = 'rgba(255, 0, 0, 0.7)';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([10, 5]);
+            ctx.beginPath(); ctx.moveTo(this.x, this.y); ctx.lineTo(this.warningLine.tx, this.warningLine.ty); ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
         ctx.translate(this.x, this.y);
         const phase = (this.index % 4);
         const colors = [
@@ -1439,8 +1502,10 @@ const BattleSkills = {
 function fireWeapon(skillId, player, projectiles, enemies, stats) {
     const a = BattleSkills.getActive(skillId);
     if (!a) return;
-    const baseDmg = 28 + a.stars * 24 + (stats.atk || 0) + (player.equipAtk || 0);
-    const dmg = baseDmg * skillLevelDamageMult(a.stars, a.evo) * 1.15;
+    const baseDmg = 25 + a.stars * 20 + (stats.atk || 0) + (player.equipAtk || 0);
+    // 平衡流光飛刃傷害
+    const mult = (skillId === 'kunai' ? 0.55 : 1.15);
+    const dmg = baseDmg * skillLevelDamageMult(a.stars, a.evo) * mult;
     const crit = ((player.critRate || 0) + (stats.crit || 0)) > Math.random() ? 2 : 1;
     const finalDmg = dmg * crit * (1 + (stats.burst || 0)) * (GameEngine.skillBuff || 1);
     const spd = 10 + (stats.range ? 2 : 0);
@@ -1450,12 +1515,44 @@ function fireWeapon(skillId, player, projectiles, enemies, stats) {
         const sorted = [...enemies].filter(e => !e.isDead).sort((a, b) =>
             Math.hypot(a.x - player.x, a.y - player.y) - Math.hypot(b.x - player.x, b.y - player.y));
         for (let i = 0; i < count; i++) {
-            const target = sorted[i] || null;
+            const target = sorted[0] || null;
             const ang = target ? Math.atan2(target.y - player.y, target.x - player.x) : (Math.PI * 2 * i / Math.max(count, 1));
-            const proj = new Projectile(player.x, player.y, Math.cos(ang)*spd, Math.sin(ang)*spd, finalDmg, a.evo ? '#00ffcc' : '#00d2ff', {
+            const proj = new Projectile(player.x, player.y, Math.cos(ang)*spd*1.2, Math.sin(ang)*spd*1.2, finalDmg, a.evo ? '#00ffcc' : '#00d2ff', {
                 homing: true, r: a.evo ? 8 : 6, shape: 'blade', lockTarget: target || undefined, skillId
             });
             projectiles.push(proj);
+        }
+        return;
+    }
+    // 其他技能重構：燃燒瓶改為地面區域
+    if (skillId === 'burnBottle') {
+        const count = skillProjCount(1, a.stars, a.evo, 1);
+        for (let i = 0; i < count; i++) {
+            const ang = Math.random() * Math.PI * 2;
+            const dist = 80 + Math.random() * 150;
+            const tx = player.x + Math.cos(ang) * dist;
+            const ty = player.y + Math.sin(ang) * dist;
+            projectiles.push(new Projectile(tx, ty, 0, 0, finalDmg * 0.4, '#ff5722', {
+                r: a.evo ? 60 : 40, shape: 'orb', skillId, life: 240, isPuddle: true, burn: true, burnDmg: finalDmg * 0.6
+            }));
+        }
+        return;
+    }
+    // 力場與護盾加入強大的擊退
+    if (skillId === 'forcefield') {
+        const r = 70 + a.stars * 20 + (a.evo ? 40 : 0);
+        projectiles.push(new Projectile(player.x, player.y, 0, 0, finalDmg * 0.6, '#4dd0e1', {
+            r: r, shape: 'orb', skillId, life: 30, followPlayer: true, knockback: 25 + a.stars * 5
+        }));
+        return;
+    }
+    if (skillId === 'guardian') {
+        const count = skillProjCount(2, a.stars, a.evo, 1);
+        for (let i = 0; i < count; i++) {
+            const ang = (Date.now() / 150) + Math.PI * 2 * i / count;
+            projectiles.push(new Projectile(player.x + Math.cos(ang) * 60, player.y + Math.sin(ang) * 60, 0, 0, finalDmg * 0.8, '#81c784', {
+                r: a.evo ? 16 : 12, shape: 'hex', skillId, life: 2, followPlayer: true, knockback: 12 + a.stars * 3
+            }));
         }
         return;
     }
@@ -1636,9 +1733,13 @@ function fireWeapon(skillId, player, projectiles, enemies, stats) {
     if (skillId === 'burnBottle') {
         const count = skillProjCount(3, a.stars, a.evo, 2);
         for (let i = 0; i < count; i++) {
-            const ang = Math.PI * 2 * i / count + (a.evo ? 0.12 : 0);
-            projectiles.push(new Projectile(player.x, player.y, Math.cos(ang) * spd * 1.2, Math.sin(ang) * spd * 1.2, finalDmg * 0.75, '#ff5722', {
-                r: a.evo ? 10 : 8, shape:'diamond', skillId, life: 320, burn:true, burnDmg: finalDmg * 0.22
+            const ang = Math.random() * Math.PI * 2;
+            const dist = 80 + Math.random() * 160;
+            const targetX = player.x + Math.cos(ang) * dist;
+            const targetY = player.y + Math.sin(ang) * dist;
+            // 產生在地上的燃燒區域
+            projectiles.push(new Projectile(targetX, targetY, 0, 0, finalDmg * 0.4, '#ff5722', {
+                r: a.evo ? 55 : 35, shape:'orb', skillId, life: 200, isPuddle: true, burn: true, burnDmg: finalDmg * 0.6
             }));
         }
         return;
@@ -2222,7 +2323,7 @@ window.GameEngine = {
         for (const a of BattleSkills.active) {
             if (a.id === 'gojoDomain') continue;
             this.shootTimers[a.id] = (this.shootTimers[a.id] || 0) + dt;
-            const cd = Math.max(10, (a.evo ? 20 : 30) - stats.cdReduct - skillLevelCdBonus(a.stars));
+            const cd = Math.max(10, (a.evo ? 20 : 30) - stats.cdReduct - skillLevelCdBonus(a.id, a.stars));
             if (this.shootTimers[a.id] >= cd) {
                 fireWeapon(a.id, this.player, this.projectiles, this.enemies, stats);
                 this.shootTimers[a.id] = 0;
@@ -2642,6 +2743,7 @@ window.GameEngine = {
             this.showAlert(msg);
         } else {
             pity.drawsSinceLastFragment = (pity.drawsSinceLastFragment || 0) + 1;
+            SaveSystem.save();
             if (msgEl) msgEl.textContent = '未抽到碎片，再試一次吧。（保底 ' + (20 - pity.drawsSinceLastFragment) + ' 抽）';
             this.showAlert('抽獎失敗。');
             // show fail overlay briefly
