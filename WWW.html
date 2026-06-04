@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Raingod | 影片</title>
+    <title>YouTube 放大版播放器</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -15,15 +15,17 @@
         }
         h2 {
             color: #333;
+            margin-bottom: 20px;
         }
+        /* 調整容器：放大至 1200px，適應大螢幕但限制最大寬度，避免全螢幕 */
         .video-container {
             position: relative;
-            width: 100%;
-            max-width: 800px;
+            width: 90%;
+            max-width: 1200px; 
             aspect-ratio: 16 / 9;
             background: #000;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
-            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            border-radius: 12px;
             overflow: hidden;
         }
         iframe {
@@ -33,7 +35,7 @@
         }
         .status-bar {
             margin-top: 15px;
-            font-size: 14px;
+            font-size: 16px;
             color: #666;
         }
     </style>
@@ -44,7 +46,7 @@
 <div id="nav_bar"></div>
 
 <script src="menu.js"></script>
-    <h2>YouTube 播放進度自動儲存</h2>
+    <h2>YouTube 影片播放</h2>
     
     <div class="video-container">
         <div id="player"></div>
@@ -55,11 +57,8 @@
     <script src="https://www.youtube.com/iframe_api"></script>
 
     <script>
-        // 從您提供的網址中提取出的 YouTube 影片 ID
         const videoId = 'uc4IVwtGkTc'; 
-        const storageKey = `yt_progress_${videoId}`;
         let player;
-        let progressTimer;
 
         // 1. 當 YouTube API 準備就緒時會自動觸發此函式
         function onYouTubeIframeAPIReady() {
@@ -79,52 +78,19 @@
 
         // 2. 影片準備好時觸發
         function onPlayerReady(event) {
-            // 檢查本地端是否有上一次的觀看紀錄
-            const savedTime = localStorage.getItem(storageKey);
-            const statusDiv = document.getElementById('status');
-
-            if (savedTime) {
-                const timeInSeconds = parseFloat(savedTime);
-                // 跳轉到記錄的時間（但先不自動播放，讓使用者自己點擊）
-                player.seekTo(timeInSeconds, true);
-                
-                // 格式化時間顯示
-                const minutes = Math.floor(timeInSeconds / 60);
-                const seconds = Math.floor(timeInSeconds % 60);
-                statusDiv.innerText = `已恢復至上次觀看進度：${minutes}分${seconds}秒`;
-            } else {
-                statusDiv.innerText = `影片已準備就緒（尚無觀看紀錄）`;
-            }
+            document.getElementById('status').innerText = `影片已準備就緒`;
         }
 
-        // 3. 監聽播放狀態改變（播放中、暫停、結束）
+        // 3. 監聽播放狀態改變（純粹更新文字狀態，不儲存任何進度）
         function onPlayerStateChange(event) {
             const statusDiv = document.getElementById('status');
             
             if (event.data == YT.PlayerState.PLAYING) {
-                statusDiv.innerText = "影片播放中，正在即時記錄進度...";
-                // 當影片在播放時，每秒鐘自動儲存一次進度
-                progressTimer = setInterval(() => {
-                    if (player && player.getCurrentTime) {
-                        const currentTime = player.getCurrentTime();
-                        localStorage.setItem(storageKey, currentTime);
-                    }
-                }, 1000);
-            } else {
-                // 如果暫停、快轉或結束，停止定時器
-                clearInterval(progressTimer);
-                
-                if (event.data == YT.PlayerState.PAUSED) {
-                    const currentTime = player.getCurrentTime();
-                    localStorage.setItem(storageKey, currentTime);
-                    statusDiv.innerText = "影片已暫停，進度已儲存。";
-                }
-                
-                if (event.data == YT.PlayerState.ENDED) {
-                    // 影片看完了，清除紀錄
-                    localStorage.removeItem(storageKey);
-                    statusDiv.innerText = "影片已看完，觀看紀錄已清除。";
-                }
+                statusDiv.innerText = "影片播放中...";
+            } else if (event.data == YT.PlayerState.PAUSED) {
+                statusDiv.innerText = "影片已暫停。";
+            } else if (event.data == YT.PlayerState.ENDED) {
+                statusDiv.innerText = "影片已播放完畢。";
             }
         }
     </script>
