@@ -1,33 +1,243 @@
-<html>
-    <head>
-        <title>raingod0101</title>
-    </head>
-    <body style="background-color:white">
-		<!--
-    <div style="background-color:skyblue; display: flex; align-items: center;gap: 20px;"> 
-        <a href="https://raingod0101.github.io/"><img src="p3.png" width="70" height="70"></a>
-        <a href="math.html"><span style="font-size: 40px;">數學</span></a>
-        <a href="game.html"><span style="font-size: 40px;">遊戲</span></a>
-        <a href="tool.html"><span style="font-size: 40px;">工具</span></a>
-    </div>
-		-->
-	<script src="https://freegeometricgames.com/raingod_code.js"></script> //新導覽列
-    <div id="nav_bar"></div>
-		
-    <div style=background-color:skyblue>
-    <a href="math1.html"><h2>質因數分解</h2></a>
-	<a href="math6.html"><h2>所有質數</h2></a>
-	</div>
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Raingod | 網頁自動連點器</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
 
+        body {
+            background-color: #0f172a;
+            color: #f8fafc;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            background: #1e293b;
+            padding: 30px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            width: 350px;
+            border: 1px solid #38bdf8;
+        }
+
+        h1 {
+            font-size: 24px;
+            margin-bottom: 20px;
+            color: #38bdf8;
+            text-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .stat-box {
+            background: #0f172a;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #334155;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #94a3b8;
+            text-transform: uppercase;
+        }
+
+        .stat-value {
+            font-size: 22px;
+            font-weight: bold;
+            color: #f8fafc;
+            margin-top: 5px;
+        }
+
+        .control-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+
+        label {
+            font-size: 14px;
+            color: #94a3b8;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        input[type="number"] {
+            width: 100%;
+            padding: 10px;
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 16px;
+            outline: none;
+            transition: border 0.2s;
+        }
+
+        input[type="number"]:focus {
+            border-color: #38bdf8;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 15px;
+            font-size: 18px;
+            font-weight: bold;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 10px;
+        }
+
+        .btn-target {
+            background: linear-gradient(135deg, #38bdf8, #0284c7);
+            color: #fff;
+            box-shadow: 0 4px 15px rgba(56, 189, 248, 0.4);
+        }
+
+        .btn-target:active {
+            transform: scale(0.98);
+        }
+
+        .btn-toggle {
+            background: #22c55e;
+            color: #fff;
+        }
+
+        .btn-toggle.running {
+            background: #ef4444;
+        }
+
+        .btn-reset {
+            background: transparent;
+            color: #64748b;
+            font-size: 14px;
+            text-decoration: underline;
+            margin-top: 5px;
+            cursor: pointer;
+            border: none;
+        }
+
+        .btn-reset:hover {
+            color: #94a3b8;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Raingod 連點測試器</h1>
+
+        <div class="dashboard">
+            <div class="stat-box">
+                <div class="stat-label">總點擊次數</div>
+                <div id="click-count" class="stat-value">0</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">目前 CPS</div>
+                <div id="cps-value" class="stat-value">0</div>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <label for="interval">點擊間隔 (毫秒 ms)：</label>
+            <input type="number" id="interval" value="100" min="10">
+        </div>
+
+        <!-- 這個按鈕是被連點的目標 -->
+        <button id="target-btn" class="btn btn-target">點擊目標按鈕</button>
+        
+        <!-- 這個按鈕用來開關自動連點 -->
+        <button id="toggle-btn" class="btn btn-toggle">啟動自動連點</button>
+
+        <button id="reset-btn" class="btn btn-reset">重設數據</button>
+    </div>
+
+    <script>
+        let count = 0;
+        let isRunning = false;
+        let clickInterval = null;
+        let lastSecondsClicks = 0;
+
+        const targetBtn = document.getElementById('target-btn');
+        const toggleBtn = document.getElementById('toggle-btn');
+        const resetBtn = document.getElementById('reset-btn');
+        const clickCountDisplay = document.getElementById('click-count');
+        const cpsDisplay = document.getElementById('cps-value');
+        const intervalInput = document.getElementById('interval');
+
+        // 1. 目標按鈕點擊事件（手動或自動點擊都會觸發這裡）
+        targetBtn.addEventListener('click', () => {
+            count++;
+            lastSecondsClicks++;
+            clickCountDisplay.textContent = count;
+        });
+
+        // 2. 開關自動連點
+        toggleBtn.addEventListener('click', () => {
+            if (isRunning) {
+                stopAutoClick();
+            } else {
+                startAutoClick();
+            }
+        });
+
+        function startAutoClick() {
+            const ms = parseInt(intervalInput.value) || 100;
+            if (ms < 10) {
+                alert("間隔時間太短可能會導致瀏覽器卡死，請設定 10ms 以上！");
+                return;
+            }
+
+            isRunning = true;
+            toggleBtn.textContent = '停止連點';
+            toggleBtn.classList.add('running');
+            intervalInput.disabled = true;
+
+            // 核心邏輯：定時去觸發目標按鈕的 click() 事件
+            clickInterval = setInterval(() => {
+                targetBtn.click();
+            }, ms);
+        }
+
+        function stopAutoClick() {
+            isRunning = false;
+            toggleBtn.textContent = '啟動自動連點';
+            toggleBtn.classList.remove('running');
+            intervalInput.disabled = false;
+            clearInterval(clickInterval);
+        }
+
+        // 3. 每秒計算一次 CPS (Clicks Per Second)
+        setInterval(() => {
+            cpsDisplay.textContent = lastSecondsClicks;
+            lastSecondsClicks = 0;
+        }, 1000);
+
+        // 4. 重設數據
+        resetBtn.addEventListener('click', () => {
+            stopAutoClick();
+            count = 0;
+            lastSecondsClicks = 0;
+            clickCountDisplay.textContent = '0';
+            cpsDisplay.textContent = '0';
+        });
+    </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
