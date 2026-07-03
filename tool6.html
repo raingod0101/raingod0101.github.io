@@ -10,35 +10,37 @@
             font-family: "Microsoft JhengHei", "微軟正黑體", sans-serif;
             margin: 0;
             padding: 0;
-            background-color: #333333; /* 改用深色背景，看白底黑字的 PDF 更舒服 */
+            background-color: #333333; /* 深色背景 */
         }
 
-        /* PDF 顯示區域：這次完全頂到最上方，絕不留白 */
+        /* PDF 顯示區域：解決切邊問題，並允許左右滾動 */
         .pdf-container {
             margin-top: 0;
-            margin-bottom: 90px; /* 只留底部給按鈕 */
+            margin-bottom: 70px; /* 配合變小的按鈕，縮小底部留白 */
             display: flex;
             flex-direction: column;
             align-items: center;
-            padding: 5px;
-            overflow-x: auto;
+            padding: 10px;
+            overflow-x: auto; /* 當放大時，允許左右滑動觀看 */
+            width: 100%;
+            box-sizing: border-box;
         }
 
         canvas {
             background-color: white;
             box-shadow: 0 4px 12px rgba(0,0,0,0.5);
             margin-bottom: 15px;
-            max-width: 100%;
+            display: block; /* 移除 Canvas 預設的行內間隙 */
         }
 
-        /* 底部固定操作面板：改到下面，字體適中不佔空間 */
+        /* 底部固定操作面板：高度稍微調低 */
         .bottom-controls {
             position: fixed;
             bottom: 0;
             left: 0;
             right: 0;
             background-color: rgba(0, 86, 179, 0.95);
-            padding: 10px;
+            padding: 8px 5px; /* 縮減上下內邊距 */
             box-shadow: 0 -4px 10px rgba(0,0,0,0.3);
             z-index: 999;
             display: flex;
@@ -52,7 +54,7 @@
             transform: translateY(100%);
         }
 
-        /* 浮動的「打開選單」小按鈕，只有在隱藏時才會出現 */
+        /* 浮動的「打開選單」小按鈕（也稍微調小一點） */
         .menu-toggle-btn {
             position: fixed;
             bottom: 15px;
@@ -61,9 +63,9 @@
             color: white;
             border: 2px solid white;
             border-radius: 50%;
-            width: 60px;
-            height: 60px;
-            font-size: 16px;
+            width: 50px;  /* 60px -> 50px */
+            height: 50px; /* 60px -> 50px */
+            font-size: 15px;
             font-weight: bold;
             box-shadow: 0 4px 10px rgba(0,0,0,0.4);
             z-index: 998;
@@ -71,12 +73,12 @@
             cursor: pointer;
         }
 
-        /* 精簡優化後的按鈕樣式 */
+        /* 按鈕樣式改小（字體 18px -> 15px，縮減 padding） */
         .nav-btn {
-            font-size: 18px;
+            font-size: 15px;
             font-weight: bold;
-            padding: 10px 14px;
-            border-radius: 8px;
+            padding: 6px 10px; /* 10px 14px -> 6px 10px */
+            border-radius: 6px;
             border: 2px solid white;
             cursor: pointer;
             box-shadow: 0 2px 5px rgba(0,0,0,0.2);
@@ -163,15 +165,15 @@
                     pdfArea.appendChild(canvas);
                     const context = canvas.getContext('2d');
                     
+                    // 用目前的縮放比例計算真實渲染解析度
                     const viewport = page.getViewport({ scale: currentScale });
                     canvas.height = viewport.height;
                     canvas.width = viewport.width;
 
-                    if (currentScale > 1.2) {
-                        canvas.style.maxWidth = 'none';
-                    } else {
-                        canvas.style.maxWidth = '100%';
-                    }
+                    // 關鍵修正：直接利用 CSS width 控制縮放後的螢幕呈現
+                    // 當小於螢幕寬度時填滿 100%，大於螢幕寬度時呈現實際放大像素並允許滾動
+                    canvas.style.width = '100%';
+                    canvas.style.maxWidth = viewport.width + 'px';
 
                     const renderContext = { canvasContext: context, viewport: viewport };
                     page.render(renderContext);
