@@ -3,87 +3,96 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
-    <title>阿公的手機看書機</title>
-    <!-- 載入手機看 PDF 必備的工具 -->
+    <title>阿公的全螢幕看書機</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <style>
         body {
             font-family: "Microsoft JhengHei", "微軟正黑體", sans-serif;
             margin: 0;
             padding: 0;
-            background-color: #f0f0f0;
+            background-color: #333333; /* 改用深色背景，看白底黑字的 PDF 更舒服 */
         }
 
-        /* 頂部固定操作區 */
-        .header-controls {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            background-color: #0056b3;
-            padding: 12px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-            z-index: 999;
-            text-align: center;
-        }
-
-        /* 巨型按鈕通用樣式 */
-        .big-btn {
-            font-size: 24px;
-            font-weight: bold;
-            padding: 12px 20px;
-            margin: 5px;
-            border-radius: 12px;
-            border: 3px solid white;
-            cursor: pointer;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
-        }
-
-        /* 檔案上傳按鈕 */
-        .upload-wrapper {
-            position: relative;
-            display: inline-block;
-        }
-        .upload-wrapper input[type="file"] {
-            position: absolute;
-            left: 0; top: 0; opacity: 0;
-            width: 100%; height: 100%;
-            cursor: pointer;
-        }
-        .file-btn {
-            background-color: #ffffff;
-            color: #0056b3;
-        }
-
-        /* 放大縮小按鈕 */
-        .zoom-btn {
-            background-color: #ff9800;
-            color: white;
-        }
-
-        /* 顯示 PDF 的畫布區域 */
+        /* PDF 顯示區域：這次完全頂到最上方，絕不留白 */
         .pdf-container {
-            margin-top: 170px; /* 留空間給上面的大按鈕 */
+            margin-top: 0;
+            margin-bottom: 90px; /* 只留底部給按鈕 */
             display: flex;
             flex-direction: column;
             align-items: center;
-            padding: 10px;
-            overflow-x: auto; /* 放大時可以左右滑動 */
+            padding: 5px;
+            overflow-x: auto;
         }
 
         canvas {
             background-color: white;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            margin-bottom: 20px;
-            max-width: 100%; /* 預設剛好符合手機寬度 */
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            margin-bottom: 15px;
+            max-width: 100%;
         }
 
-        /* 歡迎提示 */
+        /* 底部固定操作面板：改到下面，字體適中不佔空間 */
+        .bottom-controls {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background-color: rgba(0, 86, 179, 0.95);
+            padding: 10px;
+            box-shadow: 0 -4px 10px rgba(0,0,0,0.3);
+            z-index: 999;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            transition: transform 0.2s ease-in-out;
+        }
+
+        /* 當隱藏按鈕時，把面板推到螢幕外面 */
+        .bottom-controls.hidden {
+            transform: translateY(100%);
+        }
+
+        /* 浮動的「打開選單」小按鈕，只有在隱藏時才會出現 */
+        .menu-toggle-btn {
+            position: fixed;
+            bottom: 15px;
+            right: 15px;
+            background-color: #ff9800;
+            color: white;
+            border: 2px solid white;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            font-size: 16px;
+            font-weight: bold;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.4);
+            z-index: 998;
+            display: none;
+            cursor: pointer;
+        }
+
+        /* 精簡優化後的按鈕樣式 */
+        .nav-btn {
+            font-size: 18px;
+            font-weight: bold;
+            padding: 10px 14px;
+            border-radius: 8px;
+            border: 2px solid white;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+
+        .file-btn { background-color: #ffffff; color: #0056b3; position: relative; }
+        .file-btn input[type="file"] { position: absolute; left: 0; top: 0; opacity: 0; width: 100%; height: 100%; }
+        .zoom-btn { background-color: #ff9800; color: white; }
+        .hide-btn { background-color: #666; color: white; }
+
+        /* 初始歡迎提示 */
         .welcome-msg {
-            margin-top: 200px;
-            font-size: 28px;
+            margin-top: 150px;
+            font-size: 26px;
             text-align: center;
-            color: #444;
+            color: #eee;
             line-height: 1.6;
             padding: 20px;
         }
@@ -91,66 +100,63 @@
 </head>
 <body>
 
-    <!-- 頂部大按鈕固定區 -->
-    <div class="header-controls">
-        <div class="upload-wrapper">
-            <button class="big-btn file-btn">📂 1. 按這裡選檔案</button>
-            <input type="file" id="file-selector" accept=".pdf">
-        </div>
-        <div>
-            <button class="big-btn zoom-btn" onclick="zoomIn()">➕ 2. 字變大</button>
-            <button class="big-btn zoom-btn" onclick="zoomOut()">➖ 3. 字變小</button>
-        </div>
-    </div>
-
-    <!-- 初始歡迎畫面 -->
     <div id="welcome" class="welcome-msg">
         👴🏻 阿公好！<br><br>
-        第一步：先按最上面的<br><b>【📂 選檔案】</b><br><br>
-        第二步：如果字太小，就按<br><b>【➕ 字變大】</b>
+        請先按最下面的<br><b>【📁 選檔案】</b><br><br>
+        選好後，字就會出現在這裡囉！
     </div>
 
-    <!-- PDF 渲染出來的地方 -->
     <div id="pdf-area" class="pdf-container"></div>
 
+    <button id="menu-toggle" class="menu-toggle-btn" onclick="toggleMenu(true)">選單</button>
+
+    <div id="controls-panel" class="bottom-controls">
+        <button class="nav-btn file-btn">
+            📂 選檔案
+            <input type="file" id="file-selector" accept=".pdf">
+        </button>
+        <button class="nav-btn zoom-btn" onclick="zoomIn()">➕ 放大</button>
+        <button class="nav-btn zoom-btn" onclick="zoomOut()">➖ 縮小</button>
+        <button class="nav-btn hide-btn" onclick="toggleMenu(false)">👁️ 隱藏</button>
+    </div>
+
     <script>
-        // 設定 PDF.js 的核心工具路徑
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
 
         let currentPdf = null;
-        let currentScale = 1.2; // 預設放大倍率，配合手機
+        let currentScale = 1.0; 
         const pdfArea = document.getElementById('pdf-area');
         const welcome = document.getElementById('welcome');
+        const controlsPanel = document.getElementById('controls-panel');
+        const menuToggle = document.getElementById('menu-toggle');
 
-        // 監聽選取檔案
+        // 監聽選檔案
         document.getElementById('file-selector').addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (!file) return;
 
             welcome.style.display = 'none';
-            pdfArea.innerHTML = '請稍等...資料載入中...';
+            pdfArea.innerHTML = '<p style="color:white; font-size:24px;">資料載入中，請稍等...</p>';
 
             const fileReader = new FileReader();
             fileReader.onload = function() {
                 const typedarray = new Uint8Array(this.result);
                 
-                // 讀取 PDF
                 pdfjsLib.getDocument(typedarray).promise.then(function(pdf) {
                     currentPdf = pdf;
                     renderAllPages();
                 }).catch(function(error) {
-                    pdfArea.innerHTML = '檔案打開失敗，請確認是不是正確的 PDF 喔！';
+                    pdfArea.innerHTML = '<p style="color:red; font-size:24px;">檔案打開失敗！</p>';
                 });
             };
             fileReader.readAsArrayBuffer(file);
         });
 
-        // 把所有頁面畫出來
+        // 渲染頁面
         function renderAllPages() {
             if (!currentPdf) return;
-            pdfArea.innerHTML = ''; // 清空畫面
+            pdfArea.innerHTML = ''; 
 
-            // 一頁一頁畫出來，阿公只要一直往下捲動就能看
             for (let pageNum = 1; pageNum <= currentPdf.numPages; pageNum++) {
                 currentPdf.getPage(pageNum).then(function(page) {
                     const canvas = document.createElement('canvas');
@@ -161,34 +167,31 @@
                     canvas.height = viewport.height;
                     canvas.width = viewport.width;
 
-                    // 如果放大到超出螢幕，取消 max-width 限制，讓它可以左右滑動看細節
-                    if (currentScale > 1.5) {
+                    if (currentScale > 1.2) {
                         canvas.style.maxWidth = 'none';
                     } else {
                         canvas.style.maxWidth = '100%';
                     }
 
-                    const renderContext = {
-                        canvasContext: context,
-                        viewport: viewport
-                    };
+                    const renderContext = { canvasContext: context, viewport: viewport };
                     page.render(renderContext);
                 });
             }
         }
 
-        // 放大按鈕
-        function zoomIn() {
-            if (!currentPdf) return;
-            currentScale += 0.3; // 每次放大 30%
-            renderAllPages();
-        }
+        // 放大縮小
+        function zoomIn() { if (currentPdf) { currentScale += 0.2; renderAllPages(); } }
+        function zoomOut() { if (currentPdf && currentScale > 0.4) { currentScale -= 0.2; renderAllPages(); } }
 
-        // 縮小按鈕
-        function zoomOut() {
-            if (!currentPdf || currentScale <= 0.6) return;
-            currentScale -= 0.3; // 每次縮小 30%
-            renderAllPages();
+        // 控制選單顯示或隱藏
+        function toggleMenu(show) {
+            if (show) {
+                controlsPanel.classList.remove('hidden');
+                menuToggle.style.display = 'none';
+            } else {
+                controlsPanel.classList.add('hidden');
+                menuToggle.style.display = 'block';
+            }
         }
     </script>
 </body>
