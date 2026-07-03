@@ -2,154 +2,194 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>阿公的超級看書機</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <title>阿公的手機看書機</title>
+    <!-- 載入手機看 PDF 必備的工具 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <style>
-        /* 全域大字體與舒適深色背景，保護眼睛 */
         body {
             font-family: "Microsoft JhengHei", "微軟正黑體", sans-serif;
             margin: 0;
             padding: 0;
-            background-color: #f4f4f9;
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-            overflow: hidden;
+            background-color: #f0f0f0;
         }
 
-        /* 頂部超大操作區 */
-        .top-bar {
+        /* 頂部固定操作區 */
+        .header-controls {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
             background-color: #0056b3;
-            color: white;
-            padding: 20px;
+            padding: 12px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            z-index: 999;
             text-align: center;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-            z-index: 10;
         }
 
-        .title {
-            font-size: 36px;
+        /* 巨型按鈕通用樣式 */
+        .big-btn {
+            font-size: 24px;
             font-weight: bold;
-            margin-bottom: 15px;
-            letter-spacing: 2px;
+            padding: 12px 20px;
+            margin: 5px;
+            border-radius: 12px;
+            border: 3px solid white;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
         }
 
-        /* 巨型上傳按鈕 */
-        .upload-btn-wrapper {
+        /* 檔案上傳按鈕 */
+        .upload-wrapper {
             position: relative;
-            overflow: hidden;
             display: inline-block;
         }
-
-        .btn {
-            border: 4px solid #ffffff;
-            color: #0056b3;
-            background-color: #ffffff;
-            padding: 15px 40px;
-            border-radius: 50px;
-            font-size: 28px;
-            font-weight: bold;
-            cursor: pointer;
-            box-shadow: 0 6px 15px rgba(0,0,0,0.3);
-            transition: transform 0.1s;
-        }
-
-        .btn:active {
-            transform: scale(0.95);
-        }
-
-        .upload-btn-wrapper input[type=file] {
-            font-size: 100px;
+        .upload-wrapper input[type="file"] {
             position: absolute;
-            left: 0;
-            top: 0;
-            opacity: 0;
+            left: 0; top: 0; opacity: 0;
+            width: 100%; height: 100%;
             cursor: pointer;
         }
-
-        /* 提示文字 */
-        .tip-text {
-            font-size: 22px;
-            color: #ffe600;
-            margin-top: 10px;
-            font-weight: bold;
+        .file-btn {
+            background-color: #ffffff;
+            color: #0056b3;
         }
 
-        /* PDF 顯示區域 */
-        .viewer-container {
-            flex: 1;
-            width: 100%;
-            height: calc(100vh - 160px);
-            border: none;
+        /* 放大縮小按鈕 */
+        .zoom-btn {
+            background-color: #ff9800;
+            color: white;
         }
 
-        iframe {
-            width: 100%;
-            height: 100%;
-            border: none;
-        }
-
-        /* 一開始沒上傳檔案時的巨型提示 */
-        .welcome-screen {
-            flex: 1;
+        /* 顯示 PDF 的畫布區域 */
+        .pdf-container {
+            margin-top: 170px; /* 留空間給上面的大按鈕 */
             display: flex;
             flex-direction: column;
-            justify-content: center;
             align-items: center;
-            color: #555;
-            padding: 20px;
-            text-align: center;
+            padding: 10px;
+            overflow-x: auto; /* 放大時可以左右滑動 */
         }
 
-        .welcome-text {
-            font-size: 32px;
+        canvas {
+            background-color: white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
             margin-bottom: 20px;
+            max-width: 100%; /* 預設剛好符合手機寬度 */
+        }
+
+        /* 歡迎提示 */
+        .welcome-msg {
+            margin-top: 200px;
+            font-size: 28px;
+            text-align: center;
+            color: #444;
             line-height: 1.6;
+            padding: 20px;
         }
     </style>
 </head>
 <body>
 
-    <div class="top-bar">
-        <div class="upload-btn-wrapper">
-            <button class="btn">📂 按這裡選檔案（看報紙、看書）</button>
-            <input type="file" id="pdf-upload" accept=".pdf" onchange="loadPDF(this)" />
+    <!-- 頂部大按鈕固定區 -->
+    <div class="header-controls">
+        <div class="upload-wrapper">
+            <button class="big-btn file-btn">📂 1. 按這裡選檔案</button>
+            <input type="file" id="file-selector" accept=".pdf">
         </div>
-        <div class="tip-text">💡 大提示：進去畫面後，按右下角或右上角的「+」就可以放大喔！</div>
+        <div>
+            <button class="big-btn zoom-btn" onclick="zoomIn()">➕ 2. 字變大</button>
+            <button class="big-btn zoom-btn" onclick="zoomOut()">➖ 3. 字變小</button>
+        </div>
     </div>
 
-    <div id="welcome" class="welcome-screen">
-        <p class="welcome-text">
-            👴🏻 阿公好！<br>
-            請先點選上面的 <b>【按這裡選檔案】</b> 藍色大按鈕，<br>
-            選好你想看的 PDF 檔案，字就會跑出來囉！
-        </p>
+    <!-- 初始歡迎畫面 -->
+    <div id="welcome" class="welcome-msg">
+        👴🏻 阿公好！<br><br>
+        第一步：先按最上面的<br><b>【📂 選檔案】</b><br><br>
+        第二步：如果字太小，就按<br><b>【➕ 字變大】</b>
     </div>
 
-    <div id="viewer-container" class="viewer-container" style="display: none;">
-        <iframe id="pdf-viewer" src=""></iframe>
-    </div>
+    <!-- PDF 渲染出來的地方 -->
+    <div id="pdf-area" class="pdf-container"></div>
 
     <script>
-        function loadPDF(input) {
-            const file = input.files[0];
-            if (file) {
-                // 建立檔案的臨時 URL
-                const fileURL = URL.createObjectURL(file);
-                
-                const viewer = document.getElementById('pdf-viewer');
-                const container = document.getElementById('viewer-container');
-                const welcome = document.getElementById('welcome');
+        // 設定 PDF.js 的核心工具路徑
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
 
-                // 將 PDF 網址丟給 iframe
-                viewer.src = fileURL;
+        let currentPdf = null;
+        let currentScale = 1.2; // 預設放大倍率，配合手機
+        const pdfArea = document.getElementById('pdf-area');
+        const welcome = document.getElementById('welcome');
+
+        // 監聽選取檔案
+        document.getElementById('file-selector').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            welcome.style.display = 'none';
+            pdfArea.innerHTML = '請稍等...資料載入中...';
+
+            const fileReader = new FileReader();
+            fileReader.onload = function() {
+                const typedarray = new Uint8Array(this.result);
                 
-                // 切換顯示畫面
-                welcome.style.display = 'none';
-                container.style.display = 'block';
+                // 讀取 PDF
+                pdfjsLib.getDocument(typedarray).promise.then(function(pdf) {
+                    currentPdf = pdf;
+                    renderAllPages();
+                }).catch(function(error) {
+                    pdfArea.innerHTML = '檔案打開失敗，請確認是不是正確的 PDF 喔！';
+                });
+            };
+            fileReader.readAsArrayBuffer(file);
+        });
+
+        // 把所有頁面畫出來
+        function renderAllPages() {
+            if (!currentPdf) return;
+            pdfArea.innerHTML = ''; // 清空畫面
+
+            // 一頁一頁畫出來，阿公只要一直往下捲動就能看
+            for (let pageNum = 1; pageNum <= currentPdf.numPages; pageNum++) {
+                currentPdf.getPage(pageNum).then(function(page) {
+                    const canvas = document.createElement('canvas');
+                    pdfArea.appendChild(canvas);
+                    const context = canvas.getContext('2d');
+                    
+                    const viewport = page.getViewport({ scale: currentScale });
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+
+                    // 如果放大到超出螢幕，取消 max-width 限制，讓它可以左右滑動看細節
+                    if (currentScale > 1.5) {
+                        canvas.style.maxWidth = 'none';
+                    } else {
+                        canvas.style.maxWidth = '100%';
+                    }
+
+                    const renderContext = {
+                        canvasContext: context,
+                        viewport: viewport
+                    };
+                    page.render(renderContext);
+                });
             }
         }
-    </script>
 
+        // 放大按鈕
+        function zoomIn() {
+            if (!currentPdf) return;
+            currentScale += 0.3; // 每次放大 30%
+            renderAllPages();
+        }
+
+        // 縮小按鈕
+        function zoomOut() {
+            if (!currentPdf || currentScale <= 0.6) return;
+            currentScale -= 0.3; // 每次縮小 30%
+            renderAllPages();
+        }
+    </script>
 </body>
 </html>
