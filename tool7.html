@@ -2,154 +2,142 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>阿公的超級看書機</title>
+    <!-- 關鍵：允許阿公用兩隻手指自由縮放畫面 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <title>阿公的全螢幕看書機</title>
+    <!-- 載入手機看 PDF 必備工具 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
     <style>
-        /* 全域大字體與舒適深色背景，保護眼睛 */
         body {
             font-family: "Microsoft JhengHei", "微軟正黑體", sans-serif;
             margin: 0;
             padding: 0;
-            background-color: #f4f4f9;
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-            overflow: hidden;
-        }
-
-        /* 頂部超大操作區 */
-        .top-bar {
-            background-color: #0056b3;
-            color: white;
-            padding: 20px;
+            background-color: #222222; /* 深色背景，看白底黑字最舒服 */
             text-align: center;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-            z-index: 10;
         }
 
-        .title {
-            font-size: 36px;
+        /* 頂部選檔案大按鈕 */
+        .top-box {
+            background-color: #0056b3;
+            padding: 20px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+
+        .file-btn {
+            background-color: #ffffff;
+            color: #0056b3;
+            font-size: 26px;
             font-weight: bold;
-            margin-bottom: 15px;
-            letter-spacing: 2px;
-        }
-
-        /* 巨型上傳按鈕 */
-        .upload-btn-wrapper {
+            padding: 15px 30px;
+            border-radius: 12px;
+            border: 3px solid #ffe600;
+            cursor: pointer;
             position: relative;
-            overflow: hidden;
             display: inline-block;
         }
 
-        .btn {
-            border: 4px solid #ffffff;
-            color: #0056b3;
-            background-color: #ffffff;
-            padding: 15px 40px;
-            border-radius: 50px;
-            font-size: 28px;
-            font-weight: bold;
-            cursor: pointer;
-            box-shadow: 0 6px 15px rgba(0,0,0,0.3);
-            transition: transform 0.1s;
-        }
-
-        .btn:active {
-            transform: scale(0.95);
-        }
-
-        .upload-btn-wrapper input[type=file] {
-            font-size: 100px;
+        .file-btn input[type="file"] {
             position: absolute;
-            left: 0;
-            top: 0;
-            opacity: 0;
+            left: 0; top: 0; opacity: 0;
+            width: 100%; height: 100%;
             cursor: pointer;
         }
 
-        /* 提示文字 */
-        .tip-text {
-            font-size: 22px;
-            color: #ffe600;
-            margin-top: 10px;
-            font-weight: bold;
+        /* 初始歡迎提示 */
+        .welcome-msg {
+            margin-top: 100px;
+            font-size: 28px;
+            color: #eee;
+            line-height: 1.8;
+            padding: 20px;
         }
 
-        /* PDF 顯示區域 */
-        .viewer-container {
-            flex: 1;
+        /* PDF 顯示區域：選完檔案後全螢幕充滿 */
+        .pdf-container {
             width: 100%;
-            height: calc(100vh - 160px);
-            border: none;
-        }
-
-        iframe {
-            width: 100%;
-            height: 100%;
-            border: none;
-        }
-
-        /* 一開始沒上傳檔案時的巨型提示 */
-        .welcome-screen {
-            flex: 1;
             display: flex;
             flex-direction: column;
-            justify-content: center;
             align-items: center;
-            color: #555;
-            padding: 20px;
-            text-align: center;
+            padding-top: 5px;
+            padding-bottom: 5px;
         }
 
-        .welcome-text {
-            font-size: 32px;
-            margin-bottom: 20px;
-            line-height: 1.6;
+        canvas {
+            background-color: white;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            margin-bottom: 10px;
+            width: 100%; /* 預設剛好塞滿手機螢幕寬度 */
+            max-width: 100%;
+            height: auto;
         }
     </style>
 </head>
 <body>
 
-    <div class="top-bar">
-        <div class="upload-btn-wrapper">
-            <button class="btn">📂 按這裡選檔案（看報紙、看書）</button>
-            <input type="file" id="pdf-upload" accept=".pdf" onchange="loadPDF(this)" />
+    <!-- 頂部按鈕區（選完檔案會被程式藏起來） -->
+    <div id="upload-zone" class="top-box">
+        <div class="file-btn">
+            📂 按這裡選檔案看報紙
+            <input type="file" id="file-selector" accept=".pdf">
         </div>
-        <div class="tip-text">💡 大提示：進去畫面後，按右下角或右上角的「+」就可以放大喔！</div>
     </div>
 
-    <div id="welcome" class="welcome-screen">
-        <p class="welcome-text">
-            👴🏻 阿公好！<br>
-            請先點選上面的 <b>【按這裡選檔案】</b> 藍色大按鈕，<br>
-            選好你想看的 PDF 檔案，字就會跑出來囉！
-        </p>
+    <!-- 初始歡迎畫面（選完檔案也會藏起來） -->
+    <div id="welcome" class="welcome-msg">
+        👴🏻 阿公好！<br><br>
+        1. 先按最上面<b>【選檔案】</b><br><br>
+        2. 看資料時，可以用<b>兩隻手指</b><br>在螢幕上撥開，字就會變大喔！
     </div>
 
-    <div id="viewer-container" class="viewer-container" style="display: none;">
-        <iframe id="pdf-viewer" src=""></iframe>
-    </div>
+    <!-- PDF 實際顯示區 -->
+    <div id="pdf-area" class="pdf-container"></div>
 
     <script>
-        function loadPDF(input) {
-            const file = input.files[0];
-            if (file) {
-                // 建立檔案的臨時 URL
-                const fileURL = URL.createObjectURL(file);
-                
-                const viewer = document.getElementById('pdf-viewer');
-                const container = document.getElementById('viewer-container');
-                const welcome = document.getElementById('welcome');
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
 
-                // 將 PDF 網址丟給 iframe
-                viewer.src = fileURL;
+        const pdfArea = document.getElementById('pdf-area');
+        const welcome = document.getElementById('welcome');
+        const uploadZone = document.getElementById('upload-zone');
+
+        document.getElementById('file-selector').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            // 1. 阿公一選好檔案，立刻把按鈕和歡迎字句「隱藏」，把整個螢幕留給 PDF
+            welcome.style.display = 'none';
+            uploadZone.style.display = 'none';
+            
+            pdfArea.innerHTML = '<p style="color:white; font-size:24px; margin-top:50px;">資料載入中，請稍等...</p>';
+
+            const fileReader = new FileReader();
+            fileReader.onload = function() {
+                const typedarray = new Uint8Array(this.result);
                 
-                // 切換顯示畫面
-                welcome.style.display = 'none';
-                container.style.display = 'block';
-            }
-        }
+                pdfjsLib.getDocument(typedarray).promise.then(function(pdf) {
+                    pdfArea.innerHTML = ''; // 清空載入中字樣
+                    
+                    // 2. 把 PDF 每一頁都畫出來
+                    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                        pdf.getPage(pageNum).then(function(page) {
+                            const canvas = document.createElement('canvas');
+                            pdfArea.appendChild(canvas);
+                            const context = canvas.getContext('2d');
+                            
+                            // 使用較高的解析度(2.0)，這樣阿公用手指放大時字體才不會模糊
+                            const viewport = page.getViewport({ scale: 2.0 });
+                            canvas.height = viewport.height;
+                            canvas.width = viewport.width;
+
+                            const renderContext = { canvasContext: context, viewport: viewport };
+                            page.render(renderContext);
+                        });
+                    }
+                }).catch(function(error) {
+                    pdfArea.innerHTML = '<p style="color:red; font-size:24px;">檔案打開失敗，請重試！</p>';
+                });
+            };
+            fileReader.readAsArrayBuffer(file);
+        });
     </script>
-
 </body>
 </html>
