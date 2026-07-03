@@ -10,37 +10,45 @@
             font-family: "Microsoft JhengHei", "微軟正黑體", sans-serif;
             margin: 0;
             padding: 0;
-            background-color: #333333; /* 深色背景 */
+            background-color: #333333;
+            overflow-x: auto; /* 允許整個網頁左右滑動 */
         }
 
-        /* PDF 顯示區域：解決切邊問題，並允許左右滾動 */
+        /* 外層容器：允許上下左右滾動，並保留底部按鈕空間 */
+        .pdf-outer-wrapper {
+            width: 100%;
+            padding-bottom: 80px; 
+            overflow: auto; /* 關鍵：這會開啟上下左右滑動功能 */
+            display: flex;
+            justify-content: center;
+        }
+
+        /* PDF 顯示區域：加上 transform-origin 確保放大時從左上角對齊，字才不會跑掉 */
         .pdf-container {
-            margin-top: 0;
-            margin-bottom: 70px; /* 配合變小的按鈕，縮小底部留白 */
             display: flex;
             flex-direction: column;
             align-items: center;
             padding: 10px;
-            overflow-x: auto; /* 當放大時，允許左右滑動觀看 */
-            width: 100%;
-            box-sizing: border-box;
+            transform-origin: top center; /* 放大時以頂部中心點放大 */
+            transition: transform 0.1s ease-out; /* 讓放大時有一點點平滑感 */
         }
 
         canvas {
             background-color: white;
             box-shadow: 0 4px 12px rgba(0,0,0,0.5);
             margin-bottom: 15px;
-            display: block; /* 移除 Canvas 預設的行內間隙 */
+            max-width: 100%; /* 確保初始狀態不超出螢幕 */
+            display: block;
         }
 
-        /* 底部固定操作面板：高度稍微調低 */
+        /* 底部固定操作面板 */
         .bottom-controls {
             position: fixed;
             bottom: 0;
             left: 0;
             right: 0;
             background-color: rgba(0, 86, 179, 0.95);
-            padding: 8px 5px; /* 縮減上下內邊距 */
+            padding: 8px 5px;
             box-shadow: 0 -4px 10px rgba(0,0,0,0.3);
             z-index: 999;
             display: flex;
@@ -49,12 +57,10 @@
             transition: transform 0.2s ease-in-out;
         }
 
-        /* 當隱藏按鈕時，把面板推到螢幕外面 */
         .bottom-controls.hidden {
             transform: translateY(100%);
         }
 
-        /* 浮動的「打開選單」小按鈕（也稍微調小一點） */
         .menu-toggle-btn {
             position: fixed;
             bottom: 15px;
@@ -63,8 +69,8 @@
             color: white;
             border: 2px solid white;
             border-radius: 50%;
-            width: 50px;  /* 60px -> 50px */
-            height: 50px; /* 60px -> 50px */
+            width: 50px;
+            height: 50px;
             font-size: 15px;
             font-weight: bold;
             box-shadow: 0 4px 10px rgba(0,0,0,0.4);
@@ -73,11 +79,11 @@
             cursor: pointer;
         }
 
-        /* 按鈕樣式改小（字體 18px -> 15px，縮減 padding） */
+        /* 小按鈕樣式 */
         .nav-btn {
             font-size: 15px;
             font-weight: bold;
-            padding: 6px 10px; /* 10px 14px -> 6px 10px */
+            padding: 6px 10px;
             border-radius: 6px;
             border: 2px solid white;
             cursor: pointer;
@@ -108,7 +114,9 @@
         選好後，字就會出現在這裡囉！
     </div>
 
-    <div id="pdf-area" class="pdf-container"></div>
+    <div class="pdf-outer-wrapper">
+        <div id="pdf-area" class="pdf-container"></div>
+    </div>
 
     <button id="menu-toggle" class="menu-toggle-btn" onclick="toggleMenu(true)">選單</button>
 
@@ -126,7 +134,7 @@
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
 
         let currentPdf = null;
-        let currentScale = 1.0; 
+        let viewScale = 1.0; // 控制畫面的 CSS 縮放比例
         const pdfArea = document.getElementById('pdf-area');
         const welcome = document.getElementById('welcome');
         const controlsPanel = document.getElementById('controls-panel');
@@ -139,6 +147,10 @@
 
             welcome.style.display = 'none';
             pdfArea.innerHTML = '<p style="color:white; font-size:24px;">資料載入中，請稍等...</p>';
+            
+            // 重設縮放比例
+            viewScale = 1.0;
+            pdfArea.style.transform = `scale(${viewScale})`;
 
             const fileReader = new FileReader();
             fileReader.onload = function() {
@@ -154,7 +166,7 @@
             fileReader.readAsArrayBuffer(file);
         });
 
-        // 渲染頁面
+        // 渲染頁面（以清晰度 1.5 倍基底渲染，確保放大時不會模糊）
         function renderAllPages() {
             if (!currentPdf) return;
             pdfArea.innerHTML = ''; 
@@ -165,15 +177,10 @@
                     pdfArea.appendChild(canvas);
                     const context = canvas.getContext('2d');
                     
-                    // 用目前的縮放比例計算真實渲染解析度
-                    const viewport = page.getViewport({ scale: currentScale });
+                    // 固定用 1.5 倍清晰度渲染，字體會很好看
+                    const viewport = page.getViewport({ scale: 1.5 });
                     canvas.height = viewport.height;
                     canvas.width = viewport.width;
-
-                    // 關鍵修正：直接利用 CSS width 控制縮放後的螢幕呈現
-                    // 當小於螢幕寬度時填滿 100%，大於螢幕寬度時呈現實際放大像素並允許滾動
-                    canvas.style.width = '100%';
-                    canvas.style.maxWidth = viewport.width + 'px';
 
                     const renderContext = { canvasContext: context, viewport: viewport };
                     page.render(renderContext);
@@ -181,9 +188,33 @@
             }
         }
 
-        // 放大縮小
-        function zoomIn() { if (currentPdf) { currentScale += 0.2; renderAllPages(); } }
-        function zoomOut() { if (currentPdf && currentScale > 0.4) { currentScale -= 0.2; renderAllPages(); } }
+        // 放大：每次微調 0.1，並更新 CSS 縮放
+        function zoomIn() { 
+            if (currentPdf) { 
+                viewScale += 0.1; 
+                applyZoom();
+            } 
+        }
+
+        // 縮小：最低縮到 0.5
+        function zoomOut() { 
+            if (currentPdf && viewScale > 0.5) { 
+                viewScale -= 0.1; 
+                applyZoom();
+            } 
+        }
+
+        // 執行放大縮小與調整容器寬度，確保滾動條出現
+        function applyZoom() {
+            pdfArea.style.transform = `scale(${viewScale})`;
+            
+            // 關鍵：如果放大超過 100%，就把外層寬度撐開，這樣手機和瀏覽器才會出現左右滾動條
+            if (viewScale > 1.0) {
+                pdfArea.style.width = (100 * viewScale) + '%';
+            } else {
+                pdfArea.style.width = '100%';
+            }
+        }
 
         // 控制選單顯示或隱藏
         function toggleMenu(show) {
