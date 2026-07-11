@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>經典點擊接龍 (修復版)</title>
+    <title>經典點擊接龍 (大字自動收牌版)</title>
     <style>
         :root {
             --bg-color: #141414;
             --board-color: #1b4332;
             --card-w: calc((100vw - 36px) / 7 - 4px);
             --card-h: calc(var(--card-w) * 1.45);
-            --card-radius: 5px;
+            --card-radius: 6px;
         }
 
         @media (min-width: 600px) {
@@ -74,7 +74,7 @@
             display: flex;
             justify-content: space-between;
             gap: 4px;
-            min-height: 360px;
+            min-height: 380px;
         }
 
         .slot {
@@ -87,7 +87,6 @@
             background: rgba(0,0,0,0.1);
         }
 
-        /* 讓發牌區有明顯的可點擊外觀 */
         #deck-pile {
             cursor: pointer;
             background: rgba(255,255,255,0.1);
@@ -109,38 +108,45 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            font-size: 22px;
+            font-size: 24px;
             color: rgba(255,255,255,0.1);
         }
 
+        /* 卡牌本體與大字化樣式 */
         .card {
             width: var(--card-w);
             height: var(--card-h);
             background-color: #ffffff;
             border-radius: var(--card-radius);
-            box-shadow: 0 2px 5px rgba(0,0,0,0.4);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.4);
             position: absolute;
             display: flex;
             flex-direction: column;
-            justify-content: space-between;
-            padding: 4px;
+            justify-content: center;
+            align-items: center;
             box-sizing: border-box;
             color: #000;
             transition: transform 0.1s ease;
+            line-height: 1.1;
         }
 
         .card.red { color: #e63946; }
         .card.black { color: #1d3557; }
 
-        .card-corner {
-            font-size: 11px;
+        /* 讓數字與花色放大並垂直排列置中 */
+        .card-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
             font-weight: bold;
-            line-height: 1;
+        }
+        .card-value {
+            font-size: calc(var(--card-w) * 0.35);
         }
         .card-suit {
-            font-size: 18px;
-            align-self: center;
-            margin-bottom: 8px;
+            font-size: calc(var(--card-w) * 0.38);
+            margin-top: -2px;
         }
 
         .card.back {
@@ -150,7 +156,7 @@
                         linear-gradient(335deg, #7f1d1d 25%, #450a0a 25%);
             background-size: 14px 14px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.5);
-            pointer-events: none; /* 蓋住的牌不吃點擊，讓底下的牌桌或發牌堆點得到 */
+            pointer-events: none;
         }
         .card.back * { display: none; }
 
@@ -182,7 +188,7 @@
     </style>
 </head>
 <body>
-
+<link rel="stylesheet" href="menu.css"> <div id="nav_bar"></div> <script src="menu.js"></script>
     <div class="hud">
         <div>分數: <span id="score">0</span></div>
         <div>勝率: <span id="win-rate">0%</span> (<span id="stats">0/0</span>)</div>
@@ -192,7 +198,6 @@
     <div class="game-container">
         <div class="top-row">
             <div class="deck-area">
-                <!-- 發牌區點擊事件 -->
                 <div class="slot" id="deck-pile" onclick="drawCard(event)"></div>
                 <div class="slot" id="waste-pile"></div>
             </div>
@@ -292,9 +297,12 @@
         div.dataset.suit = card.suit;
         div.dataset.suitId = card.suitId;
 
+        // 大字化排版結構
         div.innerHTML = `
-            <div class="card-corner">${card.value}<br>${card.suit}</div>
-            <div class="card-suit">${card.suit}</div>
+            <div class="card-content">
+                <div class="card-value">${card.value}</div>
+                <div class="card-suit">${card.suit}</div>
+            </div>
         `;
 
         div.addEventListener('click', (e) => {
@@ -317,7 +325,6 @@
         }
     }
 
-    // 發牌邏輯修正：確保點擊事性能正常運作
     function drawCard(e) {
         if (e) e.stopPropagation();
         if (!gameActive) return;
@@ -331,7 +338,6 @@
             card.style.top = '0px';
             wastePile.appendChild(card);
         } else {
-            // 回收廢牌
             while (wastePile.children.length > 0) {
                 const card = wastePile.lastElementChild;
                 card.classList.add('back');
@@ -346,7 +352,6 @@
         const chain = getValidChain(cardEl);
         if (!chain) return;
 
-        // 1. 優先上右上角本位區
         if (chain.length === 1) {
             for (let i = 0; i < 4; i++) {
                 const fnd = document.getElementById(`fnd${i}`);
@@ -361,7 +366,6 @@
             }
         }
 
-        // 2. 移到下方7行牌桌
         for (let i = 0; i < 7; i++) {
             const tab = document.getElementById(`t${i}`);
             if (tab === sourceSlot) continue;
@@ -411,7 +415,7 @@
         const mWeight = parseInt(moveTopCard.dataset.weight);
 
         if (!targetTopCard) {
-            return mWeight === 13; // 空行只能放 K
+            return mWeight === 13; 
         } else {
             return moveTopCard.dataset.color !== targetTopCard.dataset.color && 
                    (parseInt(targetTopCard.dataset.weight) - mWeight === 1);
@@ -440,10 +444,27 @@
         }
     }
 
+    // 自動收牌核心邏輯修改
     function checkAutoAbsorb() {
         let absorbed = false;
         const availableCards = [];
         
+        // 判斷是否所有的覆蓋牌（暗牌）與發牌堆都已經清空/翻開
+        let hasHiddenCards = false;
+        // 1. 檢查發牌堆是否有剩
+        if (document.getElementById('deck-pile').children.length > 0) {
+            hasHiddenCards = true;
+        }
+        // 2. 檢查牌桌上是否有還沒翻開的牌
+        for (let i = 0; i < 7; i++) {
+            const tab = document.getElementById(`t${i}`);
+            if (tab.querySelector('.card.back')) {
+                hasHiddenCards = true;
+                break;
+            }
+        }
+
+        // 收集目前可移動的卡牌
         for (let i = 0; i < 7; i++) {
             const last = document.getElementById(`t${i}`).lastElementChild;
             if (last && !last.classList.contains('back')) availableCards.push(last);
@@ -456,7 +477,9 @@
                 const fnd = document.getElementById(`fnd${i}`);
                 if (canPlayToFoundation(card, fnd)) {
                     const weight = parseInt(card.dataset.weight);
-                    if (weight <= 2) { // 簡化自動吸入，只自動收 A 和 2 防止卡牌
+                    
+                    // 如果後面所有牌都翻開了(沒有暗牌)，就啟動無限制全自動收牌；否則，依然只收 A 和 2
+                    if (!hasHiddenCards || weight <= 2) { 
                         const src = card.parentElement;
                         fnd.appendChild(card);
                         card.style.top = '0px';
@@ -473,7 +496,8 @@
 
         if (absorbed) {
             saveState();
-            checkAutoAbsorb();
+            // 使用 setTimeout 營造一張張快速吸進去的流暢動畫感
+            setTimeout(checkAutoAbsorb, 80);
             checkWin();
         }
     }
@@ -523,8 +547,18 @@
         updateHUD();
     }
 
+    // 重來確認彈窗功能
     function restartGame() {
-        initGame(true);
+        if (history.length <= 1) {
+            // 一剛開始還沒動過直接重開，不需要問
+            initGame(true);
+            return;
+        }
+        
+        const confirmRestart = confirm("確定要放棄當前局勢重新開始嗎？\n這將會計入一次輸局。");
+        if (confirmRestart) {
+            initGame(true);
+        }
     }
 
     function checkWin() {
@@ -534,9 +568,11 @@
         }
         if (totalFndCards === 52 && gameActive) {
             gameActive = false;
-            alert("🎉 恭喜！你成功完成了經典接龍！");
-            gamesPlayed++; gamesWon++; currentStreak++;
-            saveStats(); updateHUD();
+            setTimeout(() => {
+                alert("🎉 恭喜！你成功完成了經典接龍！");
+                gamesPlayed++; gamesWon++; currentStreak++;
+                saveStats(); updateHUD();
+            }, 200);
         }
     }
 
