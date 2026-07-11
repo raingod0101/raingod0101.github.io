@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>經典點擊接龍 (修復版)</title>
+    <style>
+        :root {
+            --bg-color: #141414;
+            --board-color: #1b4332;
+            --card-w: calc((100vw - 36px) / 7 - 4px);
+            --card-h: calc(var(--card-w) * 1.45);
+            --card-radius: 5px;
+        }
+
+        @media (min-width: 600px) {
+            :root {
+                --card-w: 80px;
+                --card-h: 116px;
+            }
+        }
+
+        body {
+            margin: 0;
+            padding: 10px;
+            background-color: var(--bg-color);
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: white;
+            user-select: none;
+            overflow-x: hidden;
+        }
+
+        .hud {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            max-width: 640px;
+            background: rgba(0,0,0,0.4);
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            box-sizing: border-box;
+            margin-bottom: 10px;
+        }
+
+        .game-container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            background-color: var(--board-color);
+            padding: 12px;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+            width: 100%;
+            max-width: 640px;
+            box-sizing: border-box;
+        }
+
+        .top-row {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+        }
+
+        .deck-area, .foundations {
+            display: flex;
+            gap: 4px;
+        }
+
+        .tableaus {
+            display: flex;
+            justify-content: space-between;
+            gap: 4px;
+            min-height: 360px;
+        }
+
+        .slot {
+            width: var(--card-w);
+            height: var(--card-h);
+            border: 1.5px dashed rgba(255,255,255,0.15);
+            border-radius: var(--card-radius);
+            position: relative;
+            box-sizing: border-box;
+            background: rgba(0,0,0,0.1);
+        }
+
+        /* 讓發牌區有明顯的可點擊外觀 */
+        #deck-pile {
+            cursor: pointer;
+            background: rgba(255,255,255,0.1);
+            border: 1.5px solid rgba(255,255,255,0.3);
+        }
+        #deck-pile::after {
+            content: "🔄";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 20px;
+            opacity: 0.3;
+        }
+
+        .slot.foundation::after {
+            content: attr(data-suit);
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 22px;
+            color: rgba(255,255,255,0.1);
+        }
+
+        .card {
+            width: var(--card-w);
+            height: var(--card-h);
+            background-color: #ffffff;
+            border-radius: var(--card-radius);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.4);
+            position: absolute;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 4px;
+            box-sizing: border-box;
+            color: #000;
+            transition: transform 0.1s ease;
+        }
+
+        .card.red { color: #e63946; }
+        .card.black { color: #1d3557; }
+
+        .card-corner {
+            font-size: 11px;
+            font-weight: bold;
+            line-height: 1;
+        }
+        .card-suit {
+            font-size: 18px;
+            align-self: center;
+            margin-bottom: 8px;
+        }
+
+        .card.back {
+            background: linear-gradient(135deg, #7f1d1d 25%, transparent 25%) -25px 0,
+                        linear-gradient(225deg, #7f1d1d 25%, transparent 25%) -25px 0,
+                        linear-gradient(45deg, #7f1d1d 25%, transparent 25%),
+                        linear-gradient(335deg, #7f1d1d 25%, #450a0a 25%);
+            background-size: 14px 14px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            pointer-events: none; /* 蓋住的牌不吃點擊，讓底下的牌桌或發牌堆點得到 */
+        }
+        .card.back * { display: none; }
+
+        .toolbar {
+            display: flex;
+            justify-content: space-around;
+            width: 100%;
+            max-width: 640px;
+            margin-top: 15px;
+            gap: 10px;
+        }
+
+        .btn {
+            flex: 1;
+            background: #2a2a2a;
+            color: white;
+            border: 1px solid #444;
+            padding: 12px;
+            font-size: 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .btn:active { background: #444; }
+    </style>
+</head>
+<body>
+
+    <div class="hud">
+        <div>分數: <span id="score">0</span></div>
+        <div>勝率: <span id="win-rate">0%</span> (<span id="stats">0/0</span>)</div>
+        <div>連勝: <span id="streak">0</span></div>
+    </div>
+
+    <div class="game-container">
+        <div class="top-row">
+            <div class="deck-area">
+                <!-- 發牌區點擊事件 -->
+                <div class="slot" id="deck-pile" onclick="drawCard(event)"></div>
+                <div class="slot" id="waste-pile"></div>
+            </div>
+            <div class="foundations">
+                <div class="slot foundation" id="fnd0" data-suit="♠"></div>
+                <div class="slot foundation" id="fnd1" data-suit="♥"></div>
+                <div class="slot foundation" id="fnd2" data-suit="♦"></div>
+                <div class="slot foundation" id="fnd3" data-suit="♣"></div>
+            </div>
+        </div>
+
+        <div class="tableaus">
+            <div class="slot tableau" id="t0"></div>
+            <div class="slot tableau" id="t1"></div>
+            <div class="slot tableau" id="t2"></div>
+            <div class="slot tableau" id="t3"></div>
+            <div class="slot tableau" id="t4"></div>
+            <div class="slot tableau" id="t5"></div>
+            <div class="slot tableau" id="t6"></div>
+        </div>
+    </div>
+
+    <div class="toolbar">
+        <button class="btn" onclick="undo()">↩️ 復原</button>
+        <button class="btn" onclick="restartGame()">🔄 重來(算輸)</button>
+    </div>
+
+<script>
+    const SUITS = [
+        { symbol: '♠', color: 'black', id: 0 },
+        { symbol: '♥', color: 'red', id: 1 },
+        { symbol: '♦', color: 'red', id: 2 },
+        { symbol: '♣', color: 'black', id: 3 }
+    ];
+    const VALUES = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+
+    let score = 0;
+    let history = []; 
+    let gameActive = true;
+
+    let gamesPlayed = parseInt(localStorage.getItem('kl_played') || '0');
+    let gamesWon = parseInt(localStorage.getItem('kl_won') || '0');
+    let currentStreak = parseInt(localStorage.getItem('kl_streak') || '0');
+
+    function initGame(isNewGame = true) {
+        gameActive = true;
+        document.querySelectorAll('.slot').forEach(s => s.innerHTML = '');
+
+        if (isNewGame && history.length > 0) {
+            gamesPlayed++;
+            currentStreak = 0;
+            saveStats();
+        }
+        history = [];
+        updateHUD();
+
+        let deck = [];
+        SUITS.forEach(s => {
+            VALUES.forEach((v, idx) => {
+                deck.push({ suit: s.symbol, color: s.color, value: v, weight: idx + 1, suitId: s.id });
+            });
+        });
+
+        for (let i = deck.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [deck[i], deck[j]] = [deck[j], deck[i]];
+        }
+
+        let deckIndex = 0;
+        for (let i = 0; i < 7; i++) {
+            const tSlot = document.getElementById(`t${i}`);
+            for (let j = 0; j <= i; j++) {
+                const cardData = deck[deckIndex++];
+                const cardEl = createCardDOM(cardData);
+                if (j < i) cardEl.classList.add('back'); 
+                tSlot.appendChild(cardEl);
+            }
+        }
+
+        const deckPile = document.getElementById('deck-pile');
+        while (deckIndex < deck.length) {
+            const cardData = deck[deckIndex++];
+            const cardEl = createCardDOM(cardData);
+            cardEl.classList.add('back');
+            deckPile.appendChild(cardEl);
+        }
+
+        renderAllTableaus();
+        saveState();
+    }
+
+    function createCardDOM(card) {
+        const div = document.createElement('div');
+        div.className = `card ${card.color}`;
+        div.dataset.weight = card.weight;
+        div.dataset.color = card.color;
+        div.dataset.suit = card.suit;
+        div.dataset.suitId = card.suitId;
+
+        div.innerHTML = `
+            <div class="card-corner">${card.value}<br>${card.suit}</div>
+            <div class="card-suit">${card.suit}</div>
+        `;
+
+        div.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!gameActive || div.classList.contains('back')) return;
+            tryAutoMove(div);
+        });
+
+        return div;
+    }
+
+    function renderAllTableaus() {
+        for (let i = 0; i < 7; i++) {
+            const t = document.getElementById(`t${i}`);
+            const cards = t.querySelectorAll('.card');
+            cards.forEach((card, idx) => {
+                card.style.top = `${idx * 24}px`; 
+                card.style.zIndex = idx + 1;
+            });
+        }
+    }
+
+    // 發牌邏輯修正：確保點擊事性能正常運作
+    function drawCard(e) {
+        if (e) e.stopPropagation();
+        if (!gameActive) return;
+
+        const deckPile = document.getElementById('deck-pile');
+        const wastePile = document.getElementById('waste-pile');
+
+        if (deckPile.children.length > 0) {
+            const card = deckPile.lastElementChild;
+            card.classList.remove('back');
+            card.style.top = '0px';
+            wastePile.appendChild(card);
+        } else {
+            // 回收廢牌
+            while (wastePile.children.length > 0) {
+                const card = wastePile.lastElementChild;
+                card.classList.add('back');
+                deckPile.appendChild(card);
+            }
+        }
+        saveState();
+    }
+
+    function tryAutoMove(cardEl) {
+        const sourceSlot = cardEl.parentElement;
+        const chain = getValidChain(cardEl);
+        if (!chain) return;
+
+        // 1. 優先上右上角本位區
+        if (chain.length === 1) {
+            for (let i = 0; i < 4; i++) {
+                const fnd = document.getElementById(`fnd${i}`);
+                if (canPlayToFoundation(cardEl, fnd)) {
+                    executeMove(sourceSlot, fnd, chain);
+                    score += 10;
+                    checkRevealTopCard(sourceSlot);
+                    checkAutoAbsorb();
+                    checkWin();
+                    return;
+                }
+            }
+        }
+
+        // 2. 移到下方7行牌桌
+        for (let i = 0; i < 7; i++) {
+            const tab = document.getElementById(`t${i}`);
+            if (tab === sourceSlot) continue;
+            if (canPlayToTableau(chain[0], tab)) {
+                executeMove(sourceSlot, tab, chain);
+                checkRevealTopCard(sourceSlot);
+                checkAutoAbsorb();
+                return;
+            }
+        }
+    }
+
+    function getValidChain(cardEl) {
+        const slot = cardEl.parentElement;
+        if (!slot.classList.contains('tableau')) return [cardEl]; 
+
+        const cards = Array.from(slot.children);
+        const startIdx = cards.indexOf(cardEl);
+        const chain = cards.slice(startIdx);
+
+        for (let i = 0; i < chain.length - 1; i++) {
+            const curr = chain[i];
+            const next = chain[i+1];
+            if (curr.dataset.color === next.dataset.color || 
+                parseInt(curr.dataset.weight) - parseInt(next.dataset.weight) !== 1) {
+                return null; 
+            }
+        }
+        return chain;
+    }
+
+    function canPlayToFoundation(cardEl, fndSlot) {
+        const topCard = fndSlot.lastElementChild;
+        const cWeight = parseInt(cardEl.dataset.weight);
+        const cSuit = cardEl.dataset.suit;
+
+        if (!topCard) {
+            return cWeight === 1 && fndSlot.dataset.suit === cSuit;
+        } else {
+            return cardEl.dataset.suit === topCard.dataset.suit && 
+                   cWeight - parseInt(topCard.dataset.weight) === 1;
+        }
+    }
+
+    function canPlayToTableau(moveTopCard, tabSlot) {
+        const targetTopCard = tabSlot.lastElementChild;
+        const mWeight = parseInt(moveTopCard.dataset.weight);
+
+        if (!targetTopCard) {
+            return mWeight === 13; // 空行只能放 K
+        } else {
+            return moveTopCard.dataset.color !== targetTopCard.dataset.color && 
+                   (parseInt(targetTopCard.dataset.weight) - mWeight === 1);
+        }
+    }
+
+    function executeMove(fromSlot, toSlot, chain) {
+        chain.forEach(card => {
+            toSlot.appendChild(card);
+        });
+        if (!toSlot.classList.contains('tableau')) {
+            chain[0].style.top = '0px';
+        }
+        renderAllTableaus();
+        saveState();
+    }
+
+    function checkRevealTopCard(slot) {
+        if (slot && slot.classList.contains('tableau') && slot.children.length > 0) {
+            const topCard = slot.lastElementChild;
+            if (topCard.classList.contains('back')) {
+                topCard.classList.remove('back');
+                score += 5;
+                saveState();
+            }
+        }
+    }
+
+    function checkAutoAbsorb() {
+        let absorbed = false;
+        const availableCards = [];
+        
+        for (let i = 0; i < 7; i++) {
+            const last = document.getElementById(`t${i}`).lastElementChild;
+            if (last && !last.classList.contains('back')) availableCards.push(last);
+        }
+        const wasteLast = document.getElementById('waste-pile').lastElementChild;
+        if (wasteLast) availableCards.push(wasteLast);
+
+        for (let card of availableCards) {
+            for (let i = 0; i < 4; i++) {
+                const fnd = document.getElementById(`fnd${i}`);
+                if (canPlayToFoundation(card, fnd)) {
+                    const weight = parseInt(card.dataset.weight);
+                    if (weight <= 2) { // 簡化自動吸入，只自動收 A 和 2 防止卡牌
+                        const src = card.parentElement;
+                        fnd.appendChild(card);
+                        card.style.top = '0px';
+                        score += 10;
+                        checkRevealTopCard(src);
+                        renderAllTableaus();
+                        absorbed = true;
+                        break;
+                    }
+                }
+            }
+            if (absorbed) break;
+        }
+
+        if (absorbed) {
+            saveState();
+            checkAutoAbsorb();
+            checkWin();
+        }
+    }
+
+    function saveState() {
+        const snapshot = [];
+        document.querySelectorAll('.slot').forEach(slot => {
+            const cardData = [];
+            slot.querySelectorAll('.card').forEach(card => {
+                cardData.push({
+                    html: card.outerHTML,
+                    isBack: card.classList.contains('back')
+                });
+            });
+            snapshot.push({ slotId: slot.id, cards: cardData });
+        });
+        history.push({ snapshot: snapshot, score: score });
+        if (history.length > 50) history.shift();
+    }
+
+    function undo() {
+        if (history.length <= 1) return;
+        history.pop(); 
+        const prevState = history[history.length - 1];
+
+        prevState.snapshot.forEach(slotState => {
+            const slot = document.getElementById(slotState.slotId);
+            slot.innerHTML = '';
+            slotState.cards.forEach(c => {
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = c.html;
+                const newCard = tempDiv.firstElementChild;
+                if (c.isBack) newCard.classList.add('back');
+                else newCard.classList.remove('back');
+
+                newCard.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (!gameActive || newCard.classList.contains('back')) return;
+                    tryAutoMove(newCard);
+                });
+                slot.appendChild(newCard);
+            });
+        });
+        score = prevState.score;
+        if (score > 0) score = Math.max(0, score - 5); 
+        renderAllTableaus();
+        updateHUD();
+    }
+
+    function restartGame() {
+        initGame(true);
+    }
+
+    function checkWin() {
+        let totalFndCards = 0;
+        for (let i = 0; i < 4; i++) {
+            totalFndCards += document.getElementById(`fnd${i}`).children.length;
+        }
+        if (totalFndCards === 52 && gameActive) {
+            gameActive = false;
+            alert("🎉 恭喜！你成功完成了經典接龍！");
+            gamesPlayed++; gamesWon++; currentStreak++;
+            saveStats(); updateHUD();
+        }
+    }
+
+    function updateHUD() {
+        document.getElementById('score').innerText = score;
+        document.getElementById('stats').innerText = `${gamesWon}/${gamesPlayed}`;
+        document.getElementById('streak').innerText = currentStreak;
+        const rate = gamesPlayed === 0 ? 0 : Math.round((gamesWon / gamesPlayed) * 100);
+        document.getElementById('win-rate').innerText = `${rate}%`;
+    }
+
+    function saveStats() {
+        localStorage.setItem('kl_played', gamesPlayed);
+        localStorage.setItem('kl_won', gamesWon);
+        localStorage.setItem('kl_streak', currentStreak);
+    }
+
+    initGame(false); 
+</script>
+
+</body>
+</html>
