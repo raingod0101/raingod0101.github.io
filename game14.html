@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>經典點擊接龍 (大字自動收牌版)</title>
+    <title>經典點擊接龍 (終極流暢修復版)</title>
     <style>
         :root {
             --bg-color: #141414;
@@ -30,7 +30,9 @@
             align-items: center;
             color: white;
             user-select: none;
-            overflow-x: hidden;
+            overflow-y: auto;
+            min-height: 100vh;
+            box-sizing: border-box;
         }
 
         .hud {
@@ -49,7 +51,7 @@
         .game-container {
             display: flex;
             flex-direction: column;
-            gap: 20px;
+            gap: 15px;
             background-color: var(--board-color);
             padding: 12px;
             border-radius: 12px;
@@ -74,7 +76,11 @@
             display: flex;
             justify-content: space-between;
             gap: 4px;
-            min-height: 380px;
+            height: 55vh;
+            min-height: 360px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding-bottom: 40px;
         }
 
         .slot {
@@ -85,6 +91,7 @@
             position: relative;
             box-sizing: border-box;
             background: rgba(0,0,0,0.1);
+            flex-shrink: 0;
         }
 
         #deck-pile {
@@ -112,7 +119,7 @@
             color: rgba(255,255,255,0.1);
         }
 
-        /* 卡牌本體與大字化樣式 */
+        /* 卡牌樣式修復 */
         .card {
             width: var(--card-w);
             height: var(--card-h);
@@ -121,34 +128,53 @@
             box-shadow: 0 2px 6px rgba(0,0,0,0.4);
             position: absolute;
             display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
             box-sizing: border-box;
             color: #000;
             transition: transform 0.1s ease;
-            line-height: 1.1;
+            overflow: hidden;
+            
+            /* 【修復關鍵】強制啟用獨立渲染層，防止多層 absolute 元素文字穿透鬼影 */
+            transform: translate3d(0, 0, 0);
+            backface-visibility: hidden;
         }
 
         .card.red { color: #e63946; }
         .card.black { color: #1d3557; }
 
-        /* 讓數字與花色放大並垂直排列置中 */
-        .card-content {
+        .card-corner {
+            position: absolute;
+            top: 2px;
+            left: 3px;
+            font-size: calc(var(--card-w) * 0.16);
+            font-weight: 900;
+            line-height: 1;
+            text-align: center;
+            z-index: 2;
+        }
+
+        .card-center {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            font-weight: bold;
+            font-weight: 900;
+            line-height: 0.9;
+            z-index: 1;
         }
         .card-value {
-            font-size: calc(var(--card-w) * 0.35);
+            font-size: calc(var(--card-w) * 0.45);
         }
         .card-suit {
-            font-size: calc(var(--card-w) * 0.38);
-            margin-top: -2px;
+            font-size: calc(var(--card-w) * 0.42);
+            margin-top: -4px;
         }
 
+        /* 背面樣式 */
         .card.back {
             background: linear-gradient(135deg, #7f1d1d 25%, transparent 25%) -25px 0,
                         linear-gradient(225deg, #7f1d1d 25%, transparent 25%) -25px 0,
@@ -158,7 +184,12 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.5);
             pointer-events: none;
         }
-        .card.back * { display: none; }
+        .card.back * { display: none !important; }
+
+        /* 【修復關鍵】被壓在下方的卡片內容直接隱藏，防止文字重疊穿透 */
+        .card.underneath * {
+            display: none !important;
+        }
 
         .toolbar {
             display: flex;
@@ -167,6 +198,7 @@
             max-width: 640px;
             margin-top: 15px;
             gap: 10px;
+            margin-bottom: 20px;
         }
 
         .btn {
@@ -188,6 +220,7 @@
     </style>
 </head>
 <body>
+
 <link rel="stylesheet" href="menu.css"> <div id="nav_bar"></div> <script src="menu.js"></script>
     <div class="hud">
         <div>分數: <span id="score">0</span></div>
@@ -285,7 +318,7 @@
             deckPile.appendChild(cardEl);
         }
 
-        renderAllTableaus();
+        refreshAllPiles();
         saveState();
     }
 
@@ -297,9 +330,9 @@
         div.dataset.suit = card.suit;
         div.dataset.suitId = card.suitId;
 
-        // 大字化排版結構
         div.innerHTML = `
-            <div class="card-content">
+            <div class="card-corner">${card.value}<br>${card.suit}</div>
+            <div class="card-center">
                 <div class="card-value">${card.value}</div>
                 <div class="card-suit">${card.suit}</div>
             </div>
@@ -314,15 +347,33 @@
         return div;
     }
 
-    function renderAllTableaus() {
+    /* 【修復與優化】全面重新計算所有牌堆的 z-index 與「被遮擋隱藏」狀態 */
+    function refreshAllPiles() {
+        // 1. 處理 7 個牌桌
         for (let i = 0; i < 7; i++) {
             const t = document.getElementById(`t${i}`);
             const cards = t.querySelectorAll('.card');
             cards.forEach((card, idx) => {
-                card.style.top = `${idx * 24}px`; 
+                card.style.top = `${idx * 20}px`;
                 card.style.zIndex = idx + 1;
+                card.classList.remove('underneath'); // 牌桌上的排需要露出來
             });
         }
+
+        // 2. 處理發牌回收區與右上角結算區 (完全重疊的地方，隱藏下層文字防止穿透)
+        const singleStackSlots = ['waste-pile', 'fnd0', 'fnd1', 'fnd2', 'fnd3'];
+        singleStackSlots.forEach(id => {
+            const slot = document.getElementById(id);
+            const cards = Array.from(slot.children);
+            cards.forEach((card, idx) => {
+                card.style.zIndex = idx + 1;
+                if (idx === cards.length - 1) {
+                    card.classList.remove('underneath'); // 最上面那張要秀出來
+                } else {
+                    card.classList.add('underneath');    // 底下的全部隱藏文字
+                }
+            });
+        });
     }
 
     function drawCard(e) {
@@ -344,6 +395,7 @@
                 deckPile.appendChild(card);
             }
         }
+        refreshAllPiles();
         saveState();
     }
 
@@ -429,7 +481,7 @@
         if (!toSlot.classList.contains('tableau')) {
             chain[0].style.top = '0px';
         }
-        renderAllTableaus();
+        refreshAllPiles();
         saveState();
     }
 
@@ -444,18 +496,14 @@
         }
     }
 
-    // 自動收牌核心邏輯修改
     function checkAutoAbsorb() {
         let absorbed = false;
         const availableCards = [];
         
-        // 判斷是否所有的覆蓋牌（暗牌）與發牌堆都已經清空/翻開
         let hasHiddenCards = false;
-        // 1. 檢查發牌堆是否有剩
         if (document.getElementById('deck-pile').children.length > 0) {
             hasHiddenCards = true;
         }
-        // 2. 檢查牌桌上是否有還沒翻開的牌
         for (let i = 0; i < 7; i++) {
             const tab = document.getElementById(`t${i}`);
             if (tab.querySelector('.card.back')) {
@@ -464,7 +512,6 @@
             }
         }
 
-        // 收集目前可移動的卡牌
         for (let i = 0; i < 7; i++) {
             const last = document.getElementById(`t${i}`).lastElementChild;
             if (last && !last.classList.contains('back')) availableCards.push(last);
@@ -478,14 +525,13 @@
                 if (canPlayToFoundation(card, fnd)) {
                     const weight = parseInt(card.dataset.weight);
                     
-                    // 如果後面所有牌都翻開了(沒有暗牌)，就啟動無限制全自動收牌；否則，依然只收 A 和 2
                     if (!hasHiddenCards || weight <= 2) { 
                         const src = card.parentElement;
                         fnd.appendChild(card);
                         card.style.top = '0px';
                         score += 10;
                         checkRevealTopCard(src);
-                        renderAllTableaus();
+                        refreshAllPiles();
                         absorbed = true;
                         break;
                     }
@@ -496,7 +542,6 @@
 
         if (absorbed) {
             saveState();
-            // 使用 setTimeout 營造一張張快速吸進去的流暢動畫感
             setTimeout(checkAutoAbsorb, 80);
             checkWin();
         }
@@ -543,14 +588,12 @@
         });
         score = prevState.score;
         if (score > 0) score = Math.max(0, score - 5); 
-        renderAllTableaus();
+        refreshAllPiles();
         updateHUD();
     }
 
-    // 重來確認彈窗功能
     function restartGame() {
         if (history.length <= 1) {
-            // 一剛開始還沒動過直接重開，不需要問
             initGame(true);
             return;
         }
