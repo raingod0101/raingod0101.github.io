@@ -2,8 +2,8 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>經典點擊接龍 (終極流暢修復版)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>接龍 | Raingod</title>
     <style>
         :root {
             --bg-color: #141414;
@@ -24,7 +24,7 @@
             margin: 0;
             padding: 10px;
             background-color: var(--bg-color);
-            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -76,8 +76,8 @@
             display: flex;
             justify-content: space-between;
             gap: 4px;
-            height: 55vh;
-            min-height: 360px;
+            height: 50vh; /* 稍微縮小牌桌高度，留空間給下方按鈕 */
+            min-height: 340px;
             overflow-y: auto;
             overflow-x: hidden;
             padding-bottom: 40px;
@@ -133,7 +133,7 @@
             transition: transform 0.1s ease;
             overflow: hidden;
             
-            /* 【修復關鍵】強制啟用獨立渲染層，防止多層 absolute 元素文字穿透鬼影 */
+            /* 強制啟用獨立渲染層，防止鬼影 */
             transform: translate3d(0, 0, 0);
             backface-visibility: hidden;
         }
@@ -141,17 +141,20 @@
         .card.red { color: #e63946; }
         .card.black { color: #1d3557; }
 
+        /* 【調整】左上角小字放大，粗體拉滿 */
         .card-corner {
             position: absolute;
-            top: 2px;
-            left: 3px;
-            font-size: calc(var(--card-w) * 0.16);
-            font-weight: 900;
-            line-height: 1;
+            top: 4px;
+            left: 4px;
+            font-size: calc(var(--card-w) * 0.22); /* 從 0.16 放大到 0.22 */
+            font-weight: 900;                      /* 數字全面特粗 */
+            line-height: 0.95;
             text-align: center;
             z-index: 2;
+            letter-spacing: -1px;
         }
 
+        /* 中央大字體 */
         .card-center {
             position: absolute;
             width: 100%;
@@ -162,12 +165,13 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            font-weight: 900;
+            font-weight: 900;                      /* 數字全面特粗 */
             line-height: 0.9;
             z-index: 1;
         }
         .card-value {
             font-size: calc(var(--card-w) * 0.45);
+            font-weight: 900;                      /* 數字全面特粗 */
         }
         .card-suit {
             font-size: calc(var(--card-w) * 0.42);
@@ -186,11 +190,12 @@
         }
         .card.back * { display: none !important; }
 
-        /* 【修復關鍵】被壓在下方的卡片內容直接隱藏，防止文字重疊穿透 */
+        /* 被壓在下方的卡片內容直接隱藏 */
         .card.underneath * {
             display: none !important;
         }
 
+        /* 【調整】按鈕工具列往上提，留出底部的虛擬導覽列避讓空間 */
         .toolbar {
             display: flex;
             justify-content: space-around;
@@ -198,7 +203,9 @@
             max-width: 640px;
             margin-top: 15px;
             gap: 10px;
-            margin-bottom: 20px;
+            /* 使用 env(safe-area-inset-bottom) 自動避開 iOS/Android 底部導覽條，並給予足夠底色間距 */
+            padding-bottom: calc(env(safe-area-inset-bottom, 24px) + 10px); 
+            box-sizing: border-box;
         }
 
         .btn {
@@ -208,6 +215,7 @@
             border: 1px solid #444;
             padding: 12px;
             font-size: 14px;
+            font-weight: bold;
             border-radius: 8px;
             cursor: pointer;
             display: flex;
@@ -220,7 +228,6 @@
     </style>
 </head>
 <body>
-
 <link rel="stylesheet" href="menu.css"> <div id="nav_bar"></div> <script src="menu.js"></script>
     <div class="hud">
         <div>分數: <span id="score">0</span></div>
@@ -347,20 +354,17 @@
         return div;
     }
 
-    /* 【修復與優化】全面重新計算所有牌堆的 z-index 與「被遮擋隱藏」狀態 */
     function refreshAllPiles() {
-        // 1. 處理 7 個牌桌
         for (let i = 0; i < 7; i++) {
             const t = document.getElementById(`t${i}`);
             const cards = t.querySelectorAll('.card');
             cards.forEach((card, idx) => {
                 card.style.top = `${idx * 20}px`;
                 card.style.zIndex = idx + 1;
-                card.classList.remove('underneath'); // 牌桌上的排需要露出來
+                card.classList.remove('underneath');
             });
         }
 
-        // 2. 處理發牌回收區與右上角結算區 (完全重疊的地方，隱藏下層文字防止穿透)
         const singleStackSlots = ['waste-pile', 'fnd0', 'fnd1', 'fnd2', 'fnd3'];
         singleStackSlots.forEach(id => {
             const slot = document.getElementById(id);
@@ -368,9 +372,9 @@
             cards.forEach((card, idx) => {
                 card.style.zIndex = idx + 1;
                 if (idx === cards.length - 1) {
-                    card.classList.remove('underneath'); // 最上面那張要秀出來
+                    card.classList.remove('underneath');
                 } else {
-                    card.classList.add('underneath');    // 底下的全部隱藏文字
+                    card.classList.add('underneath');
                 }
             });
         });
