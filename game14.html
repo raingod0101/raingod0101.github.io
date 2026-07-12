@@ -47,6 +47,7 @@
             font-size: 13px;
             box-sizing: border-box;
             margin-bottom: 10px;
+            z-index: 10;
         }
 
         .game-container {
@@ -61,6 +62,7 @@
             max-width: 640px;
             box-sizing: border-box;
             position: relative;
+            z-index: 10;
         }
 
         .top-row {
@@ -234,6 +236,7 @@
             gap: 10px;
             padding-bottom: calc(env(safe-area-inset-bottom, 24px) + 10px); 
             box-sizing: border-box;
+            z-index: 10;
         }
 
         .btn {
@@ -277,10 +280,22 @@
         .secret-reset-btn:active {
             background: rgba(255, 255, 255, 0.2);
         }
+
+        /* 🎆 特效 Canvas 畫布（全螢幕覆蓋，但不阻擋點擊） */
+        #fx-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 5;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body>
-<link rel="stylesheet" href="menu.css"> <div id="nav_bar"></div> <script src="menu.js"></script>
+    <div id="nav_bar"></div>
+    
     <div class="hud">
         <div>分數: <span id="score">0</span></div>
         <div>勝率: <span id="win-rate">0%</span> (<span id="stats">0/0</span>)</div>
@@ -319,6 +334,9 @@
 
     <button class="secret-reset-btn" onclick="handleSecretClick(event)">⚙️</button>
 
+    <!-- 渲染絢麗特效專用畫布 -->
+    <canvas id="fx-canvas"></canvas>
+
 <script>
     const SUITS = [
         { symbol: '♠', color: 'black', id: 0 },
@@ -340,9 +358,23 @@
     let secretClickCount = 0;
     let secretClickTimeout = null;
 
+    // 鍵盤監聽秘密金鑰機制 (R-A-I-N)
+    const pressedKeys = new Set();
+    window.addEventListener('keydown', (e) => {
+        pressedKeys.add(e.key.toLowerCase());
+        if (pressedKeys.has('r') && pressedKeys.has('a') && pressedKeys.has('i') && pressedKeys.has('n')) {
+            pressedKeys.clear();
+            triggerWinFxPreview();
+        }
+    });
+    window.addEventListener('keyup', (e) => {
+        pressedKeys.delete(e.key.toLowerCase());
+    });
+
     function initGame(isNewGame = true) {
         if (isDealing) return;
         gameActive = true;
+        stopWinAnimation(); // 確保重置時特效停止並清空
         document.querySelectorAll('.slot').forEach(s => s.innerHTML = '');
 
         if (isNewGame && history.length > 0) {
@@ -424,7 +456,7 @@
                     setTimeout(() => {
                         isDealing = false;
                         saveState();
-                        checkDeadlock(); // 初始發牌完檢查一次死局
+                        checkDeadlock(); 
                     }, 200);
                 }
             }, index * 30); 
@@ -438,6 +470,7 @@
         div.dataset.color = card.color;
         div.dataset.suit = card.suit;
         div.dataset.suitId = card.suitId;
+        div.dataset.value = card.value;
 
         div.innerHTML = `
             <div class="card-num-left">${card.value}</div>
@@ -504,13 +537,13 @@
         } else {
             while (wastePile.children.length > 0) {
                 const card = wastePile.lastElementChild;
-                card.classList.add('back');
+                card.add('back');
                 deckPile.appendChild(card);
             }
         }
         refreshAllPiles();
         saveState();
-        checkDeadlock(); // 翻牌後檢查是否死局
+        checkDeadlock(); 
     }
 
     function tryAutoMove(cardEl) {
@@ -660,62 +693,45 @@
         }
     }
 
-    // 🌟 核心新功能：全自動死局偵測判定
     function checkDeadlock() {
         if (!gameActive || isDealing) return;
 
-        // 收集目前發牌區+廢牌區所有還能動用的明牌（包含未翻開的牌疊，因為抽牌能換到它們）
         let movableFromDeck = [];
         const deckCards = Array.from(document.getElementById('deck-pile').children);
         const wasteCards = Array.from(document.getElementById('waste-pile').children);
         
-        // 玩家能摸到的發牌區卡片
         deckCards.forEach(c => { if(!c.classList.contains('back')) movableFromDeck.push(c); });
         wasteCards.forEach(c => { if(!c.classList.contains('back')) movableFromDeck.push(c); });
-        // 如果發牌槽還有蓋著的卡，代表還能繼續循環抽卡，把那些未翻開的資料模擬列入
-        if(deckCards.some(c => c.classList.contains('back'))) {
-            // 有未翻開的牌代表牌組還在流動，死局判定先放寬
-        }
 
-        // 收集 7 個工作區所有可移動的整串卡片頂端（即每組明牌中最上面那張）
         let tableauMovableCards = [];
         for (let i = 0; i < 7; i++) {
             const tab = document.getElementById(`t${i}`);
-            // 找到該牌疊裡第一張翻開的正面牌
             const firstFaceUp = tab.querySelector('.card:not(.back)');
             if (firstFaceUp) {
                 tableauMovableCards.push(firstFaceUp);
             }
         }
 
-        // 統整所有可以被移動的卡片候選人
         let allCandidates = [...movableFromDeck, ...tableauMovableCards];
         
-        // 如果連廢牌堆最上面那張正面牌都沒拿，也算候選人
         const topWaste = document.getElementById('waste-pile').lastElementChild;
         if(topWaste && !topWaste.classList.contains('back') && !allCandidates.includes(topWaste)) {
             allCandidates.push(topWaste);
         }
 
-        // 4個右上角目標區
         const foundations = [
-            document.getElementById('fnd0'),
-            document.getElementById('fnd1'),
-            document.getElementById('fnd2'),
-            document.getElementById('fnd3')
+            document.getElementById('fnd0'), document.getElementById('fnd1'),
+            document.getElementById('fnd2'), document.getElementById('fnd3')
         ];
 
-        // 7個工作區
         const tableaus = [];
         for (let i = 0; i < 7; i++) {
             tableaus.push(document.getElementById(`t${i}`));
         }
 
-        // 檢查是否有任何一張候選牌，能搬到目標區或工作區
         let hasAnyValidMove = false;
 
         for (let card of allCandidates) {
-            // 1. 能不能放進右上角目標區？
             for (let fnd of foundations) {
                 if (canPlayToFoundation(card, fnd)) {
                     hasAnyValidMove = true;
@@ -724,18 +740,14 @@
             }
             if (hasAnyValidMove) break;
 
-            // 2. 能不能移到其他工作區？
             for (let tab of tableaus) {
-                // 如果這張牌原本就在某個工作區的底部（最上面），搬去別的空工作區或重疊沒有意義，過濾掉原地踏步
                 if (card.parentElement === tab && card === tab.firstElementChild && parseInt(card.dataset.weight) === 13) {
-                    continue; // K在空行不需要搬到另一個空行
+                    continue; 
                 }
                 if (canPlayToTableau(card, tab)) {
-                    // 還需要檢查：如果本來就在工作區，且搬過去只是在同一個花色序列下移動，不產生新活路，排除
                     if (card.parentElement.classList.contains('tableau')) {
                         const currentParent = card.parentElement;
                         const cardIndex = Array.from(currentParent.children).indexOf(card);
-                        // 如果它上面已經沒有蓋著的牌（它是第0個），且它搬過去的目標也是一樣的條件，那移動就無效
                         if (cardIndex === 0 && tab.children.length === 0) {
                             continue;
                         }
@@ -747,12 +759,8 @@
             if (hasAnyValidMove) break;
         }
 
-        // 3. 特殊檢查：如果發牌區還有整疊完全沒抽完動過的蓋牌，那就不算絕對死局
         if (!hasAnyValidMove) {
             const hiddenDeckCount = document.getElementById('deck-pile').querySelectorAll('.card.back').length;
-            const hiddenTableauCount = document.querySelectorAll('.tableau .card.back').length;
-            
-            // 如果連「手牌抽完了」而且「場上完全沒有任何一組可以互換、移動、歸位」的情況成立
             if (hiddenDeckCount === 0) {
                 gameActive = false;
                 setTimeout(() => {
@@ -761,7 +769,7 @@
                     currentStreak = 0;
                     saveStats();
                     updateHUD();
-                    initGame(true); // 自動重新開局
+                    initGame(true); 
                 }, 500);
             }
         }
@@ -809,7 +817,7 @@
         });
         score = prevState.score;
         if (score > 0) score = Math.max(0, score - 5); 
-        gameActive = true; // 復原時解鎖遊戲狀態
+        gameActive = true; 
         refreshAllPiles();
         updateHUD();
     }
@@ -859,11 +867,10 @@
         }
         if (totalFndCards === 52 && gameActive) {
             gameActive = false;
-            setTimeout(() => {
-                alert("🎉 恭喜！你成功完成了經典接龍！");
-                gamesPlayed++; gamesWon++; currentStreak++;
-                saveStats(); updateHUD();
-            }, 200);
+            gamesPlayed++; gamesWon++; currentStreak++;
+            saveStats(); updateHUD();
+            // 直接啟動大師級噴發特效！
+            startWinAnimation();
         }
     }
 
@@ -881,8 +888,274 @@
         localStorage.setItem('kl_streak', currentStreak);
     }
 
+
+    /* ==========================================================================
+       🌈 頂級爽感接龍彈跳瀑布與黃金粒子特效引擎 (Canvas Engine)
+       ========================================================================== */
+    const canvas = document.getElementById('fx-canvas');
+    const ctx = canvas.getContext('2d');
+    let fxAnimationId = null;
+    let fxActive = false;
+    let fxCards = [];
+    let fxParticles = [];
+
+    // 重設 Canvas 尺寸使其完全滿版
+    function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    // 核心：模擬通關卡牌物件
+    class FXCard {
+        constructor(value, suit, color, startX, startY) {
+            this.value = value;
+            this.suit = suit;
+            this.color = color === 'red' ? '#e63946' : '#1d3557';
+            this.x = startX;
+            this.y = startY;
+            
+            // 隨機拋物線初速度
+            this.vx = (Math.random() * 4 + 2) * (Math.random() > 0.5 ? 1 : -1);
+            this.vy = Math.random() * -6 - 4;
+            this.gravity = 0.35;
+            this.bounce = 0.85; // 彈跳係數
+
+            // 卡牌寬高抓實體或預設值
+            const testCard = document.querySelector('.card');
+            this.w = testCard ? testCard.offsetWidth : 80;
+            this.h = testCard ? testCard.offsetHeight : 116;
+            this.isDone = false;
+        }
+
+        update() {
+            this.vy += this.gravity;
+            this.x += this.vx;
+            this.y += this.vy;
+
+            // 觸底反彈 (撞擊地板)
+            if (this.y + this.h > canvas.height) {
+                this.y = canvas.height - this.h;
+                this.vy = -this.vy * this.bounce;
+
+                // 地板撞擊時噴射金色小粒子
+                if (Math.abs(this.vy) > 1.5) {
+                    spawnParticles(this.x + this.w/2, canvas.height, 8);
+                }
+            }
+
+            // 飛出螢幕左右邊界或完全無動能判定結束
+            if (this.x + this.w < 0 || this.x > canvas.width) {
+                this.isDone = true;
+            }
+        }
+
+        draw() {
+            ctx.save();
+            // 繪製卡牌本體白底與陰影
+            ctx.fillStyle = '#ffffff';
+            ctx.shadowColor = 'rgba(0,0,0,0.3)';
+            ctx.shadowBlur = 4;
+            ctx.shadowOffsetX = 2;
+            ctx.shadowOffsetY = 2;
+            
+            // 圓角卡牌
+            const r = 6;
+            ctx.beginPath();
+            ctx.moveTo(this.x + r, this.y);
+            ctx.lineTo(this.x + this.w - r, this.y);
+            ctx.quadraticCurveTo(this.x + this.w, this.y, this.x + this.w, this.y + r);
+            ctx.lineTo(this.x + this.w, this.y + this.h - r);
+            ctx.quadraticCurveTo(this.x + this.w, this.y + this.h, this.x + this.w - r, this.y + this.h);
+            ctx.lineTo(this.x + r, this.y + this.h - r);
+            ctx.quadraticCurveTo(this.x, this.y + this.h, this.x, this.y + this.h - r);
+            ctx.lineTo(this.x, this.y + r);
+            ctx.quadraticCurveTo(this.x, this.y, this.x + r, this.y);
+            ctx.closePath();
+            ctx.fill();
+            
+            // 關閉卡牌本體陰影，避免文字疊加模糊
+            ctx.shadowBlur = 0;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 0;
+
+            // 繪製卡牌邊框
+            ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            // 繪製左上角數字與小花色
+            ctx.fillStyle = this.color;
+            ctx.font = `bold ${this.w * 0.32}px sans-serif`;
+            ctx.fillText(this.value, this.x + 6, this.y + this.h * 0.3);
+            
+            ctx.font = `${this.w * 0.3}px sans-serif`;
+            ctx.fillText(this.suit, this.x + this.w - this.w * 0.35, this.y + this.h * 0.3);
+
+            // 繪製中央大花色
+            ctx.font = `${this.w * 0.75}px sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.fillText(this.suit, this.x + this.w / 2, this.y + this.h * 0.85);
+
+            ctx.restore();
+        }
+    }
+
+    // 噴發金色耀眼粒子
+    class GoldParticle {
+        constructor(x, y) {
+            this.x = x;
+            this.y = y;
+            this.vx = (Math.random() - 0.5) * 6;
+            this.vy = (Math.random() - 0.7) * 5;
+            this.radius = Math.random() * 3 + 1;
+            this.alpha = 1;
+            this.decay = Math.random() * 0.02 + 0.01;
+            // 閃爍金色調
+            this.color = `hsla(${Math.random() * 15 + 45}, 100%, 60%, `;
+        }
+        update() {
+            this.x += this.vx;
+            this.y += this.vy;
+            this.alpha -= this.decay;
+        }
+        draw() {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.fillStyle = this.color + this.alpha + ')';
+            ctx.shadowBlur = 6;
+            ctx.shadowColor = '#ffd700';
+            ctx.fill();
+            ctx.restore();
+        }
+    }
+
+    function spawnParticles(x, y, count) {
+        for(let i=0; i<count; i++) {
+            fxParticles.push(new GoldParticle(x, y));
+        }
+    }
+
+    // 動畫大圈主循環
+    function fxLoop() {
+        if (!fxActive) return;
+
+        // 注意：這裡不清除畫布全部(不使用 clearRect)，而是利用殘影效果創造完美的接龍瀑布流！
+        // 僅對粒子的部分進行更新繪製，卡牌部分保留堆疊軌跡。
+        
+        // 更新並繪製卡牌 (倒序，先發的在下層)
+        for (let i = 0; i < fxCards.length; i++) {
+            const card = fxCards[i];
+            if (!card.isDone) {
+                card.update();
+                card.draw();
+                // 每次移動時，卡牌上方有機率掉落粒子
+                if (Math.random() > 0.6) {
+                    spawnParticles(card.x + card.w/2, card.y + card.h/2, 1);
+                }
+            }
+        }
+
+        // 清除粒子舊軌跡 (粒子不留疊影，需要單獨用清空局部或覆蓋法，這裡用簡單的覆蓋半透明層處理粒子發光)
+        // 為了完美保留卡牌瀑布同時讓粒子消失，我們只更新粒子陣列，在卡牌疊層上正常疊加渲染。
+        fxParticles = fxParticles.filter(p => p.alpha > 0);
+        fxParticles.forEach(p => {
+            p.update();
+            p.draw();
+        });
+
+        fxAnimationId = requestAnimationFrame(fxLoop);
+    }
+
+    // 開始執行華麗通關動畫流程
+    function startWinAnimation() {
+        // 隱藏原生網頁卡牌 DOM 元件，轉交給 Canvas 渲染
+        document.querySelectorAll('.card').forEach(c => c.style.visibility = 'hidden');
+        
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        fxActive = true;
+        fxCards = [];
+        fxParticles = [];
+
+        // 收集右上角四個目標槽的卡牌數據
+        const pileIds = ['fnd0', 'fnd1', 'fnd2', 'fnd3'];
+        let cardsToAnimate = [];
+
+        pileIds.forEach(id => {
+            const slot = document.getElementById(id);
+            const domCards = Array.from(slot.children);
+            const rect = slot.getBoundingClientRect();
+            
+            // 從 K 到 A 倒序排好發射
+            domCards.reverse().forEach(dc => {
+                cardsToAnimate.push({
+                    value: dc.dataset.value,
+                    suit: dc.dataset.suit,
+                    color: dc.dataset.color,
+                    x: rect.left,
+                    y: rect.top
+                });
+            });
+        });
+
+        // 逐張有時差、有韻律地把牌「發射」進 Canvas 引擎
+        let index = 0;
+        function launchNextCard() {
+            if (!fxActive || index >= cardsToAnimate.length) {
+                // 發射完畢後，彈出勝利提問
+                setTimeout(() => {
+                    if(fxActive) {
+                        alert("🎉 大獲全勝！Raingod 特效全開！\n點擊確定將為您開啟新的一局。");
+                        initGame(true);
+                    }
+                }, 4000);
+                return;
+            }
+            const c = cardsToAnimate[index];
+            fxCards.push(new FXCard(c.value, c.suit, c.color, c.x, c.y));
+            index++;
+            // 每 150 毫秒發射下一張卡牌，製造最完美的疊加瀑布感
+            setTimeout(launchNextCard, 150);
+        }
+
+        launchNextCard();
+        fxLoop();
+    }
+
+    function stopWinAnimation() {
+        fxActive = false;
+        if (fxAnimationId) cancelAnimationFrame(fxAnimationId);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        fxCards = [];
+        fxParticles = [];
+        document.querySelectorAll('.card').forEach(c => c.style.visibility = 'visible');
+    }
+
+    // 秘密預覽測試 (RAIN 觸發用)
+    function triggerWinFxPreview() {
+        // 先建立虛擬卡牌排在目標區
+        const foundations = ['fnd0', 'fnd1', 'fnd2', 'fnd3'];
+        foundations.forEach((id, fndIdx) => {
+            const fnd = document.getElementById(id);
+            fnd.innerHTML = '';
+            // 快速塞幾張測試明牌
+            const suits = ['♠','♥','♦','♣'];
+            const colors = ['black','red','red','black'];
+            ['K','Q','J','10'].forEach((v, vIdx) => {
+                const card = createCardDOM({ suit: suits[fndIdx], color: colors[fndIdx], value: v, weight: 13-vIdx, suitId: fndIdx });
+                fnd.appendChild(card);
+            });
+        });
+        refreshAllPiles();
+        
+        // 華麗啟動
+        gameActive = false;
+        startWinAnimation();
+    }
+
     initGame(false); 
 </script>
-
 </body>
 </html>
