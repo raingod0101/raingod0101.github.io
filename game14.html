@@ -33,6 +33,7 @@
             overflow-y: auto;
             min-height: 100vh;
             box-sizing: border-box;
+            position: relative;
         }
 
         .hud {
@@ -141,7 +142,7 @@
         .card.red { color: #e63946; }
         .card.black { color: #1d3557; }
 
-        /* 📍 左上角數字 - 加大加粗 */
+        /* 📍 左上角數字 */
         .card-num-left {
             position: absolute;
             top: 1px;
@@ -153,7 +154,7 @@
             letter-spacing: -1px;
         }
 
-        /* 📍 右上角小花色 - 同步加大 */
+        /* 📍 右上角小花色 */
         .card-suit-right {
             position: absolute;
             top: 1px;
@@ -178,7 +179,6 @@
             z-index: 1;
         }
         
-        /* 讓花色變得超級無敵大 */
         .card-suit-big {
             font-size: calc(var(--card-w) * 0.85);
             line-height: 1;
@@ -253,6 +253,30 @@
         }
 
         .btn:active { background: #444; }
+
+        /* ⚙️ 左下角極小隱蔽重置按鈕 */
+        .secret-reset-btn {
+            position: fixed;
+            left: 10px;
+            bottom: 10px;
+            width: 16px;
+            height: 16px;
+            background: rgba(255, 255, 255, 0.05);
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 8px;
+            color: rgba(255, 255, 255, 0.2);
+            box-shadow: inset 0 0 2px rgba(0,0,0,0.5);
+            transition: background 0.2s;
+        }
+        .secret-reset-btn:active {
+            background: rgba(255, 255, 255, 0.2);
+        }
     </style>
 </head>
 <body>
@@ -293,6 +317,9 @@
         <button class="btn" onclick="restartGame()">🔄 重來(算輸)</button>
     </div>
 
+    <!-- 🌟 左下角極小按鈕 -->
+    <button class="secret-reset-btn" onclick="handleSecretClick(event)">⚙️</button>
+
 <script>
     const SUITS = [
         { symbol: '♠', color: 'black', id: 0 },
@@ -310,6 +337,10 @@
     let gamesPlayed = parseInt(localStorage.getItem('kl_played') || '0');
     let gamesWon = parseInt(localStorage.getItem('kl_won') || '0');
     let currentStreak = parseInt(localStorage.getItem('kl_streak') || '0');
+
+    // 連點計算變數
+    let secretClickCount = 0;
+    let secretClickTimeout = null;
 
     function initGame(isNewGame = true) {
         if (isDealing) return;
@@ -684,6 +715,34 @@
         if (confirmRestart) {
             initGame(true);
         }
+    }
+
+    // 🌟 連點 5 下觸發重置處理函式
+    function handleSecretClick(e) {
+        e.stopPropagation();
+        
+        clearTimeout(secretClickTimeout);
+        secretClickCount++;
+
+        if (secretClickCount === 5) {
+            secretClickCount = 0; 
+            const confirmReset = confirm("⚠️ 警告\n確定要強制重置所有數據嗎？\n這將會清空總局數、勝率以及連勝紀錄！");
+            if (confirmReset) {
+                gamesPlayed = 0;
+                gamesWon = 0;
+                currentStreak = 0;
+                score = 0;
+                saveStats();
+                initGame(false); // 重新洗牌開局，且不計入先前的輸局
+                alert("數據已成功全部清空！");
+            }
+            return;
+        }
+
+        // 0.5 秒內沒有繼續點擊，就重置計數器
+        secretClickTimeout = setTimeout(() => {
+            secretClickCount = 0;
+        }, 500);
     }
 
     function checkWin() {
