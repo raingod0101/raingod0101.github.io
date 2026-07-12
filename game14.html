@@ -317,7 +317,6 @@
         <button class="btn" onclick="restartGame()">🔄 重來(算輸)</button>
     </div>
 
-    <!-- 🌟 左下角極小按鈕 -->
     <button class="secret-reset-btn" onclick="handleSecretClick(event)">⚙️</button>
 
 <script>
@@ -338,7 +337,6 @@
     let gamesWon = parseInt(localStorage.getItem('kl_won') || '0');
     let currentStreak = parseInt(localStorage.getItem('kl_streak') || '0');
 
-    // 連點計算變數
     let secretClickCount = 0;
     let secretClickTimeout = null;
 
@@ -426,6 +424,7 @@
                     setTimeout(() => {
                         isDealing = false;
                         saveState();
+                        checkDeadlock(); // 初始發牌完檢查一次死局
                     }, 200);
                 }
             }, index * 30); 
@@ -511,6 +510,7 @@
         }
         refreshAllPiles();
         saveState();
+        checkDeadlock(); // 翻牌後檢查是否死局
     }
 
     function tryAutoMove(cardEl) {
@@ -527,6 +527,7 @@
                     checkRevealTopCard(sourceSlot);
                     checkAutoAbsorb();
                     checkWin();
+                    if (gameActive) checkDeadlock();
                     return;
                 }
             }
@@ -539,6 +540,7 @@
                 executeMove(sourceSlot, tab, chain);
                 checkRevealTopCard(sourceSlot);
                 checkAutoAbsorb();
+                if (gameActive) checkDeadlock();
                 return;
             }
         }
@@ -658,6 +660,113 @@
         }
     }
 
+    // 🌟 核心新功能：全自動死局偵測判定
+    function checkDeadlock() {
+        if (!gameActive || isDealing) return;
+
+        // 收集目前發牌區+廢牌區所有還能動用的明牌（包含未翻開的牌疊，因為抽牌能換到它們）
+        let movableFromDeck = [];
+        const deckCards = Array.from(document.getElementById('deck-pile').children);
+        const wasteCards = Array.from(document.getElementById('waste-pile').children);
+        
+        // 玩家能摸到的發牌區卡片
+        deckCards.forEach(c => { if(!c.classList.contains('back')) movableFromDeck.push(c); });
+        wasteCards.forEach(c => { if(!c.classList.contains('back')) movableFromDeck.push(c); });
+        // 如果發牌槽還有蓋著的卡，代表還能繼續循環抽卡，把那些未翻開的資料模擬列入
+        if(deckCards.some(c => c.classList.contains('back'))) {
+            // 有未翻開的牌代表牌組還在流動，死局判定先放寬
+        }
+
+        // 收集 7 個工作區所有可移動的整串卡片頂端（即每組明牌中最上面那張）
+        let tableauMovableCards = [];
+        for (let i = 0; i < 7; i++) {
+            const tab = document.getElementById(`t${i}`);
+            // 找到該牌疊裡第一張翻開的正面牌
+            const firstFaceUp = tab.querySelector('.card:not(.back)');
+            if (firstFaceUp) {
+                tableauMovableCards.push(firstFaceUp);
+            }
+        }
+
+        // 統整所有可以被移動的卡片候選人
+        let allCandidates = [...movableFromDeck, ...tableauMovableCards];
+        
+        // 如果連廢牌堆最上面那張正面牌都沒拿，也算候選人
+        const topWaste = document.getElementById('waste-pile').lastElementChild;
+        if(topWaste && !topWaste.classList.contains('back') && !allCandidates.includes(topWaste)) {
+            allCandidates.push(topWaste);
+        }
+
+        // 4個右上角目標區
+        const foundations = [
+            document.getElementById('fnd0'),
+            document.getElementById('fnd1'),
+            document.getElementById('fnd2'),
+            document.getElementById('fnd3')
+        ];
+
+        // 7個工作區
+        const tableaus = [];
+        for (let i = 0; i < 7; i++) {
+            tableaus.push(document.getElementById(`t${i}`));
+        }
+
+        // 檢查是否有任何一張候選牌，能搬到目標區或工作區
+        let hasAnyValidMove = false;
+
+        for (let card of allCandidates) {
+            // 1. 能不能放進右上角目標區？
+            for (let fnd of foundations) {
+                if (canPlayToFoundation(card, fnd)) {
+                    hasAnyValidMove = true;
+                    break;
+                }
+            }
+            if (hasAnyValidMove) break;
+
+            // 2. 能不能移到其他工作區？
+            for (let tab of tableaus) {
+                // 如果這張牌原本就在某個工作區的底部（最上面），搬去別的空工作區或重疊沒有意義，過濾掉原地踏步
+                if (card.parentElement === tab && card === tab.firstElementChild && parseInt(card.dataset.weight) === 13) {
+                    continue; // K在空行不需要搬到另一個空行
+                }
+                if (canPlayToTableau(card, tab)) {
+                    // 還需要檢查：如果本來就在工作區，且搬過去只是在同一個花色序列下移動，不產生新活路，排除
+                    if (card.parentElement.classList.contains('tableau')) {
+                        const currentParent = card.parentElement;
+                        const cardIndex = Array.from(currentParent.children).indexOf(card);
+                        // 如果它上面已經沒有蓋著的牌（它是第0個），且它搬過去的目標也是一樣的條件，那移動就無效
+                        if (cardIndex === 0 && tab.children.length === 0) {
+                            continue;
+                        }
+                    }
+                    hasAnyValidMove = true;
+                    break;
+                }
+            }
+            if (hasAnyValidMove) break;
+        }
+
+        // 3. 特殊檢查：如果發牌區還有整疊完全沒抽完動過的蓋牌，那就不算絕對死局
+        if (!hasAnyValidMove) {
+            const hiddenDeckCount = document.getElementById('deck-pile').querySelectorAll('.card.back').length;
+            const hiddenTableauCount = document.querySelectorAll('.tableau .card.back').length;
+            
+            // 如果連「手牌抽完了」而且「場上完全沒有任何一組可以互換、移動、歸位」的情況成立
+            if (hiddenDeckCount === 0) {
+                gameActive = false;
+                setTimeout(() => {
+                    alert("❌ 偵測到死局！已經沒有任何合法的移動方式了。\n本局直接判定結束。");
+                    gamesPlayed++;
+                    currentStreak = 0;
+                    saveStats();
+                    updateHUD();
+                    initGame(true); // 自動重新開局
+                }, 500);
+            }
+        }
+    }
+
     function saveState() {
         if (isDealing) return; 
         const snapshot = [];
@@ -700,6 +809,7 @@
         });
         score = prevState.score;
         if (score > 0) score = Math.max(0, score - 5); 
+        gameActive = true; // 復原時解鎖遊戲狀態
         refreshAllPiles();
         updateHUD();
     }
@@ -717,10 +827,8 @@
         }
     }
 
-    // 🌟 連點 5 下觸發重置處理函式
     function handleSecretClick(e) {
         e.stopPropagation();
-        
         clearTimeout(secretClickTimeout);
         secretClickCount++;
 
@@ -733,13 +841,12 @@
                 currentStreak = 0;
                 score = 0;
                 saveStats();
-                initGame(false); // 重新洗牌開局，且不計入先前的輸局
+                initGame(false);
                 alert("數據已成功全部清空！");
             }
             return;
         }
 
-        // 0.5 秒內沒有繼續點擊，就重置計數器
         secretClickTimeout = setTimeout(() => {
             secretClickCount = 0;
         }, 500);
