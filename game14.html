@@ -59,6 +59,7 @@
             width: 100%;
             max-width: 640px;
             box-sizing: border-box;
+            position: relative;
         }
 
         .top-row {
@@ -76,7 +77,7 @@
             display: flex;
             justify-content: space-between;
             gap: 4px;
-            height: 50vh; /* 稍微縮小牌桌高度，留空間給下方按鈕 */
+            height: 50vh;
             min-height: 340px;
             overflow-y: auto;
             overflow-x: hidden;
@@ -119,7 +120,7 @@
             color: rgba(255,255,255,0.1);
         }
 
-        /* 卡牌樣式修復 */
+        /* 卡牌基礎樣式 */
         .card {
             width: var(--card-w);
             height: var(--card-h);
@@ -130,31 +131,29 @@
             display: flex;
             box-sizing: border-box;
             color: #000;
-            transition: transform 0.1s ease;
             overflow: hidden;
             
-            /* 強制啟用獨立渲染層，防止鬼影 */
+            /* 獨立渲染層 */
             transform: translate3d(0, 0, 0);
             backface-visibility: hidden;
+            transition: transform 0.2s ease, top 0.2s ease;
         }
 
         .card.red { color: #e63946; }
         .card.black { color: #1d3557; }
 
-        /* 【調整】左上角小字放大，粗體拉滿 */
         .card-corner {
             position: absolute;
             top: 4px;
             left: 4px;
-            font-size: calc(var(--card-w) * 0.22); /* 從 0.16 放大到 0.22 */
-            font-weight: 900;                      /* 數字全面特粗 */
+            font-size: calc(var(--card-w) * 0.22);
+            font-weight: 900;
             line-height: 0.95;
             text-align: center;
             z-index: 2;
             letter-spacing: -1px;
         }
 
-        /* 中央大字體 */
         .card-center {
             position: absolute;
             width: 100%;
@@ -165,13 +164,13 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            font-weight: 900;                      /* 數字全面特粗 */
+            font-weight: 900;
             line-height: 0.9;
             z-index: 1;
         }
         .card-value {
             font-size: calc(var(--card-w) * 0.45);
-            font-weight: 900;                      /* 數字全面特粗 */
+            font-weight: 900;
         }
         .card-suit {
             font-size: calc(var(--card-w) * 0.42);
@@ -195,7 +194,30 @@
             display: none !important;
         }
 
-        /* 【調整】按鈕工具列往上提，留出底部的虛擬導覽列避讓空間 */
+        /* 🔄 3D 翻牌動畫效果 */
+        @keyframes flipIn {
+            0% { transform: scale(1) rotateY(90deg); background-color: #b91c1c; }
+            100% { transform: scale(1) rotateY(0deg); background-color: #ffffff; }
+        }
+        .card.flip-animate {
+            animation: flipIn 0.2s ease-out forwards;
+        }
+
+        /* 🚀 新增：發牌動態滑動飛入效果 */
+        @keyframes dealGlide {
+            from {
+                transform: translate3d(var(--deal-start-x, 0px), var(--deal-start-y, 0px), 0) scale(0.9);
+                opacity: 0.5;
+            }
+            to {
+                transform: translate3d(0, 0, 0) scale(1);
+                opacity: 1;
+            }
+        }
+        .card.dealing {
+            animation: dealGlide 0.25s cubic-bezier(0.18, 0.89, 0.32, 1.15) forwards;
+        }
+
         .toolbar {
             display: flex;
             justify-content: space-around;
@@ -203,7 +225,6 @@
             max-width: 640px;
             margin-top: 15px;
             gap: 10px;
-            /* 使用 env(safe-area-inset-bottom) 自動避開 iOS/Android 底部導覽條，並給予足夠底色間距 */
             padding-bottom: calc(env(safe-area-inset-bottom, 24px) + 10px); 
             box-sizing: border-box;
         }
@@ -277,12 +298,14 @@
     let score = 0;
     let history = []; 
     let gameActive = true;
+    let isDealing = false; 
 
     let gamesPlayed = parseInt(localStorage.getItem('kl_played') || '0');
     let gamesWon = parseInt(localStorage.getItem('kl_won') || '0');
     let currentStreak = parseInt(localStorage.getItem('kl_streak') || '0');
 
     function initGame(isNewGame = true) {
+        if (isDealing) return;
         gameActive = true;
         document.querySelectorAll('.slot').forEach(s => s.innerHTML = '');
 
@@ -307,13 +330,15 @@
         }
 
         let deckIndex = 0;
+        let dealQueue = [];
+
         for (let i = 0; i < 7; i++) {
-            const tSlot = document.getElementById(`t${i}`);
             for (let j = 0; j <= i; j++) {
-                const cardData = deck[deckIndex++];
-                const cardEl = createCardDOM(cardData);
-                if (j < i) cardEl.classList.add('back'); 
-                tSlot.appendChild(cardEl);
+                dealQueue.push({
+                    targetSlotId: `t${i}`,
+                    cardData: deck[deckIndex++],
+                    isBack: j < i
+                });
             }
         }
 
@@ -325,8 +350,53 @@
             deckPile.appendChild(cardEl);
         }
 
-        refreshAllPiles();
-        saveState();
+        // 取得起點（發牌堆的位置坐標）
+        const deckRect = deckPile.getBoundingClientRect();
+
+        isDealing = true;
+        dealQueue.forEach((item, index) => {
+            setTimeout(() => {
+                const targetSlot = document.getElementById(item.targetSlotId);
+                const cardEl = createCardDOM(item.cardData);
+                
+                if (item.isBack) {
+                    cardEl.classList.add('back');
+                }
+
+                // 塞入 DOM 之前先計算相對位移坐標
+                targetSlot.appendChild(cardEl);
+                refreshAllPiles();
+
+                const cardRect = cardEl.getBoundingClientRect();
+                const startX = deckRect.left - cardRect.left;
+                const startY = deckRect.top - cardRect.top;
+
+                cardEl.style.setProperty('--deal-start-x', `${startX}px`);
+                cardEl.style.setProperty('--deal-start-y', `${startY}px`);
+                
+                // 啟動發牌滑動動畫
+                cardEl.classList.add('dealing');
+
+                // 動畫結束後處理
+                cardEl.addEventListener('animationend', function handler(e) {
+                    if (e.animationName === 'dealGlide') {
+                        cardEl.classList.remove('dealing');
+                        cardEl.removeEventListener('animationend', handler);
+                        // 如果是最上層的正面牌，發牌到位後補一個翻轉 3D 特效
+                        if (!item.isBack) {
+                            cardEl.classList.add('flip-animate');
+                        }
+                    }
+                });
+
+                if (index === dealQueue.length - 1) {
+                    setTimeout(() => {
+                        isDealing = false;
+                        saveState();
+                    }, 200);
+                }
+            }, index * 30); 
+        });
     }
 
     function createCardDOM(card) {
@@ -347,8 +417,14 @@
 
         div.addEventListener('click', (e) => {
             e.stopPropagation();
-            if (!gameActive || div.classList.contains('back')) return;
+            if (!gameActive || isDealing || div.classList.contains('back')) return;
             tryAutoMove(div);
+        });
+
+        div.addEventListener('animationend', (e) => {
+            if (e.animationName === 'flipIn') {
+                div.classList.remove('flip-animate');
+            }
         });
 
         return div;
@@ -370,6 +446,7 @@
             const slot = document.getElementById(id);
             const cards = Array.from(slot.children);
             cards.forEach((card, idx) => {
+                card.style.top = '0px';
                 card.style.zIndex = idx + 1;
                 if (idx === cards.length - 1) {
                     card.classList.remove('underneath');
@@ -382,7 +459,7 @@
 
     function drawCard(e) {
         if (e) e.stopPropagation();
-        if (!gameActive) return;
+        if (!gameActive || isDealing) return;
 
         const deckPile = document.getElementById('deck-pile');
         const wastePile = document.getElementById('waste-pile');
@@ -390,7 +467,7 @@
         if (deckPile.children.length > 0) {
             const card = deckPile.lastElementChild;
             card.classList.remove('back');
-            card.style.top = '0px';
+            card.classList.add('flip-animate'); 
             wastePile.appendChild(card);
         } else {
             while (wastePile.children.length > 0) {
@@ -482,9 +559,6 @@
         chain.forEach(card => {
             toSlot.appendChild(card);
         });
-        if (!toSlot.classList.contains('tableau')) {
-            chain[0].style.top = '0px';
-        }
         refreshAllPiles();
         saveState();
     }
@@ -494,6 +568,7 @@
             const topCard = slot.lastElementChild;
             if (topCard.classList.contains('back')) {
                 topCard.classList.remove('back');
+                topCard.classList.add('flip-animate'); 
                 score += 5;
                 saveState();
             }
@@ -532,7 +607,6 @@
                     if (!hasHiddenCards || weight <= 2) { 
                         const src = card.parentElement;
                         fnd.appendChild(card);
-                        card.style.top = '0px';
                         score += 10;
                         checkRevealTopCard(src);
                         refreshAllPiles();
@@ -552,6 +626,7 @@
     }
 
     function saveState() {
+        if (isDealing) return; 
         const snapshot = [];
         document.querySelectorAll('.slot').forEach(slot => {
             const cardData = [];
@@ -568,7 +643,7 @@
     }
 
     function undo() {
-        if (history.length <= 1) return;
+        if (history.length <= 1 || isDealing) return;
         history.pop(); 
         const prevState = history[history.length - 1];
 
@@ -597,6 +672,7 @@
     }
 
     function restartGame() {
+        if (isDealing) return;
         if (history.length <= 1) {
             initGame(true);
             return;
