@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>蜘蛛接龍 | Raingod</title>
+    <style>
+        :root {
+            --bg-color: #141414;
+            --board-color: #0d5c34;
+            --card-w: calc((100vw - 44px) / 10 - 2px);
+            --card-h: calc(var(--card-w) * 1.45);
+            --card-radius: 4px;
+        }
+
+        @media (min-width: 800px) {
+            :root {
+                --card-w: 68px;
+                --card-h: 98px;
+            }
+        }
+
+        body {
+            margin: 0;
+            padding: 10px;
+            background-color: var(--bg-color);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: white;
+            user-select: none;
+            overflow-y: auto;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+
+        /* 🟢 仿截圖膠囊 HUD */
+        .hud-panel {
+            background: rgba(0, 0, 0, 0.4);
+            padding: 8px 30px;
+            border-radius: 20px;
+            display: flex;
+            gap: 25px;
+            font-size: 16px;
+            font-weight: bold;
+            color: #fffbdf;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+            margin-bottom: 20px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .hud-panel span {
+            color: #ffffff;
+            margin-left: 4px;
+        }
+
+        .game-container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            background-color: var(--board-color);
+            padding: 15px 10px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+            width: 100%;
+            max-width: 840px;
+            box-sizing: border-box;
+            position: relative;
+        }
+
+        .top-row {
+            display: flex;
+            justify-content: flex-end;
+            width: 100%;
+            padding-right: 5px;
+            height: var(--card-h);
+        }
+
+        .deck-area {
+            display: flex;
+            position: relative;
+            width: calc(var(--card-w) * 2);
+            height: var(--card-h);
+            cursor: pointer;
+        }
+
+        .deck-stack-visual {
+            width: var(--card-w);
+            height: var(--card-h);
+            background: linear-gradient(135deg, #b91c1c 25%, transparent 25%) -10px 0,
+                        linear-gradient(225deg, #b91c1c 25%, transparent 25%) -10px 0,
+                        linear-gradient(45deg, #b91c1c 25%, transparent 25%),
+                        linear-gradient(335deg, #b91c1c 25%, #7f1d1d 25%);
+            background-size: 10px 10px;
+            border-radius: var(--card-radius);
+            box-shadow: -2px 2px 4px rgba(0,0,0,0.4);
+            position: absolute;
+            border: 1px solid #fff;
+        }
+
+        .tableaus {
+            display: flex;
+            justify-content: space-between;
+            gap: 3px;
+            height: 65vh;
+            min-height: 450px;
+            overflow-y: auto;
+            padding-bottom: 40px;
+        }
+
+        .slot {
+            width: var(--card-w);
+            height: var(--card-h);
+            border: 1px dashed rgba(255,255,255,0.15);
+            border-radius: var(--card-radius);
+            position: relative;
+            box-sizing: border-box;
+            background: rgba(0,0,0,0.1);
+            flex-shrink: 0;
+        }
+
+        /* 🃏 卡牌核心樣式 */
+        .card {
+            width: var(--card-w);
+            height: var(--card-h);
+            background-color: #ffffff;
+            border-radius: var(--card-radius);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            position: absolute;
+            display: flex;
+            box-sizing: border-box;
+            color: #1d3557; 
+            overflow: hidden;
+            border: 1px solid #bbbbbb;
+            
+            transform: translate3d(0, 0, 0);
+            backface-visibility: hidden;
+            transition: transform 0.2s ease, top 0.2s ease;
+        }
+
+        /* 📍 精準排版：將數字與花色置於頂端，確保被重疊壓住時依然清晰可見 */
+        .card-num-left {
+            position: absolute;
+            top: 2px;
+            left: 4px;
+            font-size: calc(var(--card-w) * 0.35);
+            font-weight: 900;
+            line-height: 1;
+            z-index: 5;
+        }
+
+        .card-suit-right {
+            position: absolute;
+            top: 2px;
+            right: 4px;
+            font-size: calc(var(--card-w) * 0.32);
+            line-height: 1;
+            z-index: 5;
+        }
+
+        .card-center {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            padding-bottom: 6px;
+            box-sizing: border-box;
+            z-index: 1;
+        }
+        
+        .card-suit-big {
+            font-size: calc(var(--card-w) * 0.7);
+            line-height: 1;
+        }
+
+        /* 卡牌背面 */
+        .card.back {
+            background: linear-gradient(135deg, #b91c1c 25%, transparent 25%) -10px 0,
+                        linear-gradient(225deg, #b91c1c 25%, transparent 25%) -10px 0,
+                        linear-gradient(45deg, #b91c1c 25%, transparent 25%),
+                        linear-gradient(335deg, #b91c1c 25%, #7f1d1d 25%);
+            background-size: 10px 10px;
+            border: 1px solid #ffffff;
+            pointer-events: none;
+        }
+        .card.back * { display: none !important; }
+
+        /* 被完全壓住的蓋牌隱藏內容（明牌不套用，明牌要維持看得到頂部） */
+        .card.underneath-back * { display: none !important; }
+
+        /* 🔄 3D 翻牌動畫效果 */
+        @keyframes flipIn {
+            0% { transform: scale(1) rotateY(90deg); background-color: #b91c1c; }
+            100% { transform: scale(1) rotateY(0deg); background-color: #ffffff; }
+        }
+        .card.flip-animate {
+            animation: flipIn 0.2s ease-out forwards;
+        }
+
+        /* 🚀 發牌動態飛入效果 */
+        @keyframes dealGlide {
+            from {
+                transform: translate3d(var(--deal-start-x, 0px), var(--deal-start-y, 0px), 0) scale(0.9);
+                opacity: 0.5;
+            }
+            to {
+                transform: translate3d(0, 0, 0) scale(1);
+                opacity: 1;
+            }
+        }
+        .card.dealing {
+            animation: dealGlide 0.25s cubic-bezier(0.18, 0.89, 0.32, 1.15) forwards;
+        }
+
+        .toolbar {
+            display: flex;
+            justify-content: space-around;
+            width: 100%;
+            max-width: 840px;
+            margin-top: 15px;
+            gap: 10px;
+        }
+
+        .btn {
+            flex: 1;
+            background: #2a2a2a;
+            color: white;
+            border: 1px solid #444;
+            padding: 12px;
+            font-size: 14px;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        .btn:active { background: #444; }
+    </style>
+</head>
+<body>
+<link rel="stylesheet" href="menu.css"> <div id="nav_bar"></div> <script src="menu.js"></script>
+
+    <div class="hud-panel">
+        <div>得分:<span id="score-val">500</span></div>
+        <div>時間:<span id="time-val">00:00</span></div>
+        <div>步數:<span id="moves-val">0</span></div>
+    </div>
+
+    <div class="game-container">
+        <div class="top-row">
+            <div class="deck-area" id="deck-area" onclick="dealRound()"></div>
+        </div>
+
+        <div class="tableaus">
+            <div class="slot tableau" id="t0"></div>
+            <div class="slot tableau" id="t1"></div>
+            <div class="slot tableau" id="t2"></div>
+            <div class="slot tableau" id="t3"></div>
+            <div class="slot tableau" id="t4"></div>
+            <div class="slot tableau" id="t5"></div>
+            <div class="slot tableau" id="t6"></div>
+            <div class="slot tableau" id="t7"></div>
+            <div class="slot tableau" id="t8"></div>
+            <div class="slot tableau" id="t9"></div>
+        </div>
+    </div>
+
+    <div class="toolbar">
+        <button class="btn" onclick="undo()">↩️ 復原</button>
+        <button class="btn" onclick="initGame()">🔄 新遊戲</button>
+    </div>
+
+<script>
+    const VALUES = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+    
+    let deck = [];         
+    let score = 500;       
+    let moves = 0;
+    let timer = 0;
+    let timerInterval = null;
+    let history = [];
+    let gameActive = true;
+    let isDealing = false; 
+
+    function initGame() {
+        if (isDealing) return;
+        gameActive = true;
+        score = 500;
+        moves = 0;
+        timer = 0;
+        history = [];
+        
+        clearInterval(timerInterval);
+        startTimer();
+
+        document.querySelectorAll('.slot.tableau').forEach(s => s.innerHTML = '');
+
+        deck = [];
+        for (let i = 0; i < 8; i++) {
+            VALUES.forEach((v, idx) => {
+                deck.push({ value: v, weight: idx + 1, suit: '♠' });
+            });
+        }
+
+        for (let i = deck.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [deck[i], deck[j]] = [deck[j], deck[i]];
+        }
+
+        let deckIdx = 0;
+        let dealQueue = [];
+
+        // 建立初始發牌排程
+        for (let i = 0; i < 10; i++) {
+            const cardCount = i < 4 ? 6 : 5;
+            for (let j = 0; j < cardCount; j++) {
+                dealQueue.push({
+                    targetSlotId: `t${i}`,
+                    cardData: deck[deckIdx++],
+                    isBack: j < cardCount - 1
+                });
+            }
+        }
+
+        deck = deck.slice(deckIdx);
+        updateDeckVisual();
+        updateHUD();
+
+        const deckArea = document.getElementById('deck-area');
+        const deckRect = deckArea.getBoundingClientRect();
+
+        // 🚀 動態開局發牌飛入特效
+        isDealing = true;
+        dealQueue.forEach((item, index) => {
+            setTimeout(() => {
+                const targetSlot = document.getElementById(item.targetSlotId);
+                const cardEl = createCardDOM(item.cardData);
+                
+                if (item.isBack) {
+                    cardEl.classList.add('back');
+                }
+
+                targetSlot.appendChild(cardEl);
+                refreshAllPiles();
+
+                const cardRect = cardEl.getBoundingClientRect();
+                const startX = deckRect.left - cardRect.left;
+                const startY = deckRect.top - cardRect.top;
+
+                cardEl.style.setProperty('--deal-start-x', `${startX}px`);
+                cardEl.style.setProperty('--deal-start-y', `${startY}px`);
+                cardEl.classList.add('dealing');
+
+                cardEl.addEventListener('animationend', function handler(e) {
+                    if (e.animationName === 'dealGlide') {
+                        cardEl.classList.remove('dealing');
+                        cardEl.removeEventListener('animationend', handler);
+                        if (!item.isBack) {
+                            cardEl.classList.add('flip-animate');
+                        }
+                    }
+                });
+
+                if (index === dealQueue.length - 1) {
+                    setTimeout(() => {
+                        isDealing = false;
+                        saveState();
+                        checkDeadlock();
+                    }, 200);
+                }
+            }, index * 20); 
+        });
+    }
+
+    function createCardDOM(card) {
+        const div = document.createElement('div');
+        div.className = 'card';
+        div.dataset.weight = card.weight;
+        div.dataset.value = card.value;
+
+        div.innerHTML = `
+            <div class="card-num-left">${card.value}</div>
+            <div class="card-suit-right">${card.suit}</div>
+            <div class="card-center">
+                <div class="card-suit-big">${card.suit}</div>
+            </div>
+        `;
+
+        div.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!gameActive || isDealing || div.classList.contains('back')) return;
+            tryAutoMove(div); // ⚡ 點擊立刻智慧偵測可能的位置傳送
+        });
+
+        div.addEventListener('animationend', (e) => {
+            if (e.animationName === 'flipIn') {
+                div.classList.remove('flip-animate');
+            }
+        });
+
+        return div;
+    }
+
+    // ⚡ 點擊傳送核心邏輯
+    function tryAutoMove(cardEl) {
+        const sourceSlot = cardEl.parentElement;
+        const chain = getMovableChain(cardEl);
+        if (!chain) return; // 如果不是合法連續牌組，不能點擊移動
+
+        // 尋找場上所有可以放置的候選工作列
+        for (let i = 0; i < 10; i++) {
+            const tab = document.getElementById(`t${i}`);
+            if (tab === sourceSlot) continue;
+
+            const targetTopCard = tab.lastElementChild;
+            
+            // 優先搬移到有對應數字的牌疊上
+            if (targetTopCard && canPlayToCard(chain[0], targetTopCard)) {
+                executeMove(sourceSlot, tab, chain);
+                return;
+            }
+        }
+
+        // 如果沒有剛好能接上的牌，再看有沒有空的槽位可以放
+        for (let i = 0; i < 10; i++) {
+            const tab = document.getElementById(`t${i}`);
+            if (tab === sourceSlot) continue;
+            
+            if (tab.children.length === 0) {
+                // 如果整串牌本來就在最頂層，搬去別的空行是沒有實質活路進展的，過濾掉原地踏步
+                if (cardEl === sourceSlot.firstElementChild) continue;
+
+                executeMove(sourceSlot, tab, chain);
+                return;
+            }
+        }
+    }
+
+    function getMovableChain(cardEl) {
+        const slot = cardEl.parentElement;
+        const cards = Array.from(slot.children);
+        const idx = cards.indexOf(cardEl);
+        const chain = cards.slice(idx);
+
+        for (let i = 0; i < chain.length - 1; i++) {
+            const currW = parseInt(chain[i].dataset.weight);
+            const nextW = parseInt(chain[i+1].dataset.weight);
+            if (currW - nextW !== 1) return null; 
+        }
+        return chain;
+    }
+
+    function canPlayToCard(moveCard, targetCard) {
+        const mW = parseInt(moveCard.dataset.weight);
+        const tW = parseInt(targetCard.dataset.weight);
+        return tW - mW === 1; 
+    }
+
+    function executeMove(fromSlot, toSlot, chain) {
+        chain.forEach(card => toSlot.appendChild(card));
+
+        moves++;
+        score--; 
+        
+        checkRevealTopCard(fromSlot);
+        refreshAllPiles();
+        checkElimination(); 
+        saveState();
+        checkDeadlock();
+    }
+
+    function checkRevealTopCard(slot) {
+        if (slot && slot.children.length > 0) {
+            const topCard = slot.lastElementChild;
+            if (topCard.classList.contains('back')) {
+                topCard.classList.remove('back');
+                topCard.classList.add('flip-animate');
+            }
+        }
+    }
+
+    // 🚀 手動點擊右上方發牌特效
+    function dealRound() {
+        if (!gameActive || isDealing || deck.length === 0) return;
+
+        for (let i = 0; i < 10; i++) {
+            if (document.getElementById(`t${i}`).children.length === 0) {
+                alert("❌ 必須把空的工作列填上牌才能發牌！");
+                return;
+            }
+        }
+
+        const deckArea = document.getElementById('deck-area');
+        const deckRect = deckArea.getBoundingClientRect();
+
+        isDealing = true;
+        moves++;
+
+        for (let i = 0; i < 10; i++) {
+            setTimeout(() => {
+                if (deck.length === 0) return;
+                const cardData = deck.shift();
+                const cardEl = createCardDOM(cardData);
+                const targetSlot = document.getElementById(`t${i}`);
+                
+                targetSlot.appendChild(cardEl);
+                refreshAllPiles();
+
+                const cardRect = cardEl.getBoundingClientRect();
+                const startX = deckRect.left - cardRect.left;
+                const startY = deckRect.top - cardRect.top;
+
+                cardEl.style.setProperty('--deal-start-x', `${startX}px`);
+                cardEl.style.setProperty('--deal-start-y', `${startY}px`);
+                cardEl.classList.add('dealing');
+
+                cardEl.addEventListener('animationend', function handler(e) {
+                    if (e.animationName === 'dealGlide') {
+                        cardEl.classList.remove('dealing');
+                        cardEl.classList.add('flip-animate');
+                        cardEl.removeEventListener('animationend', handler);
+                    }
+                });
+
+                if (i === 9) {
+                    setTimeout(() => {
+                        isDealing = false;
+                        updateDeckVisual();
+                        checkElimination();
+                        saveState();
+                        checkDeadlock();
+                    }, 200);
+                }
+            }, i * 30);
+        }
+    }
+
+    function checkElimination() {
+        for (let i = 0; i < 10; i++) {
+            const slot = document.getElementById(`t${i}`);
+            const cards = Array.from(slot.children);
+            if (cards.length < 13) continue;
+
+            let match = true;
+            for (let j = 0; j < 13; j++) {
+                const card = cards[cards.length - 1 - j];
+                if (card.classList.contains('back') || parseInt(card.dataset.weight) !== (j + 1)) {
+                    match = false;
+                    break;
+                }
+            }
+
+            if (match) {
+                for (let j = 0; j < 13; j++) {
+                    const card = slot.lastElementChild;
+                    card.remove();
+                }
+                score += 100; 
+                alert("🎉 組合出一套完美的 K 到 A！已自動消除。");
+                checkRevealTopCard(slot);
+                refreshAllPiles();
+                checkWin();
+            }
+        }
+    }
+
+    // 📍 刷新排版位移：明牌就算重疊，也只留上半部，絕不遮擋數字
+    function refreshAllPiles() {
+        for (let i = 0; i < 10; i++) {
+            const slot = document.getElementById(`t${i}`);
+            const cards = slot.querySelectorAll('.card');
+            cards.forEach((card, idx) => {
+                // 蓋牌與明牌使用精準分層位移，明牌拉大到 22px 確保數值完好清晰
+                const offset = card.classList.contains('back') ? 14 : 22;
+                card.style.top = `${idx * offset}px`; 
+                card.style.zIndex = idx + 1;
+                
+                // 只有蓋牌被完全壓住時才完全隱藏內容
+                if (idx < cards.length - 1 && card.classList.contains('back')) {
+                    card.classList.add('underneath-back');
+                } else {
+                    card.classList.remove('underneath-back');
+                }
+            });
+        }
+    }
+
+    function updateDeckVisual() {
+        const deckArea = document.getElementById('deck-area');
+        deckArea.innerHTML = '';
+        const roundsLeft = Math.ceil(deck.length / 10);
+        for (let i = 0; i < roundsLeft; i++) {
+            const layer = document.createElement('div');
+            layer.className = 'deck-stack-visual';
+            layer.style.right = `${i * 6}px`; 
+            deckArea.appendChild(layer);
+        }
+    }
+
+    function checkDeadlock() {
+        if (!gameActive || isDealing) return;
+        if (deck.length > 0) return;
+
+        let movableHeads = [];
+        for (let i = 0; i < 10; i++) {
+            const slot = document.getElementById(`t${i}`);
+            const cards = Array.from(slot.children);
+            cards.forEach(card => {
+                if (!card.classList.contains('back') && getMovableChain(card)) {
+                    movableHeads.push(card);
+                }
+            });
+        }
+
+        let anyMovePossible = false;
+        for (let card of movableHeads) {
+            for (let i = 0; i < 10; i++) {
+                const targetSlot = document.getElementById(`t${i}`);
+                const targetTop = targetSlot.lastElementChild;
+
+                if (!targetTop) {
+                    if (card.parentElement.firstElementChild !== card) {
+                        anyMovePossible = true;
+                        break;
+                    }
+                    continue;
+                }
+
+                if (canPlayToCard(card, targetTop)) {
+                    anyMovePossible = true;
+                    break;
+                }
+            }
+            if (anyMovePossible) break;
+        }
+
+        if (!anyMovePossible) {
+            gameActive = false;
+            clearInterval(timerInterval);
+            setTimeout(() => {
+                alert("❌ 【死局判定】牌都沒救了，怎麼換也一樣！本局直接結束輸掉。");
+                initGame();
+            }, 600);
+        }
+    }
+
+    function checkWin() {
+        let totalCards = deck.length;
+        for (let i = 0; i < 10; i++) {
+            totalCards += document.getElementById(`t${i}`).children.length;
+        }
+        if (totalCards === 0) {
+            gameActive = false;
+            clearInterval(timerInterval);
+            alert(`🏆 太強了！你成功通關了蜘蛛接龍！總得分: ${score}`);
+        }
+    }
+
+    function startTimer() {
+        timerInterval = setInterval(() => {
+            if (!gameActive || isDealing) return;
+            timer++;
+            updateHUD();
+        }, 1000);
+    }
+
+    function updateHUD() {
+        document.getElementById('score-val').innerText = score;
+        document.getElementById('moves-val').innerText = moves;
+
+        const mins = String(Math.floor(timer / 60)).padStart(2, '0');
+        const secs = String(timer % 60).padStart(2, '0');
+        document.getElementById('time-val').innerText = `${mins}:${secs}`;
+    }
+
+    function saveState() {
+        if (isDealing) return;
+        const state = [];
+        document.querySelectorAll('.slot.tableau').forEach(slot => {
+            const cardsData = [];
+            slot.querySelectorAll('.card').forEach(card => {
+                cardsData.push({
+                    value: card.dataset.value,
+                    weight: card.dataset.weight,
+                    isBack: card.classList.contains('back')
+                });
+            });
+            state.push({ slotId: slot.id, cards: cardsData });
+        });
+        
+        history.push({
+            board: state,
+            deckSnapshot: [...deck],
+            score: score,
+            moves: moves
+        });
+        if (history.length > 30) history.shift();
+        updateHUD();
+    }
+
+    function undo() {
+        if (history.length <= 1 || !gameActive || isDealing) return;
+        history.pop(); 
+        const prevState = history[history.length - 1];
+
+        prevState.board.forEach(slotState => {
+            const slot = document.getElementById(slotState.slotId);
+            slot.innerHTML = '';
+            slotState.cards.forEach(c => {
+                const cardEl = createCardDOM({ value: c.value, weight: c.weight, suit: '♠' });
+                if (c.isBack) cardEl.classList.add('back');
+                slot.appendChild(cardEl);
+            });
+        });
+
+        deck = [...prevState.deckSnapshot];
+        score = prevState.score;
+        moves = prevState.moves;
+
+        refreshAllPiles();
+        updateDeckVisual();
+        updateHUD();
+    }
+
+    initGame();
+</script>
+</body>
+</html>
