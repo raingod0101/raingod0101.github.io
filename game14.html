@@ -262,13 +262,14 @@
         .btn.hint-btn { background: #513200; border-color: #b8860b; }
         .btn.hint-btn:active { background: #7a4b00; }
 
+        /* 修正：提升特效畫布的 z-index，確保蓋在牌桌（z-index: 10）之上 */
         #fx-canvas {
             position: fixed;
             top: 0;
             left: 0;
             width: 100vw;
             height: 100vh;
-            z-index: 5;
+            z-index: 9999;
             pointer-events: none;
         }
     </style>
@@ -328,16 +329,14 @@
     let gameActive = true;
     let isDealing = false; 
 
-    // 從本地快取讀取過關次數與提示獎勵
     let winCount = parseInt(localStorage.getItem('sol_win_count') || '0');
-    // 每過一關，開局可用提示上限就 +1 (基本盤 1 個)
     let currentHints = 1 + winCount; 
 
     function initGame() {
         if (isDealing) return;
         gameActive = true;
         moves = 0;
-        currentHints = 1 + winCount; // 重置本局提示數
+        currentHints = 1 + winCount; 
         stopWinAnimation();
         document.querySelectorAll('.slot').forEach(s => s.innerHTML = '');
         document.getElementById('deck-pile').classList.remove('empty');
@@ -413,7 +412,7 @@
                 if (index === dealQueue.length - 1) {
                     setTimeout(() => {
                         isDealing = false;
-                        saveState(false); // 開局不計步數
+                        saveState(false); 
                     }, 200);
                 }
             }, index * 25); 
@@ -477,7 +476,6 @@
             });
         });
 
-        // 控管左上角牌堆空底圖案
         const deckPile = document.getElementById('deck-pile');
         if (deckPile.children.length === 0) {
             deckPile.classList.add('empty');
@@ -486,7 +484,6 @@
         }
     }
 
-    // 🔄 牌堆翻牌與無限重翻核心
     function drawCard(e) {
         if (e) e.stopPropagation();
         if (!gameActive || isDealing) return;
@@ -495,27 +492,25 @@
         const wastePile = document.getElementById('waste-pile');
 
         if (deckPile.children.length > 0) {
-            // 正常翻牌
             const card = deckPile.lastElementChild;
             card.classList.remove('back');
             card.classList.add('flip-animate'); 
             wastePile.appendChild(card);
         } else if (wastePile.children.length > 0) {
-            // 【無限重翻機制】翻到底了，整疊廢牌收回發牌區
             const allWaste = Array.from(wastePile.children);
-            // 保持原本順序翻轉回去
             for (let i = allWaste.length - 1; i >= 0; i--) {
                 const card = allWaste[i];
                 card.classList.add('back');
                 deckPile.appendChild(card);
             }
         } else {
-            return; // 兩邊都沒牌了
+            return; 
         }
         
         moves++;
         refreshAllPiles();
         saveState(true);
+        checkAutoCollectTrigger(); // 每次翻牌後也檢查是否達到自動收牌標準
     }
 
     function tryAutoMove(cardEl) {
@@ -523,7 +518,6 @@
         const chain = getValidChain(cardEl);
         if (!chain) return;
 
-        // 優先嘗試移到右上角 Foundation
         if (chain.length === 1) {
             for (let i = 0; i < 4; i++) {
                 const fnd = document.getElementById(`fnd${i}`);
@@ -532,13 +526,13 @@
                     executeMove(sourceSlot, fnd, chain);
                     checkRevealTopCard(sourceSlot);
                     checkAutoAbsorb();
+                    checkAutoCollectTrigger(); // 移動後檢查是否可自動收完全場
                     checkWin();
                     return;
                 }
             }
         }
 
-        // 嘗試移到下方 Tableau
         for (let i = 0; i < 7; i++) {
             const tab = document.getElementById(`t${i}`);
             if (tab === sourceSlot) continue;
@@ -547,6 +541,7 @@
                 executeMove(sourceSlot, tab, chain);
                 checkRevealTopCard(sourceSlot);
                 checkAutoAbsorb();
+                checkAutoCollectTrigger(); // 移動後檢查是否可自動收完全場
                 return;
             }
         }
@@ -589,7 +584,7 @@
         const mWeight = parseInt(moveTopCard.dataset.weight);
 
         if (!targetTopCard) {
-            return mWeight === 13; // 空位只能放 K
+            return mWeight === 13; 
         } else {
             return moveTopCard.dataset.color !== targetTopCard.dataset.color && 
                    (parseInt(targetTopCard.dataset.weight) - mWeight === 1);
@@ -615,7 +610,6 @@
         }
     }
 
-    // 自動把能上收的 A 或 2 收上去，順暢體驗
     function checkAutoAbsorb() {
         let absorbed = false;
         const availableCards = [];
@@ -651,7 +645,72 @@
         }
     }
 
-    // 💡 智慧提示系統：動態搜尋全場可行步驟
+    /* ==========================================================================
+       🚀 功能優化：自動收牌系統 (Auto Collect Engine)
+       當發牌區與廢牌區空了，且下方 7 排所有留存的牌全部都已經被「翻開」時，即可宣告勝利並自動收牌。
+       ========================================================================== */
+    let isAutoCollecting = false;
+
+    function checkAutoCollectTrigger() {
+        if (!gameActive || isAutoCollecting) return;
+
+        // 1. 檢查發牌區和廢牌區是不是空了
+        const deckEmpty = document.getElementById('deck-pile').children.length === 0;
+        const wasteEmpty = document.getElementById('waste-pile').children.length === 0;
+        if (!deckEmpty || !wasteEmpty) return;
+
+        // 2. 檢查下方 7 排是否還有暗牌（蓋著的牌）
+        let hasHiddenCard = false;
+        for (let i = 0; i < 7; i++) {
+            if (document.getElementById(`t${i}`).querySelector('.card.back')) {
+                hasHiddenCard = true;
+                break;
+            }
+        }
+
+        // 如果全部翻開且發牌堆空了，啟動自動連環收牌
+        if (!hasHiddenCard) {
+            isAutoCollecting = true;
+            runAutoCollectStep();
+        }
+    }
+
+    function runAutoCollectStep() {
+        if (!gameActive) {
+            isAutoCollecting = false;
+            return;
+        }
+
+        let movedAny = false;
+        // 尋找全場最底部可上收的卡片
+        for (let i = 0; i < 7; i++) {
+            const lastCard = document.getElementById(`t${i}`).lastElementChild;
+            if (!lastCard) continue;
+
+            for (let f = 0; f < 4; f++) {
+                const fnd = document.getElementById(`fnd${f}`);
+                if (canPlayToFoundation(lastCard, fnd)) {
+                    const src = lastCard.parentElement;
+                    fnd.appendChild(lastCard);
+                    refreshAllPiles();
+                    moves++;
+                    saveState(false);
+                    movedAny = true;
+                    break;
+                }
+            }
+            if (movedAny) break;
+        }
+
+        if (movedAny) {
+            checkWin();
+            // 用 120 毫秒的間隔依序把牌吸上去，營造視覺效果
+            setTimeout(runAutoCollectStep, 120);
+        } else {
+            isAutoCollecting = false;
+        }
+    }
+
     function useHint() {
         if (!gameActive || isDealing) return;
         if (currentHints <= 0) {
@@ -659,12 +718,9 @@
             return;
         }
 
-        // 1. 蒐集場上所有可以被移動的卡片源頭
         let candidates = [];
-        // 廢牌堆最上面那張
         const topWaste = document.getElementById('waste-pile').lastElementChild;
         if (topWaste) candidates.push(topWaste);
-        // 下方排組中，所有正面朝上的卡片中最頂端的那張
         for (let i = 0; i < 7; i++) {
             const tab = document.getElementById(`t${i}`);
             const faceUpFirst = tab.querySelector('.card:not(.back)');
@@ -674,9 +730,7 @@
         const foundations = [0,1,2,3].map(i => document.getElementById(`fnd${i}`));
         const tableaus = [0,1,2,3,4,5,6].map(i => document.getElementById(`t${i}`));
 
-        // 2. 尋找可以移動的組合
         for (let card of candidates) {
-            // 能不能上收？
             for (let fnd of foundations) {
                 if (canPlayToFoundation(card, fnd)) {
                     triggerCardHighlight(card);
@@ -685,11 +739,9 @@
                     return;
                 }
             }
-            // 能不能移到其他排？
             for (let tab of tableaus) {
                 if (card.parentElement === tab) continue; 
                 if (canPlayToTableau(card, tab)) {
-                    // 如果是原本就在最底部的 K 去移到空位，無實質意義則跳過
                     if (card.parentElement.classList.contains('tableau') && card === card.parentElement.firstElementChild && tab.children.length === 0) {
                         continue;
                     }
@@ -701,7 +753,6 @@
             }
         }
 
-        // 如果點按時發牌堆還有牌，提示玩家翻牌也是一種解法
         const deckPile = document.getElementById('deck-pile');
         const wastePile = document.getElementById('waste-pile');
         if (deckPile.children.length > 0 || wastePile.children.length > 0) {
@@ -713,7 +764,7 @@
 
     function triggerCardHighlight(cardEl) {
         cardEl.classList.remove('hint-highlight');
-        void cardEl.offsetWidth; // 強制瀏覽器重繪觸發動畫
+        void cardEl.offsetWidth; 
         cardEl.classList.add('hint-highlight');
     }
 
@@ -736,7 +787,7 @@
     }
 
     function undo() {
-        if (history.length <= 1 || isDealing) return;
+        if (history.length <= 1 || isDealing || isAutoCollecting) return;
         history.pop(); 
         const prevState = history[history.length - 1];
 
@@ -759,7 +810,7 @@
             });
         });
         
-        moves = prevState.moves + 1; // 返回也算一步
+        moves = prevState.moves + 1; 
         gameActive = true; 
         refreshAllPiles();
         updateHUD();
@@ -770,11 +821,12 @@
         for (let i = 0; i < 4; i++) {
             totalFndCards += document.getElementById(`fnd${i}`).children.length;
         }
-        if (totalFndCards === 52 && gameActive) {
+        if (totalFndCards === 52 && !gameActive) return; // 防止重複觸發
+        if (totalFndCards === 52) {
             gameActive = false;
             winCount++;
             localStorage.setItem('sol_win_count', winCount);
-            currentHints = 1 + winCount; // 立即擴編提示上限
+            currentHints = 1 + winCount; 
             updateHUD();
             startWinAnimation();
         }
@@ -786,6 +838,11 @@
         document.getElementById('hint-count').innerText = currentHints;
     }
 
+    function stopWinAnimation() {
+        fxActive = false;
+        if (fxAnimationId) cancelAnimationFrame(fxAnimationId);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
 
     /* ==========================================================================
        🌈 經典卡牌瀑布噴發特效引擎 (Canvas Engine)
@@ -900,6 +957,8 @@
 
     function fxLoop() {
         if (!fxActive) return;
+        ctx.clearRect(0, 0, canvas.width, canvas.height); // 每影更新清空畫布，避免殘影疊加
+
         for (let i = 0; i < fxCards.length; i++) {
             const card = fxCards[i];
             if (!card.isDone) { card.update(); card.draw(); }
@@ -939,24 +998,21 @@
                 }, 3000);
                 return;
             }
+
             const c = cardsToAnimate[index];
             fxCards.push(new FXCard(c.value, c.suit, c.color, c.x, c.y));
             index++;
-            setTimeout(launchNextCard, 120);
+            setTimeout(launchNextCard, 150);
         }
-        launchNextCard();
+
         fxLoop();
+        launchNextCard();
     }
 
-    function stopWinAnimation() {
-        fxActive = false;
-        if (fxAnimationId) cancelAnimationFrame(fxAnimationId);
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        document.querySelectorAll('.card').forEach(c => c.style.visibility = 'visible');
+    // 啟動首局遊戲
+    window.onload = () => {
+        initGame();
     }
-
-    // 啟動遊戲
-    initGame();
 </script>
 </body>
 </html>
