@@ -68,22 +68,29 @@
             position: relative;
         }
 
-        /* 💥 畫面震動動畫 (過關特效用) */
-        @keyframes board-shake {
-            0%, 100% { transform: translate(0, 0); }
-            10%, 30%, 50%, 70%, 90% { transform: translate(-2px, 1px); }
-            20%, 40%, 60%, 80% { transform: translate(2px, -1px); }
-        }
-        .game-container.shake {
-            animation: board-shake 0.4s ease-in-out infinite;
-        }
-
+        /* 頂部區域（左邊放收集區，右邊放發牌區） */
         .top-row {
             display: flex;
-            justify-content: flex-end;
+            justify-content: space-between;
+            align-items: center;
             width: 100%;
-            padding-right: 5px;
             height: var(--card-h);
+            padding: 0 5px;
+        }
+
+        /* 左上角 A-K 收集空處 */
+        .completed-area {
+            display: flex;
+            gap: 4px;
+            height: var(--card-h);
+        }
+        .complete-slot {
+            width: var(--card-w);
+            height: var(--card-h);
+            border: 1px dashed rgba(255,255,255,0.3);
+            border-radius: var(--card-radius);
+            background: rgba(0,0,0,0.2);
+            position: relative;
         }
 
         .deck-area {
@@ -113,8 +120,7 @@
             justify-content: space-between;
             gap: 3px;
             height: 65vh;
-            min-height: 450px;
-            overflow-y: auto;
+            min-height: 480px;
             padding-bottom: 40px;
             position: relative;
         }
@@ -143,9 +149,10 @@
             color: #1d3557; 
             overflow: hidden;
             border: 1px solid #bbbbbb;
-            transform: translate3d(0, 0, 0);
-            backface-visibility: hidden;
-            transition: transform 0.2s ease, top 0.2s ease, box-shadow 0.2s;
+            /* 平滑漂移關鍵：當 top, left, z-index 改變時自動漂移 */
+            transition: top 0.25s cubic-bezier(0.25, 1, 0.5, 1), 
+                        left 0.25s cubic-bezier(0.25, 1, 0.5, 1), 
+                        transform 0.2s ease, box-shadow 0.2s;
         }
 
         .card-num-left {
@@ -197,6 +204,14 @@
         .card.back * { display: none !important; }
         .card.underneath-back * { display: none !important; }
 
+        /* 🟢 被選取時的亮綠色外框 */
+        .card.selected {
+            box-shadow: 0 0 15px #22c55e, inset 0 0 8px #22c55e;
+            border: 2px solid #22c55e;
+            transform: translateY(-5px);
+            z-index: 9999 !important;
+        }
+
         /* 🔄 3D 翻牌動畫效果 */
         @keyframes flipIn {
             0% { transform: scale(1) rotateY(90deg); background-color: #b91c1c; }
@@ -206,44 +221,28 @@
             animation: flipIn 0.2s ease-out forwards;
         }
 
-        /* 🚀 發牌動態飛入效果 */
-        @keyframes dealGlide {
-            from {
-                transform: translate3d(var(--deal-start-x, 0px), var(--deal-start-y, 0px), 0) scale(0.9);
-                opacity: 0.5;
-            }
-            to {
-                transform: translate3d(0, 0, 0) scale(1);
-                opacity: 1;
-            }
-        }
-        .card.dealing {
-            animation: dealGlide 0.25s cubic-bezier(0.18, 0.89, 0.32, 1.15) forwards;
-        }
-
         /* ✨ 提示閃爍特效 */
         @keyframes hint-glow {
-            0%, 100% { box-shadow: 0 0 4px #ffdf00; border-color: #ffdf00; transform: scale(1); }
-            50% { box-shadow: 0 0 20px #ffdf00, inset 0 0 10px #ffdf00; border-color: #fff; transform: scale(1.05); }
+            0%, 100% { box-shadow: 0 0 4px #ffdf00; border-color: #ffdf00; }
+            50% { box-shadow: 0 0 20px #ffdf00, inset 0 0 10px #ffdf00; border-color: #fff; }
         }
         .card.hint-active {
             animation: hint-glow 0.5s ease-in-out 3;
             z-index: 999 !important;
         }
 
-        /* 🎇 連成一排收牌（K到A消除）華麗特效 */
+        /* 🎇 收牌動畫（放大與金光閃爍後淡出） */
         @keyframes clear-pulse {
             0% { transform: scale(1); filter: brightness(1); }
-            50% { transform: scale(1.08); filter: brightness(1.8) drop-shadow(0 0 15px #ffdf00); box-shadow: 0 0 25px #ffdf00; }
-            100% { transform: scale(0); filter: brightness(2); opacity: 0; }
+            50% { transform: scale(1.05); filter: brightness(1.6); box-shadow: 0 0 20px #ffdf00; }
+            100% { transform: scale(1); filter: brightness(1); opacity: 1; }
         }
         .card.eliminating {
-            animation: clear-pulse 0.6s cubic-bezier(0.6, -0.28, 0.735, 0.045) forwards;
-            pointer-events: none;
+            animation: clear-pulse 0.5s ease-in-out forwards;
             z-index: 9999 !important;
         }
 
-        /* 🌟 通關特效殘影複製卡片 */
+        /* 通關動畫卡片 */
         .fx-card {
             width: var(--card-w);
             height: var(--card-h);
@@ -283,11 +282,9 @@
             gap: 4px;
         }
         .btn:active { background: #444; }
-        .btn:disabled { opacity: 0.4; cursor: not-allowed; }
     </style>
 </head>
 <body>
-<link rel="stylesheet" href="menu.css"> <div id="nav_bar"></div> <script src="menu.js"></script>
 
     <div class="hud-panel">
         <div>🏆 過關次數:<span id="wins-val">0</span></div>
@@ -297,21 +294,33 @@
     </div>
 
     <div class="game-container" id="game-container">
+        <!-- 頂部：左側為收集槽，右側為發牌堆 -->
         <div class="top-row">
+            <div class="completed-area" id="completed-area">
+                <div class="complete-slot" id="cs0"></div>
+                <div class="complete-slot" id="cs1"></div>
+                <div class="complete-slot" id="cs2"></div>
+                <div class="complete-slot" id="cs3"></div>
+                <div class="complete-slot" id="cs4"></div>
+                <div class="complete-slot" id="cs5"></div>
+                <div class="complete-slot" id="cs6"></div>
+                <div class="complete-slot" id="cs7"></div>
+            </div>
             <div class="deck-area" id="deck-area" onclick="dealRound()"></div>
         </div>
 
         <div class="tableaus" id="tableaus-container">
-            <div class="slot tableau" id="t0"></div>
-            <div class="slot tableau" id="t1"></div>
-            <div class="slot tableau" id="t2"></div>
-            <div class="slot tableau" id="t3"></div>
-            <div class="slot tableau" id="t4"></div>
-            <div class="slot tableau" id="t5"></div>
-            <div class="slot tableau" id="t6"></div>
-            <div class="slot tableau" id="t7"></div>
-            <div class="slot tableau" id="t8"></div>
-            <div class="slot tableau" id="t9"></div>
+            <!-- 10個工作列，增加點擊監聽用以手動選擇目的地 -->
+            <div class="slot tableau" id="t0" onclick="handleSlotClick(0)"></div>
+            <div class="slot tableau" id="t1" onclick="handleSlotClick(1)"></div>
+            <div class="slot tableau" id="t2" onclick="handleSlotClick(2)"></div>
+            <div class="slot tableau" id="t3" onclick="handleSlotClick(3)"></div>
+            <div class="slot tableau" id="t4" onclick="handleSlotClick(4)"></div>
+            <div class="slot tableau" id="t5" onclick="handleSlotClick(5)"></div>
+            <div class="slot tableau" id="t6" onclick="handleSlotClick(6)"></div>
+            <div class="slot tableau" id="t7" onclick="handleSlotClick(7)"></div>
+            <div class="slot tableau" id="t8" onclick="handleSlotClick(8)"></div>
+            <div class="slot tableau" id="t9" onclick="handleSlotClick(9)"></div>
         </div>
     </div>
 
@@ -325,104 +334,101 @@
     const VALUES = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
     
     let deck = [];         
-    let winsCount = 0;     // 儲存通關次數
-    let hintsCount = 3;    // 儲存提示額度
-    let moves = 0;         // 步數
+    let winsCount = 0;     
+    let hintsCount = 3;    
+    let moves = 0;         
     let timer = 0;
     let timerInterval = null;
     let history = [];
     let gameActive = true;
     let isDealing = false; 
-    let isEliminatingAnimation = false; // 防止收牌動畫中亂點
+    let isAnimateRunning = false; 
+    let completedSets = 0; // 目前收了幾組
 
-    const pressedKeys = new Set();
+    let selectedCardEl = null; // 當前被點擊選取的牌
 
     function initGame() {
-        if (isDealing || isEliminatingAnimation) return;
+        if (isDealing || isAnimateRunning) return;
         gameActive = true;
         moves = 0;
         timer = 0;
+        completedSets = 0;
         history = [];
+        selectedCardEl = null;
         
         clearInterval(timerInterval);
         startTimer();
 
-        document.getElementById('game-container').classList.remove('shake');
         document.querySelectorAll('.slot.tableau').forEach(s => s.innerHTML = '');
+        document.querySelectorAll('.complete-slot').forEach(s => s.innerHTML = '');
 
-        deck = [];
+        // 🧠 【高勝率洗牌演算法】
+        // 蜘蛛接龍極容易卡在 K, Q, J 沒有位置放。
+        // 我們將大牌（K, Q, J）優先分配到開局的蓋牌底層，小牌放到表層，大幅降低開局死局機率。
+        let bigCards = [];
+        let smallCards = [];
+        
         for (let i = 0; i < 8; i++) {
             VALUES.forEach((v, idx) => {
-                deck.push({ value: v, weight: idx + 1, suit: '♠' });
+                const card = { value: v, weight: idx + 1, suit: '♠' };
+                if (idx >= 9) { // J, Q, K
+                    bigCards.push(card);
+                } else {
+                    smallCards.push(card);
+                }
             });
         }
 
-        for (let i = deck.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [deck[i], deck[j]] = [deck[j], deck[i]];
+        // 分別打亂
+        shuffleArray(bigCards);
+        shuffleArray(smallCards);
+
+        // 組合出高勝率分配堆
+        deck = [];
+        // 先放 24 張大牌到最前面（使其高機率成為開局最底下的蓋牌）
+        for(let i=0; i<20; i++) {
+            deck.push(bigCards.pop());
         }
+        // 剩下的大牌跟小牌混和作為上層牌與發牌堆
+        let remaining = [...bigCards, ...smallCards];
+        shuffleArray(remaining);
+        deck = [...deck, ...remaining];
 
         let deckIdx = 0;
-        let dealQueue = [];
-
+        // 開局發牌
         for (let i = 0; i < 10; i++) {
             const cardCount = i < 4 ? 6 : 5;
+            const targetSlot = document.getElementById(`t${i}`);
             for (let j = 0; j < cardCount; j++) {
-                dealQueue.push({
-                    targetSlotId: `t${i}`,
-                    cardData: deck[deckIdx++],
-                    isBack: j < cardCount - 1
-                });
+                const cardData = deck[deckIdx++];
+                const cardEl = createCardDOM(cardData);
+                if (j < cardCount - 1) {
+                    cardEl.classList.add('back');
+                }
+                targetSlot.appendChild(cardEl);
             }
         }
 
         deck = deck.slice(deckIdx);
+        
+        // 初始佈局，先不使用過渡動畫，直接定位
+        refreshAllPiles(false);
         updateDeckVisual();
+        
+        // 讓最上層的牌翻開
+        for(let i=0; i<10; i++) {
+            checkRevealTopCard(document.getElementById(`t${i}`));
+        }
+        
+        saveState();
         updateHUD();
+    }
 
-        const deckArea = document.getElementById('deck-area');
-        const deckRect = deckArea.getBoundingClientRect();
-
-        isDealing = true;
-        dealQueue.forEach((item, index) => {
-            setTimeout(() => {
-                const targetSlot = document.getElementById(item.targetSlotId);
-                const cardEl = createCardDOM(item.cardData);
-                
-                if (item.isBack) {
-                    cardEl.classList.add('back');
-                }
-
-                targetSlot.appendChild(cardEl);
-                refreshAllPiles();
-
-                const cardRect = cardEl.getBoundingClientRect();
-                const startX = deckRect.left - cardRect.left;
-                const startY = deckRect.top - cardRect.top;
-
-                cardEl.style.setProperty('--deal-start-x', `${startX}px`);
-                cardEl.style.setProperty('--deal-start-y', `${startY}px`);
-                cardEl.classList.add('dealing');
-
-                cardEl.addEventListener('animationend', function handler(e) {
-                    if (e.animationName === 'dealGlide') {
-                        cardEl.classList.remove('dealing');
-                        cardEl.removeEventListener('animationend', handler);
-                        if (!item.isBack) {
-                            cardEl.classList.add('flip-animate');
-                        }
-                    }
-                });
-
-                if (index === dealQueue.length - 1) {
-                    setTimeout(() => {
-                        isDealing = false;
-                        saveState();
-                        checkDeadlock();
-                    }, 200);
-                }
-            }, index * 12); 
-        });
+    function shuffleArray(arr) {
+        for (let i = arr.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
     }
 
     function createCardDOM(card) {
@@ -439,50 +445,101 @@
             </div>
         `;
 
+        // 監聽卡牌點擊事件
         div.addEventListener('click', (e) => {
             e.stopPropagation();
-            if (!gameActive || isDealing || isEliminatingAnimation || div.classList.contains('back')) return;
-            tryAutoMove(div); 
-        });
-
-        div.addEventListener('animationend', (e) => {
-            if (e.animationName === 'flipIn') {
-                div.classList.remove('flip-animate');
-            }
+            if (!gameActive || isDealing || isAnimateRunning || div.classList.contains('back')) return;
+            handleCardClick(div);
         });
 
         return div;
     }
 
-    function tryAutoMove(cardEl) {
-        const sourceSlot = cardEl.parentElement;
-        const chain = getMovableChain(cardEl);
-        if (!chain) return; 
+    // 🎯 核心邏輯：雙擊/單擊多處目的地選擇器
+    function handleCardClick(cardEl) {
+        const slot = cardEl.parentElement;
+        const slotIdx = parseInt(slot.id.replace('t', ''));
 
-        for (let i = 0; i < 10; i++) {
-            const tab = document.getElementById(`t${i}`);
-            if (tab === sourceSlot) continue;
-
-            const targetTopCard = tab.lastElementChild;
-            if (targetTopCard && canPlayToCard(chain[0], targetTopCard)) {
-                executeMove(sourceSlot, tab, chain);
+        // 如果當前已經選取了一張牌，且這次點的是另一條工作列的最後一張牌
+        if (selectedCardEl && selectedCardEl !== cardEl) {
+            if (cardEl === slot.lastElementChild) {
+                handleSlotClick(slotIdx);
                 return;
             }
         }
 
+        // 否則，視為想要選取這張牌
+        const chain = getMovableChain(cardEl);
+        if (!chain) {
+            clearSelection();
+            return; 
+        }
+
+        // 計算這張牌可以去哪裡
+        let validTargets = [];
         for (let i = 0; i < 10; i++) {
             const tab = document.getElementById(`t${i}`);
-            if (tab === sourceSlot) continue;
-            if (tab.children.length === 0) {
-                if (cardEl === sourceSlot.firstElementChild) continue;
-                executeMove(sourceSlot, tab, chain);
-                return;
+            if (tab === slot) continue;
+            const topCard = tab.lastElementChild;
+            if (topCard && canPlayToCard(chain[0], topCard)) {
+                validTargets.push(i);
+            } else if (!topCard) {
+                validTargets.push(i);
             }
+        }
+
+        if (validTargets.length === 0) {
+            clearSelection();
+        } else if (validTargets.length === 1) {
+            // 只有 1 個地方可以去，直接智能飛過去
+            clearSelection();
+            const targetSlot = document.getElementById(`t${validTargets[0]}`);
+            executeMove(slot, targetSlot, chain);
+        } else {
+            // 有 2 個以上的地方可以去！開啟選取狀態，等待玩家點擊目的地
+            clearSelection();
+            selectedCardEl = cardEl;
+            cardEl.classList.add('selected');
+        }
+    }
+
+    // 點擊空槽或工作列區塊
+    function handleSlotClick(slotIdx) {
+        if (!selectedCardEl) return;
+        
+        const fromSlot = selectedCardEl.parentElement;
+        const toSlot = document.getElementById(`t${slotIdx}`);
+        if (fromSlot === toSlot) {
+            clearSelection();
+            return;
+        }
+
+        const chain = getMovableChain(selectedCardEl);
+        const targetTop = toSlot.lastElementChild;
+
+        let canMove = false;
+        if (targetTop && canPlayToCard(chain[0], targetTop)) canMove = true;
+        if (!targetTop) canMove = true; // 空白區可以放任意牌鏈
+
+        if (canMove) {
+            const tempChain = [...chain];
+            clearSelection();
+            executeMove(fromSlot, toSlot, tempChain);
+        } else {
+            clearSelection();
+        }
+    }
+
+    function clearSelection() {
+        if (selectedCardEl) {
+            selectedCardEl.classList.remove('selected');
+            selectedCardEl = null;
         }
     }
 
     function getMovableChain(cardEl) {
         const slot = cardEl.parentElement;
+        if (!slot) return null;
         const cards = Array.from(slot.children);
         const idx = cards.indexOf(cardEl);
         const chain = cards.slice(idx);
@@ -502,14 +559,24 @@
     }
 
     function executeMove(fromSlot, toSlot, chain) {
+        // 先計算漂移前，牌在畫面上的真實絕對座標
+        const rects = chain.map(c => c.getBoundingClientRect());
+
+        // 把 DOM 移入新工作列
         chain.forEach(card => toSlot.appendChild(card));
-        moves++; // 正常移動，步數增加
-        
-        checkRevealTopCard(fromSlot);
-        refreshAllPiles();
-        checkElimination(fromSlot); 
-        saveState();
-        checkDeadlock();
+        moves++; 
+
+        // 刷新佈局讓它們漂移過去
+        refreshAllPiles(true);
+
+        isAnimateRunning = true;
+        setTimeout(() => {
+            isAnimateRunning = false;
+            checkRevealTopCard(fromSlot);
+            refreshAllPiles(true);
+            checkElimination(fromSlot); 
+            saveState();
+        }, 260);
     }
 
     function checkRevealTopCard(slot) {
@@ -518,12 +585,13 @@
             if (topCard.classList.contains('back')) {
                 topCard.classList.remove('back');
                 topCard.classList.add('flip-animate');
+                setTimeout(() => topCard.classList.remove('flip-animate'), 200);
             }
         }
     }
 
     function dealRound() {
-        if (!gameActive || isDealing || isEliminatingAnimation || deck.length === 0) return;
+        if (!gameActive || isDealing || isAnimateRunning || deck.length === 0) return;
 
         for (let i = 0; i < 10; i++) {
             if (document.getElementById(`t${i}`).children.length === 0) {
@@ -532,11 +600,8 @@
             }
         }
 
-        const deckArea = document.getElementById('deck-area');
-        const deckRect = deckArea.getBoundingClientRect();
-
         isDealing = true;
-        moves++; // 發牌也算是一步動作
+        moves++; 
 
         for (let i = 0; i < 10; i++) {
             setTimeout(() => {
@@ -545,24 +610,15 @@
                 const cardEl = createCardDOM(cardData);
                 const targetSlot = document.getElementById(`t${i}`);
                 
+                // 為了讓它有從右下角「漂移」發出的效果，先給予一個初始位置
+                cardEl.style.left = '80vw';
+                cardEl.style.top = '10vh';
                 targetSlot.appendChild(cardEl);
-                refreshAllPiles();
 
-                const cardRect = cardEl.getBoundingClientRect();
-                const startX = deckRect.left - cardRect.left;
-                const startY = deckRect.top - cardRect.top;
-
-                cardEl.style.setProperty('--deal-start-x', `${startX}px`);
-                cardEl.style.setProperty('--deal-start-y', `${startY}px`);
-                cardEl.classList.add('dealing');
-
-                cardEl.addEventListener('animationend', function handler(e) {
-                    if (e.animationName === 'dealGlide') {
-                        cardEl.classList.remove('dealing');
-                        cardEl.classList.add('flip-animate');
-                        cardEl.removeEventListener('animationend', handler);
-                    }
-                });
+                // 稍微延遲讓瀏覽器渲染初始位置後，觸發漂移
+                setTimeout(() => {
+                    refreshAllPiles(true);
+                }, 10);
 
                 if (i === 9) {
                     setTimeout(() => {
@@ -570,14 +626,13 @@
                         updateDeckVisual();
                         checkElimination();
                         saveState();
-                        checkDeadlock();
-                    }, 200);
+                    }, 300);
                 }
-            }, i * 25);
+            }, i * 30);
         }
     }
 
-    // 🎇 核心優化：【連成一排收牌華麗特效】
+    // 🎇 核心優化：【連成一排 A-K 漂移飛往左上角收集區】
     function checkElimination(optFromSlot) {
         for (let i = 0; i < 10; i++) {
             const slot = document.getElementById(`t${i}`);
@@ -594,45 +649,55 @@
             }
 
             if (match) {
-                isEliminatingAnimation = true;
+                isAnimateRunning = true;
                 const elimList = cards.slice(cards.length - 13);
                 
-                // 賦予這 13 張連成一排的卡片閃爍爆發動畫
-                elimList.forEach((card, index) => {
-                    card.classList.add('eliminating');
-                    card.style.animationDelay = `${index * 25}ms`;
-                });
+                // 觸發高亮金光動畫
+                elimList.forEach(card => card.classList.add('eliminating'));
 
-                // 動態播完後正式移除
                 setTimeout(() => {
-                    elimList.forEach(card => card.remove());
-                    isEliminatingAnimation = false;
+                    // 取得左上角目標收集槽
+                    const targetSlot = document.getElementById(`cs${completedSets}`);
+                    const targetRect = targetSlot.getBoundingClientRect();
+                    const containerRect = document.getElementById('game-container').getBoundingClientRect();
+
+                    // 將這 13 張牌抽離原本排流，漂移飛往左上角
+                    elimList.forEach((card, idx) => {
+                        card.classList.remove('eliminating');
+                        // 轉移至收集槽 DOM
+                        targetSlot.appendChild(card);
+                        card.style.left = '0px';
+                        card.style.top = '0px';
+                        card.style.zIndex = idx + 1;
+                        card.style.pointerEvents = 'none'; // 鎖定不可點擊
+                    });
+
+                    completedSets++;
+                    isAnimateRunning = false;
                     
                     checkRevealTopCard(slot);
                     if (optFromSlot && optFromSlot !== slot) {
                         checkRevealTopCard(optFromSlot);
                     }
-                    refreshAllPiles();
+                    refreshAllPiles(true);
                     saveState();
                     checkWin();
-                }, 700);
+                }, 500);
                 break;
             }
         }
     }
 
-    // 💡 智慧提示核心功能
     function useHint() {
-        if (!gameActive || isDealing || isEliminatingAnimation) return;
+        if (!gameActive || isDealing || isAnimateRunning) return;
         if (hintsCount <= 0) {
-            alert("❌ 提示次數用光囉！成功過關一次可以獲得一個提示。");
+            alert("❌ 提示次數用光囉！");
             return;
         }
 
         let foundMove = null;
         let movableHeads = [];
 
-        // 蒐集全場目前能被移動的整串開頭牌
         for (let i = 0; i < 10; i++) {
             const slot = document.getElementById(`t${i}`);
             Array.from(slot.children).forEach(card => {
@@ -642,13 +707,11 @@
             });
         }
 
-        // 尋找最佳合併策略（優先找對應數字）
         for (let card of movableHeads) {
             for (let i = 0; i < 10; i++) {
                 const targetSlot = document.getElementById(`t${i}`);
                 if (targetSlot === card.parentElement) continue;
                 const targetTop = targetSlot.lastElementChild;
-
                 if (targetTop && canPlayToCard(card, targetTop)) {
                     foundMove = { card, target: targetTop };
                     break;
@@ -657,48 +720,32 @@
             if (foundMove) break;
         }
 
-        // 如果找不到完美的，再看有沒有空位能塞
-        if (!foundMove) {
-            for (let card of movableHeads) {
-                if (card.parentElement.firstElementChild === card) continue; // 原本就在空位頂端的不需要重複提示
-                for (let i = 0; i < 10; i++) {
-                    const targetSlot = document.getElementById(`t${i}`);
-                    if (targetSlot.children.length === 0) {
-                        foundMove = { card, target: targetSlot };
-                        break;
-                    }
-                }
-                if (foundMove) break;
-            }
-        }
-
-        // 施放高亮閃爍動畫特效
         if (foundMove) {
             hintsCount--;
             updateHUD();
-            
             foundMove.card.classList.add('hint-active');
-            if (foundMove.target.classList.contains('card')) {
-                foundMove.target.classList.add('hint-active');
-            }
+            if (foundMove.target.classList.contains('card')) foundMove.target.classList.add('hint-active');
 
             setTimeout(() => {
                 foundMove.card.classList.remove('hint-active');
-                if (foundMove.target.classList.contains('card')) {
-                    foundMove.target.classList.remove('hint-active');
-                }
+                if (foundMove.target.classList.contains('card')) foundMove.target.classList.remove('hint-active');
             }, 1500);
         } else {
-            alert("🔍 觀察入微！目前畫面上沒有任何可以移動的合法路線。");
+            alert("🔍 目前畫面上沒有任何可以移動的合法組合。");
         }
     }
 
-    function refreshAllPiles() {
+    // 🔄 動態刷新卡牌堆疊高度與寬度
+    function refreshAllPiles(useAnimation = true) {
         for (let i = 0; i < 10; i++) {
             const slot = document.getElementById(`t${i}`);
             const cards = slot.querySelectorAll('.card');
             cards.forEach((card, idx) => {
-                const offset = card.classList.contains('back') ? 14 : 22;
+                // 如果不使用動畫(如剛開局)，先暫時關閉 transition
+                card.style.transition = useAnimation ? '' : 'none';
+                
+                const offset = card.classList.contains('back') ? 14 : 24;
+                card.style.left = '0px';
                 card.style.top = `${idx * offset}px`; 
                 card.style.zIndex = idx + 1;
                 
@@ -706,6 +753,12 @@
                     card.classList.add('underneath-back');
                 } else {
                     card.classList.remove('underneath-back');
+                }
+
+                // 強制重繪
+                if(!useAnimation) {
+                    card.offsetHeight; 
+                    card.style.transition = '';
                 }
             });
         }
@@ -723,70 +776,18 @@
         }
     }
 
-    function checkDeadlock() {
-        if (!gameActive || isDealing || isEliminatingAnimation) return;
-        if (deck.length > 0) return;
-
-        let anyMovePossible = false;
-        let movableHeads = [];
-        for (let i = 0; i < 10; i++) {
-            const slot = document.getElementById(`t${i}`);
-            Array.from(slot.children).forEach(card => {
-                if (!card.classList.contains('back') && getMovableChain(card)) {
-                    movableHeads.push(card);
-                }
-            });
-        }
-
-        for (let card of movableHeads) {
-            for (let i = 0; i < 10; i++) {
-                const targetSlot = document.getElementById(`t${i}`);
-                const targetTop = targetSlot.lastElementChild;
-                if (!targetTop) {
-                    if (card.parentElement.firstElementChild !== card) {
-                        anyMovePossible = true;
-                        break;
-                    }
-                    continue;
-                }
-                if (canPlayToCard(card, targetTop)) {
-                    anyMovePossible = true;
-                    break;
-                }
-            }
-            if (anyMovePossible) break;
-        }
-
-        if (!anyMovePossible) {
-            gameActive = false;
-            clearInterval(timerInterval);
-            setTimeout(() => {
-                alert("❌ 【死局判定】已經沒有路可以走囉！點擊確認重新一局。");
-                initGame();
-            }, 600);
-        }
-    }
-
     function checkWin() {
-        let totalCards = deck.length;
-        for (let i = 0; i < 10; i++) {
-            totalCards += document.getElementById(`t${i}`).children.length;
-        }
-        if (totalCards === 0 && gameActive) {
-            winsCount++; // 過關次數加 1
-            hintsCount++; // 每過關一次，贈送一個提示！
+        if (completedSets === 8 && gameActive) {
+            winsCount++; 
+            hintsCount++; 
             triggerWinCelebration();
         }
     }
 
-    // 🌟 【超爽無限彩帶卡牌瀑布彈跳通關特效】
     function triggerWinCelebration() {
         gameActive = false;
         clearInterval(timerInterval);
-
-        const board = document.getElementById('game-container');
         const viewContainer = document.getElementById('tableaus-container');
-        board.classList.add('shake'); 
 
         let fxCardQueue = [];
         for (let set = 0; set < 8; set++) {
@@ -794,8 +795,6 @@
                 fxCardQueue.push({ value: VALUES[w-1], weight: w });
             }
         }
-
-        let totalSprayed = 0;
 
         fxCardQueue.forEach((cardInfo, index) => {
             setTimeout(() => {
@@ -828,7 +827,6 @@
                     if (posY >= bottomBoundary) {
                         posY = bottomBoundary;
                         vy *= bounceLoss;
-                        if (Math.abs(vy) < 1) vy = 0; 
                     }
 
                     fxEl.style.left = `${posX}px`;
@@ -840,40 +838,19 @@
                         requestAnimationFrame(updatePhysics);
                     }
                 }
-
                 requestAnimationFrame(updatePhysics);
-
-                totalSprayed++;
-                if (totalSprayed === fxCardQueue.length) {
-                    setTimeout(() => {
-                        board.classList.remove('shake');
-                        alert(`🏆 完美的勝利！已幫你累計通關次數並解鎖 1 個新提示！`);
-                        initGame();
-                    }, 4000);
-                }
             }, index * 30); 
         });
+
+        setTimeout(() => {
+            alert(`🏆 完美的勝利！通關次數已累計。`);
+            initGame();
+        }, 5000);
     }
-
-    // 🎹 秘密組合鍵預覽偵測
-    window.addEventListener('keydown', (e) => {
-        const key = e.key.toLowerCase();
-        if (['r', 'a', 'i', 'n'].includes(key)) {
-            pressedKeys.add(key);
-            if (pressedKeys.has('r') && pressedKeys.has('a') && pressedKeys.has('i') && pressedKeys.has('n')) {
-                pressedKeys.clear();
-                triggerWinCelebration(); 
-            }
-        }
-    });
-
-    window.addEventListener('keyup', (e) => {
-        pressedKeys.delete(e.key.toLowerCase());
-    });
 
     function startTimer() {
         timerInterval = setInterval(() => {
-            if (!gameActive || isDealing || isEliminatingAnimation) return;
+            if (!gameActive || isDealing || isAnimateRunning) return;
             timer++;
             updateHUD();
         }, 1000);
@@ -889,7 +866,7 @@
     }
 
     function saveState() {
-        if (isDealing || isEliminatingAnimation) return;
+        if (isDealing || isAnimateRunning) return;
         const state = [];
         document.querySelectorAll('.slot.tableau').forEach(slot => {
             const cardsData = [];
@@ -902,21 +879,29 @@
             });
             state.push({ slotId: slot.id, cards: cardsData });
         });
+
+        const compState = [];
+        document.querySelectorAll('.complete-slot').forEach(slot => {
+            compState.push(slot.children.length); // 記住左上角每個槽裡面有幾張牌
+        });
         
         history.push({
             board: state,
+            comp: compState,
             deckSnapshot: [...deck],
-            moves: moves
+            moves: moves,
+            completedSets: completedSets
         });
         if (history.length > 30) history.shift();
-        updateHUD();
     }
 
     function undo() {
-        if (history.length <= 1 || !gameActive || isDealing || isEliminatingAnimation) return;
+        if (history.length <= 1 || !gameActive || isDealing || isAnimateRunning) return;
+        clearSelection();
         history.pop(); 
         const prevState = history[history.length - 1];
 
+        // 還原牌桌
         prevState.board.forEach(slotState => {
             const slot = document.getElementById(slotState.slotId);
             slot.innerHTML = '';
@@ -927,29 +912,39 @@
             });
         });
 
-        deck = [...prevState.deckSnapshot];
-        // 核心設定：返回（Undo）也算一次完整動作，步數往上加
-        moves = prevState.moves + 1; 
+        // 還原左上角
+        completedSets = prevState.completedSets;
+        document.querySelectorAll('.complete-slot').forEach((slot, sIdx) => {
+            slot.innerHTML = '';
+            const count = prevState.comp[sIdx];
+            for(let k=0; k<count; k++) {
+                // 模擬放回左上角封存的卡片
+                const dummy = createCardDOM({ value: '?', weight: 1, suit: '♠' });
+                slot.appendChild(dummy);
+            }
+        });
 
-        refreshAllPiles();
+        deck = [...prevState.deckSnapshot];
+        moves = prevState.moves + 1; // 復原也算一步動作
+
+        refreshAllPiles(true);
         updateDeckVisual();
         updateHUD();
-        
-        // 儲存當前返回後的最新狀態
-        const state = [];
-        document.querySelectorAll('.slot.tableau').forEach(slot => {
-            const cardsData = [];
-            slot.querySelectorAll('.card').forEach(card => {
-                cardsData.push({
-                    value: card.dataset.value,
-                    weight: card.dataset.weight,
-                    isBack: card.classList.contains('back')
-                });
-            });
-            state.push({ slotId: slot.id, cards: cardsData });
-        });
-        history[history.length - 1] = { board: state, deckSnapshot: [...deck], moves: moves };
     }
+
+    // 監聽鍵盤 R,A,I,N 通關彩蛋
+    const pressedKeys = new Set();
+    window.addEventListener('keydown', (e) => {
+        const key = e.key.toLowerCase();
+        if (['r', 'a', 'i', 'n'].includes(key)) {
+            pressedKeys.add(key);
+            if (pressedKeys.has('r') && pressedKeys.has('a') && pressedKeys.has('i') && pressedKeys.has('n')) {
+                pressedKeys.clear();
+                triggerWinCelebration(); 
+            }
+        }
+    });
+    window.addEventListener('keyup', (e) => pressedKeys.delete(e.key.toLowerCase()));
 
     initGame();
 </script>
