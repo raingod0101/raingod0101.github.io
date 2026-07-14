@@ -88,6 +88,7 @@
             padding-bottom: 40px;
         }
 
+        /* 插槽樣式 */
         .slot {
             width: var(--card-w);
             height: var(--card-h);
@@ -97,6 +98,15 @@
             box-sizing: border-box;
             background: rgba(0,0,0,0.1);
             flex-shrink: 0;
+            transition: background 0.2s ease;
+        }
+
+        /* 被選為可用目的地時的高亮閃爍 */
+        .slot.dest-highlight {
+            background: rgba(255, 215, 0, 0.25);
+            border-color: #ffd700;
+            box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+            cursor: pointer;
         }
 
         #deck-pile {
@@ -143,6 +153,13 @@
 
         .card.red { color: #e63946; }
         .card.black { color: #1d3557; }
+
+        /* 當前點擊被選中的發光卡牌 */
+        .card.selected-highlight {
+            box-shadow: 0 0 14px #ffd700, inset 0 0 8px #ffd700;
+            transform: scale(1.05) translate3d(0, -5px, 0);
+            z-index: 1000 !important;
+        }
 
         /* 💡 提示高亮閃爍特效 */
         @keyframes hintGlow {
@@ -215,7 +232,14 @@
             animation: flipIn 0.2s ease-out forwards;
         }
 
-        /* 🚀 發牌動態滑動飛入效果 */
+        /* 🚀 漂移/飛越動畫 (CSS Transition 專用) */
+        .card.glide-animation {
+            transition: transform 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94), 
+                        top 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+                        left 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        }
+
+        /* 發牌動態滑動飛入效果 */
         @keyframes dealGlide {
             from {
                 transform: translate3d(var(--deal-start-x, 0px), var(--deal-start-y, 0px), 0) scale(0.9);
@@ -262,7 +286,6 @@
         .btn.hint-btn { background: #513200; border-color: #b8860b; }
         .btn.hint-btn:active { background: #7a4b00; }
 
-        /* 修正：提升特效畫布的 z-index，確保蓋在牌桌（z-index: 10）之上 */
         #fx-canvas {
             position: fixed;
             top: 0;
@@ -329,6 +352,10 @@
     let gameActive = true;
     let isDealing = false; 
 
+    // 點選->目的地兩步驟狀態變數
+    let selectedClickCard = null;
+    let validDestinations = []; // 存放當前選中牌可前往的 Slot Elements
+
     let winCount = parseInt(localStorage.getItem('sol_win_count') || '0');
     let currentHints = 1 + winCount; 
 
@@ -337,6 +364,7 @@
         gameActive = true;
         moves = 0;
         currentHints = 1 + winCount; 
+        clearSelection();
         stopWinAnimation();
         document.querySelectorAll('.slot').forEach(s => s.innerHTML = '');
         document.getElementById('deck-pile').classList.remove('empty');
@@ -351,10 +379,50 @@
             });
         });
 
-        // 洗牌
-        for (let i = deck.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [deck[i], deck[j]] = [deck[j], deck[i]];
+        /* ==========================================================================
+           📈 算法升級：保障過關機率的洗牌過濾器 (High-Probability Shuffler)
+           ========================================================================== */
+        let attempt = 0;
+        while (attempt < 100) {
+            // 先進行隨機標準洗牌
+            for (let i = deck.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [deck[i], deck[j]] = [deck[j], deck[i]];
+            }
+
+            // 統計前 28 張牌（即發給 7 個 Tableau 排組的卡片）
+            let numAcesInTableau = 0;
+            let numTwosInTableau = 0;
+            let deepestAceIndex = -1; // 記錄 Ace 被壓在暗牌多深的索引
+
+            // 下方 7 疊的暗牌與明牌分配如下：
+            // t0: 0暗 1明 (idx 0)
+            // t1: 1暗 1明 (idx 1, 2)
+            // t2: 2暗 1明 (idx 3, 4, 5) ... 依此類推
+            let itemIdx = 0;
+            for (let i = 0; i < 7; i++) {
+                for (let j = 0; j <= i; j++) {
+                    const card = deck[itemIdx];
+                    const isBack = j < i;
+                    if (card.weight === 1) { // A
+                        numAcesInTableau++;
+                        if (isBack) deepestAceIndex = Math.max(deepestAceIndex, j);
+                    }
+                    if (card.weight === 2) { // 2
+                        numTwosInTableau++;
+                    }
+                    itemIdx++;
+                }
+            }
+
+            // 【保障條件】
+            // 1. 如果下方排組中有多個 A 或 2 被壓在極深處（例如第 3、4 層暗牌以下），此局極易卡死，重新洗牌。
+            // 2. 至少要確保場上有部分的 A / 2 容易露出，或在發牌堆/廢牌堆可正常循環使用。
+            if (deepestAceIndex >= 3 && numAcesInTableau > 2) {
+                attempt++;
+                continue;
+            }
+            break; // 滿足良好牌型，跳出循環
         }
 
         let deckIndex = 0;
@@ -439,7 +507,7 @@
         div.addEventListener('click', (e) => {
             e.stopPropagation();
             if (!gameActive || isDealing || div.classList.contains('back')) return;
-            tryAutoMove(div);
+            handleCardInteraction(div);
         });
 
         div.addEventListener('animationend', (e) => {
@@ -484,9 +552,11 @@
         }
     }
 
+    // 翻發牌堆
     function drawCard(e) {
         if (e) e.stopPropagation();
         if (!gameActive || isDealing) return;
+        clearSelection();
 
         const deckPile = document.getElementById('deck-pile');
         const wastePile = document.getElementById('waste-pile');
@@ -510,41 +580,116 @@
         moves++;
         refreshAllPiles();
         saveState(true);
-        checkAutoCollectTrigger(); // 每次翻牌後也檢查是否達到自動收牌標準
+        checkAutoCollectTrigger(); 
     }
 
-    function tryAutoMove(cardEl) {
+    /* ==========================================================================
+       🖱️ 操作升級：手動選擇與多目的地判定機制
+       ========================================================================== */
+    function handleCardInteraction(cardEl) {
+        // 如果點擊了已經選中的卡，取消選取
+        if (selectedClickCard === cardEl) {
+            clearSelection();
+            return;
+        }
+
         const sourceSlot = cardEl.parentElement;
         const chain = getValidChain(cardEl);
         if (!chain) return;
 
+        // 如果目前選中了其他卡，且點擊的這張卡所在的 Slot 是可選的目的地，則執行移動
+        if (selectedClickCard && validDestinations.includes(sourceSlot)) {
+            executeSelectedMove(sourceSlot);
+            return;
+        }
+
+        // 重新尋找這張牌的所有可去之處
+        clearSelection();
+
+        let destinations = [];
+        
+        // 1. 檢索 4 個右上角 Foundation
         if (chain.length === 1) {
             for (let i = 0; i < 4; i++) {
                 const fnd = document.getElementById(`fnd${i}`);
                 if (canPlayToFoundation(cardEl, fnd)) {
-                    moves++;
-                    executeMove(sourceSlot, fnd, chain);
-                    checkRevealTopCard(sourceSlot);
-                    checkAutoAbsorb();
-                    checkAutoCollectTrigger(); // 移動後檢查是否可自動收完全場
-                    checkWin();
-                    return;
+                    destinations.push(fnd);
                 }
             }
         }
 
+        // 2. 檢索 7 個下方 Tableau
         for (let i = 0; i < 7; i++) {
             const tab = document.getElementById(`t${i}`);
             if (tab === sourceSlot) continue;
             if (canPlayToTableau(chain[0], tab)) {
-                moves++;
-                executeMove(sourceSlot, tab, chain);
-                checkRevealTopCard(sourceSlot);
-                checkAutoAbsorb();
-                checkAutoCollectTrigger(); // 移動後檢查是否可自動收完全場
-                return;
+                destinations.push(tab);
             }
         }
+
+        // 無處可去：直接彈出不可移動視覺回饋
+        if (destinations.length === 0) {
+            triggerCardHighlight(cardEl);
+            return;
+        }
+
+        // 如果「去處只有 1 個（且不管是上收還是移至另一排）」，則直接自動移動，免去兩步驟點選的繁瑣
+        if (destinations.length === 1) {
+            moves++;
+            animateCardSlide(sourceSlot, destinations[0], chain, () => {
+                checkRevealTopCard(sourceSlot);
+                checkAutoAbsorb();
+                checkAutoCollectTrigger();
+                checkWin();
+            });
+            return;
+        }
+
+        // 如果去處有 2 個以上，啟動「兩步驟手動點選模式」
+        selectedClickCard = cardEl;
+        validDestinations = destinations;
+
+        // 高亮當前選取卡片
+        cardEl.classList.add('selected-highlight');
+
+        // 高亮目標 Slots
+        validDestinations.forEach(slot => {
+            slot.classList.add('dest-highlight');
+            // 為目標 Slot 增加暫時的點擊監聽器
+            slot.onclick = (e) => {
+                e.stopPropagation();
+                executeSelectedMove(slot);
+            };
+        });
+    }
+
+    // 執行兩步驟移動
+    function executeSelectedMove(targetSlot) {
+        if (!selectedClickCard) return;
+        const sourceSlot = selectedClickCard.parentElement;
+        const chain = getValidChain(selectedClickCard);
+
+        clearSelection();
+        moves++;
+
+        animateCardSlide(sourceSlot, targetSlot, chain, () => {
+            checkRevealTopCard(sourceSlot);
+            checkAutoAbsorb();
+            checkAutoCollectTrigger();
+            checkWin();
+        });
+    }
+
+    function clearSelection() {
+        if (selectedClickCard) {
+            selectedClickCard.classList.remove('selected-highlight');
+        }
+        selectedClickCard = null;
+        validDestinations.forEach(slot => {
+            slot.classList.remove('dest-highlight');
+            slot.onclick = null; // 清除暫時綁定的點擊事件
+        });
+        validDestinations = [];
     }
 
     function getValidChain(cardEl) {
@@ -591,12 +736,55 @@
         }
     }
 
-    function executeMove(fromSlot, toSlot, chain) {
-        chain.forEach(card => {
-            toSlot.appendChild(card);
+    /* ==========================================================================
+       ✈️ 視覺優化：平滑卡牌漂移/滑動動畫引擎 (Smooth Slide Engine)
+       ========================================================================== */
+    function animateCardSlide(fromSlot, toSlot, chain, callback) {
+        isDealing = true; // 平滑滑動中，先暫停其他交互以防穿幫
+
+        // 1. 計算當前卡牌與目標位置在螢幕上的相對物理偏移
+        const firstCard = chain[0];
+        const rectStart = firstCard.getBoundingClientRect();
+
+        // 模擬卡片放入目標 Slot 後的臨時定位計算
+        let targetYOffset = 0;
+        if (toSlot.classList.contains('tableau')) {
+            targetYOffset = toSlot.children.length * 20;
+        }
+        
+        // 臨時放一個隱形標記來獲取目標定位點
+        const tempMarker = document.createElement('div');
+        tempMarker.style.width = '1px';
+        tempMarker.style.height = '1px';
+        tempMarker.style.position = 'absolute';
+        tempMarker.style.top = `${targetYOffset}px`;
+        toSlot.appendChild(tempMarker);
+        
+        const rectEnd = tempMarker.getBoundingClientRect();
+        toSlot.removeChild(tempMarker);
+
+        const deltaX = rectEnd.left - rectStart.left;
+        const deltaY = rectEnd.top - rectStart.top;
+
+        // 2. 為卡片組添加 transition 樣式與 3D Translate 位移
+        chain.forEach((card, idx) => {
+            card.style.zIndex = 2000 + idx; // 飛在最上空
+            card.classList.add('glide-animation');
+            card.style.transform = `translate3d(${deltaX}px, ${deltaY}px, 0)`;
         });
-        refreshAllPiles();
-        saveState(false);
+
+        // 3. 移動完畢後，執行真正 DOM 節點轉移
+        setTimeout(() => {
+            chain.forEach(card => {
+                card.classList.remove('glide-animation');
+                card.style.transform = 'translate3d(0, 0, 0)';
+                toSlot.appendChild(card);
+            });
+            refreshAllPiles();
+            saveState(false);
+            isDealing = false;
+            if (callback) callback();
+        }, 260); // 配合 CSS Transition 的 0.25 秒時間
     }
 
     function checkRevealTopCard(slot) {
@@ -627,9 +815,12 @@
                 if (canPlayToFoundation(card, fnd)) {
                     if (parseInt(card.dataset.weight) <= 2) { 
                         const src = card.parentElement;
-                        fnd.appendChild(card);
-                        checkRevealTopCard(src);
-                        refreshAllPiles();
+                        // 升級：自動收牌也改用平滑滑動飛入效果！
+                        animateCardSlide(src, fnd, [card], () => {
+                            checkRevealTopCard(src);
+                            checkAutoAbsorb();
+                            checkWin();
+                        });
                         absorbed = true;
                         break;
                     }
@@ -640,26 +831,19 @@
 
         if (absorbed) {
             saveState(false);
-            setTimeout(checkAutoAbsorb, 80);
-            checkWin();
         }
     }
 
-    /* ==========================================================================
-       🚀 功能優化：自動收牌系統 (Auto Collect Engine)
-       當發牌區與廢牌區空了，且下方 7 排所有留存的牌全部都已經被「翻開」時，即可宣告勝利並自動收牌。
-       ========================================================================== */
+    /* 自動收全場卡牌 */
     let isAutoCollecting = false;
 
     function checkAutoCollectTrigger() {
         if (!gameActive || isAutoCollecting) return;
 
-        // 1. 檢查發牌區和廢牌區是不是空了
         const deckEmpty = document.getElementById('deck-pile').children.length === 0;
         const wasteEmpty = document.getElementById('waste-pile').children.length === 0;
         if (!deckEmpty || !wasteEmpty) return;
 
-        // 2. 檢查下方 7 排是否還有暗牌（蓋著的牌）
         let hasHiddenCard = false;
         for (let i = 0; i < 7; i++) {
             if (document.getElementById(`t${i}`).querySelector('.card.back')) {
@@ -668,7 +852,6 @@
             }
         }
 
-        // 如果全部翻開且發牌堆空了，啟動自動連環收牌
         if (!hasHiddenCard) {
             isAutoCollecting = true;
             runAutoCollectStep();
@@ -682,7 +865,6 @@
         }
 
         let movedAny = false;
-        // 尋找全場最底部可上收的卡片
         for (let i = 0; i < 7; i++) {
             const lastCard = document.getElementById(`t${i}`).lastElementChild;
             if (!lastCard) continue;
@@ -691,10 +873,11 @@
                 const fnd = document.getElementById(`fnd${f}`);
                 if (canPlayToFoundation(lastCard, fnd)) {
                     const src = lastCard.parentElement;
-                    fnd.appendChild(lastCard);
-                    refreshAllPiles();
-                    moves++;
-                    saveState(false);
+                    // 使用平滑動畫吸到上方
+                    animateCardSlide(src, fnd, [lastCard], () => {
+                        checkWin();
+                        runAutoCollectStep();
+                    });
                     movedAny = true;
                     break;
                 }
@@ -702,11 +885,7 @@
             if (movedAny) break;
         }
 
-        if (movedAny) {
-            checkWin();
-            // 用 120 毫秒的間隔依序把牌吸上去，營造視覺效果
-            setTimeout(runAutoCollectStep, 120);
-        } else {
+        if (!movedAny) {
             isAutoCollecting = false;
         }
     }
@@ -788,6 +967,7 @@
 
     function undo() {
         if (history.length <= 1 || isDealing || isAutoCollecting) return;
+        clearSelection();
         history.pop(); 
         const prevState = history[history.length - 1];
 
@@ -804,7 +984,7 @@
                 newCard.addEventListener('click', (e) => {
                     e.stopPropagation();
                     if (!gameActive || newCard.classList.contains('back')) return;
-                    tryAutoMove(newCard);
+                    handleCardInteraction(newCard);
                 });
                 slot.appendChild(newCard);
             });
@@ -821,12 +1001,12 @@
         for (let i = 0; i < 4; i++) {
             totalFndCards += document.getElementById(`fnd${i}`).children.length;
         }
-        if (totalFndCards === 52 && !gameActive) return; // 防止重複觸發
+        if (totalFndCards === 52 && !gameActive) return; 
         if (totalFndCards === 52) {
             gameActive = false;
             winCount++;
             localStorage.setItem('sol_win_count', winCount);
-            currentHints = 1000 + winCount; 
+            currentHints = 1 + winCount; 
             updateHUD();
             startWinAnimation();
         }
@@ -957,7 +1137,7 @@
 
     function fxLoop() {
         if (!fxActive) return;
-        ctx.clearRect(0, 0, canvas.width, canvas.height); // 每影更新清空畫布，避免殘影疊加
+        ctx.clearRect(0, 0, canvas.width, canvas.height); 
 
         for (let i = 0; i < fxCards.length; i++) {
             const card = fxCards[i];
@@ -1009,7 +1189,6 @@
         launchNextCard();
     }
 
-    // 啟動首局遊戲
     window.onload = () => {
         initGame();
     }
