@@ -68,7 +68,6 @@
             position: relative;
         }
 
-        /* 頂部區域（左邊放收集區，右邊放發牌區） */
         .top-row {
             display: flex;
             justify-content: space-between;
@@ -78,7 +77,7 @@
             padding: 0 5px;
         }
 
-        /* 左上角 A-K 收集空處 */
+        /* 左上角 A-K 收集區 */
         .completed-area {
             display: flex;
             gap: 4px;
@@ -149,7 +148,6 @@
             color: #1d3557; 
             overflow: hidden;
             border: 1px solid #bbbbbb;
-            /* 平滑漂移關鍵：當 top, left, z-index 改變時自動漂移 */
             transition: top 0.25s cubic-bezier(0.25, 1, 0.5, 1), 
                         left 0.25s cubic-bezier(0.25, 1, 0.5, 1), 
                         transform 0.2s ease, box-shadow 0.2s;
@@ -204,7 +202,7 @@
         .card.back * { display: none !important; }
         .card.underneath-back * { display: none !important; }
 
-        /* 🟢 被選取時的亮綠色外框 */
+        /* 被選取時的亮綠色外框 */
         .card.selected {
             box-shadow: 0 0 15px #22c55e, inset 0 0 8px #22c55e;
             border: 2px solid #22c55e;
@@ -212,7 +210,7 @@
             z-index: 9999 !important;
         }
 
-        /* 🔄 3D 翻牌動畫效果 */
+        /* 3D 翻牌動畫效果 */
         @keyframes flipIn {
             0% { transform: scale(1) rotateY(90deg); background-color: #b91c1c; }
             100% { transform: scale(1) rotateY(0deg); background-color: #ffffff; }
@@ -221,7 +219,7 @@
             animation: flipIn 0.2s ease-out forwards;
         }
 
-        /* ✨ 提示閃爍特效 */
+        /* 提示閃爍特效 */
         @keyframes hint-glow {
             0%, 100% { box-shadow: 0 0 4px #ffdf00; border-color: #ffdf00; }
             50% { box-shadow: 0 0 20px #ffdf00, inset 0 0 10px #ffdf00; border-color: #fff; }
@@ -231,7 +229,7 @@
             z-index: 999 !important;
         }
 
-        /* 🎇 收牌動畫（放大與金光閃爍後淡出） */
+        /* 收牌動畫 */
         @keyframes clear-pulse {
             0% { transform: scale(1); filter: brightness(1); }
             50% { transform: scale(1.05); filter: brightness(1.6); box-shadow: 0 0 20px #ffdf00; }
@@ -242,7 +240,7 @@
             z-index: 9999 !important;
         }
 
-        /* 通關動畫卡片 */
+        /* 通關彩蛋特效卡片 */
         .fx-card {
             width: var(--card-w);
             height: var(--card-h);
@@ -255,6 +253,69 @@
             box-sizing: border-box;
             z-index: 9999;
             pointer-events: none;
+        }
+
+        /* 彈出詢問視窗 Overlay */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.85);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        .modal-overlay.show {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .modal-box {
+            background: #222;
+            border: 2px solid #0d5c34;
+            border-radius: 12px;
+            padding: 25px;
+            text-align: center;
+            max-width: 400px;
+            width: 85%;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+        }
+        .modal-box h2 {
+            margin-top: 0;
+            color: #ffdf00;
+            font-size: 22px;
+        }
+        .modal-box p {
+            color: #ddd;
+            font-size: 16px;
+            line-height: 1.5;
+            margin-bottom: 25px;
+        }
+        .modal-btns {
+            display: flex;
+            gap: 15px;
+        }
+        .modal-btn {
+            flex: 1;
+            padding: 12px;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        .modal-btn.primary {
+            background: #22c55e;
+            color: white;
+        }
+        .modal-btn.secondary {
+            background: #ef4444;
+            color: white;
         }
 
         .toolbar {
@@ -286,6 +347,7 @@
 </head>
 <body>
 <link rel="stylesheet" href="menu.css"> <div id="nav_bar"></div> <script src="menu.js"></script>
+
     <div class="hud-panel">
         <div>🏆 過關次數:<span id="wins-val">0</span></div>
         <div>💡 提示次數:<span id="hints-val">3</span></div>
@@ -294,7 +356,6 @@
     </div>
 
     <div class="game-container" id="game-container">
-        <!-- 頂部：左側為收集槽，右側為發牌堆 -->
         <div class="top-row">
             <div class="completed-area" id="completed-area">
                 <div class="complete-slot" id="cs0"></div>
@@ -310,7 +371,6 @@
         </div>
 
         <div class="tableaus" id="tableaus-container">
-            <!-- 10個工作列，增加點擊監聽用以手動選擇目的地 -->
             <div class="slot tableau" id="t0" onclick="handleSlotClick(0)"></div>
             <div class="slot tableau" id="t1" onclick="handleSlotClick(1)"></div>
             <div class="slot tableau" id="t2" onclick="handleSlotClick(2)"></div>
@@ -327,11 +387,24 @@
     <div class="toolbar">
         <button class="btn" onclick="undo()">↩️ 復原</button>
         <button class="btn" id="hint-btn" onclick="useHint()">💡 提示</button>
-        <button class="btn" onclick="initGame()">🔄 新遊戲</button>
+        <button class="btn" onclick="confirmReset()">🔄 新遊戲</button>
+    </div>
+
+    <!-- 詢問視窗 Overlay -->
+    <div class="modal-overlay" id="save-modal">
+        <div class="modal-box">
+            <h2>💾 發現未完成的牌局</h2>
+            <p>偵測到您上次有尚未結束的蜘蛛接龍。請問是否要繼續上次的進度，還是重新開始一局？</p>
+            <div class="modal-btns">
+                <button class="modal-btn primary" onclick="restoreGame()">繼續遊戲</button>
+                <button class="modal-btn secondary" onclick="discardSavedGame()">重新開始</button>
+            </div>
+        </div>
     </div>
 
 <script>
     const VALUES = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+    const LOCAL_STORAGE_KEY = 'raingod_spider_solitaire_save';
     
     let deck = [];         
     let winsCount = 0;     
@@ -343,9 +416,25 @@
     let gameActive = true;
     let isDealing = false; 
     let isAnimateRunning = false; 
-    let completedSets = 0; // 目前收了幾組
+    let completedSets = 0; 
+    let selectedCardEl = null; 
 
-    let selectedCardEl = null; // 當前被點擊選取的牌
+    // 初始化檢查是否含有舊存檔
+    function checkSaveOnLoad() {
+        // 從瀏覽器快取載入歷史「過關次數」，這個要獨立保存不被重開局洗掉
+        const totalWins = localStorage.getItem('raingod_spider_wins');
+        if (totalWins !== null) {
+            winsCount = parseInt(totalWins);
+        }
+
+        const saveData = localStorage.getItem(LOCAL_STORAGE_KEY);
+        if (saveData) {
+            // 顯示詢問彈窗
+            document.getElementById('save-modal').classList.add('show');
+        } else {
+            initGame();
+        }
+    }
 
     function initGame() {
         if (isDealing || isAnimateRunning) return;
@@ -363,8 +452,6 @@
         document.querySelectorAll('.complete-slot').forEach(s => s.innerHTML = '');
 
         // 🧠 【高勝率洗牌演算法】
-        // 蜘蛛接龍極容易卡在 K, Q, J 沒有位置放。
-        // 我們將大牌（K, Q, J）優先分配到開局的蓋牌底層，小牌放到表層，大幅降低開局死局機率。
         let bigCards = [];
         let smallCards = [];
         
@@ -379,23 +466,18 @@
             });
         }
 
-        // 分別打亂
         shuffleArray(bigCards);
         shuffleArray(smallCards);
 
-        // 組合出高勝率分配堆
         deck = [];
-        // 先放 24 張大牌到最前面（使其高機率成為開局最底下的蓋牌）
         for(let i=0; i<20; i++) {
             deck.push(bigCards.pop());
         }
-        // 剩下的大牌跟小牌混和作為上層牌與發牌堆
         let remaining = [...bigCards, ...smallCards];
         shuffleArray(remaining);
         deck = [...deck, ...remaining];
 
         let deckIdx = 0;
-        // 開局發牌
         for (let i = 0; i < 10; i++) {
             const cardCount = i < 4 ? 6 : 5;
             const targetSlot = document.getElementById(`t${i}`);
@@ -411,17 +493,123 @@
 
         deck = deck.slice(deckIdx);
         
-        // 初始佈局，先不使用過渡動畫，直接定位
         refreshAllPiles(false);
         updateDeckVisual();
         
-        // 讓最上層的牌翻開
         for(let i=0; i<10; i++) {
             checkRevealTopCard(document.getElementById(`t${i}`));
         }
         
         saveState();
         updateHUD();
+    }
+
+    // 💾 【儲存遊戲狀態至 LocalStorage】
+    function saveGameToStorage() {
+        if (!gameActive) return;
+
+        const boardState = [];
+        document.querySelectorAll('.slot.tableau').forEach(slot => {
+            const cardsData = [];
+            slot.querySelectorAll('.card').forEach(card => {
+                cardsData.push({
+                    value: card.dataset.value,
+                    weight: card.dataset.weight,
+                    isBack: card.classList.contains('back')
+                });
+            });
+            boardState.push({ slotId: slot.id, cards: cardsData });
+        });
+
+        const compState = [];
+        document.querySelectorAll('.complete-slot').forEach(slot => {
+            compState.push(slot.children.length);
+        });
+
+        const gameSession = {
+            board: boardState,
+            comp: compState,
+            deck: deck,
+            moves: moves,
+            timer: timer,
+            hintsCount: hintsCount,
+            completedSets: completedSets,
+            history: history // 還原時復原歷史也保留
+        };
+
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(gameSession));
+        localStorage.setItem('raingod_spider_wins', winsCount); // 獨立儲存過關數
+    }
+
+    // 📂 【繼續先前未完的牌局】
+    function restoreGame() {
+        const saveData = localStorage.getItem(LOCAL_STORAGE_KEY);
+        if (!saveData) return;
+
+        try {
+            const data = JSON.parse(saveData);
+
+            // 還原面板數值
+            moves = data.moves;
+            timer = data.timer;
+            hintsCount = data.hintsCount !== undefined ? data.hintsCount : 3;
+            completedSets = data.completedSets;
+            deck = data.deck;
+            history = data.history || [];
+            gameActive = true;
+
+            // 還原牌桌
+            data.board.forEach(slotState => {
+                const slot = document.getElementById(slotState.slotId);
+                slot.innerHTML = '';
+                slotState.cards.forEach(c => {
+                    const cardEl = createCardDOM({ value: c.value, weight: c.weight, suit: '♠' });
+                    if (c.isBack) cardEl.classList.add('back');
+                    slot.appendChild(cardEl);
+                });
+            });
+
+            // 還原左上角收集槽
+            document.querySelectorAll('.complete-slot').forEach((slot, sIdx) => {
+                slot.innerHTML = '';
+                const count = data.comp[sIdx];
+                for(let k=0; k<count; k++) {
+                    const dummy = createCardDOM({ value: '?', weight: 1, suit: '♠' });
+                    slot.appendChild(dummy);
+                }
+            });
+
+            // 還原重繪
+            refreshAllPiles(false);
+            updateDeckVisual();
+            updateHUD();
+
+            // 啟動計時
+            clearInterval(timerInterval);
+            startTimer();
+
+        } catch (e) {
+            console.error("還原檔案失敗", e);
+            initGame();
+        }
+
+        // 關閉 Modal
+        document.getElementById('save-modal').classList.remove('show');
+    }
+
+    // 🗑️ 【捨棄存檔直接重新一局】
+    function discardSavedGame() {
+        localStorage.removeItem(LOCAL_STORAGE_KEY);
+        document.getElementById('save-modal').classList.remove('show');
+        initGame();
+    }
+
+    // 新遊戲按鈕防止手殘
+    function confirmReset() {
+        if (confirm("確定要放棄當前進度並重新一局嗎？")) {
+            localStorage.removeItem(LOCAL_STORAGE_KEY);
+            initGame();
+        }
     }
 
     function shuffleArray(arr) {
@@ -445,7 +633,6 @@
             </div>
         `;
 
-        // 監聽卡牌點擊事件
         div.addEventListener('click', (e) => {
             e.stopPropagation();
             if (!gameActive || isDealing || isAnimateRunning || div.classList.contains('back')) return;
@@ -455,12 +642,10 @@
         return div;
     }
 
-    // 🎯 核心邏輯：雙擊/單擊多處目的地選擇器
     function handleCardClick(cardEl) {
         const slot = cardEl.parentElement;
         const slotIdx = parseInt(slot.id.replace('t', ''));
 
-        // 如果當前已經選取了一張牌，且這次點的是另一條工作列的最後一張牌
         if (selectedCardEl && selectedCardEl !== cardEl) {
             if (cardEl === slot.lastElementChild) {
                 handleSlotClick(slotIdx);
@@ -468,22 +653,18 @@
             }
         }
 
-        // 否則，視為想要選取這張牌
         const chain = getMovableChain(cardEl);
         if (!chain) {
             clearSelection();
             return; 
         }
 
-        // 計算這張牌可以去哪裡
         let validTargets = [];
         for (let i = 0; i < 10; i++) {
             const tab = document.getElementById(`t${i}`);
             if (tab === slot) continue;
             const topCard = tab.lastElementChild;
-            if (topCard && canPlayToCard(chain[0], topCard)) {
-                validTargets.push(i);
-            } else if (!topCard) {
+            if (targetTopCardMatches(chain[0], topCard)) {
                 validTargets.push(i);
             }
         }
@@ -491,19 +672,21 @@
         if (validTargets.length === 0) {
             clearSelection();
         } else if (validTargets.length === 1) {
-            // 只有 1 個地方可以去，直接智能飛過去
             clearSelection();
             const targetSlot = document.getElementById(`t${validTargets[0]}`);
             executeMove(slot, targetSlot, chain);
         } else {
-            // 有 2 個以上的地方可以去！開啟選取狀態，等待玩家點擊目的地
             clearSelection();
             selectedCardEl = cardEl;
             cardEl.classList.add('selected');
         }
     }
 
-    // 點擊空槽或工作列區塊
+    function targetTopCardMatches(moveCard, targetTopCard) {
+        if (!targetTopCard) return true; // 空格可以直接移動
+        return canPlayToCard(moveCard, targetTopCard);
+    }
+
     function handleSlotClick(slotIdx) {
         if (!selectedCardEl) return;
         
@@ -519,7 +702,7 @@
 
         let canMove = false;
         if (targetTop && canPlayToCard(chain[0], targetTop)) canMove = true;
-        if (!targetTop) canMove = true; // 空白區可以放任意牌鏈
+        if (!targetTop) canMove = true; 
 
         if (canMove) {
             const tempChain = [...chain];
@@ -559,14 +742,9 @@
     }
 
     function executeMove(fromSlot, toSlot, chain) {
-        // 先計算漂移前，牌在畫面上的真實絕對座標
-        const rects = chain.map(c => c.getBoundingClientRect());
-
-        // 把 DOM 移入新工作列
         chain.forEach(card => toSlot.appendChild(card));
         moves++; 
 
-        // 刷新佈局讓它們漂移過去
         refreshAllPiles(true);
 
         isAnimateRunning = true;
@@ -610,12 +788,10 @@
                 const cardEl = createCardDOM(cardData);
                 const targetSlot = document.getElementById(`t${i}`);
                 
-                // 為了讓它有從右下角「漂移」發出的效果，先給予一個初始位置
                 cardEl.style.left = '80vw';
                 cardEl.style.top = '10vh';
                 targetSlot.appendChild(cardEl);
 
-                // 稍微延遲讓瀏覽器渲染初始位置後，觸發漂移
                 setTimeout(() => {
                     refreshAllPiles(true);
                 }, 10);
@@ -632,7 +808,6 @@
         }
     }
 
-    // 🎇 核心優化：【連成一排 A-K 漂移飛往左上角收集區】
     function checkElimination(optFromSlot) {
         for (let i = 0; i < 10; i++) {
             const slot = document.getElementById(`t${i}`);
@@ -652,24 +827,18 @@
                 isAnimateRunning = true;
                 const elimList = cards.slice(cards.length - 13);
                 
-                // 觸發高亮金光動畫
                 elimList.forEach(card => card.classList.add('eliminating'));
 
                 setTimeout(() => {
-                    // 取得左上角目標收集槽
                     const targetSlot = document.getElementById(`cs${completedSets}`);
-                    const targetRect = targetSlot.getBoundingClientRect();
-                    const containerRect = document.getElementById('game-container').getBoundingClientRect();
 
-                    // 將這 13 張牌抽離原本排流，漂移飛往左上角
                     elimList.forEach((card, idx) => {
                         card.classList.remove('eliminating');
-                        // 轉移至收集槽 DOM
                         targetSlot.appendChild(card);
                         card.style.left = '0px';
                         card.style.top = '0px';
                         card.style.zIndex = idx + 1;
-                        card.style.pointerEvents = 'none'; // 鎖定不可點擊
+                        card.style.pointerEvents = 'none'; 
                     });
 
                     completedSets++;
@@ -735,13 +904,11 @@
         }
     }
 
-    // 🔄 動態刷新卡牌堆疊高度與寬度
     function refreshAllPiles(useAnimation = true) {
         for (let i = 0; i < 10; i++) {
             const slot = document.getElementById(`t${i}`);
             const cards = slot.querySelectorAll('.card');
             cards.forEach((card, idx) => {
-                // 如果不使用動畫(如剛開局)，先暫時關閉 transition
                 card.style.transition = useAnimation ? '' : 'none';
                 
                 const offset = card.classList.contains('back') ? 14 : 24;
@@ -755,7 +922,6 @@
                     card.classList.remove('underneath-back');
                 }
 
-                // 強制重繪
                 if(!useAnimation) {
                     card.offsetHeight; 
                     card.style.transition = '';
@@ -780,6 +946,8 @@
         if (completedSets === 8 && gameActive) {
             winsCount++; 
             hintsCount++; 
+            localStorage.setItem('raingod_spider_wins', winsCount);
+            localStorage.removeItem(LOCAL_STORAGE_KEY); // 通關後清除快取
             triggerWinCelebration();
         }
     }
@@ -853,6 +1021,7 @@
             if (!gameActive || isDealing || isAnimateRunning) return;
             timer++;
             updateHUD();
+            saveGameToStorage(); // 每一秒計時伴隨狀態自動保存至快取
         }, 1000);
     }
 
@@ -882,7 +1051,7 @@
 
         const compState = [];
         document.querySelectorAll('.complete-slot').forEach(slot => {
-            compState.push(slot.children.length); // 記住左上角每個槽裡面有幾張牌
+            compState.push(slot.children.length);
         });
         
         history.push({
@@ -893,6 +1062,8 @@
             completedSets: completedSets
         });
         if (history.length > 30) history.shift();
+
+        saveGameToStorage(); // 主動觸發寫入快取
     }
 
     function undo() {
@@ -901,7 +1072,6 @@
         history.pop(); 
         const prevState = history[history.length - 1];
 
-        // 還原牌桌
         prevState.board.forEach(slotState => {
             const slot = document.getElementById(slotState.slotId);
             slot.innerHTML = '';
@@ -912,27 +1082,25 @@
             });
         });
 
-        // 還原左上角
         completedSets = prevState.completedSets;
         document.querySelectorAll('.complete-slot').forEach((slot, sIdx) => {
             slot.innerHTML = '';
             const count = prevState.comp[sIdx];
             for(let k=0; k<count; k++) {
-                // 模擬放回左上角封存的卡片
                 const dummy = createCardDOM({ value: '?', weight: 1, suit: '♠' });
                 slot.appendChild(dummy);
             }
         });
 
         deck = [...prevState.deckSnapshot];
-        moves = prevState.moves + 1; // 復原也算一步動作
+        moves = prevState.moves + 1; 
 
         refreshAllPiles(true);
         updateDeckVisual();
         updateHUD();
+        saveGameToStorage(); // 復原動作也寫入快取
     }
 
-    // 監聽鍵盤 R,A,I,N 通關彩蛋
     const pressedKeys = new Set();
     window.addEventListener('keydown', (e) => {
         const key = e.key.toLowerCase();
@@ -946,7 +1114,8 @@
     });
     window.addEventListener('keyup', (e) => pressedKeys.delete(e.key.toLowerCase()));
 
-    initGame();
+    // 啟動程序
+    checkSaveOnLoad();
 </script>
 </body>
 </html>
