@@ -295,10 +295,81 @@
             z-index: 9999;
             pointer-events: none;
         }
+
+        /* 💾 詢問繼續遊戲的彈出視窗樣式 */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        .modal-overlay.show {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .modal-content {
+            background: #1e1e1e;
+            border: 2px solid #1b4332;
+            border-radius: 12px;
+            padding: 24px;
+            width: 85%;
+            max-width: 380px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            transform: scale(0.8);
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .modal-overlay.show .modal-content {
+            transform: scale(1);
+        }
+        .modal-title {
+            font-size: 20px;
+            margin-bottom: 12px;
+            color: #ffd700;
+            font-weight: bold;
+        }
+        .modal-desc {
+            font-size: 15px;
+            color: #ccc;
+            margin-bottom: 24px;
+            line-height: 1.5;
+        }
+        .modal-btn-group {
+            display: flex;
+            gap: 12px;
+        }
+        .modal-btn {
+            flex: 1;
+            padding: 12px;
+            font-size: 15px;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            border: none;
+        }
+        .btn-continue {
+            background: #1b4332;
+            color: white;
+            border: 1px solid #2d6a4f;
+        }
+        .btn-continue:active { background: #2d6a4f; }
+        .btn-restart {
+            background: #333;
+            color: #aaa;
+        }
+        .btn-restart:active { background: #444; color: #fff; }
     </style>
 </head>
 <body>
     <link rel="stylesheet" href="menu.css"> <div id="nav_bar"></div> <script src="menu.js"></script>
+    
     <div class="hud">
         <div>過關次數: <span id="win-count">0</span></div>
         <div>步數: <span id="move-count">0</span></div>
@@ -336,6 +407,18 @@
         <button class="btn" onclick="initGame()">🔄 重來</button>
     </div>
 
+    <!-- 💾 詢問繼續或重來的彈出視窗 -->
+    <div class="modal-overlay" id="save-modal">
+        <div class="modal-content">
+            <div class="modal-title">發現未完局存檔 💾</div>
+            <div class="modal-desc">偵測到您上次有未完成的接龍牌局，請問要繼續挑戰，還是重新發牌呢？</div>
+            <div class="modal-btn-group">
+                <button class="modal-btn btn-restart" onclick="decideLoadSave(false)">🔄 重新開始</button>
+                <button class="modal-btn btn-continue" onclick="decideLoadSave(true)">▶️ 繼續遊戲</button>
+            </div>
+        </div>
+    </div>
+
     <canvas id="fx-canvas"></canvas>
 
 <script>
@@ -358,6 +441,34 @@
 
     let winCount = parseInt(localStorage.getItem('sol_win_count') || '0');
     let currentHints = 1 + winCount; 
+
+    // 網頁初始化載入
+    window.onload = function() {
+        checkExistingSave();
+    };
+
+    // 檢查是否有未玩完的存檔
+    function checkExistingSave() {
+        const savedState = localStorage.getItem('sol_current_save_state');
+        if (savedState) {
+            document.getElementById('save-modal').classList.add('show');
+        } else {
+            initGame();
+        }
+    }
+
+    // 玩家決定繼續還是重來
+    function decideLoadSave(continueGame) {
+        document.getElementById('save-modal').classList.remove('show');
+        if (continueGame) {
+            loadSavedState();
+        } else {
+            // 清除存檔並開新局
+            localStorage.removeItem('sol_current_save_state');
+            localStorage.removeItem('sol_current_history');
+            initGame();
+        }
+    }
 
     function initGame() {
         if (isDealing) return;
@@ -587,7 +698,6 @@
        🖱️ 操作升級：手動選擇與多目的地判定機制
        ========================================================================== */
     function handleCardInteraction(cardEl) {
-        // 如果點擊了已經選中的卡，取消選取
         if (selectedClickCard === cardEl) {
             clearSelection();
             return;
@@ -597,18 +707,15 @@
         const chain = getValidChain(cardEl);
         if (!chain) return;
 
-        // 如果目前選中了其他卡，且點擊的這張卡所在的 Slot 是可選的目的地，則執行移動
         if (selectedClickCard && validDestinations.includes(sourceSlot)) {
             executeSelectedMove(sourceSlot);
             return;
         }
 
-        // 重新尋找這張牌的所有可去之處
         clearSelection();
 
         let destinations = [];
         
-        // 1. 檢索 4 個右上角 Foundation
         if (chain.length === 1) {
             for (let i = 0; i < 4; i++) {
                 const fnd = document.getElementById(`fnd${i}`);
@@ -618,7 +725,6 @@
             }
         }
 
-        // 2. 檢索 7 個下方 Tableau
         for (let i = 0; i < 7; i++) {
             const tab = document.getElementById(`t${i}`);
             if (tab === sourceSlot) continue;
@@ -627,13 +733,11 @@
             }
         }
 
-        // 無處可去：直接彈出不可移動視覺回饋
         if (destinations.length === 0) {
             triggerCardHighlight(cardEl);
             return;
         }
 
-        // 如果「去處只有 1 個（且不管是上收還是移至另一排）」，則直接自動移動，免去兩步驟點選的繁瑣
         if (destinations.length === 1) {
             moves++;
             animateCardSlide(sourceSlot, destinations[0], chain, () => {
@@ -645,17 +749,13 @@
             return;
         }
 
-        // 如果去處有 2 個以上，啟動「兩步驟手動點選模式」
         selectedClickCard = cardEl;
         validDestinations = destinations;
 
-        // 高亮當前選取卡片
         cardEl.classList.add('selected-highlight');
 
-        // 高亮目標 Slots
         validDestinations.forEach(slot => {
             slot.classList.add('dest-highlight');
-            // 為目標 Slot 增加暫時的點擊監聽器
             slot.onclick = (e) => {
                 e.stopPropagation();
                 executeSelectedMove(slot);
@@ -663,7 +763,6 @@
         });
     }
 
-    // 執行兩步驟移動
     function executeSelectedMove(targetSlot) {
         if (!selectedClickCard) return;
         const sourceSlot = selectedClickCard.parentElement;
@@ -687,7 +786,7 @@
         selectedClickCard = null;
         validDestinations.forEach(slot => {
             slot.classList.remove('dest-highlight');
-            slot.onclick = null; // 清除暫時綁定的點擊事件
+            slot.onclick = null;
         });
         validDestinations = [];
     }
@@ -740,19 +839,16 @@
        ✈️ 視覺優化：平滑卡牌漂移/滑動動畫引擎 (Smooth Slide Engine)
        ========================================================================== */
     function animateCardSlide(fromSlot, toSlot, chain, callback) {
-        isDealing = true; // 平滑滑動中，先暫停其他交互以防穿幫
+        isDealing = true; 
 
-        // 1. 計算當前卡牌與目標位置在螢幕上的相對物理偏移
         const firstCard = chain[0];
         const rectStart = firstCard.getBoundingClientRect();
 
-        // 模擬卡片放入目標 Slot 後的臨時定位計算
         let targetYOffset = 0;
         if (toSlot.classList.contains('tableau')) {
             targetYOffset = toSlot.children.length * 20;
         }
         
-        // 臨時放一個隱形標記來獲取目標定位點
         const tempMarker = document.createElement('div');
         tempMarker.style.width = '1px';
         tempMarker.style.height = '1px';
@@ -766,14 +862,12 @@
         const deltaX = rectEnd.left - rectStart.left;
         const deltaY = rectEnd.top - rectStart.top;
 
-        // 2. 為卡片組添加 transition 樣式與 3D Translate 位移
         chain.forEach((card, idx) => {
-            card.style.zIndex = 2000 + idx; // 飛在最上空
+            card.style.zIndex = 2000 + idx; 
             card.classList.add('glide-animation');
             card.style.transform = `translate3d(${deltaX}px, ${deltaY}px, 0)`;
         });
 
-        // 3. 移動完畢後，執行真正 DOM 節點轉移
         setTimeout(() => {
             chain.forEach(card => {
                 card.classList.remove('glide-animation');
@@ -784,7 +878,7 @@
             saveState(false);
             isDealing = false;
             if (callback) callback();
-        }, 260); // 配合 CSS Transition 的 0.25 秒時間
+        }, 260); 
     }
 
     function checkRevealTopCard(slot) {
@@ -815,7 +909,6 @@
                 if (canPlayToFoundation(card, fnd)) {
                     if (parseInt(card.dataset.weight) <= 2) { 
                         const src = card.parentElement;
-                        // 升級：自動收牌也改用平滑滑動飛入效果！
                         animateCardSlide(src, fnd, [card], () => {
                             checkRevealTopCard(src);
                             checkAutoAbsorb();
@@ -873,7 +966,6 @@
                 const fnd = document.getElementById(`fnd${f}`);
                 if (canPlayToFoundation(lastCard, fnd)) {
                     const src = lastCard.parentElement;
-                    // 使用平滑動畫吸到上方
                     animateCardSlide(src, fnd, [lastCard], () => {
                         checkWin();
                         runAutoCollectStep();
@@ -915,6 +1007,7 @@
                     triggerCardHighlight(card);
                     currentHints--;
                     updateHUD();
+                    saveState(false);
                     return;
                 }
             }
@@ -927,6 +1020,7 @@
                     triggerCardHighlight(card);
                     currentHints--;
                     updateHUD();
+                    saveState(false);
                     return;
                 }
             }
@@ -947,8 +1041,13 @@
         cardEl.classList.add('hint-highlight');
     }
 
+    /* ==========================================================================
+       💾 儲存系統 (Save & Auto-Load System)
+       ========================================================================== */
     function saveState(isManualAction = true) {
         if (isDealing) return; 
+        
+        // 1. 抓取當前所有插槽中的卡片 HTML 與狀態
         const snapshot = [];
         document.querySelectorAll('.slot').forEach(slot => {
             const cardData = [];
@@ -960,56 +1059,127 @@
             });
             snapshot.push({ slotId: slot.id, cards: cardData });
         });
-        history.push({ snapshot: snapshot, moves: moves });
-        if (history.length > 60) history.shift();
+
+        // 2. 打包整合遊戲變數
+        const gameState = {
+            moves: moves,
+            currentHints: currentHints,
+            winCount: winCount,
+            snapshot: snapshot
+        };
+
+        localStorage.setItem('sol_current_save_state', JSON.stringify(gameState));
+
+        // 3. 處理復原歷史紀錄
+        if (isManualAction) {
+            history.push(JSON.stringify(snapshot));
+            if (history.length > 50) history.shift(); // 限制復原步數上限
+            localStorage.setItem('sol_current_history', JSON.stringify(history));
+        }
         updateHUD();
     }
 
-    function undo() {
-        if (history.length <= 1 || isDealing || isAutoCollecting) return;
-        clearSelection();
-        history.pop(); 
-        const prevState = history[history.length - 1];
+    // 載入存檔
+    function loadSavedState() {
+        try {
+            const rawState = localStorage.getItem('sol_current_save_state');
+            if (!rawState) return;
 
-        prevState.snapshot.forEach(slotState => {
-            const slot = document.getElementById(slotState.slotId);
-            slot.innerHTML = '';
-            slotState.cards.forEach(c => {
-                const tempDiv = document.createElement('div');
-                tempDiv.innerHTML = c.html;
-                const newCard = tempDiv.firstElementChild;
-                if (c.isBack) newCard.classList.add('back');
-                else newCard.classList.remove('back');
+            const gameState = JSON.parse(rawState);
+            moves = gameState.moves || 0;
+            currentHints = gameState.currentHints !== undefined ? gameState.currentHints : (1 + winCount);
+            winCount = gameState.winCount || 0;
 
-                newCard.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    if (!gameActive || newCard.classList.contains('back')) return;
-                    handleCardInteraction(newCard);
+            // 載入歷史復原紀錄
+            const rawHistory = localStorage.getItem('sol_current_history');
+            if (rawHistory) {
+                history = JSON.parse(rawHistory);
+            }
+
+            // 重構卡片 DOM 物件
+            gameState.snapshot.forEach(slotData => {
+                const slot = document.getElementById(slotData.slotId);
+                slot.innerHTML = ''; // 清空原本牌桌
+
+                slotData.cards.forEach(cardObj => {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = cardObj.html.trim();
+                    const cardEl = tempDiv.firstChild;
+
+                    // 重新綁定事件監聽
+                    cardEl.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        if (!gameActive || isDealing || cardEl.classList.contains('back')) return;
+                        handleCardInteraction(cardEl);
+                    });
+
+                    cardEl.addEventListener('animationend', (e) => {
+                        if (e.animationName === 'flipIn') cardEl.classList.remove('flip-animate');
+                        if (e.animationName === 'hintGlow') cardEl.classList.remove('hint-highlight');
+                    });
+
+                    slot.appendChild(cardEl);
                 });
-                slot.appendChild(newCard);
+            });
+
+            refreshAllPiles();
+            updateHUD();
+            gameActive = true;
+        } catch (e) {
+            console.error("載入存檔失敗，開始全新局", e);
+            initGame();
+        }
+    }
+
+    /* ↩️ 復原功能 */
+    function undo() {
+        if (!gameActive || isDealing || history.length <= 1) {
+            alert("目前沒有更早的步驟可以復原囉！");
+            return;
+        }
+
+        clearSelection();
+        history.pop(); // 彈出當前步
+        const prevStateString = history[history.length - 1];
+        const snapshot = JSON.parse(prevStateString);
+
+        snapshot.forEach(slotData => {
+            const slot = document.getElementById(slotData.slotId);
+            slot.innerHTML = '';
+            slotData.cards.forEach(cardObj => {
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = cardObj.html.trim();
+                const cardEl = tempDiv.firstChild;
+
+                cardEl.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (!gameActive || isDealing || cardEl.classList.contains('back')) return;
+                    handleCardInteraction(cardEl);
+                });
+
+                cardEl.addEventListener('animationend', (e) => {
+                    if (e.animationName === 'flipIn') cardEl.classList.remove('flip-animate');
+                    if (e.animationName === 'hintGlow') cardEl.classList.remove('hint-highlight');
+                });
+
+                slot.appendChild(cardEl);
             });
         });
-        
-        moves = prevState.moves + 1; 
-        gameActive = true; 
-        refreshAllPiles();
-        updateHUD();
-    }
 
-    function checkWin() {
-        let totalFndCards = 0;
-        for (let i = 0; i < 4; i++) {
-            totalFndCards += document.getElementById(`fnd${i}`).children.length;
-        }
-        if (totalFndCards === 52 && !gameActive) return; 
-        if (totalFndCards === 52) {
-            gameActive = false;
-            winCount++;
-            localStorage.setItem('sol_win_count', winCount);
-            currentHints = 1 + winCount; 
-            updateHUD();
-            startWinAnimation();
-        }
+        moves++;
+        refreshAllPiles();
+        
+        // 覆寫回存檔中
+        const gameState = {
+            moves: moves,
+            currentHints: currentHints,
+            winCount: winCount,
+            snapshot: snapshot
+        };
+        localStorage.setItem('sol_current_save_state', JSON.stringify(gameState));
+        localStorage.setItem('sol_current_history', JSON.stringify(history));
+
+        updateHUD();
     }
 
     function updateHUD() {
@@ -1018,179 +1188,102 @@
         document.getElementById('hint-count').innerText = currentHints;
     }
 
-    function stopWinAnimation() {
-        fxActive = false;
-        if (fxAnimationId) cancelAnimationFrame(fxAnimationId);
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    /* ==========================================================================
+       🏆 勝出判定與特效 (Win Condition & Card Cascade Effect)
+       ========================================================================== */
+    let animId = null;
+    let particles = [];
+
+    function checkWin() {
+        for (let i = 0; i < 4; i++) {
+            if (document.getElementById(`fnd${i}`).children.length !== 13) return;
+        }
+        gameActive = false;
+        winCount++;
+        localStorage.setItem('sol_win_count', winCount);
+        updateHUD();
+
+        // 贏了之後，主動清除該局存檔與歷史
+        localStorage.removeItem('sol_current_save_state');
+        localStorage.removeItem('sol_current_history');
+
+        triggerWinCascade();
     }
 
-    /* ==========================================================================
-       🌈 經典卡牌瀑布噴發特效引擎 (Canvas Engine)
-       ========================================================================== */
-    const canvas = document.getElementById('fx-canvas');
-    const ctx = canvas.getContext('2d');
-    let fxAnimationId = null;
-    let fxActive = false;
-    let fxCards = [];
-    let fxParticles = [];
-
-    function resizeCanvas() {
+    function triggerWinCascade() {
+        const canvas = document.getElementById('fx-canvas');
+        const ctx = canvas.getContext('2d');
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
-    }
-    window.addEventListener('resize', resizeCanvas);
-    resizeCanvas();
 
-    class FXCard {
-        constructor(value, suit, color, startX, startY) {
-            this.value = value;
-            this.suit = suit;
-            this.color = color === 'red' ? '#e63946' : '#1d3557';
-            this.x = startX;
-            this.y = startY;
-            this.vx = (Math.random() * 4 + 2) * (Math.random() > 0.5 ? 1 : -1);
-            this.vy = Math.random() * -5 - 3;
-            this.gravity = 0.35;
-            this.bounce = 0.85;
+        particles = [];
+        const foundations = [0,1,2,3].map(i => document.getElementById(`fnd${i}`));
+        
+        let currentFndIdx = 0;
+        let currentCardWeight = 13;
 
-            const testCard = document.querySelector('.card');
-            this.w = testCard ? testCard.offsetWidth : 80;
-            this.h = testCard ? testCard.offsetHeight : 116;
-            this.isDone = false;
-        }
-
-        update() {
-            this.vy += this.gravity;
-            this.x += this.vx;
-            this.y += this.vy;
-
-            if (this.y + this.h > canvas.height) {
-                this.y = canvas.height - this.h;
-                this.vy = -this.vy * this.bounce;
-                if (Math.abs(this.vy) > 1.5) spawnParticles(this.x + this.w/2, canvas.height, 6);
+        function shoot() {
+            if (currentFndIdx >= 4) return;
+            const fnd = foundations[currentFndIdx];
+            const cards = fnd.children;
+            
+            if (currentCardWeight >= 1) {
+                const card = cards[currentCardWeight - 1];
+                if (card) {
+                    const rect = card.getBoundingClientRect();
+                    particles.push({
+                        x: rect.left + rect.width/2,
+                        y: rect.top,
+                        vx: (Math.random() - 0.5) * 8,
+                        vy: -Math.random() * 6 - 4,
+                        gravity: 0.35,
+                        symbol: card.dataset.suit,
+                        color: card.dataset.color === 'red' ? '#e63946' : '#ffffff',
+                        value: card.dataset.value
+                    });
+                }
+                currentCardWeight--;
+            } else {
+                currentFndIdx++;
+                currentCardWeight = 13;
             }
-            if (this.x + this.w < 0 || this.x > canvas.width) this.isDone = true;
+            setTimeout(shoot, 100);
         }
+        shoot();
 
-        draw() {
-            ctx.save();
-            ctx.fillStyle = '#ffffff';
-            ctx.shadowColor = 'rgba(0,0,0,0.2)';
-            ctx.shadowBlur = 4;
-            ctx.shadowOffsetX = 2;
-            ctx.shadowOffsetY = 2;
-            
-            const r = 6;
-            ctx.beginPath();
-            ctx.moveTo(this.x + r, this.y);
-            ctx.lineTo(this.x + this.w - r, this.y);
-            ctx.quadraticCurveTo(this.x + this.w, this.y, this.x + this.w, this.y + r);
-            ctx.lineTo(this.x + this.w, this.y + this.h - r);
-            ctx.quadraticCurveTo(this.x + this.w, this.y + this.h, this.x + this.w - r, this.y + this.h);
-            ctx.lineTo(this.x + r, this.y + this.h - r);
-            ctx.quadraticCurveTo(this.x, this.y + this.h, this.x, this.y + this.h - r);
-            ctx.lineTo(this.x, this.y + r);
-            ctx.quadraticCurveTo(this.x, this.y, this.x + r, this.y);
-            ctx.closePath();
-            ctx.fill();
-            
-            ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
-            ctx.strokeStyle = 'rgba(0,0,0,0.1)';
-            ctx.stroke();
+        function update() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            particles.forEach((p, idx) => {
+                p.vy += p.gravity;
+                p.x += p.vx;
+                p.y += p.vy;
 
-            ctx.fillStyle = this.color;
-            ctx.font = `bold ${this.w * 0.32}px sans-serif`;
-            ctx.fillText(this.value, this.x + 6, this.y + this.h * 0.3);
-            
-            ctx.font = `${this.w * 0.3}px sans-serif`;
-            ctx.fillText(this.suit, this.x + this.w - this.w * 0.35, this.y + this.h * 0.3);
+                ctx.save();
+                ctx.fillStyle = p.color;
+                ctx.font = 'bold 20px -apple-system';
+                ctx.fillText(p.value + p.symbol, p.x, p.y);
+                ctx.restore();
 
-            ctx.font = `${this.w * 0.75}px sans-serif`;
-            ctx.textAlign = 'center';
-            ctx.fillText(this.suit, this.x + this.w / 2, this.y + this.h * 0.85);
-            ctx.restore();
-        }
-    }
-
-    class GoldParticle {
-        constructor(x, y) {
-            this.x = x; this.y = y;
-            this.vx = (Math.random() - 0.5) * 5;
-            this.vy = (Math.random() - 0.7) * 4;
-            this.radius = Math.random() * 2.5 + 1;
-            this.alpha = 1;
-            this.decay = Math.random() * 0.03 + 0.01;
-            this.color = `hsla(${Math.random() * 15 + 45}, 100%, 60%, `;
-        }
-        update() { this.x += this.vx; this.y += this.vy; this.alpha -= this.decay; }
-        draw() {
-            ctx.save(); ctx.beginPath();
-            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-            ctx.fillStyle = this.color + this.alpha + ')';
-            ctx.fill(); ctx.restore();
-        }
-    }
-
-    function spawnParticles(x, y, count) {
-        for(let i=0; i<count; i++) fxParticles.push(new GoldParticle(x, y));
-    }
-
-    function fxLoop() {
-        if (!fxActive) return;
-        ctx.clearRect(0, 0, canvas.width, canvas.height); 
-
-        for (let i = 0; i < fxCards.length; i++) {
-            const card = fxCards[i];
-            if (!card.isDone) { card.update(); card.draw(); }
-        }
-        fxParticles = fxParticles.filter(p => p.alpha > 0);
-        fxParticles.forEach(p => { p.update(); p.draw(); });
-        fxAnimationId = requestAnimationFrame(fxLoop);
-    }
-
-    function startWinAnimation() {
-        document.querySelectorAll('.card').forEach(c => c.style.visibility = 'hidden');
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        fxActive = true;
-        fxCards = [];
-        fxParticles = [];
-
-        const pileIds = ['fnd0', 'fnd1', 'fnd2', 'fnd3'];
-        let cardsToAnimate = [];
-
-        pileIds.forEach(id => {
-            const slot = document.getElementById(id);
-            const domCards = Array.from(slot.children);
-            const rect = slot.getBoundingClientRect();
-            domCards.reverse().forEach(dc => {
-                cardsToAnimate.push({ value: dc.dataset.value, suit: dc.dataset.suit, color: dc.dataset.color, x: rect.left, y: rect.top });
+                if (p.y > canvas.height + 50) {
+                    particles.splice(idx, 1);
+                }
             });
-        });
 
-        let index = 0;
-        function launchNextCard() {
-            if (!fxActive || index >= cardsToAnimate.length) {
-                setTimeout(() => {
-                    if(fxActive) {
-                        alert("🎉 太強了！恭喜破關！\n提示上限已解鎖增強！點擊確定開始新的一局。");
-                        initGame();
-                    }
-                }, 3000);
-                return;
+            if (gameActive === false) {
+                animId = requestAnimationFrame(update);
             }
-
-            const c = cardsToAnimate[index];
-            fxCards.push(new FXCard(c.value, c.suit, c.color, c.x, c.y));
-            index++;
-            setTimeout(launchNextCard, 150);
         }
-
-        fxLoop();
-        launchNextCard();
+        update();
     }
 
-    window.onload = () => {
-        initGame();
+    function stopWinAnimation() {
+        if (animId) {
+            cancelAnimationFrame(animId);
+            animId = null;
+        }
+        const canvas = document.getElementById('fx-canvas');
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
     }
 </script>
 </body>
