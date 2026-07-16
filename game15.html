@@ -3,84 +3,93 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>蜘蛛接龍 | Raingod</title>
+    <title>蜘蛛接龍終極進化版 | Raingod</title>
     <style>
         :root {
-            --bg-color: #141414;
-            --board-color: #0d5c34;
-            --card-w: calc((100vw - 44px) / 10 - 2px);
+            /* 讓卡牌寬度自動適應螢幕寬度（10等分扣除間距） */
+            --card-w: calc((100vw - 40px) / 10);
+            /* 保持黃金比例 1 : 1.45 */
             --card-h: calc(var(--card-w) * 1.45);
-            --card-radius: 4px;
+            --card-radius: 6px;
+            --board-color: #0d5c34;
         }
 
-        @media (min-width: 800px) {
+        /* 當螢幕較寬時，限制卡牌最大尺寸，避免在大螢幕上過度拉伸 */
+        @media (min-width: 700px) {
             :root {
                 --card-w: 68px;
                 --card-h: 98px;
             }
         }
 
-        body {
+        /* 調整全螢幕佈局，禁止滾動條，剛好填滿 100vh */
+        html, body {
             margin: 0;
-            padding: 10px;
-            background-color: var(--bg-color);
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden; /* 完美鎖定，不產生滾動條 */
+            background-color: #141414;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             display: flex;
             flex-direction: column;
-            align-items: center;
-            color: white;
-            user-select: none;
-            overflow-y: auto;
-            min-height: 100vh;
             box-sizing: border-box;
         }
 
-        /* 🟢 頂部資訊欄 HUD */
-        .hud-panel {
-            background: rgba(0, 0, 0, 0.4);
-            padding: 8px 25px;
-            border-radius: 20px;
-            display: flex;
-            gap: 20px;
-            font-size: 15px;
-            font-weight: bold;
-            color: #fffbdf;
-            box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
-            margin-bottom: 20px;
-            border: 1px solid rgba(255,255,255,0.1);
-        }
-        .hud-panel span {
-            color: #ffffff;
-            margin-left: 4px;
+        /* 導覽列佔用空間 */
+        #nav_bar {
+            flex-shrink: 0;
+            width: 100%;
         }
 
-        .game-container {
+        /* 遊戲主要容器：填滿賸餘的所有高度 */
+        .game-wrapper {
+            flex: 1;
             display: flex;
             flex-direction: column;
-            gap: 20px;
+            justify-content: space-between; /* 均勻分配頂部、中部、底部 */
+            align-items: center;
             background-color: var(--board-color);
-            padding: 15px 10px;
-            border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.6);
-            width: 100%;
-            max-width: 840px;
+            padding: 8px;
             box-sizing: border-box;
+            width: 100%;
             position: relative;
         }
 
+        /* 🟢 頂部資訊欄 HUD - 扁平化以節省高度 */
+        .hud-panel {
+            background: rgba(0, 0, 0, 0.4);
+            padding: 6px 16px;
+            border-radius: 15px;
+            display: flex;
+            gap: 15px;
+            font-size: 13px;
+            font-weight: bold;
+            color: #fffbdf;
+            box-shadow: inset 0 0 8px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.1);
+            flex-shrink: 0;
+        }
+        .hud-panel span {
+            color: #ffffff;
+            margin-left: 2px;
+        }
+
+        /* 頂部排組與收集槽 */
         .top-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
             width: 100%;
+            max-width: 800px;
             height: var(--card-h);
-            padding: 0 5px;
+            flex-shrink: 0;
         }
 
         /* 左上角 A-K 收集區 */
         .completed-area {
             display: flex;
-            gap: 4px;
+            gap: 3px;
             height: var(--card-h);
         }
         .complete-slot {
@@ -92,10 +101,11 @@
             position: relative;
         }
 
+        /* 發牌堆 */
         .deck-area {
             display: flex;
             position: relative;
-            width: calc(var(--card-w) * 2);
+            width: calc(var(--card-w) * 1.5);
             height: var(--card-h);
             cursor: pointer;
         }
@@ -103,25 +113,30 @@
         .deck-stack-visual {
             width: var(--card-w);
             height: var(--card-h);
-            background: linear-gradient(135deg, #b91c1c 25%, transparent 25%) -10px 0,
-                        linear-gradient(225deg, #b91c1c 25%, transparent 25%) -10px 0,
+            background: linear-gradient(135deg, #b91c1c 25%, transparent 25%) -6px 0,
+                        linear-gradient(225deg, #b91c1c 25%, transparent 25%) -6px 0,
                         linear-gradient(45deg, #b91c1c 25%, transparent 25%),
                         linear-gradient(335deg, #b91c1c 25%, #7f1d1d 25%);
-            background-size: 10px 10px;
+            background-size: 8px 8px;
             border-radius: var(--card-radius);
             box-shadow: -2px 2px 4px rgba(0,0,0,0.4);
             position: absolute;
             border: 1px solid #fff;
+            right: 0;
         }
 
+        /* 中部牌桌疊牌區：動態計算高度，確保卡牌展開不會超出底線 */
         .tableaus {
             display: flex;
             justify-content: space-between;
             gap: 3px;
-            height: 65vh;
-            min-height: 480px;
-            padding-bottom: 40px;
+            width: 100%;
+            max-width: 800px;
+            /* 動態計算賸餘高度，扣除頂部HUD、發牌區與底部按鈕 */
+            height: calc(100vh - var(--card-h) - 180px); 
             position: relative;
+            flex-grow: 1;
+            margin-top: 5px;
         }
 
         .slot {
@@ -148,15 +163,16 @@
             color: #1d3557; 
             overflow: hidden;
             border: 1px solid #bbbbbb;
-            transition: top 0.25s cubic-bezier(0.25, 1, 0.5, 1), 
-                        left 0.25s cubic-bezier(0.25, 1, 0.5, 1), 
-                        transform 0.2s ease, box-shadow 0.2s;
+            transition: top 0.2s cubic-bezier(0.25, 1, 0.5, 1), 
+                        left 0.2s cubic-bezier(0.25, 1, 0.5, 1), 
+                        transform 0.15s ease;
         }
 
+        /* 卡牌文字自適應縮放 */
         .card-num-left {
             position: absolute;
             top: 2px;
-            left: 4px;
+            left: 3px;
             font-size: calc(var(--card-w) * 0.35);
             font-weight: 900;
             line-height: 1;
@@ -166,8 +182,8 @@
         .card-suit-right {
             position: absolute;
             top: 2px;
-            right: 4px;
-            font-size: calc(var(--card-w) * 0.32);
+            right: 3px;
+            font-size: calc(var(--card-w) * 0.3);
             line-height: 1;
             z-index: 5;
         }
@@ -179,23 +195,23 @@
             display: flex;
             align-items: flex-end;
             justify-content: center;
-            padding-bottom: 6px;
+            padding-bottom: 4px;
             box-sizing: border-box;
             z-index: 1;
         }
         
         .card-suit-big {
-            font-size: calc(var(--card-w) * 0.7);
+            font-size: calc(var(--card-w) * 0.65);
             line-height: 1;
         }
 
         /* 卡牌背面 */
         .card.back {
-            background: linear-gradient(135deg, #b91c1c 25%, transparent 25%) -10px 0,
-                        linear-gradient(225deg, #b91c1c 25%, transparent 25%) -10px 0,
+            background: linear-gradient(135deg, #b91c1c 25%, transparent 25%) -6px 0,
+                        linear-gradient(225deg, #b91c1c 25%, transparent 25%) -6px 0,
                         linear-gradient(45deg, #b91c1c 25%, transparent 25%),
                         linear-gradient(335deg, #b91c1c 25%, #7f1d1d 25%);
-            background-size: 10px 10px;
+            background-size: 8px 8px;
             border: 1px solid #ffffff;
             pointer-events: none;
         }
@@ -204,9 +220,9 @@
 
         /* 被選取時的亮綠色外框 */
         .card.selected {
-            box-shadow: 0 0 15px #22c55e, inset 0 0 8px #22c55e;
+            box-shadow: 0 0 12px #22c55e, inset 0 0 6px #22c55e;
             border: 2px solid #22c55e;
-            transform: translateY(-5px);
+            transform: translateY(-4px);
             z-index: 9999 !important;
         }
 
@@ -222,7 +238,7 @@
         /* 提示閃爍特效 */
         @keyframes hint-glow {
             0%, 100% { box-shadow: 0 0 4px #ffdf00; border-color: #ffdf00; }
-            50% { box-shadow: 0 0 20px #ffdf00, inset 0 0 10px #ffdf00; border-color: #fff; }
+            50% { box-shadow: 0 0 15px #ffdf00, inset 0 0 8px #ffdf00; border-color: #fff; }
         }
         .card.hint-active {
             animation: hint-glow 0.5s ease-in-out 3;
@@ -232,11 +248,11 @@
         /* 收牌動畫 */
         @keyframes clear-pulse {
             0% { transform: scale(1); filter: brightness(1); }
-            50% { transform: scale(1.05); filter: brightness(1.6); box-shadow: 0 0 20px #ffdf00; }
+            50% { transform: scale(1.05); filter: brightness(1.4); box-shadow: 0 0 15px #ffdf00; }
             100% { transform: scale(1); filter: brightness(1); opacity: 1; }
         }
         .card.eliminating {
-            animation: clear-pulse 0.5s ease-in-out forwards;
+            animation: clear-pulse 0.4s ease-in-out forwards;
             z-index: 9999 !important;
         }
 
@@ -279,31 +295,31 @@
             background: #222;
             border: 2px solid #0d5c34;
             border-radius: 12px;
-            padding: 25px;
+            padding: 20px;
             text-align: center;
-            max-width: 400px;
-            width: 85%;
+            max-width: 360px;
+            width: 80%;
             box-shadow: 0 10px 30px rgba(0,0,0,0.7);
         }
         .modal-box h2 {
             margin-top: 0;
             color: #ffdf00;
-            font-size: 22px;
+            font-size: 20px;
         }
         .modal-box p {
             color: #ddd;
-            font-size: 16px;
+            font-size: 14px;
             line-height: 1.5;
-            margin-bottom: 25px;
+            margin-bottom: 20px;
         }
         .modal-btns {
             display: flex;
-            gap: 15px;
+            gap: 12px;
         }
         .modal-btn {
             flex: 1;
-            padding: 12px;
-            font-size: 16px;
+            padding: 10px;
+            font-size: 15px;
             font-weight: bold;
             border: none;
             border-radius: 8px;
@@ -318,13 +334,16 @@
             color: white;
         }
 
+        /* 底部工具列 */
         .toolbar {
             display: flex;
             justify-content: space-around;
             width: 100%;
-            max-width: 840px;
-            margin-top: 15px;
-            gap: 10px;
+            max-width: 800px;
+            gap: 8px;
+            flex-shrink: 0;
+            margin-top: 5px;
+            margin-bottom: 5px;
         }
 
         .btn {
@@ -332,10 +351,10 @@
             background: #2a2a2a;
             color: white;
             border: 1px solid #444;
-            padding: 12px 6px;
-            font-size: 14px;
+            padding: 10px 4px;
+            font-size: 13px;
             font-weight: bold;
-            border-radius: 8px;
+            border-radius: 6px;
             cursor: pointer;
             display: flex;
             align-items: center;
@@ -346,16 +365,23 @@
     </style>
 </head>
 <body>
-<link rel="stylesheet" href="menu.css"> <div id="nav_bar"></div> <script src="menu.js"></script>
 
-    <div class="hud-panel">
-        <div>🏆 過關次數:<span id="wins-val">0</span></div>
-        <div>💡 提示次數:<span id="hints-val">3</span></div>
-        <div>⏱️ 時間:<span id="time-val">00:00</span></div>
-        <div>👟 步數:<span id="moves-val">0</span></div>
-    </div>
+    <!-- 導覽列放置處 -->
+    <div id="nav_bar"></div> 
+    <script src="menu.js"></script>
 
-    <div class="game-container" id="game-container">
+    <!-- 滿版遊戲主容器 -->
+    <div class="game-wrapper" id="game-container">
+        
+        <!-- 🟢 頂部資訊 HUD -->
+        <div class="hud-panel">
+            <div>🏆 過關:<span id="wins-val">0</span></div>
+            <div>💡 提示:<span id="hints-val">3</span></div>
+            <div>⏱️ 時間:<span id="time-val">00:00</span></div>
+            <div>👟 步數:<span id="moves-val">0</span></div>
+        </div>
+
+        <!-- 🃏 頂部收牌區 & 發牌堆 -->
         <div class="top-row">
             <div class="completed-area" id="completed-area">
                 <div class="complete-slot" id="cs0"></div>
@@ -370,6 +396,7 @@
             <div class="deck-area" id="deck-area" onclick="dealRound()"></div>
         </div>
 
+        <!-- 🎴 中間工作列（10行疊牌區） -->
         <div class="tableaus" id="tableaus-container">
             <div class="slot tableau" id="t0" onclick="handleSlotClick(0)"></div>
             <div class="slot tableau" id="t1" onclick="handleSlotClick(1)"></div>
@@ -382,12 +409,13 @@
             <div class="slot tableau" id="t8" onclick="handleSlotClick(8)"></div>
             <div class="slot tableau" id="t9" onclick="handleSlotClick(9)"></div>
         </div>
-    </div>
 
-    <div class="toolbar">
-        <button class="btn" onclick="undo()">↩️ 復原</button>
-        <button class="btn" id="hint-btn" onclick="useHint()">💡 提示</button>
-        <button class="btn" onclick="confirmReset()">🔄 新遊戲</button>
+        <!-- 🛠️ 底部工具按鈕 -->
+        <div class="toolbar">
+            <button class="btn" onclick="undo()">↩️ 復原</button>
+            <button class="btn" id="hint-btn" onclick="useHint()">💡 提示</button>
+            <button class="btn" onclick="confirmReset()">🔄 新遊戲</button>
+        </div>
     </div>
 
     <!-- 詢問視窗 Overlay -->
@@ -421,7 +449,6 @@
 
     // 初始化檢查是否含有舊存檔
     function checkSaveOnLoad() {
-        // 從瀏覽器快取載入歷史「過關次數」，這個要獨立保存不被重開局洗掉
         const totalWins = localStorage.getItem('raingod_spider_wins');
         if (totalWins !== null) {
             winsCount = parseInt(totalWins);
@@ -429,7 +456,6 @@
 
         const saveData = localStorage.getItem(LOCAL_STORAGE_KEY);
         if (saveData) {
-            // 顯示詢問彈窗
             document.getElementById('save-modal').classList.add('show');
         } else {
             initGame();
@@ -451,7 +477,7 @@
         document.querySelectorAll('.slot.tableau').forEach(s => s.innerHTML = '');
         document.querySelectorAll('.complete-slot').forEach(s => s.innerHTML = '');
 
-        // 🧠 【高勝率洗牌演算法】
+        // 🧠 洗牌演算法
         let bigCards = [];
         let smallCards = [];
         
@@ -504,7 +530,7 @@
         updateHUD();
     }
 
-    // 💾 【儲存遊戲狀態至 LocalStorage】
+    // 💾 儲存
     function saveGameToStorage() {
         if (!gameActive) return;
 
@@ -534,14 +560,14 @@
             timer: timer,
             hintsCount: hintsCount,
             completedSets: completedSets,
-            history: history // 還原時復原歷史也保留
+            history: history
         };
 
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(gameSession));
-        localStorage.setItem('raingod_spider_wins', winsCount); // 獨立儲存過關數
+        localStorage.setItem('raingod_spider_wins', winsCount);
     }
 
-    // 📂 【繼續先前未完的牌局】
+    // 📂 還原
     function restoreGame() {
         const saveData = localStorage.getItem(LOCAL_STORAGE_KEY);
         if (!saveData) return;
@@ -549,7 +575,6 @@
         try {
             const data = JSON.parse(saveData);
 
-            // 還原面板數值
             moves = data.moves;
             timer = data.timer;
             hintsCount = data.hintsCount !== undefined ? data.hintsCount : 3;
@@ -558,7 +583,6 @@
             history = data.history || [];
             gameActive = true;
 
-            // 還原牌桌
             data.board.forEach(slotState => {
                 const slot = document.getElementById(slotState.slotId);
                 slot.innerHTML = '';
@@ -569,7 +593,6 @@
                 });
             });
 
-            // 還原左上角收集槽
             document.querySelectorAll('.complete-slot').forEach((slot, sIdx) => {
                 slot.innerHTML = '';
                 const count = data.comp[sIdx];
@@ -579,12 +602,10 @@
                 }
             });
 
-            // 還原重繪
             refreshAllPiles(false);
             updateDeckVisual();
             updateHUD();
 
-            // 啟動計時
             clearInterval(timerInterval);
             startTimer();
 
@@ -593,18 +614,15 @@
             initGame();
         }
 
-        // 關閉 Modal
         document.getElementById('save-modal').classList.remove('show');
     }
 
-    // 🗑️ 【捨棄存檔直接重新一局】
     function discardSavedGame() {
         localStorage.removeItem(LOCAL_STORAGE_KEY);
         document.getElementById('save-modal').classList.remove('show');
         initGame();
     }
 
-    // 新遊戲按鈕防止手殘
     function confirmReset() {
         if (confirm("確定要放棄當前進度並重新一局嗎？")) {
             localStorage.removeItem(LOCAL_STORAGE_KEY);
@@ -683,7 +701,7 @@
     }
 
     function targetTopCardMatches(moveCard, targetTopCard) {
-        if (!targetTopCard) return true; // 空格可以直接移動
+        if (!targetTopCard) return true;
         return canPlayToCard(moveCard, targetTopCard);
     }
 
@@ -754,7 +772,7 @@
             refreshAllPiles(true);
             checkElimination(fromSlot); 
             saveState();
-        }, 260);
+        }, 220);
     }
 
     function checkRevealTopCard(slot) {
@@ -802,9 +820,9 @@
                         updateDeckVisual();
                         checkElimination();
                         saveState();
-                    }, 300);
+                    }, 250);
                 }
-            }, i * 30);
+            }, i * 25);
         }
     }
 
@@ -851,7 +869,7 @@
                     refreshAllPiles(true);
                     saveState();
                     checkWin();
-                }, 500);
+                }, 400);
                 break;
             }
         }
@@ -898,20 +916,33 @@
             setTimeout(() => {
                 foundMove.card.classList.remove('hint-active');
                 if (foundMove.target.classList.contains('card')) foundMove.target.classList.remove('hint-active');
-            }, 1500);
+            }, 1200);
         } else {
             alert("🔍 目前畫面上沒有任何可以移動的合法組合。");
         }
     }
 
+    // 關鍵調整：根據卡牌在牌組中的數量，自適應動態調降上下堆疊間距 (offset)
+    // 當卡牌疊得越多，間距就會越窄，完美杜絕溢出螢幕底端的問題
     function refreshAllPiles(useAnimation = true) {
         for (let i = 0; i < 10; i++) {
             const slot = document.getElementById(`t${i}`);
             const cards = slot.querySelectorAll('.card');
+            
+            // 💡 智慧動態高度計算
+            // 卡牌越多時，自動把展開的間距縮得更扁（原本為 24 像素）
+            let baseOffset = 24; 
+            if (cards.length > 8) {
+                baseOffset = 18;
+            } else if (cards.length > 12) {
+                baseOffset = 12;
+            }
+
             cards.forEach((card, idx) => {
                 card.style.transition = useAnimation ? '' : 'none';
                 
-                const offset = card.classList.contains('back') ? 14 : 24;
+                // 背面卡牌本身寬度窄，只需要很小的間隙
+                const offset = card.classList.contains('back') ? 10 : baseOffset;
                 card.style.left = '0px';
                 card.style.top = `${idx * offset}px`; 
                 card.style.zIndex = idx + 1;
@@ -937,7 +968,7 @@
         for (let i = 0; i < roundsLeft; i++) {
             const layer = document.createElement('div');
             layer.className = 'deck-stack-visual';
-            layer.style.right = `${i * 6}px`; 
+            layer.style.right = `${i * 4}px`; 
             deckArea.appendChild(layer);
         }
     }
@@ -947,7 +978,7 @@
             winsCount++; 
             hintsCount++; 
             localStorage.setItem('raingod_spider_wins', winsCount);
-            localStorage.removeItem(LOCAL_STORAGE_KEY); // 通關後清除快取
+            localStorage.removeItem(LOCAL_STORAGE_KEY);
             triggerWinCelebration();
         }
     }
@@ -968,14 +999,14 @@
             setTimeout(() => {
                 const randomColumn = Math.floor(Math.random() * 10);
                 const startX = randomColumn * (viewContainer.clientWidth / 10) + 10;
-                const startY = 40;
+                const startY = 20;
 
                 const fxEl = document.createElement('div');
                 fxEl.className = 'fx-card';
                 fxEl.innerHTML = `
-                    <div style="position:absolute; top:2px; left:4px; font-weight:900; font-size:20px;">${cardInfo.value}</div>
-                    <div style="position:absolute; top:2px; right:4px; font-size:18px;">♠</div>
-                    <div style="position:absolute; width:100%; height:100%; display:flex; align-items:flex-end; justify-content:center; padding-bottom:6px; font-size:45px;">♠</div>
+                    <div style="position:absolute; top:2px; left:4px; font-weight:900; font-size:18px;">${cardInfo.value}</div>
+                    <div style="position:absolute; top:2px; right:4px; font-size:16px;">♠</div>
+                    <div style="position:absolute; width:100%; height:100%; display:flex; align-items:flex-end; justify-content:center; padding-bottom:6px; font-size:36px;">♠</div>
                 `;
                 viewContainer.appendChild(fxEl);
 
@@ -985,7 +1016,7 @@
                 let vy = (Math.random() * -5 - 3);      
                 const gravity = 0.35;                   
                 const bounceLoss = -0.85;               
-                const bottomBoundary = viewContainer.clientHeight - 100;
+                const bottomBoundary = viewContainer.clientHeight - 80;
 
                 function updatePhysics() {
                     vy += gravity;
@@ -1007,7 +1038,7 @@
                     }
                 }
                 requestAnimationFrame(updatePhysics);
-            }, index * 30); 
+            }, index * 25); 
         });
 
         setTimeout(() => {
@@ -1021,7 +1052,7 @@
             if (!gameActive || isDealing || isAnimateRunning) return;
             timer++;
             updateHUD();
-            saveGameToStorage(); // 每一秒計時伴隨狀態自動保存至快取
+            saveGameToStorage();
         }, 1000);
     }
 
@@ -1063,7 +1094,7 @@
         });
         if (history.length > 30) history.shift();
 
-        saveGameToStorage(); // 主動觸發寫入快取
+        saveGameToStorage();
     }
 
     function undo() {
@@ -1098,7 +1129,7 @@
         refreshAllPiles(true);
         updateDeckVisual();
         updateHUD();
-        saveGameToStorage(); // 復原動作也寫入快取
+        saveGameToStorage();
     }
 
     const pressedKeys = new Set();
@@ -1114,7 +1145,7 @@
     });
     window.addEventListener('keyup', (e) => pressedKeys.delete(e.key.toLowerCase()));
 
-    // 啟動程序
+    // 啟動
     checkSaveOnLoad();
 </script>
 </body>
