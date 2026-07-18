@@ -38,7 +38,8 @@
             display: flex;
             flex-wrap: wrap;
             justify-content: center;
-            gap: 10px;
+            align-items: center;
+            gap: 12px;
             margin-bottom: 15px;
             width: 100%;
             max-width: 500px;
@@ -70,6 +71,26 @@
             background-color: #28a745;
             color: white;
             border-color: #218838;
+        }
+
+        /* 提示開關樣式 */
+        .hint-toggle {
+            display: flex;
+            align-items: center;
+            font-weight: bold;
+            font-size: 1.05rem;
+            background-color: white;
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 2px solid #ccc;
+            cursor: pointer;
+        }
+
+        .hint-toggle input {
+            margin-right: 6px;
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
         }
 
         /* 資訊看板 */
@@ -126,7 +147,7 @@
         /* 棋盤容器 */
         .board-container {
             width: 100%;
-            max-width: 480px; /* 控制在手機、平板上完美顯示 */
+            max-width: 480px;
             aspect-ratio: 1 / 1;
             background-color: var(--board-color);
             border: 6px solid #2c3e50;
@@ -135,7 +156,7 @@
             display: grid;
             grid-template-columns: repeat(8, 1fr);
             grid-template-rows: repeat(8, 1fr);
-            touch-action: none; /* 防止移動端雙擊縮放 */
+            touch-action: none;
         }
 
         /* 棋格 */
@@ -147,34 +168,48 @@
             align-items: center;
             position: relative;
             cursor: pointer;
+            perspective: 1000px; /* 啟用 3D 透視，讓翻牌更立體 */
         }
 
-        /* 棋子 */
-        .disc {
-            width: 82%;
-            height: 82%;
-            border-radius: 50%;
+        /* 3D 棋子容器 */
+        .disc-container {
+            width: 84%;
+            height: 84%;
             position: absolute;
-            transition: transform 0.4s ease-in-out, background-color 0.4s;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.4);
+            transform-style: preserve-3d; /* 保持子元件的 3D 空間 */
+            transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1); /* 控制翻轉速度，0.6秒最滑順 */
         }
 
-        .disc.black {
-            background: radial-gradient(circle at 30% 30%, #444, #111 80%);
-            border: 1px solid #000;
-        }
-
-        .disc.white {
-            background: radial-gradient(circle at 30% 30%, #fff, #ccc 80%);
-            border: 1px solid #bbb;
-        }
-
-        /* 翻面動畫效果 */
-        .flipped {
+        /* 翻轉狀態 */
+        .disc-container.show-white {
             transform: rotateY(180deg);
         }
 
-        /* 提示可以落子的綠色圓圈 */
+        /* 棋子的正面與反面基底 */
+        .disc-face {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            backface-visibility: hidden; /* 翻到背面時，隱藏自己 */
+            box-shadow: 0 4px 6px rgba(0,0,0,0.4);
+        }
+
+        /* 黑棋面 */
+        .disc-face.black {
+            background: radial-gradient(circle at 30% 30%, #444, #111 80%);
+            border: 1px solid #000;
+            transform: rotateY(0deg);
+        }
+
+        /* 白棋面 */
+        .disc-face.white {
+            background: radial-gradient(circle at 30% 30%, #fff, #ccc 80%);
+            border: 1px solid #bbb;
+            transform: rotateY(180deg); /* 預先轉 180 度，等容器轉過來就變正面 */
+        }
+
+        /* 提示可以落子的圓圈 */
         .hint {
             width: 20px;
             height: 20px;
@@ -244,7 +279,7 @@
     <script src="menu.js"></script>
     <h1>黑白棋</h1>
 
-    <!-- 模式選擇 -->
+    <!-- 模式選擇與控制區 -->
     <div class="controls">
         <select id="gameMode" onchange="resetGame()">
             <option value="pvp">兩人對打</option>
@@ -252,6 +287,11 @@
             <option value="pve-medium">(中等)</option>
             <option value="pve-hard" selected>(超難)</option>
         </select>
+        
+        <label class="hint-toggle">
+            <input type="checkbox" id="showHints" checked onchange="updateUI()"> 顯示提示
+        </label>
+
         <button class="btn-success" onclick="resetGame()">🔄 重新開始</button>
         <button id="undoBtn" class="btn-primary" onclick="undoMove()">↩️ 悔棋</button>
     </div>
@@ -289,7 +329,7 @@
 
         let board = [];
         let currentPlayer = BLACK;
-        let gameHistory = []; // 用於悔棋
+        let gameHistory = []; 
         let isAiThinking = false;
 
         const boardEl = document.getElementById('board');
@@ -299,16 +339,14 @@
         const overlayEl = document.getElementById('overlay');
         const winnerTextEl = document.getElementById('winnerText');
         const finalScoreEl = document.getElementById('finalScore');
+        const showHintsEl = document.getElementById('showHints');
 
-        // 方向向量
         const directions = [
             [-1, -1], [-1, 0], [-1, 1],
             [0, -1],           [0, 1],
             [1, -1],  [1, 0],  [1, 1]
         ];
 
-        // 經典黑白棋棋盤位置權重矩陣 (Weight Table)
-        // 為了不讓電腦傻傻只看翻子數量，讓它明白角落和邊緣的重要性，避開地雷區
         const weights = [
             [100, -40,  20,   5,   5,  20, -40, 100],
             [-40, -80,  -1,  -1,  -1,  -1, -80, -40],
@@ -320,11 +358,9 @@
             [100, -40,  20,   5,   5,  20, -40, 100]
         ];
 
-        // 初始化遊戲
         function initGame() {
             board = Array(BOARD_SIZE).fill(null).map(() => Array(BOARD_SIZE).fill(EMPTY));
             
-            // 經典開局
             board[3][3] = WHITE;
             board[3][4] = BLACK;
             board[4][3] = BLACK;
@@ -338,7 +374,6 @@
             updateUI();
         }
 
-        // 產生 8x8 棋盤的格子
         function createBoardDOM() {
             boardEl.innerHTML = '';
             for (let r = 0; r < BOARD_SIZE; r++) {
@@ -353,7 +388,7 @@
             }
         }
 
-        // 更新棋盤畫面、分數與提示
+        // 升級版 UI：改用 3D DOM 結構，避免重新繪製時破壞動畫
         function updateUI() {
             const validMoves = getValidMoves(currentPlayer, board);
             let blackCount = 0;
@@ -362,27 +397,55 @@
             for (let r = 0; r < BOARD_SIZE; r++) {
                 for (let c = 0; c < BOARD_SIZE; c++) {
                     const cell = boardEl.children[r * BOARD_SIZE + c];
-                    cell.innerHTML = ''; // 清空
-
                     const state = board[r][c];
-                    if (state === BLACK) {
-                        const disc = document.createElement('div');
-                        disc.className = 'disc black';
-                        cell.appendChild(disc);
-                        blackCount++;
-                    } else if (state === WHITE) {
-                        const disc = document.createElement('div');
-                        disc.className = 'disc white';
-                        cell.appendChild(disc);
-                        whiteCount++;
-                    } else if (validMoves.some(m => m.r === r && m.c === c) && !isAiThinking) {
-                        // 玩家回合顯示提示小圓圈
+
+                    // 尋找格子內是否已有棋子元件
+                    let container = cell.querySelector('.disc-container');
+                    let hint = cell.querySelector('.hint');
+
+                    if (state === BLACK || state === WHITE) {
+                        // 如果有提示，先拔掉
+                        if (hint) hint.remove();
+
+                        if (!container) {
+                            // 建立全新的 3D 棋子結構
+                            container = document.createElement('div');
+                            container.className = 'disc-container';
+                            
+                            const blackFace = document.createElement('div');
+                            blackFace.className = 'disc-face black';
+                            const whiteFace = document.createElement('div');
+                            whiteFace.className = 'disc-face white';
+                            
+                            container.appendChild(blackFace);
+                            container.appendChild(whiteFace);
+                            cell.appendChild(container);
+                        }
+
+                        // 透過切換 class 觸發 CSS 3D 翻轉動畫
+                        if (state === BLACK) {
+                            container.classList.remove('show-white');
+                            blackCount++;
+                        } else {
+                            container.classList.add('show-white');
+                            whiteCount++;
+                        }
+                    } else {
+                        // 空格狀態：清除舊棋子
+                        if (container) container.remove();
+
+                        // 判斷是否需要顯示合法落子點提示
                         const mode = document.getElementById('gameMode').value;
                         const isPlayerTurn = (mode === 'pvp') || (mode.startsWith('pve') && currentPlayer === BLACK);
-                        if (isPlayerTurn) {
-                            const hint = document.createElement('div');
-                            hint.className = 'hint';
-                            cell.appendChild(hint);
+                        
+                        if (showHintsEl.checked && validMoves.some(m => m.r === r && m.c === c) && !isAiThinking && isPlayerTurn) {
+                            if (!hint) {
+                                hint = document.createElement('div');
+                                hint.className = 'hint';
+                                cell.appendChild(hint);
+                            }
+                        } else {
+                            if (hint) hint.remove();
                         }
                     }
                 }
@@ -391,7 +454,6 @@
             blackScoreEl.innerText = blackCount;
             whiteScoreEl.innerText = whiteCount;
 
-            // 更新回合文字
             if (currentPlayer === BLACK) {
                 turnTextEl.innerText = "⚫ 黑棋回合";
                 turnTextEl.style.color = "#111";
@@ -405,7 +467,6 @@
             }
         }
 
-        // 判斷某位置是否能落子，傳回被翻轉棋子座標
         function getFlips(r, c, player, currentBoard) {
             if (currentBoard[r][c] !== EMPTY) return [];
             const opponent = player === BLACK ? WHITE : BLACK;
@@ -429,7 +490,6 @@
             return totalFlips;
         }
 
-        // 獲取所有合法落子點
         function getValidMoves(player, currentBoard) {
             const moves = [];
             for (let r = 0; r < BOARD_SIZE; r++) {
@@ -443,7 +503,6 @@
             return moves;
         }
 
-        // 點擊事件
         function handleCellClick(r, c) {
             if (isAiThinking) return;
 
@@ -456,7 +515,6 @@
             makeMove(r, c, flips);
         }
 
-        // 執行落子
         function makeMove(r, c, flips) {
             saveHistory();
 
@@ -468,7 +526,6 @@
             switchPlayer();
         }
 
-        // 交換回合與 AI 觸發
         function switchPlayer() {
             currentPlayer = currentPlayer === BLACK ? WHITE : BLACK;
             updateUI();
@@ -480,7 +537,7 @@
                 const originalPlayerMoves = getValidMoves(currentPlayer, board);
 
                 if (originalPlayerMoves.length === 0) {
-                    setTimeout(endGame, 600);
+                    setTimeout(endGame, 1000); // 稍微拉長結算等待，留給動畫翻完
                     return;
                 } else {
                     alert(`無路可走！強制作廢，換另一方繼續。`);
@@ -491,13 +548,14 @@
             const mode = document.getElementById('gameMode').value;
             if (mode.startsWith('pve') && currentPlayer === WHITE) {
                 isAiThinking = true;
+                // 【修改：將原本的 700ms 提高到 1300ms】
+                // 這樣能有效延遲電腦的落子時間，給人一種電腦真的在「深思熟慮」的博弈感！
                 setTimeout(() => {
                     aiMove(mode);
-                }, 700); // 留一點思考時間更有博弈感
+                }, 1300); 
             }
         }
 
-        // 終極升級版 AI 邏輯
         function aiMove(mode) {
             const validMoves = getValidMoves(WHITE, board);
             if (validMoves.length === 0) {
@@ -509,17 +567,14 @@
             let bestMove;
 
             if (mode === 'pve-easy') {
-                // 【簡單】：隨便亂下
                 bestMove = validMoves[Math.floor(Math.random() * validMoves.length)];
             } 
             else if (mode === 'pve-medium') {
-                // 【中等】：基於位置權重表 (Weights) 進行評估，專挑分數最高的位置下
                 let bestScore = -Infinity;
                 let candidates = [];
 
                 for (const move of validMoves) {
                     const positionScore = weights[move.r][move.c];
-                    // 額外權衡：翻子多寡也給一點微小加分
                     const moveScore = positionScore + (move.flips.length * 0.5);
 
                     if (moveScore > bestScore) {
@@ -532,39 +587,26 @@
                 bestMove = candidates[Math.floor(Math.random() * candidates.length)];
             } 
             else if (mode === 'pve-hard') {
-                // 【超難】：位置權重 + 防守策略（Minimax 核心思想）
-                // 不僅找自己的最高分，還會模擬「我下這一步後，阿公下一步能拿到的最高分/可動棋步數」
-                // 電腦會極力降低阿公的行動力 (Mobility Control)，讓阿公陷入無處可下的窘境！
-                
                 let bestScore = -Infinity;
                 let candidates = [];
 
                 for (const move of validMoves) {
-                    // 1. 模擬下這一步後的虛擬棋盤
                     const nextBoardState = JSON.parse(JSON.stringify(board));
                     nextBoardState[move.r][move.c] = WHITE;
                     move.flips.forEach(pos => { nextBoardState[pos.r][pos.c] = WHITE; });
 
-                    // 2. 評估我這一步本身的位置價值
                     const myPositionValue = weights[move.r][move.c];
-
-                    // 3. 模擬阿公在下個回合能做的所有合法棋步
                     const opponentMoves = getValidMoves(BLACK, nextBoardState);
                     
-                    // 4. 計算對手（阿公）的威脅值
                     let opponentMaxThreat = 0;
                     opponentMoves.forEach(opMove => {
-                        // 如果阿公能搶到角落，這對電腦來說是巨大威脅
                         const opPosScore = weights[opMove.r][opMove.c];
                         if (opPosScore > opponentMaxThreat) {
                             opponentMaxThreat = opPosScore;
                         }
                     });
 
-                    // 5. 行動力限制罰分：如果我這一步走完，阿公可以選的位置越多，對我越不利
                     const mobilityPenalty = opponentMoves.length * 4;
-
-                    // 綜合評分公式 = 我的權重 - 阿公的最大威脅 - 阿公下一步的自由度
                     const totalEvaluation = myPositionValue - (opponentMaxThreat * 1.2) - mobilityPenalty + (move.flips.length * 0.1);
 
                     if (totalEvaluation > bestScore) {
@@ -581,7 +623,6 @@
             makeMove(bestMove.r, bestMove.c, bestMove.flips);
         }
 
-        // 儲存狀態以供悔棋
         function saveHistory() {
             gameHistory.push({
                 board: JSON.parse(JSON.stringify(board)),
@@ -592,7 +633,6 @@
             }
         }
 
-        // 悔棋功能
         function undoMove() {
             if (gameHistory.length === 0 || isAiThinking) return;
 
@@ -615,7 +655,6 @@
             updateUI();
         }
 
-        // 遊戲結束結算
         function endGame() {
             let blackCount = 0;
             let whiteCount = 0;
@@ -652,7 +691,6 @@
             initGame();
         }
 
-        // 開機初始化
         window.onload = initGame;
     </script>
 </body>
