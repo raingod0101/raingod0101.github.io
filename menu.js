@@ -11,7 +11,7 @@
             favicon.rel = 'icon';
             document.head.appendChild(favicon);
         }
-        favicon.href = `${baseUrl}p4.png`;
+        favicon.href = `${baseUrl}catdragon.png`;
 
         const resources = [
             { type: 'js', url: "https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js" },
@@ -104,7 +104,7 @@ async function syncData(user = null) {
             const brandA = container.querySelector('.brand');
             if (brandA && !brandA.querySelector('img')) {
                 const img = document.createElement('img');
-                img.src = `${baseUrl}p4.png`;
+                img.src = `${baseUrl}catdragon.png`;
                 img.style.cssText = "height: 24px; width: 24px; object-fit: contain; margin-right: 8px; border-radius: 4px;";
                 brandA.prepend(img);
             }
