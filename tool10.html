@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>一分鐘點擊次數測試</title>
+    <title>點擊次數測試</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -24,9 +24,21 @@
             width: 320px;
         }
         h1 {
-            margin-bottom: 20px;
+            margin-bottom: 15px;
             font-size: 24px;
             color: #2d3436;
+        }
+        .mode-select {
+            margin-bottom: 20px;
+        }
+        .mode-select select {
+            padding: 8px 12px;
+            font-size: 14px;
+            border-radius: 8px;
+            border: 1px solid #dfe6e9;
+            background-color: #f1f2f6;
+            color: #2d3436;
+            cursor: pointer;
         }
         .stats {
             display: flex;
@@ -76,7 +88,14 @@
 <body>
 
     <div class="container">
-        <h1>一分鐘點擊挑戰</h1>
+        <h1 id="gameTitle">一分鐘點擊挑戰</h1>
+        
+        <div class="mode-select">
+            <select id="modeSelector" onchange="changeMode()">
+                <option value="60">模式一：一分鐘挑戰 (60s)</option>
+                <option value="1">模式二：一秒極速點擊 (1s)</option>
+            </select>
+        </div>
         
         <div class="stats">
             <div class="stat-box">
@@ -93,41 +112,90 @@
     </div>
 
     <script>
+        let gameDuration = 60; // 預設 60 秒
         let timeLeft = 60;
         let score = 0;
         let isPlaying = false;
+        let isCountingDown = false;
         let timerId = null;
 
         const timerDisplay = document.getElementById('timer');
         const scoreDisplay = document.getElementById('score');
         const clickBtn = document.getElementById('clickBtn');
+        const modeSelector = document.getElementById('modeSelector');
+        const gameTitle = document.getElementById('gameTitle');
+
+        function changeMode() {
+            if (isPlaying || isCountingDown) return; // 遊戲中途不能切換模式
+            
+            gameDuration = parseInt(modeSelector.value);
+            timeLeft = gameDuration;
+            timerDisplay.textContent = timeLeft;
+            score = 0;
+            scoreDisplay.textContent = score;
+
+            if (gameDuration === 60) {
+                gameTitle.textContent = '一分鐘點擊挑戰';
+            } else {
+                gameTitle.textContent = '一秒極速點擊';
+            }
+        }
 
         function handleClick() {
-            // 如果遊戲尚未開始，初始化計時器
-            if (!isPlaying) {
-                isPlaying = true;
-                score = 0;
-                timeLeft = 60;
-                scoreDisplay.textContent = score;
-                clickBtn.textContent = '狂點我！';
-
-                // 開始倒數
-                timerId = setInterval(() => {
-                    timeLeft--;
-                    timerDisplay.textContent = timeLeft;
-
-                    if (timeLeft <= 0) {
-                        clearInterval(timerId);
-                        endGame();
-                    }
-                }, 1000);
-            }
-
-            // 遊戲進行中，累加點擊次數
+            // 如果正在倒數或遊戲中，直接算作點擊加分
             if (isPlaying) {
                 score++;
                 scoreDisplay.textContent = score;
+                return;
             }
+
+            if (isCountingDown) return;
+
+            // 點擊開始後，執行 3、2、1 倒數
+            isCountingDown = true;
+            modeSelector.disabled = true;
+            clickBtn.disabled = true;
+            
+            let count = 3;
+            clickBtn.textContent = count;
+
+            let countdownInterval = setInterval(() => {
+                count--;
+                if (count > 0) {
+                    clickBtn.textContent = count;
+                } else if (count === 0) {
+                    clickBtn.textContent = '開始！';
+                } else {
+                    clearInterval(countdownInterval);
+                    startOfficialGame();
+                }
+            }, 1000);
+        }
+
+        function startOfficialGame() {
+            isCountingDown = false;
+            isPlaying = true;
+            score = 0;
+            timeLeft = gameDuration;
+            
+            scoreDisplay.textContent = score;
+            timerDisplay.textContent = timeLeft;
+            clickBtn.disabled = false;
+            clickBtn.textContent = gameDuration === 60 ? '狂點我！' : '猛按！';
+
+            // 開始計時
+            const intervalTime = gameDuration === 1 ? 100 : 1000; // 一秒模式用 100ms 更新以保持流暢，60秒用 1000ms
+            const step = gameDuration === 1 ? 0.1 : 1;
+
+            timerId = setInterval(() => {
+                timeLeft = Number((timeLeft - step).toFixed(1));
+                timerDisplay.textContent = gameDuration === 1 ? timeLeft.toFixed(1) : timeLeft;
+
+                if (timeLeft <= 0) {
+                    clearInterval(timerId);
+                    endGame();
+                }
+            }, intervalTime);
         }
 
         function endGame() {
@@ -135,11 +203,12 @@
             clickBtn.disabled = true;
             clickBtn.textContent = `時間到！共點擊 ${score} 下`;
 
-            // 3秒後自動重置按鈕讓使用者可以再玩一次
+            // 3秒後自動重置按鈕
             setTimeout(() => {
                 clickBtn.disabled = false;
                 clickBtn.textContent = '再玩一次';
-                timerDisplay.textContent = '60';
+                timerDisplay.textContent = gameDuration;
+                modeSelector.disabled = false;
             }, 3000);
         }
     </script>
