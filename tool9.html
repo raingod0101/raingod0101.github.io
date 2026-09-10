@@ -255,23 +255,39 @@
     progressInfo.textContent = `進度：${currentIndex} / ${totalTargetCount}`;
   }
 
-  function getPinyinKey(char) {
-    if (!char) return "";
+  // 獲取一個字的所有可能拼音（不含聲調，且包含所有多音字讀音）
+  function getPinyinKeys(char) {
+    if (!char) return [];
     if (typeof pinyinPro !== "undefined") {
       try {
-        return pinyinPro.pinyin(char, { toneType: 'num' });
+        // 1. type: 'array' 抓出所有可能讀音
+        // 2. toneType: 'none' 去除聲調（忽略一二三四聲差異，大幅提升極速體驗）
+        // 3. multiple: true 支援多音字
+        const pyResult = pinyinPro.pinyin(char, { 
+          toneType: 'none', 
+          type: 'array',
+          multiple: true 
+        });
+        
+        // 將結果去重並轉為小寫
+        return Array.from(new Set(pyResult.map(p => p.toLowerCase())));
       } catch (e) {
-        return char;
+        return [char];
       }
     }
-    return char;
+    return [char];
   }
 
+  // 判斷兩個字是否同音（只要有任何一個讀音重疊即算同音）
   function isSameSound(char1, char2) {
+    // 如果字完全一樣，直接通過
     if (char1 === char2) return true;
-    const py1 = getPinyinKey(char1);
-    const py2 = getPinyinKey(char2);
-    return py1 && py2 && py1 === py2;
+
+    const pyList1 = getPinyinKeys(char1);
+    const pyList2 = getPinyinKeys(char2);
+
+    // 比對兩個字的拼音陣列是否有交集
+    return pyList1.some(py1 => pyList2.includes(py1));
   }
 
   function checkAnswer() {
