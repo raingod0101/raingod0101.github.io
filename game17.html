@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>2048 貪吃蛇 | Raingod</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        body {
+            background-color: #111;
+            color: #fff;
+            font-family: "Clear Sans", Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            touch-action: none;
+        }
+
+        .ui-container {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.65);
+            padding: 12px 20px;
+            border-radius: 12px;
+            pointer-events: none;
+            backdrop-filter: blur(5px);
+        }
+
+        h1 {
+            font-size: 20px;
+            margin: 0 0 5px 0;
+            color: #edc22e;
+        }
+
+        .score-container {
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        .warning-text {
+            font-size: 12px;
+            color: #ff6b6b;
+            margin-top: 4px;
+        }
+
+        canvas {
+            display: block;
+            background-color: #bbada0;
+        }
+
+        /* 虛擬搖桿 UI */
+        #joystick-base {
+            position: absolute;
+            bottom: 40px;
+            left: 40px;
+            width: 120px;
+            height: 120px;
+            background: rgba(255, 255, 255, 0.15);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            z-index: 20;
+            touch-action: none;
+        }
+
+        #joystick-stick {
+            position: absolute;
+            top: 35px;
+            left: 35px;
+            width: 50px;
+            height: 50px;
+            background: rgba(237, 194, 46, 0.85);
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+        }
+    </style>
+</head>
+<body>
+<link rel="stylesheet" href="menu.css">
+
+<div id="nav_bar"></div>
+
+<script src="menu.js"></script>
+    <div class="ui-container">
+        <h1>2048 貪吃蛇</h1>
+        <div class="score-container">分數: <span id="score">0</span></div>
+        <div class="warning-text">✨ 蛇身自動按大小排序 & 相同數字連鎖合併！</div>
+    </div>
+
+    <!-- 虛擬搖桿 -->
+    <div id="joystick-base">
+        <div id="joystick-stick"></div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        const scoreDisplay = document.getElementById("score");
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+
+        // 參數設定
+        const MAP_SIZE = 3000;       // 地圖大小
+        const BLOCK_SIZE = 42;       // 方塊大小
+        const SPEED = 4.2;           // 移動速度
+        const FOOD_COUNT = 130;      // 食物數量
+        const BODY_SPACING = 28;     // 蛇節點跟隨距離
+
+        const colors = {
+            2: { bg: "#eee4da", text: "#776e65" },
+            4: { bg: "#ede0c8", text: "#776e65" },
+            8: { bg: "#f2b179", text: "#f9f6f2" },
+            16: { bg: "#f59563", text: "#f9f6f2" },
+            32: { bg: "#f67c5f", text: "#f9f6f2" },
+            64: { bg: "#f65e3b", text: "#f9f6f2" },
+            128: { bg: "#edcf72", text: "#f9f6f2" },
+            256: { bg: "#edcc61", text: "#f9f6f2" },
+            512: { bg: "#edc850", text: "#f9f6f2" },
+            1024: { bg: "#edc53f", text: "#f9f6f2" },
+            2048: { bg: "#edc22e", text: "#f9f6f2" }
+        };
+
+        // 蛇狀態
+        let snake = [
+            { x: MAP_SIZE / 2, y: MAP_SIZE / 2, value: 2 }
+        ];
+
+        let moveAngle = 0;
+        let score = 0;
+        let foods = [];
+        let gameOver = false;
+
+        for (let i = 0; i < FOOD_COUNT; i++) {
+            foods.push(generateFood());
+        }
+
+        // --- 搖桿控制 ---
+        const joyBase = document.getElementById("joystick-base");
+        const joyStick = document.getElementById("joystick-stick");
+        let joyActive = false;
+        let joyCenter = { x: 0, y: 0 };
+
+        function handleJoystickStart(e) {
+            joyActive = true;
+            const rect = joyBase.getBoundingClientRect();
+            joyCenter = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+            handleJoystickMove(e);
+        }
+
+        function handleJoystickMove(e) {
+            if (!joyActive) return;
+            const touch = e.touches ? e.touches[0] : e;
+            const dx = touch.clientX - joyCenter.x;
+            const dy = touch.clientY - joyCenter.y;
+
+            const dist = Math.min(Math.hypot(dx, dy), 45);
+            moveAngle = Math.atan2(dy, dx);
+
+            joyStick.style.transform = `translate(${Math.cos(moveAngle) * dist}px, ${Math.sin(moveAngle) * dist}px)`;
+        }
+
+        function handleJoystickEnd() {
+            joyActive = false;
+            joyStick.style.transform = `translate(0px, 0px)`;
+        }
+
+        joyBase.addEventListener("touchstart", handleJoystickStart, { passive: false });
+        window.addEventListener("touchmove", handleJoystickMove, { passive: false });
+        window.addEventListener("touchend", handleJoystickEnd);
+
+        joyBase.addEventListener("mousedown", handleJoystickStart);
+        window.addEventListener("mousemove", handleJoystickMove);
+        window.addEventListener("mouseup", handleJoystickEnd);
+
+        // 鍵盤支援
+        const keys = {};
+        window.addEventListener("keydown", e => keys[e.key] = true);
+        window.addEventListener("keyup", e => keys[e.key] = false);
+
+        function processKeyboardInput() {
+            let kx = 0, ky = 0;
+            if (keys["ArrowUp"] || keys["w"] || keys["W"]) ky -= 1;
+            if (keys["ArrowDown"] || keys["s"] || keys["S"]) ky += 1;
+            if (keys["ArrowLeft"] || keys["a"] || keys["A"]) kx -= 1;
+            if (keys["ArrowRight"] || keys["d"] || keys["D"]) kx += 1;
+
+            if (kx !== 0 || ky !== 0) {
+                moveAngle = Math.atan2(ky, kx);
+            }
+        }
+
+        // --- 核心邏輯：排序與連鎖合併 ---
+        function reorderAndMergeSnake() {
+            // 1. 提取所有節點的數字並進行「從大到小」排序
+            let values = snake.map(seg => seg.value).sort((a, b) => b - a);
+
+            // 2. 檢查相鄰相同的數字並進行連鎖合併 (2048 規則)
+            let mergedValues = [];
+            let i = 0;
+            while (i < values.length) {
+                if (i < values.length - 1 && values[i] === values[i + 1]) {
+                    // 相鄰且相同 -> 合併翻倍 (例如 2, 2 變成 4)
+                    let newVal = values[i] * 2;
+                    mergedValues.push(newVal);
+                    score += newVal;
+                    scoreDisplay.innerText = score;
+                    i += 2; // 跳過下一個已合併的數字
+                } else {
+                    mergedValues.push(values[i]);
+                    i++;
+                }
+            }
+
+            // 如果有合併發生，進行遞迴檢查（以支援連續多重連鎖合併，例如 [2, 2, 4] -> [4, 4] -> [8]）
+            if (mergedValues.length < values.length) {
+                // 再次調用確保連鎖觸發完全
+                let checkAgain = false;
+                for (let j = 0; j < mergedValues.length - 1; j++) {
+                    if (mergedValues[j] === mergedValues[j + 1]) {
+                        checkAgain = true;
+                        break;
+                    }
+                }
+                if (checkAgain) {
+                    // 重新封裝臨時 snake 再跑一次合併
+                    snake = mergedValues.map((v, idx) => ({
+                        x: snake[idx] ? snake[idx].x : snake[snake.length - 1].x,
+                        y: snake[idx] ? snake[idx].y : snake[snake.length - 1].y,
+                        value: v
+                    }));
+                    reorderAndMergeSnake();
+                    return;
+                }
+            }
+
+            // 3. 把計算好、排序好的數值重新賦予給蛇的節點
+            // 如果合併後節點變少了，裁切多餘節點
+            snake = snake.slice(0, mergedValues.length);
+            for (let k = 0; k < mergedValues.length; k++) {
+                snake[k].value = mergedValues[k];
+            }
+        }
+
+        // --- 遊戲每幀更新 ---
+        function update() {
+            if (gameOver) return;
+
+            processKeyboardInput();
+
+            // 1. 移動蛇頭
+            const head = snake[0];
+            const nextX = head.x + Math.cos(moveAngle) * SPEED;
+            const nextY = head.y + Math.sin(moveAngle) * SPEED;
+
+            // 撞牆死亡
+            if (nextX < BLOCK_SIZE / 2 || nextX > MAP_SIZE - BLOCK_SIZE / 2 ||
+                nextY < BLOCK_SIZE / 2 || nextY > MAP_SIZE - BLOCK_SIZE / 2) {
+                endGame("撞到地圖邊界牆壁了！");
+                return;
+            }
+
+            head.x = nextX;
+            head.y = nextY;
+
+            // 2. 移動蛇身（平滑跟隨）
+            for (let i = 1; i < snake.length; i++) {
+                const prev = snake[i - 1];
+                const curr = snake[i];
+
+                const dx = prev.x - curr.x;
+                const dy = prev.y - curr.y;
+                const dist = Math.hypot(dx, dy);
+
+                if (dist > BODY_SPACING) {
+                    const angle = Math.atan2(dy, dx);
+                    curr.x = prev.x - Math.cos(angle) * BODY_SPACING;
+                    curr.y = prev.y - Math.sin(angle) * BODY_SPACING;
+                }
+            }
+
+            // 3. 撞自身判定
+            for (let i = 5; i < snake.length; i++) {
+                if (Math.hypot(head.x - snake[i].x, head.y - snake[i].y) < BLOCK_SIZE * 0.7) {
+                    endGame("撞到自己的身體了！");
+                    return;
+                }
+            }
+
+            // 4. 吃食物邏輯
+            for (let i = 0; i < foods.length; i++) {
+                const f = foods[i];
+                if (Math.hypot(head.x - f.x, head.y - f.y) < BLOCK_SIZE * 0.8) {
+                    
+                    // 規則：不能吃比蛇頭（目前最大數字）還大的數字
+                    if (f.value > head.value) {
+                        endGame(`嘗試吞下比蛇頭還大的數字 (${f.value})，爆炸了！`);
+                        return;
+                    }
+
+                    // 增加一個節點到蛇尾
+                    const last = snake[snake.length - 1];
+                    snake.push({
+                        x: last.x,
+                        y: last.y,
+                        value: f.value
+                    });
+
+                    // 核心亮點：重新從大到小排序並觸發相鄰自動合併！
+                    reorderAndMergeSnake();
+
+                    // 刷新食物
+                    foods[i] = generateFood();
+                    break;
+                }
+            }
+        }
+
+        // 隨機生成食物
+        function generateFood() {
+            const possibleValues = [2, 4, 8, 16, 32, 64, 128];
+            const headVal = snake[0].value;
+
+            let val;
+            if (Math.random() < 0.6) {
+                // 有較高機率刷出適合當前蛇拼接或合併的數字
+                val = possibleValues.filter(v => v <= headVal)[Math.floor(Math.random() * possibleValues.filter(v => v <= headVal).length)] || 2;
+            } else {
+                val = possibleValues[Math.floor(Math.random() * possibleValues.length)];
+            }
+
+            return {
+                x: Math.random() * (MAP_SIZE - 300) + 150,
+                y: Math.random() * (MAP_SIZE - 300) + 150,
+                value: val
+            };
+        }
+
+        // --- 畫面渲染 ---
+        function draw() {
+            ctx.fillStyle = "#1e1e1e";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const head = snake[0];
+
+            ctx.save();
+            ctx.translate(canvas.width / 2 - head.x, canvas.height / 2 - head.y);
+
+            // 背景與邊界
+            ctx.fillStyle = "#bbada0";
+            ctx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
+
+            ctx.strokeStyle = "#ff4444";
+            ctx.lineWidth = 12;
+            ctx.strokeRect(0, 0, MAP_SIZE, MAP_SIZE);
+
+            // 網格線
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
+            ctx.lineWidth = 2;
+            const gridSpacing = 100;
+            for (let x = 0; x <= MAP_SIZE; x += gridSpacing) {
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, MAP_SIZE); ctx.stroke();
+            }
+            for (let y = 0; y <= MAP_SIZE; y += gridSpacing) {
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(MAP_SIZE, y); ctx.stroke();
+            }
+
+            // 食物
+            foods.forEach(f => drawBlock(f.x, f.y, f.value));
+
+            // 蛇身（尾至頭）
+            for (let i = snake.length - 1; i >= 0; i--) {
+                drawBlock(snake[i].x, snake[i].y, snake[i].value, i === 0);
+            }
+
+            ctx.restore();
+        }
+
+        function drawBlock(x, y, value, isHead = false) {
+            const style = colors[value] || { bg: "#3c3a32", text: "#f9f6f2" };
+            const half = BLOCK_SIZE / 2;
+
+            ctx.save();
+            ctx.translate(x, y);
+
+            ctx.fillStyle = style.bg;
+            ctx.shadowColor = "rgba(0,0,0,0.25)";
+            ctx.shadowBlur = 6;
+            ctx.beginPath();
+            ctx.roundRect(-half, -half, BLOCK_SIZE, BLOCK_SIZE, 8);
+            ctx.fill();
+
+            if (isHead) {
+                ctx.strokeStyle = "#ffffff";
+                ctx.lineWidth = 3;
+                ctx.stroke();
+            }
+
+            ctx.fillStyle = style.text;
+            ctx.font = "bold 16px Arial";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.shadowBlur = 0;
+            ctx.fillText(value, 0, 0);
+
+            ctx.restore();
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            if (!gameOver) {
+                requestAnimationFrame(gameLoop);
+            }
+        }
+
+        function endGame(msg) {
+            gameOver = true;
+            setTimeout(() => {
+                alert(msg + "\n最終得分: " + score);
+                location.reload();
+            }, 100);
+        }
+
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>
