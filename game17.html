@@ -32,7 +32,6 @@
             backdrop-filter: blur(5px);
         }
 
-        /* 即時排行榜 UI */
         .leaderboard-container {
             position: absolute;
             top: 15px;
@@ -43,7 +42,7 @@
             border-radius: 12px;
             pointer-events: none;
             backdrop-filter: blur(5px);
-            min-width: 180px;
+            min-width: 200px;
         }
 
         .leaderboard-title {
@@ -97,7 +96,6 @@
             background-color: #bbada0;
         }
 
-        /* 虛擬搖桿 UI */
         #joystick-base {
             position: absolute;
             bottom: 40px;
@@ -122,29 +120,31 @@
             box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
         }
     </style>
-</head>
-<body>
-    <div class="ui-container">
-        <h1>2048 貪吃蛇</h1>
-        <div class="score-container">玩家分數: <span id="score">0</span></div>
-        <div id="shield-ui" class="shield-status">🛡️ 防護罩倒數: <span id="shield-time">3.0</span>s</div>
-        <div class="warning-text"></div>
-    </div>
+    <!-- Firebase SDK (v9 模組化載入) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
+        import { getDatabase, ref, set, onValue, onDisconnect, remove } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-database.js";
 
-    <!-- 即時排行榜 -->
-    <div class="leaderboard-container">
-        <div class="leaderboard-title">🏆 即時排行榜</div>
-        <div id="leaderboard-list"></div>
-    </div>
+        // 初始化 Firebase
+        const firebaseConfig = {
+            databaseURL: "https://game-24b43-default-rtdb.firebaseio.com/"
+        };
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
 
-    <!-- 虛擬搖桿 -->
-    <div id="joystick-base">
-        <div id="joystick-stick"></div>
-    </div>
+        // 生成唯一玩家 ID 與隨機名字
+        const playerId = 'player_' + Math.random().toString(36).substr(2, 9);
+        const playerName = '玩家_' + Math.floor(1000 + Math.random() * 9000);
 
-    <canvas id="gameCanvas"></canvas>
+        // 常數與遊戲設定
+        const MAP_SIZE = 3600;
+        const BLOCK_SIZE = 42;
+        const SPEED = 4.5;
+        const FOOD_COUNT = 200;
+        const AI_COUNT = 8;
+        const BODY_SPACING = 28;
+        const SHIELD_DURATION = 3000;
 
-    <script>
         const canvas = document.getElementById("gameCanvas");
         const ctx = canvas.getContext("2d");
         const scoreDisplay = document.getElementById("score");
@@ -154,20 +154,10 @@
 
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
-
         window.addEventListener('resize', () => {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
         });
-
-        // 參數設定
-        const MAP_SIZE = 3600;       // 地圖大小
-        const BLOCK_SIZE = 42;       // 方塊大小
-        const SPEED = 4.5;           // 移動速度
-        const FOOD_COUNT = 250;      // 食物數量
-        const AI_COUNT = 15;         // AI 蛇數量
-        const BODY_SPACING = 28;     // 蛇節點跟隨距離
-        const SHIELD_DURATION = 3000; // 3秒無敵防護罩
 
         const colors = {
             2: { bg: "#eee4da", text: "#776e65" },
@@ -185,32 +175,58 @@
             8192: { bg: "#222222", text: "#f9f6f2" }
         };
 
-        // 玩家蛇
+        // 本地玩家角色
         let player = {
-            id: 'player',
-            name: '玩家',
+            id: playerId,
+            name: playerName,
             isAI: false,
-            body: [{ x: MAP_SIZE / 2, y: MAP_SIZE / 2, value: 2 }],
+            body: [{ x: Math.random() * (MAP_SIZE - 400) + 200, y: Math.random() * (MAP_SIZE - 400) + 200, value: 2 }],
             angle: 0,
             score: 0,
-            color: '#ffffff',
+            color: `hsl(${Math.random() * 360}, 80%, 60%)`,
             shieldUntil: Date.now() + SHIELD_DURATION
         };
 
+        let remotePlayers = {}; // 線上真人玩家
         let aiSnakes = [];
         let foods = [];
         let gameOver = false;
 
-        // 初始化食物與 AI
+        // Firebase 玩家資料節點與離線自動移除
+        const playerRef = ref(db, 'snakes/' + playerId);
+        onDisconnect(playerRef).remove();
+
+        // 監聽所有線上玩家同步
+        const snakesRef = ref(db, 'snakes');
+        onValue(snakesRef, (snapshot) => {
+            const data = snapshot.val() || {};
+            remotePlayers = {};
+            for (let id in data) {
+                if (id !== playerId) {
+                    remotePlayers[id] = data[id];
+                }
+            }
+        });
+
+        // 初始化本地 AI 與食物
         for (let i = 0; i < FOOD_COUNT; i++) foods.push(generateFood());
         for (let i = 0; i < AI_COUNT; i++) aiSnakes.push(generateAISnake(i));
+
+        function generateFood() {
+            const possibleValues = [2, 4, 8, 16, 32, 64, 128];
+            return {
+                x: Math.random() * (MAP_SIZE - 300) + 150,
+                y: Math.random() * (MAP_SIZE - 300) + 150,
+                value: possibleValues[Math.floor(Math.random() * possibleValues.length)]
+            };
+        }
 
         function generateAISnake(id) {
             const startX = Math.random() * (MAP_SIZE - 400) + 200;
             const startY = Math.random() * (MAP_SIZE - 400) + 200;
-            const baseValues = [2, 4, 8, 16, 32, 64, 128, 256];
+            const baseValues = [2, 4, 8, 16, 32, 64];
             const startVal = baseValues[Math.floor(Math.random() * baseValues.length)];
-            
+
             return {
                 id: 'ai_' + id,
                 name: 'AI-蛇王 ' + (id + 1),
@@ -221,7 +237,7 @@
                 ],
                 angle: Math.random() * Math.PI * 2,
                 score: 0,
-                color: `hsl(${Math.random() * 360}, 80%, 60%)`,
+                color: `hsl(${Math.random() * 360}, 60%, 50%)`,
                 shieldUntil: Date.now() + SHIELD_DURATION
             };
         }
@@ -279,10 +295,9 @@
             }
         }
 
-        // --- 核心邏輯：排序與連鎖合併 ---
+        // 核心邏輯：排序與連鎖合併
         function reorderAndMergeSnake(snakeObj) {
             let values = snakeObj.body.map(seg => seg.value).sort((a, b) => b - a);
-
             let mergedValues = [];
             let i = 0;
             while (i < values.length) {
@@ -290,7 +305,7 @@
                     let newVal = values[i] * 2;
                     mergedValues.push(newVal);
                     snakeObj.score += newVal;
-                    if (!snakeObj.isAI) scoreDisplay.innerText = snakeObj.score;
+                    if (snakeObj.id === playerId) scoreDisplay.innerText = snakeObj.score;
                     i += 2;
                 } else {
                     mergedValues.push(values[i]);
@@ -304,14 +319,13 @@
             }
         }
 
-        // --- AI 導航與避障機制 ---
+        // AI 導航機制
         function updateAISnake(ai) {
             const head = ai.body[0];
             let target = null;
             let minDist = Infinity;
 
             foods.forEach(f => {
-                // 不論是否有防護罩，都只找比自己頭部小或等於的食物
                 if (f.value <= head.value) {
                     const d = Math.hypot(head.x - f.x, head.y - f.y);
                     if (d < minDist) {
@@ -335,20 +349,16 @@
             }
         }
 
-        // --- 移動與基礎更新 ---
         function moveSnake(snakeObj) {
             const head = snakeObj.body[0];
-
             let nextX = head.x + Math.cos(snakeObj.angle) * SPEED;
             let nextY = head.y + Math.sin(snakeObj.angle) * SPEED;
 
-            // 1. 撞牆檢測
             if (nextX < BLOCK_SIZE / 2 || nextX > MAP_SIZE - BLOCK_SIZE / 2 ||
                 nextY < BLOCK_SIZE / 2 || nextY > MAP_SIZE - BLOCK_SIZE / 2) {
                 return false;
             }
 
-            // 2. 碰觸較大食物的物理阻擋（包含防護罩狀態，一律無法穿透大食物）
             foods.forEach(f => {
                 if (f.value > head.value) {
                     const dist = Math.hypot(nextX - f.x, nextY - f.y);
@@ -364,7 +374,6 @@
             head.x = nextX;
             head.y = nextY;
 
-            // 身體跟隨
             for (let i = 1; i < snakeObj.body.length; i++) {
                 const prev = snakeObj.body[i - 1];
                 const curr = snakeObj.body[i];
@@ -391,9 +400,9 @@
             });
         }
 
-        // --- 更新排行榜 ---
+        // 排行榜更新
         function updateLeaderboard() {
-            const allSnakes = [player, ...aiSnakes];
+            const allSnakes = [player, ...Object.values(remotePlayers), ...aiSnakes];
             allSnakes.sort((a, b) => b.score - a.score);
 
             leaderboardList.innerHTML = '';
@@ -401,19 +410,32 @@
 
             top5.forEach((s, idx) => {
                 const item = document.createElement('div');
-                item.className = 'leaderboard-item' + (s.id === 'player' ? ' is-player' : '');
-                item.innerHTML = `<span>${idx + 1}. ${s.name}</span><span>${s.score}分</span>`;
+                item.className = 'leaderboard-item' + (s.id === playerId ? ' is-player' : '');
+                const tag = s.isAI ? '🤖' : '👤';
+                item.innerHTML = `<span>${idx + 1}. ${tag} ${s.name}</span><span>${s.score}分</span>`;
                 leaderboardList.appendChild(item);
             });
         }
 
-        // --- 遊戲每幀更新 ---
+        // 定時將本地狀態同步上傳至 Firebase Realtime DB
+        setInterval(() => {
+            if (!gameOver) {
+                set(playerRef, {
+                    id: player.id,
+                    name: player.name,
+                    body: player.body,
+                    score: player.score,
+                    color: player.color,
+                    shieldUntil: player.shieldUntil
+                });
+            }
+        }, 80);
+
         function update() {
             if (gameOver) return;
 
             processKeyboardInput();
 
-            // 防護罩 UI
             const pShieldRemaining = Math.max(0, (player.shieldUntil - Date.now()) / 1000);
             if (pShieldRemaining > 0) {
                 shieldTimeDisplay.innerText = pShieldRemaining.toFixed(1);
@@ -438,55 +460,33 @@
                 }
             }
 
-            const allSnakes = [player, ...aiSnakes];
+            const allOtherSnakes = [...Object.values(remotePlayers), ...aiSnakes];
 
-            // 3. 身體碰撞檢測（僅對「其他蛇」的身體做死亡判定）
-            let deadAISet = new Set();
+            // 3. 身體碰撞檢測 (撞到別人的身體)
+            const head = player.body[0];
+            const isShielded = Date.now() < player.shieldUntil;
 
-            allSnakes.forEach(attacker => {
-                const head = attacker.body[0];
-                const isShielded = Date.now() < attacker.shieldUntil;
-
-                // 防護罩作用：免疫被殺（撞到別人的身體不會死）
-                if (isShielded) return;
-
-                allSnakes.forEach(target => {
-                    // 忽略自己的身體，只檢查撞到「其他蛇」
-                    if (attacker.id !== target.id) {
-                        for (let k = 0; k < target.body.length; k++) {
-                            const seg = target.body[k];
+            if (!isShielded) {
+                for (let other of allOtherSnakes) {
+                    if (other.body) {
+                        for (let k = 0; k < other.body.length; k++) {
+                            const seg = other.body[k];
                             if (Math.hypot(head.x - seg.x, head.y - seg.y) < BLOCK_SIZE * 0.75) {
-                                if (!attacker.isAI) {
-                                    endGame(`撞到了【${target.name}】的身體！`);
-                                } else {
-                                    deadAISet.add(attacker);
-                                }
-                                break;
+                                endGame(`撞到了【${other.name}】的身體！`);
+                                return;
                             }
                         }
                     }
-                });
-            });
-
-            // 清理死亡的 AI 蛇
-            if (deadAISet.size > 0) {
-                deadAISet.forEach(deadAi => {
-                    killSnake(deadAi);
-                    aiSnakes = aiSnakes.filter(s => s !== deadAi);
-                    aiSnakes.push(generateAISnake(Math.floor(Math.random() * 1000)));
-                });
+                }
             }
 
-            // 4. 吃食物邏輯（無論是否有防護罩，大於頭部數值的食物一律不能吃）
-            allSnakes.forEach(s => {
-                if (deadAISet.has(s)) return;
-                const head = s.body[0];
-
+            // 4. 吃食物邏輯
+            [player, ...aiSnakes].forEach(s => {
+                const sHead = s.body[0];
                 for (let i = foods.length - 1; i >= 0; i--) {
                     const f = foods[i];
-                    if (Math.hypot(head.x - f.x, head.y - f.y) < BLOCK_SIZE * 0.8) {
-                        // 數值判定：比頭部大的數字無法吃下
-                        if (f.value > head.value) continue;
+                    if (Math.hypot(sHead.x - f.x, sHead.y - f.y) < BLOCK_SIZE * 0.8) {
+                        if (f.value > sHead.value) continue;
 
                         const last = s.body[s.body.length - 1];
                         s.body.push({ x: last.x, y: last.y, value: f.value });
@@ -498,20 +498,10 @@
                 }
             });
 
-            // 5. 排行榜
             updateLeaderboard();
         }
 
-        function generateFood() {
-            const possibleValues = [2, 4, 8, 16, 32, 64, 128];
-            return {
-                x: Math.random() * (MAP_SIZE - 300) + 150,
-                y: Math.random() * (MAP_SIZE - 300) + 150,
-                value: possibleValues[Math.floor(Math.random() * possibleValues.length)]
-            };
-        }
-
-        // --- 畫面渲染 ---
+        // 渲染畫面
         function draw() {
             ctx.fillStyle = "#1e1e1e";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -521,7 +511,7 @@
             ctx.save();
             ctx.translate(canvas.width / 2 - head.x, canvas.height / 2 - head.y);
 
-            // 背景地圖
+            // 地圖背景
             ctx.fillStyle = "#bbada0";
             ctx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
 
@@ -529,7 +519,7 @@
             ctx.lineWidth = 12;
             ctx.strokeRect(0, 0, MAP_SIZE, MAP_SIZE);
 
-            // 網格線
+            // 網格
             ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
             ctx.lineWidth = 2;
             for (let x = 0; x <= MAP_SIZE; x += 100) {
@@ -542,7 +532,7 @@
             // 食物
             foods.forEach(f => drawBlock(f.x, f.y, f.value));
 
-            // 所有 AI 蛇
+            // AI 蛇
             aiSnakes.forEach(ai => {
                 const isShielded = Date.now() < ai.shieldUntil;
                 for (let i = ai.body.length - 1; i >= 0; i--) {
@@ -550,10 +540,20 @@
                 }
             });
 
-            // 玩家蛇
+            // 其他真人連線玩家
+            Object.values(remotePlayers).forEach(rp => {
+                if (rp.body && rp.body.length > 0) {
+                    const isShielded = Date.now() < (rp.shieldUntil || 0);
+                    for (let i = rp.body.length - 1; i >= 0; i--) {
+                        drawBlock(rp.body[i].x, rp.body[i].y, rp.body[i].value, i === 0, rp.color || "#00ffff", rp.name, isShielded);
+                    }
+                }
+            });
+
+            // 本地玩家蛇
             const isPlayerShielded = Date.now() < player.shieldUntil;
             for (let i = player.body.length - 1; i >= 0; i--) {
-                drawBlock(player.body[i].x, player.body[i].y, player.body[i].value, i === 0, "#ffffff", "玩家", isPlayerShielded);
+                drawBlock(player.body[i].x, player.body[i].y, player.body[i].value, i === 0, player.color, player.name, isPlayerShielded);
             }
 
             ctx.restore();
@@ -566,7 +566,6 @@
             ctx.save();
             ctx.translate(x, y);
 
-            // 防護罩光圈
             if (isHead && isShielded) {
                 ctx.beginPath();
                 ctx.arc(0, 0, BLOCK_SIZE * 0.9, 0, Math.PI * 2);
@@ -617,6 +616,7 @@
 
         function endGame(msg) {
             gameOver = true;
+            remove(playerRef);
             setTimeout(() => {
                 alert(msg + "\n最終得分: " + player.score);
                 location.reload();
@@ -625,5 +625,26 @@
 
         requestAnimationFrame(gameLoop);
     </script>
+</head>
+<body>
+    <div class="ui-container">
+        <h1>2048 貪吃蛇</h1>
+        <div class="score-container">玩家分數: <span id="score">0</span></div>
+        <div id="shield-ui" class="shield-status">🛡️ 防護罩倒數: <span id="shield-time">3.0</span>s</div>
+        <div class="warning-text">可邀請好友進入同一網頁！</div>
+    </div>
+
+    <!-- 即時排行榜 -->
+    <div class="leaderboard-container">
+        <div class="leaderboard-title">🏆 即時大亂鬥排行榜</div>
+        <div id="leaderboard-list"></div>
+    </div>
+
+    <!-- 虛擬搖桿 -->
+    <div id="joystick-base">
+        <div id="joystick-stick"></div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
 </body>
 </html>
