@@ -20,9 +20,10 @@
             touch-action: none;
         }
 
+        /* 預留導覽列空間 (top 設為 70px) */
         .ui-container {
             position: absolute;
-            top: 15px;
+            top: 70px;
             left: 15px;
             z-index: 10;
             background: rgba(0, 0, 0, 0.65);
@@ -34,25 +35,48 @@
 
         .leaderboard-container {
             position: absolute;
-            top: 15px;
+            top: 70px;
             right: 15px;
             z-index: 10;
             background: rgba(0, 0, 0, 0.65);
             padding: 12px 18px;
             border-radius: 12px;
-            pointer-events: none;
             backdrop-filter: blur(5px);
             min-width: 200px;
+            transition: all 0.3s ease;
+        }
+
+        .leaderboard-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            padding-bottom: 4px;
+            margin-bottom: 8px;
         }
 
         .leaderboard-title {
             font-size: 14px;
             font-weight: bold;
             color: #edc22e;
-            margin-bottom: 8px;
-            text-align: center;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-            padding-bottom: 4px;
+        }
+
+        .toggle-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: #fff;
+            font-size: 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            padding: 2px 6px;
+        }
+
+        .leaderboard-list {
+            display: block;
+        }
+
+        .leaderboard-container.collapsed .leaderboard-list {
+            display: none;
         }
 
         .leaderboard-item {
@@ -67,10 +91,10 @@
             font-weight: bold;
         }
 
-        /* 擊殺播報樣式 */
+        /* 擊殺播報容器 (避開導覽列) */
         .kill-feed-container {
             position: absolute;
-            top: 15px;
+            top: 70px;
             left: 50%;
             transform: translateX(-50%);
             z-index: 10;
@@ -94,17 +118,98 @@
             backdrop-filter: blur(4px);
         }
 
-        .kill-msg .killer {
-            color: #ffd700;
-        }
-
-        .kill-msg .victim {
-            color: #ff6b6b;
-        }
+        .kill-msg .killer { color: #ffd700; }
+        .kill-msg .victim { color: #ff6b6b; }
 
         @keyframes fadeIn {
-            from { opacity: 0; transform: translate(-50%, -10px); }
-            to { opacity: 1; transform: translate(-50%, 0); }
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* 進入遊戲前的設定選單 Overlay */
+        #start-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 100;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            backdrop-filter: blur(8px);
+        }
+
+        .start-card {
+            background: rgba(30, 30, 30, 0.95);
+            padding: 25px 30px;
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            width: 320px;
+            text-align: center;
+        }
+
+        .start-card h2 {
+            margin-top: 0;
+            color: #edc22e;
+        }
+
+        .input-group {
+            margin-bottom: 18px;
+            text-align: left;
+        }
+
+        .input-group label {
+            display: block;
+            font-size: 14px;
+            margin-bottom: 6px;
+            color: #ccc;
+        }
+
+        .input-group input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #444;
+            background: #222;
+            color: #fff;
+            font-size: 14px;
+            outline: none;
+        }
+
+        .color-picker-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .color-picker-container input[type="color"] {
+            -webkit-appearance: none;
+            border: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            cursor: pointer;
+            background: none;
+        }
+
+        .start-btn {
+            width: 100%;
+            padding: 12px;
+            background: #edc22e;
+            color: #111;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .start-btn:hover {
+            background: #f5d76e;
         }
 
         h1 {
@@ -122,12 +227,6 @@
             font-size: 13px;
             color: #51cf66;
             font-weight: bold;
-            margin-top: 4px;
-        }
-
-        .warning-text {
-            font-size: 12px;
-            color: #ff6b6b;
             margin-top: 4px;
         }
 
@@ -172,7 +271,6 @@
         const db = getDatabase(app);
 
         const playerId = 'player_' + Math.random().toString(36).substr(2, 9);
-        const playerName = '玩家_' + Math.floor(1000 + Math.random() * 9000);
 
         const MAP_SIZE = 3600;
         const BLOCK_SIZE = 42;
@@ -214,14 +312,15 @@
             8192: { bg: "#222222", text: "#f9f6f2" }
         };
 
+        let gameStarted = false;
         let player = {
             id: playerId,
-            name: playerName,
+            name: '',
             isAI: false,
             body: [{ x: Math.random() * (MAP_SIZE - 400) + 200, y: Math.random() * (MAP_SIZE - 400) + 200, value: 2 }],
             angle: 0,
             score: 0,
-            color: `hsl(${Math.random() * 360}, 80%, 60%)`,
+            color: '#edc22e',
             shieldUntil: Date.now() + SHIELD_DURATION,
             lastMoved: Date.now()
         };
@@ -230,9 +329,37 @@
         let aiSnakes = [];
         let foods = [];
         let gameOver = false;
+        let playerRef = null;
 
-        const playerRef = ref(db, 'snakes/' + playerId);
-        onDisconnect(playerRef).remove();
+        // 排行榜收合/展開邏輯
+        const leaderboardContainer = document.getElementById("leaderboard-container");
+        const toggleBtn = document.getElementById("toggle-leaderboard");
+        toggleBtn.addEventListener("click", () => {
+            leaderboardContainer.classList.toggle("collapsed");
+            toggleBtn.innerText = leaderboardContainer.classList.contains("collapsed") ? "展開" : "隱藏";
+        });
+
+        // 啟動選單設定
+        const startOverlay = document.getElementById("start-overlay");
+        const nameInput = document.getElementById("player-name-input");
+        const colorInput = document.getElementById("player-color-input");
+        const startBtn = document.getElementById("start-game-btn");
+
+        nameInput.value = '玩家_' + Math.floor(1000 + Math.random() * 9000);
+
+        startBtn.addEventListener("click", () => {
+            player.name = nameInput.value.trim() || '無名蛇';
+            player.color = colorInput.value;
+            player.shieldUntil = Date.now() + SHIELD_DURATION;
+            player.lastMoved = Date.now();
+
+            playerRef = ref(db, 'snakes/' + playerId);
+            onDisconnect(playerRef).remove();
+
+            startOverlay.style.display = "none";
+            gameStarted = true;
+            requestAnimationFrame(gameLoop);
+        });
 
         const snakesRef = ref(db, 'snakes');
         onValue(snakesRef, (snapshot) => {
@@ -300,7 +427,7 @@
             }, 3000);
         }
 
-        // --- 搖桿與鍵盤控制 ---
+        // 搖桿與鍵盤控制
         const joyBase = document.getElementById("joystick-base");
         const joyStick = document.getElementById("joystick-stick");
         let joyActive = false;
@@ -476,7 +603,7 @@
         }
 
         setInterval(() => {
-            if (!gameOver) {
+            if (gameStarted && !gameOver && playerRef) {
                 set(playerRef, {
                     id: player.id,
                     name: player.name,
@@ -490,7 +617,7 @@
         }, 80);
 
         function update() {
-            if (gameOver) return;
+            if (!gameStarted || gameOver) return;
 
             processKeyboardInput();
 
@@ -526,7 +653,7 @@
 
             const allOtherSnakes = [...Object.values(remotePlayers), ...aiSnakes];
 
-            // 4. 玩家碰撞檢測（帶擊殺播報）
+            // 玩家碰撞檢測
             const head = player.body[0];
             const isShielded = now < player.shieldUntil;
 
@@ -545,7 +672,7 @@
                 }
             }
 
-            // 4.5 AI 蛇碰撞檢測（帶擊殺播報）
+            // AI 蛇碰撞檢測
             for (let i = aiSnakes.length - 1; i >= 0; i--) {
                 const ai = aiSnakes[i];
                 if (now < ai.shieldUntil) continue;
@@ -572,7 +699,7 @@
                 }
             }
 
-            // 5. 吃食物邏輯
+            // 吃食物邏輯
             [player, ...aiSnakes].forEach(s => {
                 const sHead = s.body[0];
                 for (let i = foods.length - 1; i >= 0; i--) {
@@ -596,6 +723,8 @@
         function draw() {
             ctx.fillStyle = "#1e1e1e";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            if (!gameStarted) return;
 
             const head = player.body[0];
 
@@ -694,21 +823,19 @@
         function gameLoop() {
             update();
             draw();
-            if (!gameOver) {
+            if (!gameOver && gameStarted) {
                 requestAnimationFrame(gameLoop);
             }
         }
 
         function endGame(msg) {
             gameOver = true;
-            remove(playerRef);
+            if (playerRef) remove(playerRef);
             setTimeout(() => {
                 alert(msg + "\n最終得分: " + player.score);
                 location.reload();
             }, 100);
         }
-
-        requestAnimationFrame(gameLoop);
     </script>
 </head>
 <body>
@@ -716,19 +843,42 @@
     <div id="nav_bar"></div>
     <script src="menu.js"></script>
 
+    <!-- 進入遊戲設定視窗 -->
+    <div id="start-overlay">
+        <div class="start-card">
+            <h2>遊戲設定</h2>
+            <div class="input-group">
+                <label for="player-name-input">玩家暱稱</label>
+                <input type="text" id="player-name-input" maxlength="10" placeholder="輸入你的暱稱">
+            </div>
+            <div class="input-group">
+                <label for="player-color-input">外框顏色</label>
+                <div class="color-picker-container">
+                    <input type="color" id="player-color-input" value="#edc22e">
+                    <span style="font-size: 13px; color: #aaa;">點擊選擇蛇頭顏色</span>
+                </div>
+            </div>
+            <button class="start-btn" id="start-game-btn">開始遊戲</button>
+        </div>
+    </div>
+
+    <!-- UI 計分板 -->
     <div class="ui-container">
         <h1>2048 貪吃蛇</h1>
         <div class="score-container">玩家分數: <span id="score">0</span></div>
         <div id="shield-ui" class="shield-status">🛡️ 防護罩倒數: <span id="shield-time">3.0</span>s</div>
-        <div class="warning-text"></div>
     </div>
 
     <!-- 擊殺播報容器 -->
     <div class="kill-feed-container" id="kill-feed"></div>
 
-    <div class="leaderboard-container">
-        <div class="leaderboard-title">🏆 即時排行榜</div>
-        <div id="leaderboard-list"></div>
+    <!-- 排行榜 (支援折疊) -->
+    <div class="leaderboard-container" id="leaderboard-container">
+        <div class="leaderboard-header">
+            <span class="leaderboard-title">🏆 即時排行榜</span>
+            <button class="toggle-btn" id="toggle-leaderboard">隱藏</button>
+        </div>
+        <div class="leaderboard-list" id="leaderboard-list"></div>
     </div>
 
     <div id="joystick-base">
