@@ -120,23 +120,20 @@
             box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
         }
     </style>
-    <!-- Firebase SDK (v9 模組化載入) -->
+    <!-- Firebase SDK -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
         import { getDatabase, ref, set, onValue, onDisconnect, remove } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-database.js";
 
-        // 初始化 Firebase
         const firebaseConfig = {
             databaseURL: "https://game-24b43-default-rtdb.firebaseio.com/"
         };
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
 
-        // 生成唯一玩家 ID 與隨機名字
         const playerId = 'player_' + Math.random().toString(36).substr(2, 9);
         const playerName = '玩家_' + Math.floor(1000 + Math.random() * 9000);
 
-        // 常數與遊戲設定
         const MAP_SIZE = 3600;
         const BLOCK_SIZE = 42;
         const SPEED = 4.5;
@@ -144,6 +141,7 @@
         const AI_COUNT = 8;
         const BODY_SPACING = 28;
         const SHIELD_DURATION = 3000;
+        const AFK_TIMEOUT = 15000; // 閒置判斷門檻：15秒無移動即視為沒在動
 
         const canvas = document.getElementById("gameCanvas");
         const ctx = canvas.getContext("2d");
@@ -175,7 +173,6 @@
             8192: { bg: "#222222", text: "#f9f6f2" }
         };
 
-        // 本地玩家角色
         let player = {
             id: playerId,
             name: playerName,
@@ -184,31 +181,37 @@
             angle: 0,
             score: 0,
             color: `hsl(${Math.random() * 360}, 80%, 60%)`,
-            shieldUntil: Date.now() + SHIELD_DURATION
+            shieldUntil: Date.now() + SHIELD_DURATION,
+            lastMoved: Date.now()
         };
 
-        let remotePlayers = {}; // 線上真人玩家
+        let remotePlayers = {}; 
         let aiSnakes = [];
         let foods = [];
         let gameOver = false;
 
-        // Firebase 玩家資料節點與離線自動移除
         const playerRef = ref(db, 'snakes/' + playerId);
         onDisconnect(playerRef).remove();
 
-        // 監聽所有線上玩家同步
         const snakesRef = ref(db, 'snakes');
         onValue(snakesRef, (snapshot) => {
             const data = snapshot.val() || {};
+            const now = Date.now();
             remotePlayers = {};
+            
             for (let id in data) {
                 if (id !== playerId) {
-                    remotePlayers[id] = data[id];
+                    const rp = data[id];
+                    // 伺服器端同步過濾：若該玩家超過 15 秒無更新時間戳記，自動忽視並協助清除殘留節點
+                    if (rp.lastUpdated && now - rp.lastUpdated > AFK_TIMEOUT) {
+                        remove(ref(db, 'snakes/' + id));
+                    } else {
+                        remotePlayers[id] = rp;
+                    }
                 }
             }
         });
 
-        // 初始化本地 AI 與食物
         for (let i = 0; i < FOOD_COUNT; i++) foods.push(generateFood());
         for (let i = 0; i < AI_COUNT; i++) aiSnakes.push(generateAISnake(i));
 
@@ -238,11 +241,12 @@
                 angle: Math.random() * Math.PI * 2,
                 score: 0,
                 color: `hsl(${Math.random() * 360}, 60%, 50%)`,
-                shieldUntil: Date.now() + SHIELD_DURATION
+                shieldUntil: Date.now() + SHIELD_DURATION,
+                lastMoved: Date.now()
             };
         }
 
-        // --- 搖桿控制 ---
+        // --- 搖桿與鍵盤控制 ---
         const joyBase = document.getElementById("joystick-base");
         const joyStick = document.getElementById("joystick-stick");
         let joyActive = false;
@@ -278,7 +282,6 @@
         window.addEventListener("mousemove", handleJoystickMove);
         window.addEventListener("mouseup", handleJoystickEnd);
 
-        // 鍵盤支援
         const keys = {};
         window.addEventListener("keydown", e => keys[e.key] = true);
         window.addEventListener("keyup", e => keys[e.key] = false);
@@ -295,7 +298,6 @@
             }
         }
 
-        // 核心邏輯：排序與連鎖合併
         function reorderAndMergeSnake(snakeObj) {
             let values = snakeObj.body.map(seg => seg.value).sort((a, b) => b - a);
             let mergedValues = [];
@@ -319,7 +321,6 @@
             }
         }
 
-        // AI 導航機制
         function updateAISnake(ai) {
             const head = ai.body[0];
             let target = null;
@@ -353,6 +354,11 @@
             const head = snakeObj.body[0];
             let nextX = head.x + Math.cos(snakeObj.angle) * SPEED;
             let nextY = head.y + Math.sin(snakeObj.angle) * SPEED;
+
+            // 檢查是否有實質移動
+            if (Math.abs(nextX - head.x) > 0.01 || Math.abs(nextY - head.y) > 0.01) {
+                snakeObj.lastMoved = Date.now();
+            }
 
             if (nextX < BLOCK_SIZE / 2 || nextX > MAP_SIZE - BLOCK_SIZE / 2 ||
                 nextY < BLOCK_SIZE / 2 || nextY > MAP_SIZE - BLOCK_SIZE / 2) {
@@ -400,7 +406,6 @@
             });
         }
 
-        // 排行榜更新
         function updateLeaderboard() {
             const allSnakes = [player, ...Object.values(remotePlayers), ...aiSnakes];
             allSnakes.sort((a, b) => b.score - a.score);
@@ -417,7 +422,7 @@
             });
         }
 
-        // 定時將本地狀態同步上傳至 Firebase Realtime DB
+        // 即時上傳狀態與最後移動時間戳記
         setInterval(() => {
             if (!gameOver) {
                 set(playerRef, {
@@ -426,7 +431,8 @@
                     body: player.body,
                     score: player.score,
                     color: player.color,
-                    shieldUntil: player.shieldUntil
+                    shieldUntil: player.shieldUntil,
+                    lastUpdated: Date.now()
                 });
             }
         }, 80);
@@ -436,24 +442,34 @@
 
             processKeyboardInput();
 
-            const pShieldRemaining = Math.max(0, (player.shieldUntil - Date.now()) / 1000);
+            const now = Date.now();
+
+            // 1. 本地玩家閒置檢測
+            if (now - player.lastMoved > AFK_TIMEOUT) {
+                endGame("因閒置超過 15 秒未移動，已自動清理退出遊戲！");
+                return;
+            }
+
+            const pShieldRemaining = Math.max(0, (player.shieldUntil - now) / 1000);
             if (pShieldRemaining > 0) {
                 shieldTimeDisplay.innerText = pShieldRemaining.toFixed(1);
             } else {
                 shieldUi.style.display = 'none';
             }
 
-            // 1. 移動玩家
+            // 2. 移動玩家
             if (!moveSnake(player)) {
                 endGame("撞到地圖邊界牆壁了！");
                 return;
             }
 
-            // 2. 移動 AI 蛇
+            // 3. 移動與清理 AI 蛇
             for (let i = aiSnakes.length - 1; i >= 0; i--) {
                 const ai = aiSnakes[i];
                 updateAISnake(ai);
-                if (!moveSnake(ai)) {
+                
+                // AI 閒置或撞牆直接清理並重新生成
+                if (!moveSnake(ai) || (now - ai.lastMoved > AFK_TIMEOUT)) {
                     killSnake(ai);
                     aiSnakes.splice(i, 1);
                     aiSnakes.push(generateAISnake(Math.floor(Math.random() * 1000)));
@@ -462,9 +478,9 @@
 
             const allOtherSnakes = [...Object.values(remotePlayers), ...aiSnakes];
 
-            // 3. 身體碰撞檢測 (撞到別人的身體)
+            // 4. 碰撞檢測
             const head = player.body[0];
-            const isShielded = Date.now() < player.shieldUntil;
+            const isShielded = now < player.shieldUntil;
 
             if (!isShielded) {
                 for (let other of allOtherSnakes) {
@@ -480,7 +496,7 @@
                 }
             }
 
-            // 4. 吃食物邏輯
+            // 5. 吃食物邏輯
             [player, ...aiSnakes].forEach(s => {
                 const sHead = s.body[0];
                 for (let i = foods.length - 1; i >= 0; i--) {
@@ -501,7 +517,6 @@
             updateLeaderboard();
         }
 
-        // 渲染畫面
         function draw() {
             ctx.fillStyle = "#1e1e1e";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -511,7 +526,6 @@
             ctx.save();
             ctx.translate(canvas.width / 2 - head.x, canvas.height / 2 - head.y);
 
-            // 地圖背景
             ctx.fillStyle = "#bbada0";
             ctx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
 
@@ -519,7 +533,6 @@
             ctx.lineWidth = 12;
             ctx.strokeRect(0, 0, MAP_SIZE, MAP_SIZE);
 
-            // 網格
             ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
             ctx.lineWidth = 2;
             for (let x = 0; x <= MAP_SIZE; x += 100) {
@@ -529,10 +542,8 @@
                 ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(MAP_SIZE, y); ctx.stroke();
             }
 
-            // 食物
             foods.forEach(f => drawBlock(f.x, f.y, f.value));
 
-            // AI 蛇
             aiSnakes.forEach(ai => {
                 const isShielded = Date.now() < ai.shieldUntil;
                 for (let i = ai.body.length - 1; i >= 0; i--) {
@@ -540,7 +551,6 @@
                 }
             });
 
-            // 其他真人連線玩家
             Object.values(remotePlayers).forEach(rp => {
                 if (rp.body && rp.body.length > 0) {
                     const isShielded = Date.now() < (rp.shieldUntil || 0);
@@ -550,7 +560,6 @@
                 }
             });
 
-            // 本地玩家蛇
             const isPlayerShielded = Date.now() < player.shieldUntil;
             for (let i = player.body.length - 1; i >= 0; i--) {
                 drawBlock(player.body[i].x, player.body[i].y, player.body[i].value, i === 0, player.color, player.name, isPlayerShielded);
@@ -631,16 +640,14 @@
         <h1>2048 貪吃蛇</h1>
         <div class="score-container">玩家分數: <span id="score">0</span></div>
         <div id="shield-ui" class="shield-status">🛡️ 防護罩倒數: <span id="shield-time">3.0</span>s</div>
-        <div class="warning-text">可邀請好友進入同一網頁！</div>
+        <div class="warning-text"></div>
     </div>
 
-    <!-- 即時排行榜 -->
     <div class="leaderboard-container">
-        <div class="leaderboard-title">🏆 即時大亂鬥排行榜</div>
+        <div class="leaderboard-title">🏆 即時排行榜</div>
         <div id="leaderboard-list"></div>
     </div>
 
-    <!-- 虛擬搖桿 -->
     <div id="joystick-base">
         <div id="joystick-stick"></div>
     </div>
