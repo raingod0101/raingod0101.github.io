@@ -67,6 +67,46 @@
             font-weight: bold;
         }
 
+        /* 擊殺播報樣式 */
+        .kill-feed-container {
+            position: absolute;
+            top: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            pointer-events: none;
+        }
+
+        .kill-msg {
+            background: rgba(0, 0, 0, 0.75);
+            color: #fff;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+            animation: fadeIn 0.3s ease-out;
+            backdrop-filter: blur(4px);
+        }
+
+        .kill-msg .killer {
+            color: #ffd700;
+        }
+
+        .kill-msg .victim {
+            color: #ff6b6b;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translate(-50%, -10px); }
+            to { opacity: 1; transform: translate(-50%, 0); }
+        }
+
         h1 {
             font-size: 20px;
             margin: 0 0 5px 0;
@@ -141,7 +181,7 @@
         const AI_COUNT = 8;
         const BODY_SPACING = 28;
         const SHIELD_DURATION = 3000;
-        const AFK_TIMEOUT = 15000; // 閒置判斷門檻：15秒無移動即視為沒在動
+        const AFK_TIMEOUT = 15000;
 
         const canvas = document.getElementById("gameCanvas");
         const ctx = canvas.getContext("2d");
@@ -149,6 +189,7 @@
         const shieldUi = document.getElementById("shield-ui");
         const shieldTimeDisplay = document.getElementById("shield-time");
         const leaderboardList = document.getElementById("leaderboard-list");
+        const killFeedContainer = document.getElementById("kill-feed");
 
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
@@ -202,7 +243,6 @@
             for (let id in data) {
                 if (id !== playerId) {
                     const rp = data[id];
-                    // 伺服器端同步過濾：若該玩家超過 15 秒無更新時間戳記，自動忽視並協助清除殘留節點
                     if (rp.lastUpdated && now - rp.lastUpdated > AFK_TIMEOUT) {
                         remove(ref(db, 'snakes/' + id));
                     } else {
@@ -244,6 +284,20 @@
                 shieldUntil: Date.now() + SHIELD_DURATION,
                 lastMoved: Date.now()
             };
+        }
+
+        function showKillAnnouncement(killerName, victimName) {
+            const msg = document.createElement("div");
+            msg.className = "kill-msg";
+            msg.innerHTML = `<span class="killer">⚔️ ${killerName}</span> 擊殺了 <span class="victim">${victimName}</span>`;
+            
+            killFeedContainer.appendChild(msg);
+
+            setTimeout(() => {
+                msg.style.transition = "opacity 0.5s ease";
+                msg.style.opacity = "0";
+                setTimeout(() => msg.remove(), 500);
+            }, 3000);
         }
 
         // --- 搖桿與鍵盤控制 ---
@@ -355,7 +409,6 @@
             let nextX = head.x + Math.cos(snakeObj.angle) * SPEED;
             let nextY = head.y + Math.sin(snakeObj.angle) * SPEED;
 
-            // 檢查是否有實質移動
             if (Math.abs(nextX - head.x) > 0.01 || Math.abs(nextY - head.y) > 0.01) {
                 snakeObj.lastMoved = Date.now();
             }
@@ -422,7 +475,6 @@
             });
         }
 
-        // 即時上傳狀態與最後移動時間戳記
         setInterval(() => {
             if (!gameOver) {
                 set(playerRef, {
@@ -444,7 +496,6 @@
 
             const now = Date.now();
 
-            // 1. 本地玩家閒置檢測
             if (now - player.lastMoved > AFK_TIMEOUT) {
                 endGame("因閒置超過 15 秒未移動，已自動清理退出遊戲！");
                 return;
@@ -457,18 +508,15 @@
                 shieldUi.style.display = 'none';
             }
 
-            // 2. 移動玩家
             if (!moveSnake(player)) {
                 endGame("撞到地圖邊界牆壁了！");
                 return;
             }
 
-            // 3. 移動與清理 AI 蛇
             for (let i = aiSnakes.length - 1; i >= 0; i--) {
                 const ai = aiSnakes[i];
                 updateAISnake(ai);
                 
-                // AI 閒置或撞牆直接清理並重新生成
                 if (!moveSnake(ai) || (now - ai.lastMoved > AFK_TIMEOUT)) {
                     killSnake(ai);
                     aiSnakes.splice(i, 1);
@@ -478,7 +526,7 @@
 
             const allOtherSnakes = [...Object.values(remotePlayers), ...aiSnakes];
 
-            // 4. 碰撞檢測
+            // 4. 玩家碰撞檢測（帶擊殺播報）
             const head = player.body[0];
             const isShielded = now < player.shieldUntil;
 
@@ -488,8 +536,36 @@
                         for (let k = 0; k < other.body.length; k++) {
                             const seg = other.body[k];
                             if (Math.hypot(head.x - seg.x, head.y - seg.y) < BLOCK_SIZE * 0.75) {
+                                showKillAnnouncement(other.name, player.name);
                                 endGame(`撞到了【${other.name}】的身體！`);
                                 return;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 4.5 AI 蛇碰撞檢測（帶擊殺播報）
+            for (let i = aiSnakes.length - 1; i >= 0; i--) {
+                const ai = aiSnakes[i];
+                if (now < ai.shieldUntil) continue;
+
+                const aiHead = ai.body[0];
+                const targetSnakes = [player, ...Object.values(remotePlayers), ...aiSnakes.filter(s => s.id !== ai.id)];
+
+                let died = false;
+                for (let other of targetSnakes) {
+                    if (died) break;
+                    if (other.body) {
+                        for (let k = 0; k < other.body.length; k++) {
+                            const seg = other.body[k];
+                            if (Math.hypot(aiHead.x - seg.x, aiHead.y - seg.y) < BLOCK_SIZE * 0.75) {
+                                showKillAnnouncement(other.name, ai.name);
+                                killSnake(ai);
+                                aiSnakes.splice(i, 1);
+                                aiSnakes.push(generateAISnake(Math.floor(Math.random() * 1000)));
+                                died = true;
+                                break;
                             }
                         }
                     }
@@ -637,16 +713,18 @@
 </head>
 <body>
     <link rel="stylesheet" href="menu.css">
+    <div id="nav_bar"></div>
+    <script src="menu.js"></script>
 
-<div id="nav_bar"></div>
-
-<script src="menu.js"></script>
     <div class="ui-container">
         <h1>2048 貪吃蛇</h1>
         <div class="score-container">玩家分數: <span id="score">0</span></div>
         <div id="shield-ui" class="shield-status">🛡️ 防護罩倒數: <span id="shield-time">3.0</span>s</div>
         <div class="warning-text"></div>
     </div>
+
+    <!-- 擊殺播報容器 -->
+    <div class="kill-feed-container" id="kill-feed"></div>
 
     <div class="leaderboard-container">
         <div class="leaderboard-title">🏆 即時排行榜</div>
