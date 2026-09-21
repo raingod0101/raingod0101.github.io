@@ -91,7 +91,7 @@
             font-weight: bold;
         }
 
-        /* 擊殺播報容器 (降至 130px 避免擋到排行榜與 UI) */
+        /* 擊殺播報容器 */
         .kill-feed-container {
             position: absolute;
             top: 130px;
@@ -331,6 +331,12 @@
         let gameOver = false;
         let playerRef = null;
 
+        // 判斷當前玩家是否為 Host（ID 字典序最小者為房主，負責 AI 運算）
+        function isHost() {
+            const allIds = [playerId, ...Object.keys(remotePlayers)].sort();
+            return allIds[0] === playerId;
+        }
+
         // 排行榜收合/展開邏輯
         const leaderboardContainer = document.getElementById("leaderboard-container");
         const toggleBtn = document.getElementById("toggle-leaderboard");
@@ -361,6 +367,7 @@
             requestAnimationFrame(gameLoop);
         });
 
+        // 監聽所有玩家
         const snakesRef = ref(db, 'snakes');
         onValue(snakesRef, (snapshot) => {
             const data = snapshot.val() || {};
@@ -375,6 +382,19 @@
                     } else {
                         remotePlayers[id] = rp;
                     }
+                }
+            }
+        });
+
+        // 監聽 AI 蛇資料同步 (非 Host 玩家使用同步下來的 AI)
+        const aiRef = ref(db, 'aiSnakes');
+        onValue(aiRef, (snapshot) => {
+            if (!isHost()) {
+                const data = snapshot.val();
+                if (data) {
+                    aiSnakes = Array.isArray(data) ? data : Object.values(data);
+                } else {
+                    aiSnakes = [];
                 }
             }
         });
@@ -602,8 +622,10 @@
             });
         }
 
+        // 資料寫入與同步循環
         setInterval(() => {
             if (gameStarted && !gameOver && playerRef) {
+                // 1. 寫入本地玩家資料
                 set(playerRef, {
                     id: player.id,
                     name: player.name,
@@ -613,6 +635,11 @@
                     shieldUntil: player.shieldUntil,
                     lastUpdated: Date.now()
                 });
+
+                // 2. 若自己是 Host 房主，同步 AI 資料至 Firebase
+                if (isHost()) {
+                    set(ref(db, 'aiSnakes'), aiSnakes);
+                }
             }
         }, 80);
 
@@ -640,14 +667,17 @@
                 return;
             }
 
-            for (let i = aiSnakes.length - 1; i >= 0; i--) {
-                const ai = aiSnakes[i];
-                updateAISnake(ai);
-                
-                if (!moveSnake(ai) || (now - ai.lastMoved > AFK_TIMEOUT)) {
-                    killSnake(ai);
-                    aiSnakes.splice(i, 1);
-                    aiSnakes.push(generateAISnake(Math.floor(Math.random() * 1000)));
+            // 僅 Host 房主玩家計算 AI 的移動與生成
+            if (isHost()) {
+                for (let i = aiSnakes.length - 1; i >= 0; i--) {
+                    const ai = aiSnakes[i];
+                    updateAISnake(ai);
+                    
+                    if (!moveSnake(ai) || (now - ai.lastMoved > AFK_TIMEOUT)) {
+                        killSnake(ai);
+                        aiSnakes.splice(i, 1);
+                        aiSnakes.push(generateAISnake(Math.floor(Math.random() * 1000)));
+                    }
                 }
             }
 
@@ -672,35 +702,38 @@
                 }
             }
 
-            // AI 蛇碰撞檢測
-            for (let i = aiSnakes.length - 1; i >= 0; i--) {
-                const ai = aiSnakes[i];
-                if (now < ai.shieldUntil) continue;
+            // AI 蛇碰撞檢測 (僅 Host 計算)
+            if (isHost()) {
+                for (let i = aiSnakes.length - 1; i >= 0; i--) {
+                    const ai = aiSnakes[i];
+                    if (now < ai.shieldUntil) continue;
 
-                const aiHead = ai.body[0];
-                const targetSnakes = [player, ...Object.values(remotePlayers), ...aiSnakes.filter(s => s.id !== ai.id)];
+                    const aiHead = ai.body[0];
+                    const targetSnakes = [player, ...Object.values(remotePlayers), ...aiSnakes.filter(s => s.id !== ai.id)];
 
-                let died = false;
-                for (let other of targetSnakes) {
-                    if (died) break;
-                    if (other.body) {
-                        for (let k = 0; k < other.body.length; k++) {
-                            const seg = other.body[k];
-                            if (Math.hypot(aiHead.x - seg.x, aiHead.y - seg.y) < BLOCK_SIZE * 0.75) {
-                                showKillAnnouncement(other.name, ai.name);
-                                killSnake(ai);
-                                aiSnakes.splice(i, 1);
-                                aiSnakes.push(generateAISnake(Math.floor(Math.random() * 1000)));
-                                died = true;
-                                break;
+                    let died = false;
+                    for (let other of targetSnakes) {
+                        if (died) break;
+                        if (other.body) {
+                            for (let k = 0; k < other.body.length; k++) {
+                                const seg = other.body[k];
+                                if (Math.hypot(aiHead.x - seg.x, aiHead.y - seg.y) < BLOCK_SIZE * 0.75) {
+                                    showKillAnnouncement(other.name, ai.name);
+                                    killSnake(ai);
+                                    aiSnakes.splice(i, 1);
+                                    aiSnakes.push(generateAISnake(Math.floor(Math.random() * 1000)));
+                                    died = true;
+                                    break;
+                                }
                             }
                         }
                     }
                 }
             }
 
-            // 吃食物邏輯
-            [player, ...aiSnakes].forEach(s => {
+            // 吃食物邏輯 (Host 負責 AI 吃食物，玩家自己負責玩家吃食物)
+            const activeSnakesToEat = isHost() ? [player, ...aiSnakes] : [player];
+            activeSnakesToEat.forEach(s => {
                 const sHead = s.body[0];
                 for (let i = foods.length - 1; i >= 0; i--) {
                     const f = foods[i];
@@ -750,9 +783,11 @@
             foods.forEach(f => drawBlock(f.x, f.y, f.value));
 
             aiSnakes.forEach(ai => {
-                const isShielded = Date.now() < ai.shieldUntil;
-                for (let i = ai.body.length - 1; i >= 0; i--) {
-                    drawBlock(ai.body[i].x, ai.body[i].y, ai.body[i].value, i === 0, ai.color, ai.name, isShielded);
+                if (ai.body && ai.body.length > 0) {
+                    const isShielded = Date.now() < ai.shieldUntil;
+                    for (let i = ai.body.length - 1; i >= 0; i--) {
+                        drawBlock(ai.body[i].x, ai.body[i].y, ai.body[i].value, i === 0, ai.color, ai.name, isShielded);
+                    }
                 }
             });
 
