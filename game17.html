@@ -33,7 +33,7 @@
             backdrop-filter: blur(5px);
         }
 
-        /* 排行榜升級版樣式 */
+        /* 排行榜樣式 (支援往下滑動) */
         .leaderboard-container {
             position: absolute;
             top: 70px;
@@ -74,7 +74,6 @@
         }
         .toggle-btn:hover { background: rgba(255, 255, 255, 0.3); }
 
-        /* 切換頁籤 (Tab) 樣式 */
         .lb-controls {
             display: flex;
             flex-direction: column;
@@ -103,10 +102,20 @@
             font-weight: bold;
         }
 
+        /* 滾動條調整：可下滑瀏覽完整名單 */
         .leaderboard-list {
             display: block;
-            max-height: 180px;
+            max-height: 220px;
             overflow-y: auto;
+            padding-right: 4px;
+        }
+
+        .leaderboard-list::-webkit-scrollbar {
+            width: 4px;
+        }
+        .leaderboard-list::-webkit-scrollbar-thumb {
+            background: rgba(237, 194, 70, 0.6);
+            border-radius: 2px;
         }
 
         .leaderboard-container.collapsed .leaderboard-list,
@@ -118,12 +127,35 @@
             font-size: 13px;
             display: flex;
             justify-content: space-between;
-            margin-bottom: 4px;
+            margin-bottom: 6px;
         }
 
         .leaderboard-item.is-player {
             color: #edc22e;
             font-weight: bold;
+        }
+
+        /* 左下方小地圖容器 */
+        #minimap-container {
+            position: absolute;
+            left: 15px;
+            bottom: 180px;
+            width: 140px;
+            height: 140px;
+            background: rgba(0, 0, 0, 0.65);
+            border: 2px solid rgba(255, 255, 255, 0.25);
+            border-radius: 12px;
+            z-index: 10;
+            backdrop-filter: blur(5px);
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            pointer-events: none;
+        }
+
+        #minimapCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
         }
 
         /* 擊殺播報容器 */
@@ -318,6 +350,9 @@
 
         const canvas = document.getElementById("gameCanvas");
         const ctx = canvas.getContext("2d");
+        const minimapCanvas = document.getElementById("minimapCanvas");
+        const minimapCtx = minimapCanvas.getContext("2d");
+
         const scoreDisplay = document.getElementById("score");
         const killsDisplay = document.getElementById("kills");
         const shieldUi = document.getElementById("shield-ui");
@@ -369,16 +404,15 @@
         let gameOver = false;
         let playerRef = null;
 
-        // 排行榜顯示狀態控制
-        let currentLbTimeMode = 'live'; // 'live' | 'history'
-        let currentLbTypeMode = 'score'; // 'score' | 'kills'
+        let currentLbTimeMode = 'live';
+        let currentLbTypeMode = 'score';
 
         function isHost() {
             const allIds = [playerId, ...Object.keys(remotePlayers)].sort();
             return allIds[0] === playerId;
         }
 
-        // 排行榜 UI 事件綁定
+        // 排行榜折疊控制
         const leaderboardContainer = document.getElementById("leaderboard-container");
         const toggleBtn = document.getElementById("toggle-leaderboard");
         toggleBtn.addEventListener("click", () => {
@@ -391,7 +425,6 @@
                 const group = e.target.getAttribute('data-group');
                 const val = e.target.getAttribute('data-val');
                 
-                // 設為 active
                 document.querySelectorAll(`.lb-tab[data-group="${group}"]`).forEach(t => t.classList.remove('active'));
                 e.target.classList.add('active');
 
@@ -402,19 +435,27 @@
             });
         });
 
-        // 啟動選單設定
+        // 選單與 LocalStorage 本地儲存名稱處理
         const startOverlay = document.getElementById("start-overlay");
         const nameInput = document.getElementById("player-name-input");
         const colorInput = document.getElementById("player-color-input");
         const startBtn = document.getElementById("start-game-btn");
 
-        nameInput.value = '玩家_' + Math.floor(1000 + Math.random() * 9000);
+        const savedName = localStorage.getItem("snake_player_name");
+        if (savedName) {
+            nameInput.value = savedName;
+        } else {
+            nameInput.value = '玩家_' + Math.floor(1000 + Math.random() * 9000);
+        }
 
         startBtn.addEventListener("click", () => {
-            player.name = nameInput.value.trim() || '無名蛇';
+            const enteredName = nameInput.value.trim() || '無名蛇';
+            player.name = enteredName;
             player.color = colorInput.value;
             player.shieldUntil = Date.now() + SHIELD_DURATION;
             player.lastMoved = Date.now();
+
+            localStorage.setItem("snake_player_name", enteredName);
 
             playerRef = ref(db, 'snakes/' + playerId);
             onDisconnect(playerRef).remove();
@@ -424,7 +465,6 @@
             requestAnimationFrame(gameLoop);
         });
 
-        // 監聽所有線上玩家
         const snakesRef = ref(db, 'snakes');
         onValue(snakesRef, (snapshot) => {
             const data = snapshot.val() || {};
@@ -442,14 +482,12 @@
             }
         });
 
-        // 監聽歷史最高排行榜
         const historyRef = ref(db, 'historyLeaderboard');
         onValue(historyRef, (snapshot) => {
             historyLeaderboard = snapshot.val() || {};
             updateLeaderboard();
         });
 
-        // 監聽 AI 蛇資料
         const aiRef = ref(db, 'aiSnakes');
         onValue(aiRef, (snapshot) => {
             if (!isHost()) {
@@ -487,7 +525,7 @@
                 angle: Math.random() * Math.PI * 2,
                 score: 0,
                 kills: 0,
-                color: `hsl(${Math.random() * 360}, 60%, 50%)`,
+                color: `hsl(${Math.random() * 360}, 75%, 60%)`,
                 shieldUntil: Date.now() + SHIELD_DURATION,
                 lastMoved: Date.now()
             };
@@ -506,7 +544,6 @@
             }, 3000);
         }
 
-        // 更新歷史紀錄至 Firebase (若破紀錄)
         function checkAndUpdateHistoryScore(snake) {
             if (!snake.name || snake.isAI) return;
             const recordRef = ref(db, 'historyLeaderboard/' + snake.id);
@@ -601,7 +638,6 @@
             let minDist = Infinity;
 
             foods.forEach(f => {
-                // AI 優先尋找 <= 自己頭部分數的食物吃
                 if (f.value <= head.value) {
                     const d = Math.hypot(head.x - f.x, head.y - f.y);
                     if (d < minDist) {
@@ -672,7 +708,6 @@
             let listData = [];
 
             if (currentLbTimeMode === 'live') {
-                // 即時排行榜
                 const allSnakes = [player, ...Object.values(remotePlayers), ...aiSnakes];
                 listData = allSnakes.map(s => ({
                     id: s.id,
@@ -682,7 +717,6 @@
                     isAI: !!s.isAI
                 }));
             } else {
-                // 歷史排行榜 (從 Firebase 取得)
                 listData = Object.keys(historyLeaderboard).map(key => ({
                     id: key,
                     name: historyLeaderboard[key].name || '未知',
@@ -692,7 +726,6 @@
                 }));
             }
 
-            // 排序 (分數或擊殺數)
             if (currentLbTypeMode === 'score') {
                 listData.sort((a, b) => b.score - a.score);
             } else {
@@ -700,9 +733,9 @@
             }
 
             leaderboardList.innerHTML = '';
-            const top5 = listData.slice(0, 5);
-
-            top5.forEach((s, idx) => {
+            
+            // 顯示全部名單，搭配 CSS max-height 自動展現滾動條
+            listData.forEach((s, idx) => {
                 const item = document.createElement('div');
                 item.className = 'leaderboard-item' + (s.id === playerId ? ' is-player' : '');
                 const tag = s.isAI ? '🤖' : '👤';
@@ -712,7 +745,6 @@
             });
         }
 
-        // 資料同步
         setInterval(() => {
             if (gameStarted && !gameOver && playerRef) {
                 set(playerRef, {
@@ -758,7 +790,6 @@
                 return;
             }
 
-            // AI 邏輯
             if (isHost()) {
                 for (let i = aiSnakes.length - 1; i >= 0; i--) {
                     const ai = aiSnakes[i];
@@ -776,14 +807,12 @@
             const head = player.body[0];
             const isShielded = now < player.shieldUntil;
 
-            // 玩家碰撞檢測
+            // 碰撞檢測：只有對手身體區塊 <= 本身頭部數字才判定死亡，否則穿透
             if (!isShielded) {
                 for (let other of allOtherSnakes) {
                     if (other.body) {
                         for (let k = 0; k < other.body.length; k++) {
                             const seg = other.body[k];
-                            // 修改點：只有「蛇身數字 <= 自己頭部數字」時，才會發生碰撞導致死亡！
-                            // 若 seg.value > head.value，直接穿透 (碰不到)
                             if (seg.value <= head.value) {
                                 if (Math.hypot(head.x - seg.x, head.y - seg.y) < BLOCK_SIZE * 0.75) {
                                     showKillAnnouncement(other.name, player.name);
@@ -797,7 +826,6 @@
                 }
             }
 
-            // AI 蛇碰撞檢測 (僅 Host 計算)
             if (isHost()) {
                 for (let i = aiSnakes.length - 1; i >= 0; i--) {
                     const ai = aiSnakes[i];
@@ -812,7 +840,6 @@
                         if (other.body) {
                             for (let k = 0; k < other.body.length; k++) {
                                 const seg = other.body[k];
-                                // 修改點：AI 同樣只有碰到 <= 自己頭部數字的身體時才會撞死
                                 if (seg.value <= aiHead.value) {
                                     if (Math.hypot(aiHead.x - seg.x, aiHead.y - seg.y) < BLOCK_SIZE * 0.75) {
                                         showKillAnnouncement(other.name, ai.name);
@@ -835,13 +862,12 @@
                 }
             }
 
-            // 吃食物與吃掉比自己小的方塊邏輯
+            // 吃食物邏輯
             const activeSnakesToEat = isHost() ? [player, ...aiSnakes] : [player];
             activeSnakesToEat.forEach(s => {
                 const sHead = s.body[0];
                 for (let i = foods.length - 1; i >= 0; i--) {
                     const f = foods[i];
-                    // 關鍵修正：當食物 value <= 頭部 value 時才能吃到，否則直接穿透！
                     if (f.value <= sHead.value) {
                         if (Math.hypot(sHead.x - f.x, sHead.y - f.y) < BLOCK_SIZE * 0.8) {
                             const last = s.body[s.body.length - 1];
@@ -885,50 +911,100 @@
                 ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(MAP_SIZE, y); ctx.stroke();
             }
 
-            // 繪製食物：若食物數字 > 玩家頭部數字，繪製半透明效果表示「穿透無效/碰不到」
+            // 食物與蛇區塊繪製：保持 100% 原色不變暗
             foods.forEach(f => {
-                const canEat = f.value <= head.value;
-                drawBlock(f.x, f.y, f.value, false, "#ffffff", "", false, canEat ? 1.0 : 0.4);
+                drawBlock(f.x, f.y, f.value, false, "#ffffff", "", false);
             });
 
-            // 繪製 AI 蛇
             aiSnakes.forEach(ai => {
                 if (ai.body && ai.body.length > 0) {
                     const isShielded = Date.now() < ai.shieldUntil;
                     for (let i = ai.body.length - 1; i >= 0; i--) {
-                        // 若該身體區塊數字 > 玩家頭部，顯示半透明 (表示玩家可穿透它)
-                        const isPassable = ai.body[i].value > head.value;
-                        drawBlock(ai.body[i].x, ai.body[i].y, ai.body[i].value, i === 0, ai.color, ai.name, isShielded, isPassable ? 0.4 : 1.0);
+                        drawBlock(ai.body[i].x, ai.body[i].y, ai.body[i].value, i === 0, ai.color, ai.name, isShielded);
                     }
                 }
             });
 
-            // 繪製其他玩家
             Object.values(remotePlayers).forEach(rp => {
                 if (rp.body && rp.body.length > 0) {
                     const isShielded = Date.now() < (rp.shieldUntil || 0);
                     for (let i = rp.body.length - 1; i >= 0; i--) {
-                        const isPassable = rp.body[i].value > head.value;
-                        drawBlock(rp.body[i].x, rp.body[i].y, rp.body[i].value, i === 0, rp.color || "#00ffff", rp.name, isShielded, isPassable ? 0.4 : 1.0);
+                        drawBlock(rp.body[i].x, rp.body[i].y, rp.body[i].value, i === 0, rp.color || "#00ffff", rp.name, isShielded);
                     }
                 }
             });
 
-            // 繪製本地玩家自己
             const isPlayerShielded = Date.now() < player.shieldUntil;
             for (let i = player.body.length - 1; i >= 0; i--) {
-                drawBlock(player.body[i].x, player.body[i].y, player.body[i].value, i === 0, player.color, player.name, isPlayerShielded, 1.0);
+                drawBlock(player.body[i].x, player.body[i].y, player.body[i].value, i === 0, player.color, player.name, isPlayerShielded);
             }
 
             ctx.restore();
+
+            // 繪製左下角小地圖
+            drawMinimap();
         }
 
-        function drawBlock(x, y, value, isHead = false, headColor = "#ffffff", name = "", isShielded = false, opacity = 1.0) {
+        // 繪製小地圖邏輯
+        function drawMinimap() {
+            const mWidth = minimapCanvas.width;
+            const mHeight = minimapCanvas.height;
+
+            minimapCtx.clearRect(0, 0, mWidth, mHeight);
+
+            // 小地圖背景與邊框
+            minimapCtx.fillStyle = "rgba(0, 0, 0, 0.4)";
+            minimapCtx.fillRect(0, 0, mWidth, mHeight);
+
+            const scale = mWidth / MAP_SIZE;
+
+            // 1. 繪製 AI 的頭點
+            aiSnakes.forEach(ai => {
+                if (ai.body && ai.body[0]) {
+                    const mx = ai.body[0].x * scale;
+                    const my = ai.body[0].y * scale;
+
+                    minimapCtx.fillStyle = ai.color || "#ff0000";
+                    minimapCtx.beginPath();
+                    minimapCtx.arc(mx, my, 3, 0, Math.PI * 2);
+                    minimapCtx.fill();
+                }
+            });
+
+            // 2. 繪製其他線上玩家的頭點
+            Object.values(remotePlayers).forEach(rp => {
+                if (rp.body && rp.body[0]) {
+                    const mx = rp.body[0].x * scale;
+                    const my = rp.body[0].y * scale;
+
+                    minimapCtx.fillStyle = rp.color || "#00ffff";
+                    minimapCtx.beginPath();
+                    minimapCtx.arc(mx, my, 3.5, 0, Math.PI * 2);
+                    minimapCtx.fill();
+                }
+            });
+
+            // 3. 繪製玩家本身的頭點 (加白色外邊框突顯)
+            if (player.body && player.body[0]) {
+                const px = player.body[0].x * scale;
+                const py = player.body[0].y * scale;
+
+                minimapCtx.fillStyle = player.color || "#edc22e";
+                minimapCtx.beginPath();
+                minimapCtx.arc(px, py, 4.5, 0, Math.PI * 2);
+                minimapCtx.fill();
+
+                minimapCtx.strokeStyle = "#ffffff";
+                minimapCtx.lineWidth = 1.5;
+                minimapCtx.stroke();
+            }
+        }
+
+        function drawBlock(x, y, value, isHead = false, headColor = "#ffffff", name = "", isShielded = false) {
             const style = colors[value] || { bg: "#3c3a32", text: "#f9f6f2" };
             const half = BLOCK_SIZE / 2;
 
             ctx.save();
-            ctx.globalAlpha = opacity;
             ctx.translate(x, y);
 
             if (isHead && isShielded) {
@@ -983,7 +1059,8 @@
             gameOver = true;
             checkAndUpdateHistoryScore(player);
             if (playerRef) remove(playerRef);
-            setTimeout(() => {                alert(`${msg}\n最終得分: ${player.score}\n總擊殺數: ${player.kills}`);
+            setTimeout(() => {
+                alert(`${msg}\n最終得分: ${player.score}\n總擊殺數: ${player.kills}`);
                 location.reload();
             }, 100);
         }
@@ -1023,7 +1100,7 @@
     <!-- 擊殺播報容器 -->
     <div class="kill-feed-container" id="kill-feed"></div>
 
-    <!-- 升級版排行榜 (支援 即時/歷史最高 & SCORE/KILL 多維度切換) -->
+    <!-- 排行榜 (可往下滑動查看全部名單) -->
     <div class="leaderboard-container" id="leaderboard-container">
         <div class="leaderboard-header">
             <span class="leaderboard-title">🏆 英雄排行榜</span>
@@ -1031,12 +1108,10 @@
         </div>
         
         <div class="lb-controls">
-            <!-- 時間維度切換 -->
             <div class="lb-tab-group">
                 <div class="lb-tab active" data-group="time" data-val="live">即時戰況</div>
                 <div class="lb-tab" data-group="time" data-val="history">歷史最高</div>
             </div>
-            <!-- 指標維度切換 -->
             <div class="lb-tab-group">
                 <div class="lb-tab active" data-group="type" data-val="score">分數 SCORE</div>
                 <div class="lb-tab" data-group="type" data-val="kills">擊殺 KILL</div>
@@ -1044,6 +1119,11 @@
         </div>
 
         <div class="leaderboard-list" id="leaderboard-list"></div>
+    </div>
+
+    <!-- 左下方小地圖 -->
+    <div id="minimap-container">
+        <canvas id="minimapCanvas" width="140" height="140"></canvas>
     </div>
 
     <div id="joystick-base">
