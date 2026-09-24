@@ -337,6 +337,14 @@
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
 
+        // 1. 本地裝置 ID 綁定 (代表該裝置/帳號)
+        let deviceId = localStorage.getItem("snake_device_id");
+        if (!deviceId) {
+            deviceId = 'device_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+            localStorage.setItem("snake_device_id", deviceId);
+        }
+
+        // 當前遊戲回合的 Player ID
         const playerId = 'player_' + Math.random().toString(36).substr(2, 9);
 
         const MAP_SIZE = 3600;
@@ -386,6 +394,7 @@
         let gameStarted = false;
         let player = {
             id: playerId,
+            deviceId: deviceId,
             name: '',
             isAI: false,
             body: [{ x: Math.random() * (MAP_SIZE - 400) + 200, y: Math.random() * (MAP_SIZE - 400) + 200, value: 2 }],
@@ -544,19 +553,39 @@
             }, 3000);
         }
 
+        // 依據「裝置 ID」記錄最高紀錄，打破紀錄時更新當下的名稱
         function checkAndUpdateHistoryScore(snake) {
             if (!snake.name || snake.isAI) return;
-            const recordRef = ref(db, 'historyLeaderboard/' + snake.id);
+
+            const targetDevId = snake.deviceId || snake.id;
+            const recordRef = ref(db, 'historyLeaderboard/' + targetDevId);
+
             runTransaction(recordRef, (currentData) => {
+                const currentScore = currentData ? (currentData.score || 0) : 0;
+                const currentKills = currentData ? (currentData.kills || 0) : 0;
+                
+                const newScore = snake.score || 0;
+                const newKills = snake.kills || 0;
+
+                const isNewScoreHigh = newScore > currentScore;
+                const isNewKillsHigh = newKills > currentKills;
+
                 if (!currentData) {
-                    return { name: snake.name, score: snake.score || 0, kills: snake.kills || 0 };
-                } else {
                     return {
                         name: snake.name,
-                        score: Math.max(currentData.score || 0, snake.score || 0),
-                        kills: Math.max(currentData.kills || 0, snake.kills || 0)
+                        score: newScore,
+                        kills: newKills,
+                        deviceId: targetDevId
                     };
                 }
+
+                // 只要分數或擊殺破了紀錄，名稱就更新為破紀錄時的名字
+                return {
+                    name: (isNewScoreHigh || isNewKillsHigh) ? snake.name : currentData.name,
+                    score: Math.max(currentScore, newScore),
+                    kills: Math.max(currentKills, newKills),
+                    deviceId: targetDevId
+                };
             });
         }
 
@@ -714,7 +743,8 @@
                     name: s.name,
                     score: s.score || 0,
                     kills: s.kills || 0,
-                    isAI: !!s.isAI
+                    isAI: !!s.isAI,
+                    isCurrentPlayer: s.id === playerId
                 }));
             } else {
                 listData = Object.keys(historyLeaderboard).map(key => ({
@@ -722,7 +752,8 @@
                     name: historyLeaderboard[key].name || '未知',
                     score: historyLeaderboard[key].score || 0,
                     kills: historyLeaderboard[key].kills || 0,
-                    isAI: false
+                    isAI: false,
+                    isCurrentPlayer: key === deviceId
                 }));
             }
 
@@ -734,10 +765,9 @@
 
             leaderboardList.innerHTML = '';
             
-            // 顯示全部名單，搭配 CSS max-height 自動展現滾動條
             listData.forEach((s, idx) => {
                 const item = document.createElement('div');
-                item.className = 'leaderboard-item' + (s.id === playerId ? ' is-player' : '');
+                item.className = 'leaderboard-item' + (s.isCurrentPlayer ? ' is-player' : '');
                 const tag = s.isAI ? '🤖' : '👤';
                 const valText = currentLbTypeMode === 'score' ? `${s.score}分` : `${s.kills}擊殺`;
                 item.innerHTML = `<span>${idx + 1}. ${tag} ${s.name}</span><span>${valText}</span>`;
@@ -749,6 +779,7 @@
             if (gameStarted && !gameOver && playerRef) {
                 set(playerRef, {
                     id: player.id,
+                    deviceId: player.deviceId,
                     name: player.name,
                     body: player.body,
                     score: player.score,
@@ -807,7 +838,6 @@
             const head = player.body[0];
             const isShielded = now < player.shieldUntil;
 
-            // 碰撞檢測：只有對手身體區塊 <= 本身頭部數字才判定死亡，否則穿透
             if (!isShielded) {
                 for (let other of allOtherSnakes) {
                     if (other.body) {
@@ -862,7 +892,6 @@
                 }
             }
 
-            // 吃食物邏輯
             const activeSnakesToEat = isHost() ? [player, ...aiSnakes] : [player];
             activeSnakesToEat.forEach(s => {
                 const sHead = s.body[0];
@@ -911,7 +940,6 @@
                 ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(MAP_SIZE, y); ctx.stroke();
             }
 
-            // 食物與蛇區塊繪製：保持 100% 原色不變暗
             foods.forEach(f => {
                 drawBlock(f.x, f.y, f.value, false, "#ffffff", "", false);
             });
@@ -941,24 +969,20 @@
 
             ctx.restore();
 
-            // 繪製左下角小地圖
             drawMinimap();
         }
 
-        // 繪製小地圖邏輯
         function drawMinimap() {
             const mWidth = minimapCanvas.width;
             const mHeight = minimapCanvas.height;
 
             minimapCtx.clearRect(0, 0, mWidth, mHeight);
 
-            // 小地圖背景與邊框
             minimapCtx.fillStyle = "rgba(0, 0, 0, 0.4)";
             minimapCtx.fillRect(0, 0, mWidth, mHeight);
 
             const scale = mWidth / MAP_SIZE;
 
-            // 1. 繪製 AI 的頭點
             aiSnakes.forEach(ai => {
                 if (ai.body && ai.body[0]) {
                     const mx = ai.body[0].x * scale;
@@ -971,7 +995,6 @@
                 }
             });
 
-            // 2. 繪製其他線上玩家的頭點
             Object.values(remotePlayers).forEach(rp => {
                 if (rp.body && rp.body[0]) {
                     const mx = rp.body[0].x * scale;
@@ -984,7 +1007,6 @@
                 }
             });
 
-            // 3. 繪製玩家本身的頭點 (加白色外邊框突顯)
             if (player.body && player.body[0]) {
                 const px = player.body[0].x * scale;
                 const py = player.body[0].y * scale;
