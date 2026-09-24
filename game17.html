@@ -20,7 +20,7 @@
             touch-action: none;
         }
 
-        /* 預留導覽列空間 (top 設為 70px) */
+        /* UI 容器 */
         .ui-container {
             position: absolute;
             top: 70px;
@@ -33,17 +33,19 @@
             backdrop-filter: blur(5px);
         }
 
+        /* 排行榜升級版樣式 */
         .leaderboard-container {
             position: absolute;
             top: 70px;
             right: 15px;
             z-index: 10;
-            background: rgba(0, 0, 0, 0.65);
-            padding: 12px 18px;
+            background: rgba(0, 0, 0, 0.75);
+            padding: 12px 16px;
             border-radius: 12px;
             backdrop-filter: blur(5px);
-            min-width: 200px;
+            min-width: 240px;
             transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
         }
 
         .leaderboard-header {
@@ -51,7 +53,7 @@
             justify-content: space-between;
             align-items: center;
             border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-            padding-bottom: 4px;
+            padding-bottom: 6px;
             margin-bottom: 8px;
         }
 
@@ -70,12 +72,45 @@
             cursor: pointer;
             padding: 2px 6px;
         }
+        .toggle-btn:hover { background: rgba(255, 255, 255, 0.3); }
+
+        /* 切換頁籤 (Tab) 樣式 */
+        .lb-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-bottom: 8px;
+        }
+        .lb-tab-group {
+            display: flex;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            padding: 2px;
+        }
+        .lb-tab {
+            flex: 1;
+            text-align: center;
+            font-size: 11px;
+            padding: 4px 0;
+            cursor: pointer;
+            border-radius: 4px;
+            color: #aaa;
+            transition: all 0.2s;
+        }
+        .lb-tab.active {
+            background: #edc22e;
+            color: #111;
+            font-weight: bold;
+        }
 
         .leaderboard-list {
             display: block;
+            max-height: 180px;
+            overflow-y: auto;
         }
 
-        .leaderboard-container.collapsed .leaderboard-list {
+        .leaderboard-container.collapsed .leaderboard-list,
+        .leaderboard-container.collapsed .lb-controls {
             display: none;
         }
 
@@ -219,7 +254,7 @@
         }
 
         .score-container {
-            font-size: 16px;
+            font-size: 15px;
             font-weight: bold;
         }
 
@@ -262,7 +297,7 @@
     <!-- Firebase SDK -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
-        import { getDatabase, ref, set, onValue, onDisconnect, remove } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-database.js";
+        import { getDatabase, ref, set, onValue, onDisconnect, remove, runTransaction } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-database.js";
 
         const firebaseConfig = {
             databaseURL: "https://game-24b43-default-rtdb.firebaseio.com/"
@@ -284,6 +319,7 @@
         const canvas = document.getElementById("gameCanvas");
         const ctx = canvas.getContext("2d");
         const scoreDisplay = document.getElementById("score");
+        const killsDisplay = document.getElementById("kills");
         const shieldUi = document.getElementById("shield-ui");
         const shieldTimeDisplay = document.getElementById("shield-time");
         const leaderboardList = document.getElementById("leaderboard-list");
@@ -320,6 +356,7 @@
             body: [{ x: Math.random() * (MAP_SIZE - 400) + 200, y: Math.random() * (MAP_SIZE - 400) + 200, value: 2 }],
             angle: 0,
             score: 0,
+            kills: 0,
             color: '#edc22e',
             shieldUntil: Date.now() + SHIELD_DURATION,
             lastMoved: Date.now()
@@ -328,21 +365,41 @@
         let remotePlayers = {}; 
         let aiSnakes = [];
         let foods = [];
+        let historyLeaderboard = {};
         let gameOver = false;
         let playerRef = null;
 
-        // 判斷當前玩家是否為 Host（ID 字典序最小者為房主，負責 AI 運算）
+        // 排行榜顯示狀態控制
+        let currentLbTimeMode = 'live'; // 'live' | 'history'
+        let currentLbTypeMode = 'score'; // 'score' | 'kills'
+
         function isHost() {
             const allIds = [playerId, ...Object.keys(remotePlayers)].sort();
             return allIds[0] === playerId;
         }
 
-        // 排行榜收合/展開邏輯
+        // 排行榜 UI 事件綁定
         const leaderboardContainer = document.getElementById("leaderboard-container");
         const toggleBtn = document.getElementById("toggle-leaderboard");
         toggleBtn.addEventListener("click", () => {
             leaderboardContainer.classList.toggle("collapsed");
             toggleBtn.innerText = leaderboardContainer.classList.contains("collapsed") ? "展開" : "隱藏";
+        });
+
+        document.querySelectorAll('.lb-tab').forEach(tab => {
+            tab.addEventListener('click', (e) => {
+                const group = e.target.getAttribute('data-group');
+                const val = e.target.getAttribute('data-val');
+                
+                // 設為 active
+                document.querySelectorAll(`.lb-tab[data-group="${group}"]`).forEach(t => t.classList.remove('active'));
+                e.target.classList.add('active');
+
+                if (group === 'time') currentLbTimeMode = val;
+                if (group === 'type') currentLbTypeMode = val;
+
+                updateLeaderboard();
+            });
         });
 
         // 啟動選單設定
@@ -367,13 +424,12 @@
             requestAnimationFrame(gameLoop);
         });
 
-        // 監聽所有玩家
+        // 監聽所有線上玩家
         const snakesRef = ref(db, 'snakes');
         onValue(snakesRef, (snapshot) => {
             const data = snapshot.val() || {};
             const now = Date.now();
-            remotePlayers = {};
-            
+            remotePlayers = {}; 
             for (let id in data) {
                 if (id !== playerId) {
                     const rp = data[id];
@@ -386,16 +442,19 @@
             }
         });
 
-        // 監聽 AI 蛇資料同步 (非 Host 玩家使用同步下來的 AI)
+        // 監聽歷史最高排行榜
+        const historyRef = ref(db, 'historyLeaderboard');
+        onValue(historyRef, (snapshot) => {
+            historyLeaderboard = snapshot.val() || {};
+            updateLeaderboard();
+        });
+
+        // 監聽 AI 蛇資料
         const aiRef = ref(db, 'aiSnakes');
         onValue(aiRef, (snapshot) => {
             if (!isHost()) {
                 const data = snapshot.val();
-                if (data) {
-                    aiSnakes = Array.isArray(data) ? data : Object.values(data);
-                } else {
-                    aiSnakes = [];
-                }
+                aiSnakes = data ? (Array.isArray(data) ? data : Object.values(data)) : [];
             }
         });
 
@@ -427,6 +486,7 @@
                 ],
                 angle: Math.random() * Math.PI * 2,
                 score: 0,
+                kills: 0,
                 color: `hsl(${Math.random() * 360}, 60%, 50%)`,
                 shieldUntil: Date.now() + SHIELD_DURATION,
                 lastMoved: Date.now()
@@ -437,7 +497,6 @@
             const msg = document.createElement("div");
             msg.className = "kill-msg";
             msg.innerHTML = `<span class="killer">⚔️ ${killerName}</span> 擊殺了 <span class="victim">${victimName}</span>`;
-            
             killFeedContainer.appendChild(msg);
 
             setTimeout(() => {
@@ -447,7 +506,24 @@
             }, 3000);
         }
 
-        // 搖桿與鍵盤控制
+        // 更新歷史紀錄至 Firebase (若破紀錄)
+        function checkAndUpdateHistoryScore(snake) {
+            if (!snake.name || snake.isAI) return;
+            const recordRef = ref(db, 'historyLeaderboard/' + snake.id);
+            runTransaction(recordRef, (currentData) => {
+                if (!currentData) {
+                    return { name: snake.name, score: snake.score || 0, kills: snake.kills || 0 };
+                } else {
+                    return {
+                        name: snake.name,
+                        score: Math.max(currentData.score || 0, snake.score || 0),
+                        kills: Math.max(currentData.kills || 0, snake.kills || 0)
+                    };
+                }
+            });
+        }
+
+        // 控制邏輯
         const joyBase = document.getElementById("joystick-base");
         const joyStick = document.getElementById("joystick-stick");
         let joyActive = false;
@@ -465,7 +541,6 @@
             const touch = e.touches ? e.touches[0] : e;
             const dx = touch.clientX - joyCenter.x;
             const dy = touch.clientY - joyCenter.y;
-
             const dist = Math.min(Math.hypot(dx, dy), 45);
             player.angle = Math.atan2(dy, dx);
             joyStick.style.transform = `translate(${Math.cos(player.angle) * dist}px, ${Math.sin(player.angle) * dist}px)`;
@@ -494,9 +569,7 @@
             if (keys["ArrowLeft"] || keys["a"] || keys["A"]) kx -= 1;
             if (keys["ArrowRight"] || keys["d"] || keys["D"]) kx += 1;
 
-            if (kx !== 0 || ky !== 0) {
-                player.angle = Math.atan2(ky, kx);
-            }
+            if (kx !== 0 || ky !== 0) player.angle = Math.atan2(ky, kx);
         }
 
         function reorderAndMergeSnake(snakeObj) {
@@ -528,6 +601,7 @@
             let minDist = Infinity;
 
             foods.forEach(f => {
+                // AI 優先尋找 <= 自己頭部分數的食物吃
                 if (f.value <= head.value) {
                     const d = Math.hypot(head.x - f.x, head.y - f.y);
                     if (d < minDist) {
@@ -565,18 +639,6 @@
                 return false;
             }
 
-            foods.forEach(f => {
-                if (f.value > head.value) {
-                    const dist = Math.hypot(nextX - f.x, nextY - f.y);
-                    const minDist = BLOCK_SIZE;
-                    if (dist < minDist) {
-                        const pushAngle = Math.atan2(nextY - f.y, nextX - f.x);
-                        nextX = f.x + Math.cos(pushAngle) * minDist;
-                        nextY = f.y + Math.sin(pushAngle) * minDist;
-                    }
-                }
-            });
-
             head.x = nextX;
             head.y = nextY;
 
@@ -607,36 +669,65 @@
         }
 
         function updateLeaderboard() {
-            const allSnakes = [player, ...Object.values(remotePlayers), ...aiSnakes];
-            allSnakes.sort((a, b) => b.score - a.score);
+            let listData = [];
+
+            if (currentLbTimeMode === 'live') {
+                // 即時排行榜
+                const allSnakes = [player, ...Object.values(remotePlayers), ...aiSnakes];
+                listData = allSnakes.map(s => ({
+                    id: s.id,
+                    name: s.name,
+                    score: s.score || 0,
+                    kills: s.kills || 0,
+                    isAI: !!s.isAI
+                }));
+            } else {
+                // 歷史排行榜 (從 Firebase 取得)
+                listData = Object.keys(historyLeaderboard).map(key => ({
+                    id: key,
+                    name: historyLeaderboard[key].name || '未知',
+                    score: historyLeaderboard[key].score || 0,
+                    kills: historyLeaderboard[key].kills || 0,
+                    isAI: false
+                }));
+            }
+
+            // 排序 (分數或擊殺數)
+            if (currentLbTypeMode === 'score') {
+                listData.sort((a, b) => b.score - a.score);
+            } else {
+                listData.sort((a, b) => b.kills - a.kills);
+            }
 
             leaderboardList.innerHTML = '';
-            const top5 = allSnakes.slice(0, 5);
+            const top5 = listData.slice(0, 5);
 
             top5.forEach((s, idx) => {
                 const item = document.createElement('div');
                 item.className = 'leaderboard-item' + (s.id === playerId ? ' is-player' : '');
                 const tag = s.isAI ? '🤖' : '👤';
-                item.innerHTML = `<span>${idx + 1}. ${tag} ${s.name}</span><span>${s.score}分</span>`;
+                const valText = currentLbTypeMode === 'score' ? `${s.score}分` : `${s.kills}擊殺`;
+                item.innerHTML = `<span>${idx + 1}. ${tag} ${s.name}</span><span>${valText}</span>`;
                 leaderboardList.appendChild(item);
             });
         }
 
-        // 資料寫入與同步循環
+        // 資料同步
         setInterval(() => {
             if (gameStarted && !gameOver && playerRef) {
-                // 1. 寫入本地玩家資料
                 set(playerRef, {
                     id: player.id,
                     name: player.name,
                     body: player.body,
                     score: player.score,
+                    kills: player.kills,
                     color: player.color,
                     shieldUntil: player.shieldUntil,
                     lastUpdated: Date.now()
                 });
 
-                // 2. 若自己是 Host 房主，同步 AI 資料至 Firebase
+                checkAndUpdateHistoryScore(player);
+
                 if (isHost()) {
                     set(ref(db, 'aiSnakes'), aiSnakes);
                 }
@@ -667,7 +758,7 @@
                 return;
             }
 
-            // 僅 Host 房主玩家計算 AI 的移動與生成
+            // AI 邏輯
             if (isHost()) {
                 for (let i = aiSnakes.length - 1; i >= 0; i--) {
                     const ai = aiSnakes[i];
@@ -682,20 +773,24 @@
             }
 
             const allOtherSnakes = [...Object.values(remotePlayers), ...aiSnakes];
-
-            // 玩家碰撞檢測
             const head = player.body[0];
             const isShielded = now < player.shieldUntil;
 
+            // 玩家碰撞檢測
             if (!isShielded) {
                 for (let other of allOtherSnakes) {
                     if (other.body) {
                         for (let k = 0; k < other.body.length; k++) {
                             const seg = other.body[k];
-                            if (Math.hypot(head.x - seg.x, head.y - seg.y) < BLOCK_SIZE * 0.75) {
-                                showKillAnnouncement(other.name, player.name);
-                                endGame(`撞到了【${other.name}】的身體！`);
-                                return;
+                            // 修改點：只有「蛇身數字 <= 自己頭部數字」時，才會發生碰撞導致死亡！
+                            // 若 seg.value > head.value，直接穿透 (碰不到)
+                            if (seg.value <= head.value) {
+                                if (Math.hypot(head.x - seg.x, head.y - seg.y) < BLOCK_SIZE * 0.75) {
+                                    showKillAnnouncement(other.name, player.name);
+                                    other.kills = (other.kills || 0) + 1;
+                                    endGame(`撞到了【${other.name}】小於等於你分數的身體！`);
+                                    return;
+                                }
                             }
                         }
                     }
@@ -717,13 +812,22 @@
                         if (other.body) {
                             for (let k = 0; k < other.body.length; k++) {
                                 const seg = other.body[k];
-                                if (Math.hypot(aiHead.x - seg.x, aiHead.y - seg.y) < BLOCK_SIZE * 0.75) {
-                                    showKillAnnouncement(other.name, ai.name);
-                                    killSnake(ai);
-                                    aiSnakes.splice(i, 1);
-                                    aiSnakes.push(generateAISnake(Math.floor(Math.random() * 1000)));
-                                    died = true;
-                                    break;
+                                // 修改點：AI 同樣只有碰到 <= 自己頭部數字的身體時才會撞死
+                                if (seg.value <= aiHead.value) {
+                                    if (Math.hypot(aiHead.x - seg.x, aiHead.y - seg.y) < BLOCK_SIZE * 0.75) {
+                                        showKillAnnouncement(other.name, ai.name);
+                                        if (other.id === playerId) {
+                                            player.kills++;
+                                            killsDisplay.innerText = player.kills;
+                                        } else {
+                                            other.kills = (other.kills || 0) + 1;
+                                        }
+                                        killSnake(ai);
+                                        aiSnakes.splice(i, 1);
+                                        aiSnakes.push(generateAISnake(Math.floor(Math.random() * 1000)));
+                                        died = true;
+                                        break;
+                                    }
                                 }
                             }
                         }
@@ -731,21 +835,22 @@
                 }
             }
 
-            // 吃食物邏輯 (Host 負責 AI 吃食物，玩家自己負責玩家吃食物)
+            // 吃食物與吃掉比自己小的方塊邏輯
             const activeSnakesToEat = isHost() ? [player, ...aiSnakes] : [player];
             activeSnakesToEat.forEach(s => {
                 const sHead = s.body[0];
                 for (let i = foods.length - 1; i >= 0; i--) {
                     const f = foods[i];
-                    if (Math.hypot(sHead.x - f.x, sHead.y - f.y) < BLOCK_SIZE * 0.8) {
-                        if (f.value > sHead.value) continue;
+                    // 關鍵修正：當食物 value <= 頭部 value 時才能吃到，否則直接穿透！
+                    if (f.value <= sHead.value) {
+                        if (Math.hypot(sHead.x - f.x, sHead.y - f.y) < BLOCK_SIZE * 0.8) {
+                            const last = s.body[s.body.length - 1];
+                            s.body.push({ x: last.x, y: last.y, value: f.value });
+                            reorderAndMergeSnake(s);
 
-                        const last = s.body[s.body.length - 1];
-                        s.body.push({ x: last.x, y: last.y, value: f.value });
-                        reorderAndMergeSnake(s);
-
-                        foods.splice(i, 1);
-                        foods.push(generateFood());
+                            foods.splice(i, 1);
+                            foods.push(generateFood());
+                        }
                     }
                 }
             });
@@ -780,39 +885,50 @@
                 ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(MAP_SIZE, y); ctx.stroke();
             }
 
-            foods.forEach(f => drawBlock(f.x, f.y, f.value));
+            // 繪製食物：若食物數字 > 玩家頭部數字，繪製半透明效果表示「穿透無效/碰不到」
+            foods.forEach(f => {
+                const canEat = f.value <= head.value;
+                drawBlock(f.x, f.y, f.value, false, "#ffffff", "", false, canEat ? 1.0 : 0.4);
+            });
 
+            // 繪製 AI 蛇
             aiSnakes.forEach(ai => {
                 if (ai.body && ai.body.length > 0) {
                     const isShielded = Date.now() < ai.shieldUntil;
                     for (let i = ai.body.length - 1; i >= 0; i--) {
-                        drawBlock(ai.body[i].x, ai.body[i].y, ai.body[i].value, i === 0, ai.color, ai.name, isShielded);
+                        // 若該身體區塊數字 > 玩家頭部，顯示半透明 (表示玩家可穿透它)
+                        const isPassable = ai.body[i].value > head.value;
+                        drawBlock(ai.body[i].x, ai.body[i].y, ai.body[i].value, i === 0, ai.color, ai.name, isShielded, isPassable ? 0.4 : 1.0);
                     }
                 }
             });
 
+            // 繪製其他玩家
             Object.values(remotePlayers).forEach(rp => {
                 if (rp.body && rp.body.length > 0) {
                     const isShielded = Date.now() < (rp.shieldUntil || 0);
                     for (let i = rp.body.length - 1; i >= 0; i--) {
-                        drawBlock(rp.body[i].x, rp.body[i].y, rp.body[i].value, i === 0, rp.color || "#00ffff", rp.name, isShielded);
+                        const isPassable = rp.body[i].value > head.value;
+                        drawBlock(rp.body[i].x, rp.body[i].y, rp.body[i].value, i === 0, rp.color || "#00ffff", rp.name, isShielded, isPassable ? 0.4 : 1.0);
                     }
                 }
             });
 
+            // 繪製本地玩家自己
             const isPlayerShielded = Date.now() < player.shieldUntil;
             for (let i = player.body.length - 1; i >= 0; i--) {
-                drawBlock(player.body[i].x, player.body[i].y, player.body[i].value, i === 0, player.color, player.name, isPlayerShielded);
+                drawBlock(player.body[i].x, player.body[i].y, player.body[i].value, i === 0, player.color, player.name, isPlayerShielded, 1.0);
             }
 
             ctx.restore();
         }
 
-        function drawBlock(x, y, value, isHead = false, headColor = "#ffffff", name = "", isShielded = false) {
+        function drawBlock(x, y, value, isHead = false, headColor = "#ffffff", name = "", isShielded = false, opacity = 1.0) {
             const style = colors[value] || { bg: "#3c3a32", text: "#f9f6f2" };
             const half = BLOCK_SIZE / 2;
 
             ctx.save();
+            ctx.globalAlpha = opacity;
             ctx.translate(x, y);
 
             if (isHead && isShielded) {
@@ -865,9 +981,9 @@
 
         function endGame(msg) {
             gameOver = true;
+            checkAndUpdateHistoryScore(player);
             if (playerRef) remove(playerRef);
-            setTimeout(() => {
-                alert(msg + "\n最終得分: " + player.score);
+            setTimeout(() => {                alert(`${msg}\n最終得分: ${player.score}\n總擊殺數: ${player.kills}`);
                 location.reload();
             }, 100);
         }
@@ -900,19 +1016,33 @@
     <!-- UI 計分板 -->
     <div class="ui-container">
         <h1>2048 貪吃蛇</h1>
-        <div class="score-container">玩家分數: <span id="score">0</span></div>
+        <div class="score-container">分數: <span id="score">0</span> | 擊殺: <span id="kills">0</span></div>
         <div id="shield-ui" class="shield-status">🛡️ 防護罩倒數: <span id="shield-time">3.0</span>s</div>
     </div>
 
     <!-- 擊殺播報容器 -->
     <div class="kill-feed-container" id="kill-feed"></div>
 
-    <!-- 排行榜 (支援折疊) -->
+    <!-- 升級版排行榜 (支援 即時/歷史最高 & SCORE/KILL 多維度切換) -->
     <div class="leaderboard-container" id="leaderboard-container">
         <div class="leaderboard-header">
-            <span class="leaderboard-title">🏆 即時排行榜</span>
+            <span class="leaderboard-title">🏆 英雄排行榜</span>
             <button class="toggle-btn" id="toggle-leaderboard">隱藏</button>
         </div>
+        
+        <div class="lb-controls">
+            <!-- 時間維度切換 -->
+            <div class="lb-tab-group">
+                <div class="lb-tab active" data-group="time" data-val="live">即時戰況</div>
+                <div class="lb-tab" data-group="time" data-val="history">歷史最高</div>
+            </div>
+            <!-- 指標維度切換 -->
+            <div class="lb-tab-group">
+                <div class="lb-tab active" data-group="type" data-val="score">分數 SCORE</div>
+                <div class="lb-tab" data-group="type" data-val="kills">擊殺 KILL</div>
+            </div>
+        </div>
+
         <div class="leaderboard-list" id="leaderboard-list"></div>
     </div>
 
