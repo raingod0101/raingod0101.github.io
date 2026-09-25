@@ -95,7 +95,7 @@
 
 <script src="menu.js"></script>
     <div style="position: fixed; top: 5px; left: 5px; color: gray; font-size: 12px; font-family: sans-serif;">不支援雲端儲存</div>
-<div id="game-container">1
+<div id="game-container">
     <canvas id="bg-canvas"></canvas>
     <canvas id="main-canvas"></canvas>
 
@@ -202,6 +202,7 @@
 
 // ─── 常數 ─────────────────────────────────────────────────────────────────────
 const MAP_RADIUS = 3200;
+const MAX_ENEMIES = 35;
 const MAX_STAGES = 100;
 const STAGES = (function buildStages(n) {
     const arr = [];
@@ -469,34 +470,158 @@ const Input = {
 const RARITY_ORDER = { N:0, R:1, SR:2, SS:3, SSS:4 };
 const RARITY_NAME = { N:'普通', R:'稀有', SR:'超稀有', SS:'星輝', SSS:'極稀有' };
 
-// ─── 背景 (純色，不跟隨鏡頭) ───────────────────────────────────────────────────
+// ─── 背景 / 地圖 ─────────────────────────────────────────────────────────────
 const Background = {
     ctx: null, stage: 1,
-    init(ctx, stage = 1) { this.ctx = ctx; this.stage = stage; },
+    palettes: [
+        { bg:'#00050a', grid:'rgba(0,210,255,0.07)', accent:'#00d2ff', mark:'rgba(0,180,220,0.18)' },
+        { bg:'#0a0a1a', grid:'rgba(120,100,255,0.08)', accent:'#7c4dff', mark:'rgba(120,100,255,0.2)' },
+        { bg:'#1a0a0a', grid:'rgba(255,80,60,0.08)', accent:'#ff6e40', mark:'rgba(255,100,60,0.18)' },
+        { bg:'#0a1a0a', grid:'rgba(80,220,100,0.08)', accent:'#69f0ae', mark:'rgba(80,200,100,0.18)' },
+        { bg:'#1a1a0a', grid:'rgba(255,200,60,0.08)', accent:'#ffd54f', mark:'rgba(255,200,60,0.16)' },
+        { bg:'#0a0a2a', grid:'rgba(100,160,255,0.08)', accent:'#64b5f6', mark:'rgba(100,160,255,0.18)' },
+        { bg:'#2a0a0a', grid:'rgba(255,120,80,0.08)', accent:'#ff8a65', mark:'rgba(255,120,80,0.18)' },
+        { bg:'#0a2a0a', grid:'rgba(100,255,160,0.07)', accent:'#69f0ae', mark:'rgba(80,220,140,0.16)' }
+    ],
+    landmarks: null,
+    init(ctx, stage = 1) {
+        this.ctx = ctx;
+        this.stage = stage;
+        this.buildLandmarks(stage);
+    },
+    buildLandmarks(stage) {
+        // 固定種子式地圖標記，同一關卡布局一致
+        const seed = stage * 9973;
+        const rand = (i) => {
+            const x = Math.sin(seed + i * 12.9898) * 43758.5453;
+            return x - Math.floor(x);
+        };
+        const marks = [];
+        for (let i = 0; i < 48; i++) {
+            const ang = rand(i) * Math.PI * 2;
+            const dist = 180 + rand(i + 50) * (MAP_RADIUS - 280);
+            const kind = Math.floor(rand(i + 90) * 4);
+            marks.push({
+                x: Math.cos(ang) * dist,
+                y: Math.sin(ang) * dist,
+                r: 18 + rand(i + 130) * 42,
+                kind,
+                rot: rand(i + 170) * Math.PI
+            });
+        }
+        this.landmarks = marks;
+    },
     draw() {
         if (!this.ctx) return;
-        const colors = [
-            '#00050a', // 1
-            '#0a0a1a', // 2
-            '#1a0a0a', // 3
-            '#0a1a0a', // 4
-            '#1a1a0a', // 5
-            '#0a0a2a', // 6
-            '#2a0a0a', // 7
-            '#0a2a0a', // 8
-            '#2a2a0a', // 9
-            '#0a0a3a', // 10
-            '#3a0a0a', // 11
-            '#0a3a0a', // 12
-            '#3a3a0a', // 13
-            '#0a0a4a', // 14
-            '#4a0a0a', // 15
-            '#0a4a0a', // 16
-            '#4a4a0a', // 17
-            '#0a0a5a'  // 18
-        ];
-        this.ctx.fillStyle = colors[this.stage - 1] || '#00050a';
+        const pal = this.palettes[(this.stage - 1) % this.palettes.length];
+        this.ctx.fillStyle = pal.bg;
         this.ctx.fillRect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
+    },
+    /** 鏡頭空間地圖：格線、地標、邊界 */
+    drawWorld(ctx, cam) {
+        const pal = this.palettes[(this.stage - 1) % this.palettes.length];
+        const tile = 120;
+        const viewPad = 80;
+        const left = cam.x - ctx.canvas.width / 2 - viewPad;
+        const top = cam.y - ctx.canvas.height / 2 - viewPad;
+        const right = cam.x + ctx.canvas.width / 2 + viewPad;
+        const bottom = cam.y + ctx.canvas.height / 2 + viewPad;
+        const x0 = Math.floor(left / tile) * tile;
+        const y0 = Math.floor(top / tile) * tile;
+
+        ctx.save();
+        // 地面底色圓盤
+        const floorGrad = ctx.createRadialGradient(0, 0, MAP_RADIUS * 0.15, 0, 0, MAP_RADIUS);
+        floorGrad.addColorStop(0, 'rgba(255,255,255,0.03)');
+        floorGrad.addColorStop(0.7, 'rgba(0,0,0,0)');
+        floorGrad.addColorStop(1, 'rgba(0,0,0,0.35)');
+        ctx.fillStyle = floorGrad;
+        ctx.beginPath();
+        ctx.arc(0, 0, MAP_RADIUS, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 格線
+        ctx.strokeStyle = pal.grid;
+        ctx.lineWidth = 1;
+        for (let x = x0; x <= right; x += tile) {
+            ctx.beginPath();
+            ctx.moveTo(x, top);
+            ctx.lineTo(x, bottom);
+            ctx.stroke();
+        }
+        for (let y = y0; y <= bottom; y += tile) {
+            ctx.beginPath();
+            ctx.moveTo(left, y);
+            ctx.lineTo(right, y);
+            ctx.stroke();
+        }
+
+        // 地標（岩石/塔柱/符文）
+        if (this.landmarks) {
+            for (const m of this.landmarks) {
+                if (m.x < left - 80 || m.x > right + 80 || m.y < top - 80 || m.y > bottom + 80) continue;
+                ctx.save();
+                ctx.translate(m.x, m.y);
+                ctx.rotate(m.rot);
+                ctx.fillStyle = pal.mark;
+                ctx.strokeStyle = pal.accent;
+                ctx.globalAlpha = 0.55;
+                ctx.lineWidth = 1.5;
+                if (m.kind === 0) {
+                    ctx.beginPath();
+                    ctx.moveTo(0, -m.r);
+                    ctx.lineTo(m.r * 0.85, m.r * 0.6);
+                    ctx.lineTo(-m.r * 0.85, m.r * 0.6);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+                } else if (m.kind === 1) {
+                    ctx.fillRect(-m.r * 0.7, -m.r * 0.7, m.r * 1.4, m.r * 1.4);
+                    ctx.strokeRect(-m.r * 0.7, -m.r * 0.7, m.r * 1.4, m.r * 1.4);
+                } else if (m.kind === 2) {
+                    ctx.beginPath();
+                    ctx.arc(0, 0, m.r * 0.7, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+                } else {
+                    ctx.beginPath();
+                    for (let i = 0; i < 6; i++) {
+                        const a = Math.PI / 3 * i;
+                        const px = Math.cos(a) * m.r * 0.75;
+                        const py = Math.sin(a) * m.r * 0.75;
+                        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+                    }
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+                }
+                ctx.restore();
+            }
+        }
+
+        // 中心平台
+        ctx.globalAlpha = 0.35;
+        ctx.strokeStyle = pal.accent;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 0, 140, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(0, 0, 220, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+
+        // 地圖邊界
+        ctx.strokeStyle = pal.accent;
+        ctx.globalAlpha = 0.35;
+        ctx.lineWidth = 3;
+        ctx.setLineDash([16, 10]);
+        ctx.beginPath();
+        ctx.arc(0, 0, MAP_RADIUS, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 1;
+        ctx.restore();
     }
 };
 
@@ -756,12 +881,13 @@ class Enemy {
     constructor(x, y, type = 'MELEE', stageIndex = 1, timeFactor = 1) {
         this.x = x; this.y = y;
         const stats = {
-            MELEE:  { r:22, hp:90,  speed:2.1, dmg:0.5,  exp:10, color:'#4b9b4b', eye:'#fff' },
-            SHOOTER:{ r:20, hp:70,  speed:1.1, dmg:0.4,  exp:13, color:'#b95cff', eye:'#ffea00' },
-            FAST:   { r:18, hp:65,  speed:3.4, dmg:0.35, exp:9,  color:'#2acbff', eye:'#fff' },
-            TANK:   { r:30, hp:230, speed:0.95,dmg:1.3,  exp:26, color:'#6d4c41', eye:'#ffbba0' },
-            FLY:    { r:18, hp:80,  speed:2.6, dmg:0.45, exp:14, color:'#f06292', eye:'#fff' },
-            ELITE:  { r:30, hp:360, speed:2.3, dmg:1.8,  exp:40, color:'#ff9100', eye:'#fff' }
+            // 速度整體調降，血量維持
+            MELEE:  { r:22, hp:90,  speed:1.25, dmg:0.5,  exp:10, color:'#4b9b4b', eye:'#fff' },
+            SHOOTER:{ r:20, hp:70,  speed:0.70, dmg:0.4,  exp:13, color:'#b95cff', eye:'#ffea00' },
+            FAST:   { r:18, hp:65,  speed:2.05, dmg:0.35, exp:9,  color:'#2acbff', eye:'#fff' },
+            TANK:   { r:30, hp:230, speed:0.55, dmg:1.3,  exp:26, color:'#6d4c41', eye:'#ffbba0' },
+            FLY:    { r:18, hp:80,  speed:1.55, dmg:0.45, exp:14, color:'#f06292', eye:'#fff' },
+            ELITE:  { r:30, hp:360, speed:1.35, dmg:1.8,  exp:40, color:'#ff9100', eye:'#fff' }
         };
         const s = stats[type] || stats.MELEE;
         const stageMul = 1 + (stageIndex - 1) * 0.28;
@@ -769,7 +895,7 @@ class Enemy {
         this.r = s.r;
         this.hp = s.hp * stageMul * timeMul * 1.08 * 2;
         this.maxHp = this.hp;
-        this.speed = s.speed * (1 + (stageIndex - 1) * 0.03);
+        this.speed = s.speed * (1 + (stageIndex - 1) * 0.02);
         this.dmg = s.dmg * stageMul * (1 + timeFactor * 0.25) * (1 + (stageIndex - 1) * 0.03);
         this.expValue = Math.round(s.exp * stageMul * (0.8 + timeFactor * 0.4));
         this.color = s.color;
@@ -779,6 +905,8 @@ class Enemy {
         this.burnTime = 0;
         this.burnDmg = 0;
         this.frozenTime = 0;
+        this.kx = 0;
+        this.ky = 0;
     }
     update(dt, player) {
         if (this.frozenTime > 0) {
@@ -890,11 +1018,11 @@ class Boss {
         this.x = x; this.y = y; this.r = 58;
         const stageMul = 1 + (index - 1) * 0.28;
         const tf = Math.max(1, timeFactor);
-        // 再次削減 Boss 血量與傷害，防止秒殺
         this.maxHp = hp * stageMul * 1.4 * tf;
         this.hp = this.maxHp;
-        this.speed = (2.8 + (index - 1) * 0.12) * (0.9 + tf * 0.15);
-        this.baseDmg = (1.2 + (index - 1) * 0.15) * tf;
+        this.speed = (2.2 + (index - 1) * 0.1) * (0.9 + tf * 0.12);
+        // 接觸傷害大幅調低
+        this.baseDmg = (0.45 + (index - 1) * 0.06) * tf;
         this.kx = 0; this.ky = 0;
         this.isDead = false;
         this.index = index;
@@ -912,6 +1040,8 @@ class Boss {
         this.frozenTime = 0;
         this.warningLine = null;
         this.warningTimer = 0;
+        this.pendingSkillRoll = null;
+        this.lockedAimAng = 0;
     }
     update(dt, player, projectiles) {
         if (this.frozenTime > 0) {
@@ -932,23 +1062,34 @@ class Boss {
         }
         if (!this.enraged && this.hp <= this.maxHp * 0.4) {
             this.enraged = true;
-            this.speed *= 1.45;
-            this.baseDmg *= 1.35;
+            this.speed *= 1.3;
+            this.baseDmg *= 1.2;
             this.skillName = '狂暴化！';
             this.skillColor = '#ff5252';
             this.skillTextTimer = 90;
             GameEngine.showAlert('BOSS 進入狂暴！');
             GameEngine.shake(10, 0.35);
         }
+
+        // 預警紅條期間：鎖定攻擊方向，停止移動
+        if (this.warningTimer > 0) {
+            this.warningTimer -= dt;
+            if (this.skillTextTimer > 0) this.skillTextTimer = Math.max(0, this.skillTextTimer - dt);
+            if (this.warningTimer <= 0) {
+                this._firePendingSkill(player, projectiles);
+            }
+            return;
+        }
+
         const ang = Math.atan2(player.y - this.y, player.x - this.x);
-        const moveSpd = this.speed * (this.enraged ? 1.15 : 1);
+        const moveSpd = this.speed * (this.enraged ? 1.1 : 1);
         this.x += Math.cos(ang) * moveSpd * dt;
         this.y += Math.sin(ang) * moveSpd * dt;
         if (Math.hypot(player.x - this.x, player.y - this.y) < player.r + this.r)
-            player.takeDamage(this.baseDmg * dt * (this.enraged ? 1.5 : 1.15));
+            player.takeDamage(this.baseDmg * dt * (this.enraged ? 1.25 : 1));
         this.skillTimer += dt;
-        let skillInterval = Math.max(16, 38 - (this.index - 1) * 2);
-        if (this.enraged) skillInterval *= 0.65;
+        let skillInterval = Math.max(22, 45 - (this.index - 1) * 1.5);
+        if (this.enraged) skillInterval *= 0.75;
         const chargeStart = Math.max(0, skillInterval - 18);
         const charge = Math.max(0, Math.min(1, (this.skillTimer - chargeStart) / 18));
         if (charge > 0) {
@@ -960,95 +1101,108 @@ class Boss {
             }
         }
         if (this.skillTextTimer > 0) this.skillTextTimer = Math.max(0, this.skillTextTimer - dt);
-        
-        // 預警紅線邏輯
-        if (this.warningTimer > 0) {
-            this.warningTimer -= dt;
-            this.warningLine = { tx: player.x, ty: player.y };
-            return; // 預警期間停止移動與攻擊
-        }
 
         if (this.skillTimer > skillInterval) {
-            if (this.warningTimer <= 0 && !this.warningLine) {
-                this.warningTimer = 60; // 1秒預警 (60幀)
-                return;
+            // 先鎖定攻擊位置，顯示紅條預警約 1 秒
+            this.skillTimer = 0;
+            this.chargeAlpha = 0;
+            this.warningTimer = 70;
+            this.lockedAimAng = Math.atan2(player.y - this.y, player.x - this.x);
+            const aimDist = Math.hypot(player.x - this.x, player.y - this.y);
+            this.warningLine = {
+                tx: this.x + Math.cos(this.lockedAimAng) * Math.max(aimDist, 280),
+                ty: this.y + Math.sin(this.lockedAimAng) * Math.max(aimDist, 280),
+                ang: this.lockedAimAng
+            };
+            this.pendingSkillRoll = Math.random();
+            this.skillName = '攻擊預警！';
+            this.skillColor = '#ff1744';
+            this.skillTextTimer = 70;
+            GameEngine.showAlert('注意紅條！BOSS 即將攻擊');
+        }
+    }
+    _firePendingSkill(player, projectiles) {
+        const roll = this.pendingSkillRoll != null ? this.pendingSkillRoll : Math.random();
+        this.pendingSkillRoll = null;
+        this.warningTimer = 0;
+        this.warningLine = null;
+        // 技能投射物傷害大幅調低
+        const hitDmg = (7.5 + this.index * 1.35) * this.timeFactor * (this.enraged ? 1.2 : 1);
+        const aimAng = this.lockedAimAng || Math.atan2(player.y - this.y, player.x - this.x);
+        const bossProj = (vx, vy, dmg, color, extra) => new Projectile(this.x, this.y, vx, vy, dmg, color, Object.assign({
+            hostile: true, life: 420, skillId: 'boss_atk'
+        }, extra));
+        if (roll < 0.34) {
+            const count = this.enraged ? 20 : 16;
+            for (let i = 0; i < count; i++) {
+                const a = Math.PI * 2 * i / count;
+                const sp = 10 + this.index * 0.4;
+                projectiles.push(bossProj(Math.cos(a) * sp, Math.sin(a) * sp, hitDmg * 0.85, '#ff8a65', { r: 9, shape: 'hex', skillId: 'boss_burst' }));
             }
-            this.skillTimer = 0; this.chargeAlpha = 0; this.warningTimer = 0; this.warningLine = null;
-            const roll = Math.random();
-            const hitDmg = (18 + this.index * 3.2) * this.timeFactor * (this.enraged ? 1.35 : 1);
-            const aimAng = Math.atan2(player.y - this.y, player.x - this.x);
-            const bossProj = (vx, vy, dmg, color, extra) => new Projectile(this.x, this.y, vx, vy, dmg, color, Object.assign({
-                hostile: true, life: 420, skillId: 'boss_atk'
-            }, extra));
-            if (roll < 0.34) {
-                const count = this.enraged ? 28 : 22;
+            const fan = this.enraged ? 7 : 5;
+            for (let i = 0; i < fan; i++) {
+                const off = aimAng + (i - (fan - 1) / 2) * 0.14;
+                const sp = 15 + this.index * 0.45;
+                projectiles.push(bossProj(Math.cos(off) * sp, Math.sin(off) * sp, hitDmg * 1.05, '#ff5722', { r: 10, shape: 'lightning', skillId: 'boss_burst_aim' }));
+            }
+            this.skillName = '放射彈幕！';
+            this.skillColor = '#ff8a65';
+            this.skillTextTimer = 72;
+            GameEngine.showAlert('BOSS：放射彈幕！');
+            GameEngine.shake(6, 0.22);
+            GameEngine.spawnParticles(this.x, this.y, '#ff8a65', 18, 3);
+        } else if (roll < 0.67) {
+            const sp = 17 + this.index * 0.5;
+            const beams = this.enraged ? 5 : 4;
+            for (let i = 0; i < beams; i++) {
+                const off = aimAng + (i - (beams - 1) / 2) * 0.09;
+                projectiles.push(bossProj(Math.cos(off) * sp, Math.sin(off) * sp, hitDmg * 1.15, '#ffeb3b', { r: 11, shape: 'lightning', skillId: 'boss_laser', life: 480 }));
+            }
+            this.skillName = '能量狙擊！';
+            this.skillColor = '#ffeb3b';
+            this.skillTextTimer = 72;
+            GameEngine.showAlert('BOSS：能量狙擊！');
+            GameEngine.shake(6, 0.22);
+            GameEngine.spawnParticles(this.x, this.y, '#ffeb3b', 14, 3);
+        } else if (roll < 0.85) {
+            const rainCount = this.enraged ? 10 : 7;
+            for (let i = 0; i < rainCount; i++) {
+                const baseAng = aimAng + (Math.random() - 0.5) * 1.0;
+                const sp = 12 + this.index * 0.35;
+                projectiles.push(bossProj(Math.cos(baseAng) * sp, Math.sin(baseAng) * sp, hitDmg * 0.95, '#ff7043', {
+                    r: 10, shape: 'diamond', homing: true, skillId: 'boss_fire', life: 500
+                }));
+            }
+            this.skillName = '追蹤火雨！';
+            this.skillColor = '#ff7043';
+            this.skillTextTimer = 72;
+            GameEngine.showAlert('BOSS：追蹤火雨！');
+            GameEngine.shake(6, 0.22);
+            GameEngine.spawnParticles(this.x, this.y, '#ff7043', 16, 3);
+        } else {
+            const rings = this.enraged ? 2 : 2;
+            const aimDist = Math.max(Math.hypot(player.x - this.x, player.y - this.y), 280);
+            const tx = this.x + Math.cos(aimAng) * aimDist;
+            const ty = this.y + Math.sin(aimAng) * aimDist;
+            for (let w = 0; w < rings; w++) {
+                const count = 8 + w * 3;
+                const ringR = 50 + w * 40;
                 for (let i = 0; i < count; i++) {
                     const a = Math.PI * 2 * i / count;
-                    const sp = 12 + this.index * 0.5;
-                    projectiles.push(bossProj(Math.cos(a) * sp, Math.sin(a) * sp, hitDmg * 1.1, '#ff8a65', { r: 10, shape: 'hex', skillId: 'boss_burst' }));
-                }
-                const fan = this.enraged ? 9 : 7;
-                for (let i = 0; i < fan; i++) {
-                    const off = aimAng + (i - (fan - 1) / 2) * 0.14;
-                    const sp = 18 + this.index * 0.55;
-                    projectiles.push(bossProj(Math.cos(off) * sp, Math.sin(off) * sp, hitDmg * 1.35, '#ff5722', { r: 11, shape: 'lightning', skillId: 'boss_burst_aim' }));
-                }
-                this.skillName = '放射彈幕！';
-                this.skillColor = '#ff8a65';
-                this.skillTextTimer = 72;
-                GameEngine.showAlert('BOSS：放射彈幕！');
-                GameEngine.shake(6, 0.22);
-                GameEngine.spawnParticles(this.x, this.y, '#ff8a65', 18, 3);
-            } else if (roll < 0.67) {
-                const sp = 20 + this.index * 0.6;
-                const beams = this.enraged ? 7 : 5;
-                for (let i = 0; i < beams; i++) {
-                    const off = aimAng + (i - (beams - 1) / 2) * 0.09;
-                    projectiles.push(bossProj(Math.cos(off) * sp, Math.sin(off) * sp, hitDmg * 1.5, '#ffeb3b', { r: 12, shape: 'lightning', skillId: 'boss_laser', life: 480 }));
-                }
-                this.skillName = '能量狙擊！';
-                this.skillColor = '#ffeb3b';
-                this.skillTextTimer = 72;
-                GameEngine.showAlert('BOSS：能量狙擊！');
-                GameEngine.shake(6, 0.22);
-                GameEngine.spawnParticles(this.x, this.y, '#ffeb3b', 14, 3);
-            } else if (roll < 0.85) {
-                const rainCount = this.enraged ? 14 : 10;
-                for (let i = 0; i < rainCount; i++) {
-                    const baseAng = aimAng + (Math.random() - 0.5) * 1.2;
-                    const sp = 14 + this.index * 0.45;
-                    projectiles.push(bossProj(Math.cos(baseAng) * sp, Math.sin(baseAng) * sp, hitDmg * 1.25, '#ff7043', {
-                        r: 11, shape: 'diamond', homing: true, skillId: 'boss_fire', life: 500
+                    const ox = tx + Math.cos(a) * ringR;
+                    const oy = ty + Math.sin(a) * ringR;
+                    const sp = 9 + w * 2;
+                    projectiles.push(new Projectile(ox, oy, Math.cos(a) * sp, Math.sin(a) * sp, hitDmg * 0.95, '#e040fb', {
+                        hostile: true, r: 10, shape: 'hex', skillId: 'boss_ring', life: 400
                     }));
                 }
-                this.skillName = '追蹤火雨！';
-                this.skillColor = '#ff7043';
-                this.skillTextTimer = 72;
-                GameEngine.showAlert('BOSS：追蹤火雨！');
-                GameEngine.shake(6, 0.22);
-                GameEngine.spawnParticles(this.x, this.y, '#ff7043', 16, 3);
-            } else {
-                const rings = this.enraged ? 3 : 2;
-                for (let w = 0; w < rings; w++) {
-                    const count = 10 + w * 4;
-                    const ringR = 55 + w * 45;
-                    for (let i = 0; i < count; i++) {
-                        const a = Math.PI * 2 * i / count;
-                        const ox = player.x + Math.cos(a) * ringR;
-                        const oy = player.y + Math.sin(a) * ringR;
-                        const sp = 11 + w * 2;
-                        projectiles.push(new Projectile(ox, oy, Math.cos(a) * sp, Math.sin(a) * sp, hitDmg * 1.25, '#e040fb', {
-                            hostile: true, r: 11, shape: 'hex', skillId: 'boss_ring', life: 400
-                        }));
-                    }
-                }
-                this.skillName = '壓制光環！';
-                this.skillColor = '#e040fb';
-                this.skillTextTimer = 72;
-                GameEngine.showAlert('BOSS：壓制光環！');
-                GameEngine.shake(7, 0.25);
-                GameEngine.spawnParticles(player.x, player.y, '#e040fb', 20, 3);
             }
+            this.skillName = '壓制光環！';
+            this.skillColor = '#e040fb';
+            this.skillTextTimer = 72;
+            GameEngine.showAlert('BOSS：壓制光環！');
+            GameEngine.shake(7, 0.25);
+            GameEngine.spawnParticles(tx, ty, '#e040fb', 20, 3);
         }
     }
     draw(ctx, cam) {
@@ -1058,14 +1212,40 @@ class Boss {
         ctx.fillStyle = this.hp > this.maxHp * 0.5 ? '#c5e1a5' : this.hp > this.maxHp * 0.25 ? '#ffe082' : '#ef9a9a';
         ctx.fillRect(this.x - barW/2, this.y - this.r - barH - 10, barW * (this.hp / this.maxHp), barH);
         ctx.save();
-        
-        // 繪製紅線預警
+
+        // 攻擊前紅條：鎖定方向的粗紅預警條 + 落點圈
         if (this.warningTimer > 0 && this.warningLine) {
-            ctx.strokeStyle = 'rgba(255, 0, 0, 0.7)';
-            ctx.lineWidth = 2;
-            ctx.setLineDash([10, 5]);
-            ctx.beginPath(); ctx.moveTo(this.x, this.y); ctx.lineTo(this.warningLine.tx, this.warningLine.ty); ctx.stroke();
+            const pulse = 0.55 + Math.sin(Date.now() / 80) * 0.25;
+            const ang = this.warningLine.ang != null ? this.warningLine.ang : Math.atan2(this.warningLine.ty - this.y, this.warningLine.tx - this.x);
+            const len = Math.hypot(this.warningLine.tx - this.x, this.warningLine.ty - this.y);
+            ctx.save();
+            ctx.translate(this.x, this.y);
+            ctx.rotate(ang);
+            // 外層寬紅條
+            ctx.fillStyle = 'rgba(255, 20, 40,' + (0.22 * pulse) + ')';
+            ctx.fillRect(0, -18, len, 36);
+            ctx.fillStyle = 'rgba(255, 60, 60,' + (0.45 * pulse) + ')';
+            ctx.fillRect(0, -8, len, 16);
+            // 中心實線
+            ctx.strokeStyle = 'rgba(255, 0, 0,' + (0.9 * pulse) + ')';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([14, 8]);
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(len, 0);
+            ctx.stroke();
             ctx.setLineDash([]);
+            ctx.restore();
+            // 落點紅圈
+            ctx.strokeStyle = 'rgba(255, 40, 40,' + (0.85 * pulse) + ')';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(this.warningLine.tx, this.warningLine.ty, 36 + Math.sin(Date.now() / 70) * 6, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.fillStyle = 'rgba(255, 0, 0, 0.12)';
+            ctx.beginPath();
+            ctx.arc(this.warningLine.tx, this.warningLine.ty, 36, 0, Math.PI * 2);
+            ctx.fill();
         }
 
         ctx.translate(this.x, this.y);
@@ -2198,15 +2378,16 @@ window.GameEngine = {
         const stage = this._stageConfig || STAGES[0];
         this.spawnTimer += dt;
         const baseCd = (stage.spawnCd || 75);
-        if (!this._forceBossOnly && this.spawnTimer > baseCd) {
+        const roomFor = (n) => Math.min(n, Math.max(0, MAX_ENEMIES - this.enemies.length));
+        if (!this._forceBossOnly && this.spawnTimer > baseCd && this.enemies.length < MAX_ENEMIES) {
             this.spawnTimer = 0;
             const tFactor = Math.min(1.8, this.timer / 50);
             const waveRoll = Math.random();
             if (this.swarmCount < 4 && waveRoll < 0.18 + tFactor*0.06) {
-                // 小型怪潮
+                // 小型怪潮（受上限 35 限制）
                 this.swarmCount++;
                 GameEngine.showAlert('⚠ 怪潮來襲！');
-                const pack = 10 + Math.floor(tFactor*6);
+                const pack = roomFor(10 + Math.floor(tFactor*6));
                 for (let i = 0; i < pack; i++) {
                     const ang = Math.random() * Math.PI * 2;
                     const dist = 420 + Math.random() * 260;
@@ -2222,7 +2403,7 @@ window.GameEngine = {
                         tFactor
                     ));
                 }
-            } else {
+            } else if (this.enemies.length < MAX_ENEMIES) {
                 const ang = Math.random() * Math.PI * 2;
                 const dist = 380 + Math.random() * 220;
                 const r = Math.random();
@@ -2267,11 +2448,11 @@ window.GameEngine = {
             }
         }
 
-        // Crazy waves at 2 and 4 min
+        // Crazy waves at 2 and 4 min（受上限 35 限制）
         if (this.timer > 120 && this.timer < 125 && !this._wave2) {
             this._wave2 = true;
             GameEngine.showAlert('🚨 瘋狂波次來襲！');
-            const pack = 20 + Math.floor(this.timer / 10);
+            const pack = roomFor(20 + Math.floor(this.timer / 10));
             for (let i = 0; i < pack; i++) {
                 const ang = Math.random() * Math.PI * 2;
                 const dist = 420 + Math.random() * 260;
@@ -2292,7 +2473,7 @@ window.GameEngine = {
         if (this.timer > 240 && this.timer < 245 && !this._wave4) {
             this._wave4 = true;
             GameEngine.showAlert('🚨 最終瘋狂波次！');
-            const pack = 30 + Math.floor(this.timer / 10);
+            const pack = roomFor(30 + Math.floor(this.timer / 10));
             for (let i = 0; i < pack; i++) {
                 const ang = Math.random() * Math.PI * 2;
                 const dist = 420 + Math.random() * 260;
@@ -2493,14 +2674,7 @@ window.GameEngine = {
         const shakeX = (Math.random() * 2 - 1) * shake;
         const shakeY = (Math.random() * 2 - 1) * shake;
         this.ctx.translate(this.canvas.width/2 - cam.x + shakeX, this.canvas.height/2 - cam.y + shakeY);
-        this.ctx.save();
-        this.ctx.strokeStyle = 'rgba(0,210,255,0.24)';
-        this.ctx.lineWidth = 3;
-        this.ctx.setLineDash([16, 10]);
-        this.ctx.beginPath();
-        this.ctx.arc(0, 0, MAP_RADIUS, 0, Math.PI * 2);
-        this.ctx.stroke();
-        this.ctx.restore();
+        Background.drawWorld(this.ctx, cam);
         this.expOrbs.forEach(o => o.draw(this.ctx, cam));
         this.enemies.forEach(e => e.draw(this.ctx, cam));
         this.bosses.forEach(b => b.draw(this.ctx, cam));
@@ -2948,7 +3122,6 @@ window.GameEngine = {
 
 window.onload = () => GameEngine.init();
 })();
-    GameEngine.showSection('stages')
 </script>
 </body>
 </html>
