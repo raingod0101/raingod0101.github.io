@@ -38,6 +38,11 @@
         .input-area { padding: 10px 15px 35px; border-top: 1px solid #eee; display: flex; gap: 10px; align-items: center; background: #fff; }
         input[type="text"] { flex: 1; padding: 12px 16px; border: none; background: #f2f2f7; border-radius: 25px; outline: none; font-size: 16px; }
         
+        /* Shortcut Buttons */
+        .shortcut-area { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 10px; }
+        .shortcut-btn { padding: 8px 16px; background: #f2f2f7; color: #333; border: 1px solid #ddd; border-radius: 12px; font-size: 14px; font-weight: bold; cursor: pointer; }
+        .shortcut-btn:hover { background: var(--me-bg); color: white; border-color: var(--me-bg); }
+
         .hidden { display: none !important; }
         .btn-sm { padding: 6px 12px; border-radius: 8px; border: 1px solid #ddd; background: none; font-size: 12px; cursor: pointer; font-weight: bold; }
     </style>
@@ -56,9 +61,16 @@
 
     <div id="login-view" style="padding: 40px; text-align: center; flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 15px;">
         <h2 style="color: var(--me-bg); font-size: 32px; margin: 0;">雨神聊天室</h2>
+        
+        <input type="text" id="nick-input" placeholder="設定暱稱 (可不填，自動生成)">
         <input type="text" id="room-input" placeholder="房號 (705)">
-        <input type="text" id="nick-input" placeholder="暱稱">
         <button onclick="handleJoin()" style="padding:16px; background:var(--me-bg); color:white; border:none; border-radius:15px; font-weight:bold; cursor:pointer;">進入房間</button>
+        
+        <!-- 捷徑房間區塊 -->
+        <div style="margin-top: 15px;">
+            <div style="font-size: 13px; color: var(--text-gray); margin-bottom: 8px;">快捷進房：</div>
+            <div class="shortcut-area" id="shortcut-box"></div>
+        </div>
     </div>
 
     <div id="chat-view" class="hidden" style="display:flex; flex-direction:column; height:100%;">
@@ -88,7 +100,27 @@
     const db = getDatabase(app);
     let uid = localStorage.getItem('chat_uid') || 'u' + Math.random().toString(36).substr(2, 7);
     localStorage.setItem('chat_uid', uid);
-    let currentRoom = "", myNick = "";
+    
+    // --- 1. 自動讀取與設定暱稱 ---
+    let savedNick = localStorage.getItem('chat_nick');
+    if (!savedNick) {
+        savedNick = '訪客_' + Math.random().toString(36).substr(2, 4).toUpperCase();
+        localStorage.setItem('chat_nick', savedNick);
+    }
+    document.getElementById('nick-input').value = savedNick;
+
+    let currentRoom = "", myNick = savedNick;
+
+    // --- 2. 快捷房間設定 (可自由增加或修改) ---
+    const quickRooms = ["feedback", "705", "666"]; 
+    const shortcutBox = document.getElementById('shortcut-box');
+    quickRooms.forEach(room => {
+        const btn = document.createElement('button');
+        btn.className = 'shortcut-btn';
+        btn.innerText = `🚪 ${room}`;
+        btn.onclick = () => handleJoin(room);
+        shortcutBox.appendChild(btn);
+    });
 
     // 格式化時間
     function formatTime(timestamp) {
@@ -132,10 +164,17 @@
         }
     };
 
-    window.handleJoin = async () => {
-        const r = document.getElementById('room-input').value.trim().toUpperCase();
-        const n = document.getElementById('nick-input').value.trim() || "訪客";
-        if(!r) return;
+    // 進入房間 (可傳入指定房號或讀取輸入框)
+    window.handleJoin = async (targetRoom) => {
+        const inputNick = document.getElementById('nick-input').value.trim();
+        if (inputNick) {
+            myNick = inputNick;
+            localStorage.setItem('chat_nick', myNick);
+        }
+
+        const r = (targetRoom || document.getElementById('room-input').value).trim().toUpperCase();
+        if(!r) { alert("請輸入房號"); return; }
+        
         const roomRef = ref(db, `rooms/${r}`);
         const snap = await get(roomRef);
         if(!snap.exists()){
@@ -144,7 +183,7 @@
             await set(ref(db, `rooms/${r}/meta`), { owner: uid });
             await set(ref(db, `owners/${uid}`), r);
         }
-        currentRoom = r; myNick = n;
+        currentRoom = r;
         document.getElementById('login-view').classList.add('hidden');
         document.getElementById('chat-view').classList.remove('hidden');
         document.getElementById('room-title').innerText = r;
@@ -189,7 +228,6 @@
             const box = document.getElementById('chat-box'); box.innerHTML = "";
             snap.forEach(child => {
                 const d = child.val(); 
-                // 改用暱稱 (name) 與目前登入暱稱 (myNick) 比對，確保發出的訊息在右邊
                 const isMe = d.name === myNick;
                 
                 let body = "";
@@ -207,7 +245,6 @@
                 const timeLabel = formatTime(d.ts);
                 const div = document.createElement('div');
                 div.className = `msg-row ${isMe?'me':'other'}`;
-                // 雙擊 (ondblclick) 收回訊息
                 div.innerHTML = `
                     <div class="msg-info">${d.name} • ${timeLabel}</div>
                     <div class="bubble" ondblclick="${isMe ? `deleteMsg('${child.key}')` : ''}">${body}</div>
