@@ -75,6 +75,20 @@
         .skin-card { width: 128px; border: 1px solid rgba(0,210,255,0.18); border-radius: 12px; padding: 8px; background: rgba(255,255,255,0.04); text-align:center; }
         .skin-card img { width: 100%; height: 100px; object-fit: contain; border-radius: 10px; }
         .skin-card .status { margin-top: 6px; font-size: 0.82rem; color: #ccc; }
+        #rank-list { max-height: 280px; overflow-y: auto; padding: 6px; }
+        .rank-row {
+            display: flex; align-items: center; gap: 10px; padding: 8px 10px; margin: 4px 0;
+            border-radius: 8px; background: rgba(255,255,255,0.04); border: 1px solid rgba(0,210,255,0.12);
+            font-size: 0.92rem;
+        }
+        .rank-row.me { border-color: #ffd700; background: rgba(255,215,0,0.08); }
+        .rank-pos { width: 28px; color: #00d2ff; font-weight: bold; text-align: center; }
+        .rank-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .rank-stage { color: #ffd700; min-width: 72px; text-align: right; }
+        #player-name-input {
+            width: 140px; padding: 8px 10px; border-radius: 8px;
+            border: 1px solid rgba(0,210,255,0.25); background: rgba(0,0,0,0.55); color: #fff;
+        }
         #lottery-overlay { position: fixed; inset: 0; display:none; align-items:center; justify-content:center; z-index:400; pointer-events:none; }
         #lottery-overlay.show { display:flex; pointer-events:auto; }
         #lottery-overlay .panel { width:360px; max-width:90%; padding:18px; border-radius:12px; text-align:center; background:linear-gradient(180deg, rgba(0,0,0,0.75), rgba(0,0,0,0.9)); border:1px solid rgba(255,255,255,0.06); box-shadow:0 12px 40px rgba(0,0,0,0.6); }
@@ -94,7 +108,7 @@
 <div id="nav_bar"></div>
 
 <script src="menu.js"></script>
-    <div style="position: fixed; top: 5px; left: 5px; color: gray; font-size: 12px; font-family: sans-serif;">不支援雲端儲存</div>
+    <div style="position: fixed; top: 5px; left: 5px; color: #7a9; font-size: 12px; font-family: sans-serif;">排行榜雲端：Firebase</div>
 <div id="game-container">
     <canvas id="bg-canvas"></canvas>
     <canvas id="main-canvas"></canvas>
@@ -104,9 +118,23 @@
         <div class="resource-bar">
             <span>💰 <span id="lobby-gold">0</span></span>
         </div>
-        <div id="lobby-nav" style="display:flex; justify-content:center; margin-bottom:12px;">
+        <div id="lobby-nav" style="display:flex; justify-content:center; margin-bottom:12px; flex-wrap:wrap; gap:6px;">
             <button class="main-btn small" onclick="GameEngine.showSection('stages')">關卡</button>
             <button class="main-btn small" onclick="GameEngine.showSection('talents')">天賦</button>
+            <button class="main-btn small" onclick="GameEngine.showSection('rank')">排行榜</button>
+        </div>
+        <div id="section-rank" class="lobby-section" style="display:none;">
+            <h3>取名 &amp; 關卡排行榜</h3>
+            <div class="glass-panel" style="padding:12px; margin-bottom:10px;">
+                <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:center;">
+                    <label for="player-name-input" style="color:#a8d8ff;">玩家名稱</label>
+                    <input id="player-name-input" type="text" maxlength="12" placeholder="輸入暱稱">
+                    <button class="main-btn small" onclick="GameEngine.savePlayerName()">儲存名稱</button>
+                    <button class="main-btn small" onclick="GameEngine.refreshLeaderboard()">重新整理</button>
+                </div>
+                <div id="rank-status" style="margin-top:8px; text-align:center; color:#ffea00; min-height:18px; font-size:0.85rem;"></div>
+            </div>
+            <div id="rank-list" class="glass-panel"></div>
         </div>
         <div style="display:flex; gap:8px; align-items:center; justify-content:center; flex-wrap:wrap; margin-bottom:6px;">
             <div style="color:#ccddee; font-size:0.92rem;">快速搖桿設定：</div>
@@ -320,6 +348,8 @@ const SaveSystem = {
         resources: { gold:0 },
         talents: { ATK:0, HP:0, SPD:0, REC:0 },
         unlockedStage: 1,
+        playerName: '',
+        playerId: '',
         skinsUnlocked: { CD:false, meowl:false, gojo:false },
         skinFragments: { CD:0, meowl:0, gojo:0 },
         // joystick and lottery settings persisted
@@ -334,6 +364,10 @@ const SaveSystem = {
         } catch(e) {}
         if (typeof this.currentData.unlockedStage !== 'number') this.currentData.unlockedStage = 1;
         if (typeof this.currentData.skin !== 'string') this.currentData.skin = 'default';
+        if (typeof this.currentData.playerName !== 'string') this.currentData.playerName = '';
+        if (typeof this.currentData.playerId !== 'string' || !this.currentData.playerId) {
+            this.currentData.playerId = 'p_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
+        }
         if (typeof this.currentData.skinsUnlocked !== 'object' || this.currentData.skinsUnlocked === null) {
             this.currentData.skinsUnlocked = { CD:false, meowl:false, gojo:false };
         }
@@ -348,6 +382,96 @@ const SaveSystem = {
         this.save();
     },
     save() { localStorage.setItem('RAINGOD_SAVE', JSON.stringify(this.currentData)); }
+};
+
+// ─── Firebase 排行榜（依關卡進度）────────────────────────────────────────────
+const Leaderboard = {
+    BASE: 'https://game-24b43-default-rtdb.firebaseio.com/raingod/leaderboard',
+    cache: [],
+    sanitizeName(name) {
+        return String(name || '')
+            .replace(/[<>"'`\\]/g, '')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .slice(0, 12);
+    },
+    setStatus(msg) {
+        const el = document.getElementById('rank-status');
+        if (el) el.textContent = msg || '';
+    },
+    async upload() {
+        const d = SaveSystem.currentData;
+        const name = this.sanitizeName(d.playerName);
+        if (!name) {
+            this.setStatus('請先設定玩家名稱再上傳排行榜。');
+            return false;
+        }
+        const payload = {
+            name,
+            stage: Math.max(1, d.unlockedStage || 1),
+            updatedAt: Date.now()
+        };
+        try {
+            this.setStatus('上傳中…');
+            const res = await fetch(this.BASE + '/' + encodeURIComponent(d.playerId) + '.json', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            this.setStatus('已同步：' + name + '｜關卡 ' + payload.stage);
+            return true;
+        } catch (e) {
+            this.setStatus('上傳失敗（請確認 Firebase 規則允許讀寫）');
+            return false;
+        }
+    },
+    async fetchList() {
+        try {
+            this.setStatus('讀取排行榜…');
+            const res = await fetch(this.BASE + '.json');
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const data = await res.json();
+            const list = [];
+            if (data && typeof data === 'object') {
+                Object.keys(data).forEach(id => {
+                    const row = data[id];
+                    if (!row || typeof row !== 'object') return;
+                    const name = this.sanitizeName(row.name) || '無名';
+                    const stage = Math.max(1, parseInt(row.stage, 10) || 1);
+                    list.push({ id, name, stage, updatedAt: row.updatedAt || 0 });
+                });
+            }
+            list.sort((a, b) => b.stage - a.stage || b.updatedAt - a.updatedAt);
+            this.cache = list;
+            this.render();
+            this.setStatus(list.length ? ('已載入 ' + list.length + ' 位玩家') : '尚無排行資料，成為第一名吧！');
+            return list;
+        } catch (e) {
+            this.setStatus('讀取失敗（請確認 Firebase 規則允許讀取）');
+            return [];
+        }
+    },
+    render() {
+        const box = document.getElementById('rank-list');
+        if (!box) return;
+        const myId = SaveSystem.currentData.playerId;
+        if (!this.cache.length) {
+            box.innerHTML = '<div style="padding:12px;color:#889;text-align:center;">尚無資料</div>';
+            return;
+        }
+        box.innerHTML = '';
+        this.cache.slice(0, 50).forEach((row, i) => {
+            const div = document.createElement('div');
+            div.className = 'rank-row' + (row.id === myId ? ' me' : '');
+            const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : String(i + 1);
+            div.innerHTML =
+                '<span class="rank-pos">' + medal + '</span>' +
+                '<span class="rank-name">' + row.name + (row.id === myId ? '（你）' : '') + '</span>' +
+                '<span class="rank-stage">關卡 ' + row.stage + '</span>';
+            box.appendChild(div);
+        });
+    }
 };
 
 // ─── 輸入 ─────────────────────────────────────────────────────────────────────
@@ -2319,6 +2443,7 @@ window.GameEngine = {
             if (this.currentStage >= d.unlockedStage && d.unlockedStage < MAX_STAGES) {
                 d.unlockedStage = this.currentStage + 1;
                 SaveSystem.save();
+                Leaderboard.upload();
             }
             this.stageClear();
             return true;
@@ -2789,6 +2914,10 @@ window.GameEngine = {
     },
     renderLobby() {
         document.getElementById('lobby-gold').textContent = SaveSystem.currentData.resources.gold;
+        const nameInput = document.getElementById('player-name-input');
+        if (nameInput && document.activeElement !== nameInput) {
+            nameInput.value = SaveSystem.currentData.playerName || '';
+        }
         const list = document.getElementById('upgrade-list');
         list.innerHTML = '';
         [{ id:'ATK', name:'攻擊', cost:100 }, { id:'HP', name:'血量', cost:100 }, { id:'SPD', name:'速度', cost:150, max:10 }, { id:'REC', name:'恢復', cost:120, max:10 }].forEach(t => {
@@ -3095,11 +3224,35 @@ window.GameEngine = {
         this.refreshTestPanel();
     },
     showSection(section) {
-        const sections = ['talents', 'stages'];
+        const sections = ['talents', 'stages', 'rank'];
         sections.forEach(s => {
             const el = document.getElementById('section-' + s);
             if (el) el.style.display = s === section ? 'block' : 'none';
         });
+        if (section === 'rank') {
+            const nameInput = document.getElementById('player-name-input');
+            if (nameInput) nameInput.value = SaveSystem.currentData.playerName || '';
+            this.refreshLeaderboard();
+        }
+    },
+    savePlayerName() {
+        const input = document.getElementById('player-name-input');
+        const name = Leaderboard.sanitizeName(input ? input.value : '');
+        if (!name) {
+            Leaderboard.setStatus('名稱不可空白（最多 12 字）');
+            this.showAlert('請輸入名稱');
+            return;
+        }
+        SaveSystem.currentData.playerName = name;
+        SaveSystem.save();
+        if (input) input.value = name;
+        Leaderboard.upload().then(ok => {
+            if (ok) this.refreshLeaderboard();
+        });
+        this.showAlert('名稱已儲存：' + name);
+    },
+    refreshLeaderboard() {
+        Leaderboard.fetchList();
     },
     buyTalent(id, cost) {
         const d = SaveSystem.currentData;
