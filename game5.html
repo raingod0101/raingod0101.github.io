@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
@@ -12,7 +11,7 @@
         }
         html, body { 
             margin: 0; padding: 0; height: 100%; overflow: hidden; 
-            background: var(--bg); font-family: 'Segoe UI', sans-serif; 
+            background: var(--bg); font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
             display: flex; flex-direction: column; 
             -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
         }
@@ -27,26 +26,46 @@
         #hud { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; padding: 15px; box-sizing: border-box; z-index: 10; }
         .stat-group { display: flex; flex-direction: column; gap: 8px; pointer-events: auto; }
         .panel { background: rgba(0, 0, 0, 0.85); border: 1px solid #222; border-left: 4px solid var(--neon); padding: 8px 15px; backdrop-filter: blur(5px); }
-        .label { color: #666; font-size: 9px; text-transform: uppercase; letter-spacing: 1px; }
+        .label { color: #888; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; }
         .value { color: #fff; font-size: 20px; font-weight: 900; }
         
-        .ctrl-btn { padding: 10px 15px; background: #111; color: #fff; border: 1px solid var(--pink); cursor: pointer; pointer-events: auto; font-weight: bold; font-size: 13px; }
+        .ctrl-btn { padding: 10px 15px; background: #111; color: #fff; border: 1px solid var(--pink); cursor: pointer; pointer-events: auto; font-weight: bold; font-size: 13px; transition: 0.2s; }
         .ctrl-btn:active { background: var(--pink); color: #000; }
+
+        /* Active Skills Bar */
+        #skills-bar {
+            position: absolute; bottom: 20px; right: 20px;
+            display: flex; gap: 10px; pointer-events: auto; z-index: 20;
+        }
+        .skill-btn {
+            width: 70px; height: 70px; background: rgba(10, 10, 20, 0.9);
+            border: 2px solid var(--neon); border-radius: 8px;
+            color: #fff; display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            font-size: 11px; font-weight: bold; cursor: pointer;
+            position: relative; overflow: hidden;
+        }
+        .skill-btn:disabled { border-color: #444; color: #666; cursor: not-allowed; }
+        .skill-cd {
+            position: absolute; bottom: 0; left: 0; width: 100%; height: 0%;
+            background: rgba(255, 0, 123, 0.5); transition: height 0.1s linear;
+        }
 
         #shop-window { 
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
-            width: 90%; max-width: 450px; height: 70vh; 
-            overflow-y: auto; background: rgba(5, 5, 10, 0.98); 
+            width: 90%; max-width: 480px; height: 75vh; 
+            overflow-y: auto; background: rgba(5, 5, 12, 0.98); 
             border: 2px solid var(--neon); padding: 20px; display: none; 
             pointer-events: auto; z-index: 100; touch-action: auto;
+            box-shadow: 0 0 30px rgba(0,242,255,0.2);
         }
         .upgrade-card { background: #0a0a0f; margin-bottom: 10px; padding: 12px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #222; }
-        .up-name { color: var(--neon); font-size: 13px; font-weight: bold; }
-        .btn-buy { background: var(--gold); border: none; padding: 8px 10px; font-weight: 900; min-width: 70px; cursor: pointer; }
+        .up-name { color: var(--neon); font-size: 14px; font-weight: bold; }
+        .btn-buy { background: var(--gold); border: none; padding: 8px 12px; font-weight: 900; min-width: 80px; cursor: pointer; }
         .btn-buy:disabled { background: #333; color: #666; cursor: not-allowed; }
 
         #combo-wrap { position: absolute; bottom: 20px; left: 20px; }
-        .combo-n { font-size: 50px; color: #fff; line-height: 0.7; font-style: italic; font-weight: 900; opacity: 0.4; }
+        .combo-n { font-size: 50px; color: #fff; line-height: 0.7; font-style: italic; font-weight: 900; opacity: 0.5; }
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-thumb { background: var(--neon); }
     </style>
@@ -54,10 +73,9 @@
 <body>
     
 <link rel="stylesheet" href="menu.css">
-
 <div id="nav_bar"></div>
-
 <script src="menu.js"></script>
+
     <div id="game-container">
         <canvas id="canvas"></canvas>
         <div id="hud">
@@ -72,16 +90,29 @@
                     <button id="prestige-btn" class="ctrl-btn" style="border-color: var(--gold); display:none;" onclick="doPrestige()">ASCEND</button>
                 </div>
             </div>
+            
             <div id="combo-wrap">
                 <div class="label" style="color:var(--neon)">CHAIN STREAK</div>
                 <div class="combo-n" id="combo-display">0</div>
             </div>
+
+            <!-- 主動技能欄 -->
+            <div id="skills-bar">
+                <button class="skill-btn" id="skill-shock" onclick="useSkill('shock')">
+                    <div class="skill-cd" id="cd-shock"></div>
+                    <span style="z-index: 2;">超光速<br>連鎖</span>
+                </button>
+                <button class="skill-btn" id="skill-freeze" onclick="useSkill('freeze')">
+                    <div class="skill-cd" id="cd-freeze"></div>
+                    <span style="z-index: 2;">時空<br>停滯</span>
+                </button>
+            </div>
         </div>
         
         <div id="shop-window">
-            <h2 style="color:#fff; border-bottom: 2px solid var(--neon); padding-bottom:10px;">UPGRADES</h2>
+            <h2 style="color:#fff; border-bottom: 2px solid var(--neon); padding-bottom:10px; margin-top:0;">UPGRADES</h2>
             <div id="shop-content"></div>
-            <button onclick="toggleShop()" style="width:100%; margin-top:20px; padding:12px; background:#222; color:#fff; border:none; cursor:pointer;">CLOSE</button>
+            <button onclick="toggleShop()" style="width:100%; margin-top:20px; padding:12px; background:#222; color:#fff; border:none; cursor:pointer; font-weight:bold;">CLOSE</button>
         </div>
     </div>
 
@@ -91,34 +122,38 @@
         const container = document.getElementById('game-container');
 
         const MOB_TYPES = {
-    // --- [ 基礎與普通層級 ] ---
-    COMMON:  { name: 'Drone', color: '#00f2ff', hp: 2, reward: 10, size: 30, behavior: 'normal' },
-    ELITE:   { name: 'Hunter', color: '#ff007b', hp: 60, reward: 450, size: 45, behavior: 'fast' },
-    VOID:    { name: 'Void', color: '#bc13fe', hp: 600, reward: 3000, size: 55, behavior: 'sine' },
-    MAGMA:   { name: 'Magma', color: '#ff6600', hp: 3000, reward: 20000, size: 65, behavior: 'jitter' },
-    SOLAR:   { name: 'Solar', color: '#ffcc00', hp: 25000, reward: 180000, size: 85, behavior: 'pulse' },
-    OMEGA:   { name: 'Omega', color: '#ffffff', hp: 150000, reward: 1200000, size: 110, behavior: 'teleport' },
-    RAINGOD: { name: 'RAINGOD', color: '#00ff88', hp: 1000000, reward: 10000000, size: 150, behavior: 'chaos' },
+            COMMON:   { name: 'Drone', color: '#00f2ff', hp: 2, reward: 10, size: 30, behavior: 'normal' },
+            ELITE:    { name: 'Hunter', color: '#ff007b', hp: 60, reward: 450, size: 45, behavior: 'fast' },
+            VOID:     { name: 'Void', color: '#bc13fe', hp: 600, reward: 3000, size: 55, behavior: 'sine' },
+            MAGMA:    { name: 'Magma', color: '#ff6600', hp: 3000, reward: 20000, size: 65, behavior: 'jitter' },
+            SOLAR:    { name: 'Solar', color: '#ffcc00', hp: 25000, reward: 180000, size: 85, behavior: 'pulse' },
+            OMEGA:    { name: 'Omega', color: '#ffffff', hp: 150000, reward: 1200000, size: 110, behavior: 'teleport' },
+            RAINGOD:  { name: 'RAINGOD', color: '#00ff88', hp: 1000000, reward: 10000000, size: 150, behavior: 'chaos' },
 
-    // --- [ 隱藏與超稀有層級 - 隨幸運值微幅增加機率 ] ---
-    DIMENSION: { name: '位面主宰', color: '#ff00ff', hp: 5000000, reward: 60000000, size: 160, behavior: 'teleport' },
-    ETERNAL:   { name: '永恆之光', color: '#00ffff', hp: 25000000, reward: 350000000, size: 170, behavior: 'pulse' },
-    INFINITY:  { name: '無限意志', color: '#ff0055', hp: 150000000, reward: 2500000000, size: 180, behavior: 'chaos' },
-    CREATOR:   { name: '創世神', color: '#ffeeaa', hp: 1000000000, reward: 15000000000, size: 190, behavior: 'vortex' },
-    ZENITH:    { name: '絕對頂點', color: '#ffffff', hp: 10000000000, reward: 99999999999, size: 220, behavior: 'chaos' }
-};
-        const SAVE_KEY = 'raingod_eternal_save_data';
+            // 稀有與神級怪物（調高總體出現率）
+            DIMENSION:{ name: '位面主宰', color: '#ff00ff', hp: 5000000, reward: 60000000, size: 160, behavior: 'teleport' },
+            ETERNAL:  { name: '永恆之光', color: '#00ffff', hp: 25000000, reward: 350000000, size: 170, behavior: 'pulse' },
+            INFINITY: { name: '無限意志', color: '#ff0055', hp: 150000000, reward: 2500000000, size: 180, behavior: 'chaos' },
+            CREATOR:  { name: '創世神', color: '#ffeeaa', hp: 1000000000, reward: 15000000000, size: 190, behavior: 'vortex' },
+            ZENITH:   { name: '絕對頂點', color: '#ffffff', hp: 10000000000, reward: 99999999999, size: 220, behavior: 'chaos' }
+        };
+
+        const SAVE_KEY = 'raingod_eternal_v2_save';
         let gameData = {
             money: 0, totalEarned: 0, prestige: 1,
             upgrades: {
                 damage: { lv: 1, cost: 50, mult: 1.45, name: "量子核心", desc: "增加每次點擊的破壞力" },
-                range: { lv: 1, cost: 200, mult: 1.6, name: "共振距離", desc: "引發更遠的連鎖爆炸" },
-                luck: { lv: 1, cost: 1000, mult: 2.3, name: "命運干涉", desc: "提高稀有怪出現機率" }
-            },
+                range:  { lv: 1, cost: 200, mult: 1.6, name: "共振距離", desc: "引發更遠的連鎖爆炸" },
+                luck:   { lv: 1, cost: 500, mult: 1.8, name: "命運干涉", desc: "大幅大幅提高稀有怪出現機率" },
+                turret: { lv: 0, cost: 1500, mult: 2.2, name: "軌道防禦砲", desc: "自動瞄準周圍敵人發射電漿" },
+                crit:   { lv: 1, cost: 800, mult: 1.9, name: "超頻爆擊", desc: "提高造成 3x 暴擊傷害的機率" }
+            }
         };
 
         let width, height, combo = 0;
-        let cubes = [], particles = [], floaters = [];
+        let cubes = [], particles = [], floaters = [], lasers = [];
+        let freezeTimer = 0;
+        let skillCDs = { shock: 0, freeze: 0 };
 
         function init() {
             width = canvas.width = container.clientWidth;
@@ -142,49 +177,42 @@
 
         class Cube {
             constructor() {
-                // 在 Mob 類的 constructor 內
-// --- 在 Mob 的 constructor 內 ---
+                const roll = Math.random();
+                // 強化 Luck 加成演算法，讓稀有怪物大幅增加
+                const luckLvl = gameData.upgrades.luck.lv;
+                const luckFactor = luckLvl * 0.02; // 每級增加顯著機率
 
-const roll = Math.random();
-// 修正幸運值：將 Luck lv 轉為極小的加成，避免崩壞
-const luck = gameData.upgrades.luck.lv * 0.005;
-const L = Math.sqrt(luck) * 0.01; // 極稀有怪物的判定加數
+                // --- 判定邏輯 (顯著提升高階怪物率) ---
+                if (roll < 0.0005 + luckFactor * 0.01)       this.type = MOB_TYPES.ZENITH;
+                else if (roll < 0.002 + luckFactor * 0.02)   this.type = MOB_TYPES.CREATOR;
+                else if (roll < 0.008 + luckFactor * 0.04)   this.type = MOB_TYPES.INFINITY;
+                else if (roll < 0.02 + luckFactor * 0.06)    this.type = MOB_TYPES.ETERNAL;
+                else if (roll < 0.05 + luckFactor * 0.08)    this.type = MOB_TYPES.DIMENSION;
+                else if (roll < 0.08 + luckFactor * 0.1)     this.type = MOB_TYPES.RAINGOD;
+                else if (roll < 0.15 + luckFactor * 0.12)    this.type = MOB_TYPES.OMEGA;
+                else if (roll < 0.25 + luckFactor * 0.15)    this.type = MOB_TYPES.SOLAR;
+                else if (roll < 0.40)                        this.type = MOB_TYPES.MAGMA;
+                else if (roll < 0.60)                        this.type = MOB_TYPES.VOID;
+                else if (roll < 0.80)                        this.type = MOB_TYPES.ELITE;
+                else                                         this.type = MOB_TYPES.COMMON;
 
-// --- 判定邏輯 (由強到弱，從機率 0.000001 開始) ---
-
-// 1. 神級 (極低機率)
-if (roll < 0.000001 + L * 0.001)      this.type = MOB_TYPES.ZENITH;
-else if (roll < 0.00001 + L * 0.005)  this.type = MOB_TYPES.CREATOR;
-else if (roll < 0.00005 + L * 0.01)   this.type = MOB_TYPES.INFINITY;
-else if (roll < 0.0001 + L * 0.02)    this.type = MOB_TYPES.ETERNAL;
-else if (roll < 0.0003 + L * 0.05)    this.type = MOB_TYPES.DIMENSION;
-
-// 2. 原本的稀有層級 (依照你提供的機率調整)
-else if (roll < 0.0001 + L * 0.1)     this.type = MOB_TYPES.RAINGOD;
-else if (roll < 0.001 + L * 0.2)      this.type = MOB_TYPES.OMEGA;
-else if (roll < 0.005 + L * 0.5)      this.type = MOB_TYPES.SOLAR;
-else if (roll < 0.015 + L)            this.type = MOB_TYPES.MAGMA;
-else if (roll < 0.05 + L * 2)         this.type = MOB_TYPES.VOID;
-
-// 3. 基礎層級 (保底區間，確保不消失)
-else if (roll < 0.20)                 this.type = MOB_TYPES.ELITE;
-else                                  this.type = MOB_TYPES.COMMON;
-                this.x = Math.random() * (width - 60) + 30;
-                this.y = Math.random() * (height - 60) + 30;
+                this.x = Math.random() * (width - 100) + 50;
+                this.y = Math.random() * (height - 100) + 50;
                 this.size = this.type.size;
-                const hpScale = Math.pow(1.25, (gameData.upgrades.damage.lv - 1) / 4);
+                const hpScale = Math.pow(1.22, (gameData.upgrades.damage.lv - 1) / 3);
                 this.hp = this.type.hp * gameData.prestige * hpScale;
                 this.maxHp = this.hp;
                 this.color = this.type.color;
                 this.vx = (Math.random() - 0.5) * 2;
                 this.vy = (Math.random() - 0.5) * 2;
-                this.tick = 0;
+                this.tick = Math.random() * 100;
                 this.dead = false;
             }
 
             update() {
+                if (freezeTimer > 0) return; // 時空停滯技能觸發中不移動
+
                 this.tick += 0.05;
-                // 在開始計算前，確保透明度是正常的 (防止殘留效果)
                 ctx.globalAlpha = 1;
 
                 switch(this.type.behavior) {
@@ -195,22 +223,14 @@ else                                  this.type = MOB_TYPES.COMMON;
                         this.x += this.vx; this.y += Math.sin(this.tick) * 5; 
                         break;
                     case 'jitter': 
-                        // 劇烈震動 (Magma)
                         this.x += this.vx + (Math.random()-0.5)*8; 
                         this.y += this.vy + (Math.random()-0.5)*8; 
                         break;
-                    case 'wobble': 
-                        // 輕微上下震動 (魅影)
-                        this.x += this.vx;
-                        this.y += this.vy + Math.sin(this.tick * 4) * 3;
-                        break;
                     case 'pulse': 
-                        // 縮放動作 (Solar, Eternal)
                         this.size = this.type.size + Math.sin(this.tick * 2) * 10; 
                         this.x += this.vx; this.y += this.vy; 
                         break;
                     case 'vortex': 
-                        // 旋轉移動 (Storm, Galaxy)
                         this.x += this.vx + Math.cos(this.tick) * 4;
                         this.y += this.vy + Math.sin(this.tick) * 4;
                         break;
@@ -226,9 +246,8 @@ else                                  this.type = MOB_TYPES.COMMON;
                         this.x += this.vx; this.y += this.vy;
                 }
                 
-                // 邊界判定 (保持不變)
-                if(this.x < 20 || this.x > width - 20) this.vx *= -1;
-                if(this.y < 20 || this.y > height - 20) this.vy *= -1;
+                if(this.x < 30 || this.x > width - 30) this.vx *= -1;
+                if(this.y < 30 || this.y > height - 30) this.vy *= -1;
             }
 
             draw() {
@@ -236,13 +255,15 @@ else                                  this.type = MOB_TYPES.COMMON;
                 ctx.translate(this.x, this.y);
                 ctx.strokeStyle = this.color;
                 ctx.lineWidth = 3;
-                ctx.shadowBlur = 10;
+                ctx.shadowBlur = 12;
                 ctx.shadowColor = this.color;
                 ctx.strokeRect(-this.size/2, -this.size/2, this.size, this.size);
-                let p = this.hp / this.maxHp;
+                
+                // 血條
+                let p = Math.max(0, this.hp / this.maxHp);
                 ctx.shadowBlur = 0;
-                ctx.fillStyle = '#111'; ctx.fillRect(-20, -this.size/2 - 12, 40, 5);
-                ctx.fillStyle = this.color; ctx.fillRect(-20, -this.size/2 - 12, 40 * p, 5);
+                ctx.fillStyle = '#111'; ctx.fillRect(-25, -this.size/2 - 14, 50, 6);
+                ctx.fillStyle = this.color; ctx.fillRect(-25, -this.size/2 - 14, 50 * p, 6);
                 ctx.restore();
             }
 
@@ -254,40 +275,120 @@ else                                  this.type = MOB_TYPES.COMMON;
                 spawnEffect(this.x, this.y, this.color);
                 spawnText(this.x, this.y, `+$${Math.floor(reward).toLocaleString()}`, this.color);
 
-                let range = 110 + (gameData.upgrades.range.lv * 18);
+                let range = 110 + (gameData.upgrades.range.lv * 20);
                 cubes.forEach(c => {
                     if(!c.dead && Math.hypot(this.x - c.x, this.y - c.y) < range) {
-                        setTimeout(() => c.takeDamage(getAtkPower() * 0.6), 80);
+                        setTimeout(() => c.takeDamage(getAtkPower(false) * 0.7), 80);
                     }
                 });
                 if(gameData.totalEarned > 5000000) document.getElementById('prestige-btn').style.display = 'block';
                 refreshUI(); saveGame();
             }
 
-            takeDamage(dmg) {
+            takeDamage(dmg, isCrit = false) {
                 if(this.dead) return;
                 this.hp -= dmg;
+                
+                // 特效文字
+                if(isCrit) {
+                    spawnText(this.x, this.y - 15, `CRIT! ${Math.floor(dmg).toLocaleString()}`, '#ffcc00', 18);
+                }
+
                 if(this.hp <= 0) { this.dead = true; this.explode(); }
             }
         }
 
-        function getAtkPower() { return Math.pow(1.55, gameData.upgrades.damage.lv - 1) * gameData.prestige; }
+        // 計算攻擊力（含暴擊判定）
+        function getAtkPower(canCrit = true) {
+            let base = Math.pow(1.55, gameData.upgrades.damage.lv - 1) * gameData.prestige;
+            if(!canCrit) return base;
+
+            const critChance = Math.min(0.8, (gameData.upgrades.crit.lv - 1) * 0.08); // 最高 80% 暴擊
+            const isCrit = Math.random() < critChance || freezeTimer > 0;
+            return {
+                damage: isCrit ? base * 3.5 : base,
+                isCrit: isCrit
+            };
+        }
 
         function refreshUI() {
             document.getElementById('money-display').innerText = Math.floor(gameData.money).toLocaleString();
-            document.getElementById('damage-display').innerText = Math.floor(getAtkPower()).toLocaleString();
+            document.getElementById('damage-display').innerText = Math.floor(Math.pow(1.55, gameData.upgrades.damage.lv - 1) * gameData.prestige).toLocaleString();
             document.getElementById('prestige-display').innerText = gameData.prestige;
             document.getElementById('combo-display').innerText = combo;
         }
 
         function spawnEffect(x, y, color) {
-            for(let i=0; i<12; i++) {
-                particles.push({ x, y, vx:(Math.random()-0.5)*10, vy:(Math.random()-0.5)*10, life:1, color });
+            for(let i=0; i<16; i++) {
+                particles.push({ x, y, vx:(Math.random()-0.5)*12, vy:(Math.random()-0.5)*12, life:1, color });
             }
         }
 
-        function spawnText(x, y, txt, color) {
-            floaters.push({ x, y, txt, color, life:1.2, vy:-1.5 });
+        function spawnText(x, y, txt, color, size = 14) {
+            floaters.push({ x, y, txt, color, size, life:1.2, vy:-1.5 });
+        }
+
+        // --- 主動技能系統 ---
+        function useSkill(type) {
+            if(skillCDs[type] > 0) return;
+
+            if(type === 'shock') {
+                skillCDs.shock = 15; // 15秒冷卻
+                cubes.forEach(c => {
+                    lasers.push({ x1: width/2, y1: height/2, x2: c.x, y2: c.y, life: 0.3 });
+                    c.takeDamage(getAtkPower(false) * 5);
+                });
+            } else if(type === 'freeze') {
+                skillCDs.freeze = 20; // 20秒冷卻
+                freezeTimer = 5; // 停止移動 5 秒
+            }
+        }
+
+        function updateSkills() {
+            if(freezeTimer > 0) freezeTimer -= 0.016;
+            
+            for(let key in skillCDs) {
+                if(skillCDs[key] > 0) {
+                    skillCDs[key] -= 0.016;
+                    let maxCD = key === 'shock' ? 15 : 20;
+                    let pct = Math.max(0, (skillCDs[key] / maxCD) * 100);
+                    document.getElementById(`cd-${key}`).style.height = `${pct}%`;
+                    document.getElementById(`skill-${key}`).disabled = true;
+                } else {
+                    document.getElementById(`cd-${key}`).style.height = `0%`;
+                    document.getElementById(`skill-${key}`).disabled = false;
+                }
+            }
+        }
+
+        // --- 自動砲塔系統 ---
+        function updateTurrets() {
+            const turretLv = gameData.upgrades.turret.lv;
+            if(turretLv <= 0 || cubes.length === 0) return;
+
+            const time = Date.now() * 0.002;
+            const radius = 120;
+            const cx = width / 2, cy = height / 2;
+
+            for(let i = 0; i < turretLv; i++) {
+                let angle = time + (i * Math.PI * 2 / turretLv);
+                let tx = cx + Math.cos(angle) * radius;
+                let ty = cy + Math.sin(angle) * radius;
+
+                // 繪製砲塔
+                ctx.fillStyle = '#00f2ff';
+                ctx.beginPath(); ctx.arc(tx, ty, 6, 0, Math.PI*2); ctx.fill();
+
+                // 發射間隔
+                if(Math.random() < 0.05) {
+                    let target = cubes[Math.floor(Math.random() * cubes.length)];
+                    if(target && !target.dead) {
+                        lasers.push({ x1: tx, y1: ty, x2: target.x, y2: target.y, life: 0.15 });
+                        let atk = getAtkPower(true);
+                        target.takeDamage(atk.damage * 0.4, atk.isCrit);
+                    }
+                }
+            }
         }
 
         function toggleShop() {
@@ -300,7 +401,7 @@ else                                  this.type = MOB_TYPES.COMMON;
                     const up = gameData.upgrades[k];
                     const cost = Math.floor(up.cost * Math.pow(up.mult, up.lv-1));
                     cont.innerHTML += `<div class="upgrade-card">
-                        <div><div class="up-name">${up.name} [LV.${up.lv}]</div><small style="color:#666">${up.desc}</small></div>
+                        <div><div class="up-name">${up.name} [LV.${up.lv}]</div><small style="color:#888">${up.desc}</small></div>
                         <button class="btn-buy" onclick="buy('${k}', ${cost})" ${gameData.money < cost ? 'disabled' : ''}>$${cost.toLocaleString()}</button>
                     </div>`;
                 }
@@ -325,22 +426,46 @@ else                                  this.type = MOB_TYPES.COMMON;
         }
 
         function loop() {
-            ctx.fillStyle = 'rgba(2, 2, 5, 0.3)';
+            // 時空停滯特效背景
+            if (freezeTimer > 0) {
+                ctx.fillStyle = 'rgba(0, 15, 30, 0.4)';
+            } else {
+                ctx.fillStyle = 'rgba(2, 2, 5, 0.3)';
+            }
             ctx.fillRect(0, 0, width, height);
-            if(cubes.length < 20) cubes.push(new Cube());
+
+            if(cubes.length < 22) cubes.push(new Cube());
             cubes = cubes.filter(c => !c.dead);
             cubes.forEach(c => { c.update(); c.draw(); });
+
+            // 更新技能與砲塔
+            updateSkills();
+            updateTurrets();
+
+            // 雷射光軌跡
+            lasers = lasers.filter(l => (l.life -= 0.03) > 0);
+            lasers.forEach(l => {
+                ctx.strokeStyle = '#00f2ff';
+                ctx.lineWidth = 2;
+                ctx.globalAlpha = l.life * 3;
+                ctx.beginPath(); ctx.moveTo(l.x1, l.y1); ctx.lineTo(l.x2, l.y2); ctx.stroke();
+            });
+
+            // 粒子特效
             particles = particles.filter(p => (p.life -= 0.03) > 0);
             particles.forEach(p => {
                 p.x += p.vx; p.y += p.vy;
                 ctx.fillStyle = p.color; ctx.globalAlpha = p.life;
-                ctx.fillRect(p.x, p.y, 2, 2);
+                ctx.fillRect(p.x, p.y, 3, 3);
             });
+
+            // 飄浮文字
             floaters = floaters.filter(f => (f.life -= 0.02) > 0);
             floaters.forEach(f => {
                 f.y += f.vy; ctx.fillStyle = f.color; ctx.globalAlpha = f.life;
-                ctx.font = "bold 14px Segoe UI"; ctx.fillText(f.txt, f.x, f.y);
+                ctx.font = `bold ${f.size || 14}px Segoe UI`; ctx.fillText(f.txt, f.x, f.y);
             });
+
             ctx.globalAlpha = 1;
             requestAnimationFrame(loop);
         }
@@ -350,10 +475,12 @@ else                                  this.type = MOB_TYPES.COMMON;
             const mouseX = ex - rect.left;
             const mouseY = ey - rect.top;
             let hit = false;
+
             for (let i = cubes.length - 1; i >= 0; i--) {
                 const c = cubes[i];
                 if(Math.hypot(mouseX - c.x, mouseY - c.y) < (c.size/1.5) + 30) {
-                    c.takeDamage(getAtkPower());
+                    let atk = getAtkPower(true);
+                    c.takeDamage(atk.damage, atk.isCrit);
                     hit = true; break;
                 }
             }
@@ -361,7 +488,6 @@ else                                  this.type = MOB_TYPES.COMMON;
             refreshUI();
         }
 
-        // 專門處理遊戲畫布的點擊
         canvas.addEventListener('mousedown', (e) => handleAction(e.clientX, e.clientY));
         canvas.addEventListener('touchstart', (e) => {
             e.preventDefault(); 
