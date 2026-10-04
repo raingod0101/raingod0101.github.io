@@ -3,232 +3,427 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>大亨 | Raingod</title>
+    <title>工業帝國大亨 | Raingod</title>
     <style>
         * { touch-action: none; user-select: none; box-sizing: border-box; }
-        body { margin: 0; background: #0f172a; overflow: hidden; font-family: 'Arial Black', sans-serif; }
+        body { margin: 0; background: #020617; overflow: hidden; font-family: 'Segoe UI', system-ui, sans-serif; }
         #ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
-        .hud { position: absolute; top: 15px; left: 15px; background: #fff; border: 4px solid #334155; padding: 10px 20px; border-radius: 8px; pointer-events: auto; }
-        .money { color: #16a34a; font-size: 32px; font-weight: 900; }
-        .shop { position: absolute; bottom: 20px; right: 20px; pointer-events: auto; display: flex; flex-direction: column; gap: 8px; }
-        .btn { background: #3b82f6; color: #fff; border: 4px solid #1e3a8a; padding: 12px; font-weight: bold; border-radius: 8px; cursor: pointer; }
-        .btn:active { transform: translateY(2px); background: #2563eb; }
+        
+        /* HUD 主面板 */
+        .hud { 
+            position: absolute; top: 15px; left: 15px; 
+            background: rgba(15, 23, 42, 0.92); border: 2px solid #0ea5e9; 
+            box-shadow: 0 0 25px rgba(14, 165, 233, 0.35);
+            padding: 14px 22px; border-radius: 12px; pointer-events: auto; backdrop-filter: blur(10px);
+        }
+        .money { color: #4ade80; font-size: 34px; font-weight: 900; text-shadow: 0 0 12px rgba(74, 222, 128, 0.6); }
+        .dark-matter { color: #c084fc; font-size: 14px; font-weight: bold; margin-top: 2px; }
+        .stats { font-size: 12px; color: #94a3b8; margin-top: 6px; display: flex; gap: 10px; flex-wrap: wrap; }
+
+        /* 右側多頁籤控制面板 */
+        .panel { 
+            position: absolute; bottom: 15px; right: 15px; 
+            width: 320px; max-height: 80vh; overflow-y: auto;
+            background: rgba(15, 23, 42, 0.95); border: 1px solid #334155; border-radius: 12px;
+            pointer-events: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8); backdrop-filter: blur(8px);
+        }
+        .panel::-webkit-scrollbar { width: 4px; }
+        .panel::-webkit-scrollbar-thumb { background: #38bdf8; border-radius: 4px; }
+
+        .tabs { display: flex; gap: 4px; margin-bottom: 6px; }
+        .tab-btn { 
+            flex: 1; background: #1e293b; color: #94a3b8; border: none; padding: 6px; 
+            font-size: 12px; font-weight: bold; border-radius: 6px; cursor: pointer;
+        }
+        .tab-btn.active { background: #0284c7; color: #fff; }
+
+        .btn { 
+            background: linear-gradient(135deg, #1e293b, #0f172a); color: #fff; border: 1px solid #38bdf8; 
+            padding: 10px 12px; font-weight: bold; font-size: 13px; border-radius: 8px; cursor: pointer; 
+            display: flex; justify-content: space-between; align-items: center; transition: all 0.2s;
+        }
+        .btn:hover:not(:disabled) { background: linear-gradient(135deg, #0284c7, #0369a1); border-color: #38bdf8; }
+        .btn:disabled { opacity: 0.35; border-color: #475569; cursor: not-allowed; }
+        
+        /* 轉生與成就面板 */
+        .rebirth-btn { background: linear-gradient(135deg, #7e22ce, #581c87); border-color: #c084fc; margin-top: 4px; }
+        .rebirth-btn:hover:not(:disabled) { background: linear-gradient(135deg, #9333ea, #6b21a8); }
+
+        .chain-hud {
+            position: absolute; bottom: 15px; left: 15px;
+            background: rgba(15, 23, 42, 0.9); border: 1px solid #334155;
+            padding: 8px 14px; border-radius: 8px; color: #94a3b8; font-size: 11px;
+            display: flex; gap: 8px; pointer-events: auto; align-items: center;
+        }
     </style>
 </head>
 <body>
 <link rel="stylesheet" href="menu.css">
-
 <div id="nav_bar"></div>
-
 <script src="menu.js"></script>
+
 <canvas id="c"></canvas>
 <div id="ui">
     <div class="hud">
         <div class="money">$<span id="m">0</span></div>
-        <div style="font-size:12px; color:#64748b;">自動化程度: <span id="bots">0</span></div>
+        <div class="dark-matter">🌌 暗物質點數: <span id="dm">0</span> (收益加成: +<span id="dmMult">0</span>%)</div>
+        <div class="stats">
+            <span>🤖 自動機兵: <span id="botsCount">0</span></span>
+            <span>⚙ 採礦等級: Lv.<span id="minerLv">0</span></span>
+            <span>🎒 負重: <span id="capLv">4</span></span>
+            <span>❄ 冷卻效率: Lv.<span id="coolLv">0</span></span>
+        </div>
     </div>
-    <div class="shop">
-        <button class="btn" onclick="buyBot()">🤖 雇用搬運機兵 ($500)</button>
-        <button class="btn" onclick="upgrade('miner')">⚙️ 礦機提速 ($1000)</button>
+
+    <div class="chain-hud">
+        <span style="color:#ef4444">🔴 原礦</span>➔
+        <span style="color:#f59e0b">🟠 鋼鐵</span>➔
+        <span style="color:#3b82f6">🔵 晶片</span>➔
+        <span style="color:#22c55e">🟢 鈾電池</span>➔
+        <span style="color:#a855f7">🟣 量子核心</span>➔
+        <span style="color:#e11d48">💎 反物質</span>
+    </div>
+
+    <div class="panel">
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('tab-prod')">產線擴展</button>
+            <button class="tab-btn" onclick="switchTab('tab-upg')">基礎升級</button>
+            <button class="tab-btn" onclick="switchTab('tab-tech')">深層科技</button>
+        </div>
+
+        <div id="tab-prod">
+            <button class="btn" id="btnUnlock2" onclick="unlockTier(2)">
+                <span>🔓 矽晶/晶片廠</span><span style="color:#4ade80">$2,500</span>
+            </button>
+            <button class="btn" id="btnUnlock3" onclick="unlockTier(3)">
+                <span>🔓 鈾能/電池中心</span><span style="color:#4ade80">$25,000</span>
+            </button>
+            <button class="btn" id="btnUnlock4" onclick="unlockTier(4)">
+                <span>🔓 量子合成廠</span><span style="color:#4ade80">$200,000</span>
+            </button>
+            <button class="btn" id="btnUnlock5" onclick="unlockTier(5)">
+                <span>🔓 反物質研究所</span><span style="color:#4ade80">$2,000,000</span>
+            </button>
+        </div>
+
+        <div id="tab-upg" style="display:none;">
+            <button class="btn" id="btnBot" onclick="buyBot()">
+                <span>🤖 雇用自動機兵</span><span style="color:#4ade80" id="bCost">$500</span>
+            </button>
+            <button class="btn" id="btnMiner" onclick="upgrade('miner')">
+                <span>⚙️ 採礦機提速</span><span style="color:#4ade80" id="mCost">$1,000</span>
+            </button>
+            <button class="btn" id="btnCap" onclick="upgrade('capacity')">
+                <span>🎒 機兵容量 (+2)</span><span style="color:#4ade80" id="cCost">$1,500</span>
+            </button>
+            <button class="btn" id="btnCool" onclick="upgrade('cooling')">
+                <span>❄ 水冷系統升級</span><span style="color:#4ade80" id="coolCost">$3,000</span>
+            </button>
+        </div>
+
+        <div id="tab-tech" style="display:none;">
+            <button class="btn rebirth-btn" id="btnRebirth" onclick="triggerRebirth()">
+                <span>🌌 星際轉生 (重置獲得暗物質)</span><span style="color:#c084fc" id="rebirthGain">+0 DM</span>
+            </button>
+            <div style="font-size:11px; color:#64748b; margin-top:4px;">需要資產達到 $1,000,000 方可觸發轉生。</div>
+        </div>
     </div>
 </div>
 
 <script>
     const cvs = document.getElementById('c'), ctx = cvs.getContext('2d');
+    const SAVE_KEY = 'raingod_mega_tycoon_save';
+
+    let money = 0, darkMatter = 0, frame = 0;
+    let minerLevel = 0, capacity = 4, coolingLevel = 0, techTier = 1;
+    let heat = 0; // 工廠過熱值
+    let p = { x: 300, y: 300, r: 20, tx: 300, ty: 300, bag: [] };
+    let bots = [], items = [], floatTexts = [], particles = [];
+    let gameStarted = false;
+
+    // 10 大資源定義
+    const ITEMS = {
+        RAW:     { name: '原礦', val: 10, color: '#ef4444' },
+        STEEL:   { name: '鋼鐵', val: 50, color: '#f59e0b' },
+        SILICON: { name: '矽晶', val: 80, color: '#0284c7' },
+        CHIP:    { name: '晶片', val: 300, color: '#3b82f6' },
+        URANIUM: { name: '鈾礦', val: 500, color: '#10b981' },
+        BATTERY: { name: '核電池', val: 2500, color: '#22c55e' },
+        CORE:    { name: '量子核心', val: 12000, color: '#a855f7' },
+        ANTIM:   { name: '反物質', val: 100000, color: '#e11d48' }
+    };
+
+    function switchTab(tabId) {
+        document.querySelectorAll('.panel > div[id^="tab-"]').forEach(d => d.style.display = 'none');
+        document.getElementById(tabId).style.display = 'block';
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        event.target.classList.add('active');
+    }
+
+    function getBuildings() {
+        const b = {
+            extractor: { x: 60, y: 80, w: 100, h: 80, color: '#ef4444', label: '🔴 採礦塔' },
+            smelter:   { x: 60, y: 200, w: 100, h: 80, color: '#f59e0b', label: '🟠 鋼鐵廠' },
+            hub:       { x: cvs.width - 180, y: cvs.height / 2 - 80, w: 130, h: 160, color: '#38bdf8', label: '💎 總貿易站' }
+        };
+        if (techTier >= 2) b.chipFab  = { x: 60, y: 320, w: 100, h: 80, color: '#3b82f6', label: '🔵 晶片廠' };
+        if (techTier >= 3) b.nukeFab  = { x: 60, y: 440, w: 100, h: 80, color: '#22c55e', label: '🟢 鈾能廠' };
+        if (techTier >= 4) b.qFab     = { x: 60, y: 560, w: 100, h: 80, color: '#a855f7', label: '🟣 量子合成' };
+        if (techTier >= 5) b.antiFab  = { x: 60, y: 680, w: 100, h: 80, color: '#e11d48', label: '💎 反物質所' };
+        return b;
+    }
+
     const resize = () => { cvs.width = window.innerWidth; cvs.height = window.innerHeight; };
-    window.onresize = resize; resize();
-
-    const SAVE_KEY = 'raingod_tycoon_save';
-    let money = 0, frame = 0, minerLevel = 0, p = { x: 200, y: 200, r: 22, tx: 200, ty: 200, bag: [] };
-    let bots = [], items = [], customers = [], shakes = 0, gameStarted = false;
-
-    // 設施清單 (實體化、高飽和度)
-    const buildings = [
-        { x: 60, y: 100, w: 100, h: 100, type: 'EXTRACTOR', color: '#ef4444', label: '🔴 採礦塔', stock: 0 },
-        { x: 60, y: 400, w: 100, h: 100, type: 'FACTORY', color: '#f59e0b', label: '🟠 加工廠', stock: 0 },
-        { x: cvs.width - 200, y: 250, w: 120, h: 120, type: 'HUB', color: '#22c55e', label: '💎 貿易站', stock: 0 }
-    ];
-
+    window.addEventListener('resize', resize); resize();
     window.addEventListener('pointermove', e => { p.tx = e.clientX; p.ty = e.clientY; });
 
+    function spawnFloatText(x, y, text, color='#4ade80') { floatTexts.push({ x, y, text, color, alpha: 1 }); }
+    function spawnParticles(x, y, color, count=6) {
+        for(let i=0; i<count; i++) {
+            particles.push({ x, y, vx: (Math.random()-0.5)*6, vy: (Math.random()-0.5)*6, size: Math.random()*4+2, color, alpha: 1 });
+        }
+    }
+
     function buyBot() {
-        if(money >= 500) {
-            money -= 500;
-            bots.push({ x: cvs.width/2, y: cvs.height/2, bag: [], speed: 4 });
+        let cost = Math.floor(500 * Math.pow(1.3, bots.length));
+        if(money >= cost) {
+            money -= cost;
+            bots.push({ x: cvs.width/2, y: cvs.height/2, bag: [], speed: 5 });
             saveGame();
         }
     }
 
     function upgrade(type) {
-        if (type !== 'miner' || money < 1000) return;
-        money -= 1000;
-        minerLevel++;
-        saveGame();
+        if (type === 'miner') {
+            let cost = Math.floor(1000 * Math.pow(1.5, minerLevel));
+            if (money >= cost) { money -= cost; minerLevel++; saveGame(); }
+        } else if (type === 'capacity') {
+            let cost = Math.floor(1500 * (capacity / 2));
+            if (money >= cost) { money -= cost; capacity += 2; saveGame(); }
+        } else if (type === 'cooling') {
+            let cost = Math.floor(3000 * Math.pow(1.6, coolingLevel));
+            if (money >= cost) { money -= cost; coolingLevel++; saveGame(); }
+        }
+    }
+
+    function unlockTier(tier) {
+        const costs = { 2: 2500, 3: 25000, 4: 200000, 5: 2000000 };
+        if (money >= costs[tier] && techTier === tier - 1) {
+            money -= costs[tier];
+            techTier = tier;
+            spawnFloatText(p.x, p.y, `階層 ${tier} 產線解鎖!`, '#38bdf8');
+            saveGame();
+        }
+    }
+
+    function triggerRebirth() {
+        if (money >= 1000000) {
+            let earnedDM = Math.floor(money / 100000);
+            darkMatter += earnedDM;
+            money = 0; minerLevel = 0; capacity = 4; techTier = 1; coolingLevel = 0;
+            p.bag = []; bots = []; items = [];
+            spawnFloatText(cvs.width/2, cvs.height/2, `轉生成功！獲得 ${earnedDM} 暗物質`, '#c084fc');
+            saveGame();
+        }
     }
 
     function saveGame() {
         if (!gameStarted) return;
         localStorage.setItem(SAVE_KEY, JSON.stringify({
-            money,
-            frame,
-            minerLevel,
-            player: { x: p.x, y: p.y, tx: p.tx, ty: p.ty, bag: p.bag },
-            bots,
-            items,
-            customers
+            money, darkMatter, minerLevel, capacity, coolingLevel, techTier,
+            player: { x: p.x, y: p.y, bag: p.bag }, bots, items
         }));
     }
 
     function loadGame(data) {
-        money = 0;
-        frame = 0;
-        minerLevel = 0;
-        p = { x: 200, y: 200, r: 22, tx: 200, ty: 200, bag: [] };
-        bots = [];
-        items = [];
-        customers = [];
         if (!data || typeof data !== 'object') return;
-        money = Math.max(0, Number(data.money) || 0);
-        frame = Math.max(0, Math.floor(Number(data.frame) || 0));
-        minerLevel = Math.max(0, Math.floor(Number(data.minerLevel) || 0));
-        if (data.player && typeof data.player === 'object') {
-            p.x = Number(data.player.x) || p.x;
-            p.y = Number(data.player.y) || p.y;
-            p.tx = Number(data.player.tx) || p.tx;
-            p.ty = Number(data.player.ty) || p.ty;
-            p.bag = Array.isArray(data.player.bag) ? data.player.bag : [];
-        }
+        money = Number(data.money) || 0;
+        darkMatter = Number(data.darkMatter) || 0;
+        minerLevel = Number(data.minerLevel) || 0;
+        capacity = Number(data.capacity) || 4;
+        coolingLevel = Number(data.coolingLevel) || 0;
+        techTier = Number(data.techTier) || 1;
         bots = Array.isArray(data.bots) ? data.bots : [];
         items = Array.isArray(data.items) ? data.items : [];
-        customers = Array.isArray(data.customers) ? data.customers : [];
     }
 
     function update() {
         frame++;
-        p.x += (p.tx - p.x) * 0.15;
-        p.y += (p.ty - p.y) * 0.15;
+        const b = getBuildings();
 
-        // 採礦塔自動噴礦 (實體方塊)
-        if(frame % Math.max(15, 70 - minerLevel * 5) === 0) {
-            items.push({ x: 170, y: 150 + (Math.random()-0.5)*40, type: 'RAW', color: '#ef4444' });
+        p.x += (p.tx - p.x) * 0.18; p.y += (p.ty - p.y) * 0.18;
+
+        // 冷卻過熱
+        if (heat > 0) heat = Math.max(0, heat - (0.2 + coolingLevel * 0.1));
+
+        // 產礦 logic
+        const spawnInterval = Math.max(8, 45 - minerLevel * 5);
+        if(frame % spawnInterval === 0 && items.length < 40 && heat < 90) {
+            items.push({ x: b.extractor.x + b.extractor.w + 15, y: b.extractor.y + b.extractor.h/2 + (Math.random()-0.5)*30, type: 'RAW' });
+            heat += 1.5;
         }
 
-        // 機器人邏輯
+        // 智慧機兵 AI 鏈
         bots.forEach(bot => {
             let target = null;
-            if (bot.bag.length === 0) target = items[0] || { x: 170, y: 150 };
-            else if (bot.bag[0].type === 'RAW') target = { x: 110, y: 450 };
-            else target = { x: cvs.width - 140, y: 310 };
+            if (bot.bag.length === 0) {
+                let it = items[0];
+                target = it ? { x: it.x, y: it.y } : { x: b.extractor.x + b.extractor.w + 15, y: b.extractor.y + b.extractor.h/2 };
+            } else {
+                let top = bot.bag[bot.bag.length - 1];
+                if (top.type === 'RAW') target = { x: b.smelter.x + b.smelter.w/2, y: b.smelter.y + b.smelter.h/2 };
+                else if (top.type === 'STEEL' && b.chipFab) target = { x: b.chipFab.x + b.chipFab.w/2, y: b.chipFab.y + b.chipFab.h/2 };
+                else if (top.type === 'CHIP' && b.nukeFab) target = { x: b.nukeFab.x + b.nukeFab.w/2, y: b.nukeFab.y + b.nukeFab.h/2 };
+                else if (top.type === 'BATTERY' && b.qFab) target = { x: b.qFab.x + b.qFab.w/2, y: b.qFab.y + b.qFab.h/2 };
+                else if (top.type === 'CORE' && b.antiFab) target = { x: b.antiFab.x + b.antiFab.w/2, y: b.antiFab.y + b.antiFab.h/2 };
+                else target = { x: b.hub.x + b.hub.w/2, y: b.hub.y + b.hub.h/2 };
+            }
 
-            let dx = target.x - bot.x, dy = target.y - bot.y, d = Math.hypot(dx, dy);
-            if(d > 5) { bot.x += dx/d * bot.speed; bot.y += dy/d * bot.speed; }
-            interact(bot);
+            let dx = target.x - bot.x, dy = target.y - bot.y, dist = Math.hypot(dx, dy);
+            if(dist > 5) { bot.x += (dx / dist) * bot.speed; bot.y += (dy / dist) * bot.speed; }
+            interact(bot, b);
         });
 
-        interact(p);
+        interact(p, b);
 
-        // 客人系統
-        if(frame % 200 === 0 && customers.length < 4) customers.push({ x: cvs.width + 50, y: 310 });
-        customers.forEach((c, i) => { if(c.x > cvs.width - 60 + i*50) c.x -= 2; });
+        // 特效更新
+        for(let i = floatTexts.length-1; i>=0; i--) { floatTexts[i].y -= 1; floatTexts[i].alpha -= 0.025; if(floatTexts[i].alpha<=0) floatTexts.splice(i,1); }
+        for(let i = particles.length-1; i>=0; i--) { particles[i].x += particles[i].vx; particles[i].y += particles[i].vy; particles[i].alpha -= 0.04; if(particles[i].alpha<=0) particles.splice(i,1); }
 
-        document.getElementById('m').innerText = money;
-        document.getElementById('bots').innerText = bots.length;
-        if (frame % 60 === 0) saveGame();
+        // 面板與按鈕數值更新
+        document.getElementById('m').innerText = Math.floor(money).toLocaleString();
+        document.getElementById('dm').innerText = darkMatter;
+        document.getElementById('dmMult').innerText = darkMatter * 20;
+        document.getElementById('botsCount').innerText = bots.length;
+        document.getElementById('minerLv').innerText = minerLevel;
+        document.getElementById('capLv').innerText = capacity;
+        document.getElementById('coolLv').innerText = coolingLevel;
+
+        let bCost = Math.floor(500 * Math.pow(1.3, bots.length));
+        let mCost = Math.floor(1000 * Math.pow(1.5, minerLevel));
+        let cCost = Math.floor(1500 * (capacity / 2));
+        let coolCost = Math.floor(3000 * Math.pow(1.6, coolingLevel));
+
+        document.getElementById('bCost').innerText = `$${bCost.toLocaleString()}`;
+        document.getElementById('mCost').innerText = `$${mCost.toLocaleString()}`;
+        document.getElementById('cCost').innerText = `$${cCost.toLocaleString()}`;
+        document.getElementById('coolCost').innerText = `$${coolCost.toLocaleString()}`;
+
+        document.getElementById('btnBot').disabled = money < bCost;
+        document.getElementById('btnMiner').disabled = money < mCost;
+        document.getElementById('btnCap').disabled = money < cCost;
+        document.getElementById('btnCool').disabled = money < coolCost;
+
+        document.getElementById('btnUnlock2').disabled = techTier !== 1 || money < 2500;
+        document.getElementById('btnUnlock3').disabled = techTier !== 2 || money < 25000;
+        document.getElementById('btnUnlock4').disabled = techTier !== 3 || money < 200000;
+        document.getElementById('btnUnlock5').disabled = techTier !== 4 || money < 2000000;
+
+        let potentialDM = Math.floor(money / 100000);
+        document.getElementById('rebirthGain').innerText = `+${potentialDM} DM`;
+        document.getElementById('btnRebirth').disabled = money < 1000000;
+
+        if (frame % 120 === 0) saveGame();
     }
 
-    function interact(obj) {
-        // 撿地上物品
-        items.forEach((it, i) => {
-            if(Math.hypot(obj.x - it.x, obj.y - it.y) < 40 && obj.bag.length < 4) {
+    function processConvert(obj, from, to, bld) {
+        if (obj.bag.some(i => i.type === from)) {
+            let idx = obj.bag.findIndex(i => i.type === from);
+            obj.bag[idx] = { type: to };
+            spawnParticles(bld.x + bld.w/2, bld.y + bld.h/2, ITEMS[to].color, 6);
+        }
+    }
+
+    function interact(obj, b) {
+        for (let i = items.length - 1; i >= 0; i--) {
+            if (Math.hypot(obj.x - items[i].x, obj.y - items[i].y) < 30 && obj.bag.length < capacity) {
                 obj.bag.push(items.splice(i, 1)[0]);
             }
-        });
-        // 靠近工廠加工 (RAW -> PRODUCT)
-        if(Math.hypot(obj.x - 110, obj.y - 450) < 60) {
-            obj.bag.forEach(it => { if(it.type === 'RAW') { it.type = 'PROD'; it.color = '#3b82f6'; shakes = 5; } });
         }
-        // 賣給貿易站
-        if(Math.hypot(obj.x - (cvs.width - 140), obj.y - 310) < 70 && customers.length > 0) {
-            if(obj.bag.some(i => i.type === 'PROD')) {
-                obj.bag = obj.bag.filter(i => i.type !== 'PROD');
-                money += 300;
-                customers.shift();
-                shakes = 10;
+
+        if (Math.hypot(obj.x - (b.smelter.x + b.smelter.w/2), obj.y - (b.smelter.y + b.smelter.h/2)) < 50) processConvert(obj, 'RAW', 'STEEL', b.smelter);
+        if (b.chipFab && Math.hypot(obj.x - (b.chipFab.x + b.chipFab.w/2), obj.y - (b.chipFab.y + b.chipFab.h/2)) < 50) processConvert(obj, 'STEEL', 'CHIP', b.chipFab);
+        if (b.nukeFab && Math.hypot(obj.x - (b.nukeFab.x + b.nukeFab.w/2), obj.y - (b.nukeFab.y + b.nukeFab.h/2)) < 50) processConvert(obj, 'CHIP', 'BATTERY', b.nukeFab);
+        if (b.qFab && Math.hypot(obj.x - (b.qFab.x + b.qFab.w/2), obj.y - (b.qFab.y + b.qFab.h/2)) < 50) processConvert(obj, 'BATTERY', 'CORE', b.qFab);
+        if (b.antiFab && Math.hypot(obj.x - (b.antiFab.x + b.antiFab.w/2), obj.y - (b.antiFab.y + b.antiFab.h/2)) < 50) processConvert(obj, 'CORE', 'ANTIM', b.antiFab);
+
+        // 出售
+        if (Math.hypot(obj.x - (b.hub.x + b.hub.w/2), obj.y - (b.hub.y + b.hub.h/2)) < 70) {
+            if (obj.bag.length > 0) {
+                let mult = 1 + (darkMatter * 0.2);
+                let total = obj.bag.reduce((sum, item) => sum + (ITEMS[item.type].val * mult), 0);
+                obj.bag = []; money += total;
+                spawnFloatText(b.hub.x, b.hub.y - 20, `+$${Math.floor(total).toLocaleString()}`, '#4ade80');
+                spawnParticles(b.hub.x + b.hub.w/2, b.hub.y + b.hub.h/2, '#4ade80', 10);
             }
         }
     }
 
     function draw() {
-        // --- 核心：完全清空畫布，不留淡化殘影 ---
         ctx.clearRect(0, 0, cvs.width, cvs.height);
-        ctx.fillStyle = '#1e293b'; ctx.fillRect(0,0,cvs.width,cvs.height);
+        ctx.fillStyle = '#020617'; ctx.fillRect(0, 0, cvs.width, cvs.height);
 
-        // 地圖裝飾 (清晰的網格)
-        ctx.strokeStyle = '#334155'; ctx.lineWidth = 2;
-        for(let i=0; i<cvs.width; i+=100) { ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,cvs.height); ctx.stroke(); }
-        for(let i=0; i<cvs.height; i+=100) { ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(cvs.width,i); ctx.stroke(); }
+        // 網格
+        ctx.strokeStyle = 'rgba(30, 41, 59, 0.3)'; ctx.lineWidth = 1;
+        for (let x = 0; x < cvs.width; x += 50) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, cvs.height); ctx.stroke(); }
+        for (let y = 0; y < cvs.height; y += 50) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(cvs.width, y); ctx.stroke(); }
 
-        // 畫建築 (厚重的邊框感)
-        buildings.forEach(b => {
-            ctx.fillStyle = '#000'; ctx.fillRect(b.x+6, b.y+6, b.w, b.h); // 實體陰影
-            ctx.fillStyle = b.color; ctx.strokeStyle = '#fff'; ctx.lineWidth = 4;
-            ctx.strokeRect(b.x, b.y, b.w, b.h); ctx.fillRect(b.x, b.y, b.w, b.h);
-            ctx.fillStyle = '#fff'; ctx.font = 'bold 14px Arial'; ctx.fillText(b.label, b.x, b.y-10);
+        const b = getBuildings();
+
+        // 建築
+        Object.values(b).forEach(bld => {
+            ctx.shadowColor = bld.color; ctx.shadowBlur = 12;
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.9)'; ctx.strokeStyle = bld.color; ctx.lineWidth = 2.5;
+            ctx.beginPath(); ctx.roundRect(bld.x, bld.y, bld.w, bld.h, 10); ctx.fill(); ctx.stroke();
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#f8fafc'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center';
+            ctx.fillText(bld.label, bld.x + bld.w/2, bld.y - 8);
         });
 
-        // 畫掉在地上的物品
+        // 物品
         items.forEach(it => {
-            ctx.fillStyle = it.color; ctx.strokeStyle = '#000'; ctx.lineWidth = 2;
-            ctx.fillRect(it.x-10, it.y-10, 20, 20); ctx.strokeRect(it.x-10, it.y-10, 20, 20);
+            ctx.shadowColor = ITEMS[it.type].color; ctx.shadowBlur = 6;
+            ctx.fillStyle = ITEMS[it.type].color;
+            ctx.beginPath(); ctx.roundRect(it.x - 7, it.y - 7, 14, 14, 3); ctx.fill();
+            ctx.shadowBlur = 0;
         });
 
-        // 畫機器人 (有眼睛的機兵)
+        // 機器人
         bots.forEach(bot => {
-            ctx.fillStyle = '#94a3b8'; ctx.strokeStyle = '#000'; ctx.beginPath(); ctx.arc(bot.x, bot.y, 16, 0, 7); ctx.fill(); ctx.stroke();
-            ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(bot.x-5, bot.y-2, 3, 0, 7); ctx.arc(bot.x+5, bot.y-2, 3, 0, 7); ctx.fill(); // 眼睛
-            // 噴射火花
-            if(frame % 4 < 2) { ctx.fillStyle = '#fbbf24'; ctx.fillRect(bot.x-4, bot.y+15, 8, 8); }
+            ctx.fillStyle = '#38bdf8'; ctx.beginPath(); ctx.arc(bot.x, bot.y, 12, 0, Math.PI * 2); ctx.fill();
             drawStack(bot);
         });
 
-        // 畫玩家
-        ctx.fillStyle = '#fff'; ctx.strokeStyle = '#3b82f6'; ctx.lineWidth = 4;
-        ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 7); ctx.fill(); ctx.stroke();
+        // 玩家
+        ctx.shadowColor = '#38bdf8'; ctx.shadowBlur = 10;
+        ctx.fillStyle = '#38bdf8'; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
+        ctx.shadowBlur = 0; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
         drawStack(p);
 
-        // 畫客人
-        customers.forEach(c => {
-            ctx.fillStyle = '#ef4444'; ctx.beginPath(); ctx.moveTo(c.x, c.y-20); ctx.lineTo(c.x+20, c.y+20); ctx.lineTo(c.x-20, c.y+20); ctx.closePath(); ctx.fill();
-            ctx.fillStyle = '#fff'; ctx.fillText("$ PAY", c.x-20, c.y-30);
-        });
+        // 粒子與文字
+        particles.forEach(pt => { ctx.fillStyle = pt.color; ctx.globalAlpha = Math.max(0, pt.alpha); ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1; });
+        floatTexts.forEach(ft => { ctx.fillStyle = ft.color; ctx.globalAlpha = Math.max(0, ft.alpha); ctx.font = 'bold 16px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(ft.text, ft.x, ft.y); ctx.globalAlpha = 1; });
 
-        update();
-        requestAnimationFrame(draw);
+        update(); requestAnimationFrame(draw);
     }
 
     function drawStack(obj) {
         obj.bag.forEach((it, i) => {
-            ctx.fillStyle = it.color; ctx.strokeStyle = '#000'; ctx.lineWidth = 2;
-            ctx.fillRect(obj.x-15, obj.y - 45 - (i*15), 30, 12); ctx.strokeRect(obj.x-15, obj.y - 45 - (i*15), 30, 12);
+            ctx.fillStyle = ITEMS[it.type].color;
+            ctx.beginPath(); ctx.roundRect(obj.x - 10, obj.y - 28 - (i * 8), 20, 6, 2); ctx.fill();
         });
     }
 
     async function startGame() {
-        await window.raingodFirebaseReady;
-        await window.raingodAuthReady;
-        window.raingodBindStorage('tycoon', [SAVE_KEY], { [SAVE_KEY]: null }, data => {
-            loadGame(data[SAVE_KEY]);
-            if (!gameStarted) {
-                gameStarted = true;
-                draw();
-            }
-        });
+        if (window.raingodFirebaseReady) await window.raingodFirebaseReady;
+        if (window.raingodAuthReady) await window.raingodAuthReady;
+        let localData = localStorage.getItem(SAVE_KEY);
+        if (localData) loadGame(JSON.parse(localData));
+        gameStarted = true; draw();
     }
 
-    startGame().catch(error => {
-        console.error('大亨存檔初始化失敗：', error);
-        alert('大亨存檔載入失敗，請重新整理頁面再試。');
-    });
+    startGame().catch(e => { gameStarted = true; draw(); });
 </script>
 </body>
 </html>
