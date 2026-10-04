@@ -3,79 +3,307 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>雨神跑酷 - 終極版</title>
+    <title>雨神跑酷 | Raingod</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: 'Arial Black', sans-serif; touch-action: none; }
+        * { box-sizing: border-box; }
+        body { 
+            margin: 0; overflow: hidden; background: #05050d; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            touch-action: none; user-select: none;
+        }
         canvas { display: block; }
         #gui {
-            position: absolute; top: 20px; width: 100%; display: flex; justify-content: space-around;
-            color: #0ff; font-size: 24px; text-shadow: 0 0 10px #0ff; pointer-events: none;
+            position: absolute; top: 15px; left: 0; width: 100%; 
+            display: flex; justify-content: space-between; padding: 0 25px;
+            color: #00f3ff; font-size: 22px; font-weight: 900;
+            text-shadow: 0 0 10px rgba(0,243,255,0.8); pointer-events: none; z-index: 10;
         }
-        #menu {
+        .active-buff {
+            font-size: 14px; color: #ffcc00; margin-top: 4px;
+        }
+        #menu, #shop {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             display: none; flex-direction: column; justify-content: center; align-items: center;
-            background: rgba(0,0,0,0.9); z-index: 100;
+            background: rgba(10, 10, 20, 0.9); backdrop-filter: blur(10px); z-index: 100;
         }
+        .btn-group { display: flex; gap: 15px; margin-top: 20px; }
         .btn {
-            padding: 15px 50px; font-size: 24px; background: #ff0055; border: none;
-            color: #fff; border-radius: 50px; cursor: pointer; box-shadow: 0 0 30px #ff0055;
+            padding: 14px 40px; font-size: 22px; font-weight: bold; background: linear-gradient(45deg, #ff0055, #ff5500);
+            border: none; color: #fff; border-radius: 50px; cursor: pointer;
+            box-shadow: 0 0 25px rgba(255,0,85,0.6); transition: transform 0.2s, box-shadow 0.2s;
         }
+        .btn-shop { background: linear-gradient(45deg, #00f3ff, #0055ff); box-shadow: 0 0 25px rgba(0,243,255,0.6); }
+        .btn:hover { transform: scale(1.05); }
+        
+        /* 商店樣式 */
+        .shop-container {
+            width: 85%; max-width: 500px; background: rgba(250,250,250,0.05);
+            border: 2px solid #00f3ff; border-radius: 20px; padding: 20px;
+            color: #fff; box-shadow: 0 0 30px rgba(0,243,255,0.2);
+        }
+        .shop-item {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .shop-btn {
+            padding: 8px 18px; font-size: 16px; background: #ffcc00; border: none;
+            color: #000; font-weight: bold; border-radius: 20px; cursor: pointer;
+        }
+        .shop-btn:disabled { background: #555; color: #888; cursor: not-allowed; }
+        .skin-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; max-height: 38vh; overflow-y: auto; }
+        .skin-card { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px; background: rgba(255,255,255,0.06); border-radius: 10px; color: #fff; }
+        .skin-swatch { display: inline-block; width: 18px; height: 18px; margin-right: 8px; vertical-align: middle; border-radius: 5px; box-shadow: 0 0 10px currentColor; }
+        #leaderboard-button { position: absolute; top: 96px; right: 20px; z-index: 20; pointer-events: auto; padding: 10px 16px; border: 1px solid #00f3ff; border-radius: 20px; color: #fff; background: rgba(0,0,0,0.75); font-weight: bold; cursor: pointer; }
+        #leaderboard { position: absolute; inset: 0; z-index: 130; display: none; align-items: center; justify-content: center; padding: 20px; background: rgba(5,5,13,0.92); color: #fff; }
+        .leaderboard-card { width: min(520px, 100%); max-height: 80vh; overflow-y: auto; padding: 20px; border: 2px solid #00f3ff; border-radius: 18px; background: #0b1020; }
+        .leaderboard-row { display: flex; justify-content: space-between; gap: 12px; padding: 10px; border-bottom: 1px solid #26334a; }
     </style>
 </head>
 <body>
 <link rel="stylesheet" href="menu.css">
-
 <div id="nav_bar"></div>
-
 <script src="menu.js"></script>
     <div id="gui">
-        <div>SCORE: <span id="score">0</span></div>
+        <div>
+            SCORE: <span id="score">0</span>
+            <div id="buffs" class="active-buff"></div>
+        </div>
         <div>COINS: <span id="coins">0</span></div>
     </div>
+
+    <!-- 結算選單 -->
     <div id="menu">
-        <h1 style="color: #0ff; font-size: 60px; margin: 0;">WASTED</h1>
-        <p style="color: #fff; font-size: 20px;">總得分: <span id="finalScore">0</span></p>
-        <button class="btn" onclick="restart()">RETRY</button>
+        <h1 style="color: #ff0055; font-size: 60px; margin: 0; text-shadow: 0 0 20px #ff0055;">WASTED</h1>
+        <p style="color: #fff; font-size: 22px; margin-top: 10px;">總得分: <span id="finalScore" style="color: #00f3ff;">0</span></p>
+        <div class="btn-group">
+            <button class="btn" onclick="restart()">RETRY</button>
+            <button class="btn btn-shop" onclick="openShop()">SHOP</button>
+        </div>
     </div>
+
+    <!-- 商店介面 -->
+    <div id="shop">
+        <h2 style="color: #00f3ff; font-size: 36px; margin: 0 0 10px 0;">ITEM SHOP</h2>
+        <p style="color: #ffcc00; font-size: 20px; margin-bottom: 15px;">持有金幣: <span id="shopCoins">0</span></p>
+        <div class="shop-container">
+            <h3 style="color:#fff;">造型收藏</h3>
+            <div id="skin-shop-list" class="skin-grid"></div>
+            <div class="shop-item">
+                <div>
+                    <strong>金幣磁鐵 (1次性)</strong><br>
+                    <small style="color: #aaa;">遊戲開局自動吸取金幣 15秒</small>
+                </div>
+                <button class="shop-btn" onclick="buyItem('magnet', 20)">20 金幣</button>
+            </div>
+            <div class="shop-item">
+                <div>
+                    <strong>防護盾 (1次性)</strong><br>
+                    <small style="color: #aaa;">抵擋一次撞擊死亡</small>
+                </div>
+                <button class="shop-btn" onclick="buyItem('shield', 30)">30 金幣</button>
+            </div>
+        </div>
+        <button class="btn" style="margin-top: 20px; padding: 10px 40px;" onclick="closeShop()">BACK</button>
+    </div>
+
     <canvas id="gameCanvas"></canvas>
+    <button id="leaderboard-button" onclick="openLeaderboard()">🏆 登入後查看排行榜</button>
+
+    <div id="leaderboard">
+        <div class="leaderboard-card">
+            <h2 style="color:#00f3ff; margin-top:0;">🏆 雨神跑酷排行榜</h2>
+            <p id="leaderboard-status" style="color:#aaa;">請登入帳號後查看。</p>
+            <div id="leaderboard-list"></div>
+            <div class="btn-group">
+                <button class="btn btn-shop" onclick="refreshLeaderboard()">重新整理</button>
+                <button class="btn" onclick="closeLeaderboard()">關閉</button>
+            </div>
+        </div>
+    </div>
 
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         const scoreEl = document.getElementById('score'), coinsEl = document.getElementById('coins');
         const finalScoreEl = document.getElementById('finalScore'), menu = document.getElementById('menu');
+        const shopEl = document.getElementById('shop'), shopCoinsEl = document.getElementById('shopCoins');
+        const buffsEl = document.getElementById('buffs');
 
-        let w, h, score, coinCount, gameActive, speed, offset = 0;
-        let lanes = [], obstacles = [], items = [], particles = [];
-        let player = { 
-            lane: 1, x: 0, targetX: 0, 
-            jumpY: 0, vY: 0, isJumping: false, 
-            isDucking: false, duckTimer: 0, height: 60 
+        let w, h, score, coinCount, totalCoins = 0, bestScore = 0, gameActive, speed, saveTicker = 0;
+        const SAVE_KEY = 'raingod_runner_save';
+        const LEADERBOARD_URL = 'https://game-24b43-default-rtdb.firebaseio.com/raingod_runner_leaderboard';
+        const SKINS = [
+            { id: 'cyan', name: '霓虹青跑者', color: '#00f3ff', shape: 'rect', price: 0 },
+            { id: 'gold', name: '黃金跑者', color: '#ffd700', shape: 'rect', price: 50 },
+            { id: 'pink', name: '粉紅魅影', color: '#ff00aa', shape: 'circle', price: 50 },
+            { id: 'purple', name: '紫晶幽影', color: '#a855f7', shape: 'diamond', price: 100 },
+            { id: 'lime', name: '酸橙閃電', color: '#a3e635', shape: 'triangle', price: 100 },
+            { id: 'fire', name: '烈焰衝刺', color: '#ff5a36', shape: 'star', price: 150 },
+            { id: 'ice', name: '極地冰晶', color: '#8be9ff', shape: 'diamond', price: 150 },
+            { id: 'white', name: '月光白影', color: '#f8fafc', shape: 'circle', price: 200 },
+            { id: 'orange', name: '熔岩橘子', color: '#fb923c', shape: 'triangle', price: 250 },
+            { id: 'blue', name: '深海藍鯊', color: '#2563eb', shape: 'rect', price: 250 },
+            { id: 'mint', name: '薄荷幻彩', color: '#34d399', shape: 'star', price: 300 },
+            { id: 'red', name: '赤焰武士', color: '#ef4444', shape: 'diamond', price: 350 },
+            { id: 'rainbow', name: '彩虹傳說', color: '#f472b6', shape: 'star', price: 500 }
+        ];
+        
+        // 攝影機：拉高 Y 軸、往前 Tilt，實現極佳的俯視俯瞰視角
+        let camera = { x: 0, y: 380, z: -220, fov: 320 };
+        let obstacles = [], items = [], particles = [];
+
+        // 玩家資料與商店道具
+        let playerData = {
+            skin: 'cyan',
+            ownedSkins: ['cyan'],
+            hasMagnet: false,
+            hasShield: false
         };
 
+        let activeBuffs = {
+            magnetTimer: 0,
+            hasShield: false
+        };
+
+        let player = {
+            lane: 1, x: 0, targetX: 0,
+            y: 0, vY: 0, z: 150, // 人物放置在螢幕中下方 (z:150)
+            rollRotation: 0, duckTimer: 0,
+            isJumping: false, isDucking: false,
+            width: 40, height: 75
+        };
+
+        const LANE_X = [-140, 0, 140];
         let touchX = 0, touchY = 0;
 
         function init() {
             w = canvas.width = window.innerWidth;
             h = canvas.height = window.innerHeight;
-            lanes = [w * 0.2, w * 0.5, w * 0.8];
-            player.x = lanes[1]; player.targetX = lanes[1];
-            score = 0; coinCount = 0; speed = 10; 
+            
+            player.lane = 1; player.x = LANE_X[1]; player.targetX = LANE_X[1];
+            player.y = 0; player.vY = 0; player.rollRotation = 0;
+            player.isJumping = false; player.isDucking = false;
+
+            score = 0; coinCount = 0; speed = 16;
             obstacles = []; items = []; particles = [];
-            gameActive = true; menu.style.display = 'none';
+            
+            // 載入商店道具效果
+            activeBuffs.magnetTimer = playerData.hasMagnet ? 600 : 0; // 約10秒磁鐵
+            activeBuffs.hasShield = playerData.hasShield;
+            playerData.hasMagnet = false; // 消耗道具
+            playerData.hasShield = false;
+
+            updateBuffsUI();
+            gameActive = true; 
+            menu.style.display = 'none';
+            shopEl.style.display = 'none';
+            saveRunnerData();
         }
 
-        // --- 控制系統 (鍵盤 + 手勢) ---
+        function saveRunnerData() {
+            localStorage.setItem(SAVE_KEY, JSON.stringify({
+                totalCoins,
+                bestScore,
+                playerData: {
+                    skin: playerData.skin,
+                    ownedSkins: playerData.ownedSkins,
+                    hasMagnet: playerData.hasMagnet,
+                    hasShield: playerData.hasShield
+                }
+            }));
+        }
+
+        function loadRunnerData(data) {
+            totalCoins = Math.max(0, Number(data?.totalCoins) || 0);
+            bestScore = Math.max(0, Number(data?.bestScore) || 0);
+            const savedPlayerData = data?.playerData;
+            if (savedPlayerData && typeof savedPlayerData === 'object') {
+                const owned = Array.isArray(savedPlayerData.ownedSkins)
+                    ? savedPlayerData.ownedSkins.filter(id => SKINS.some(skin => skin.id === id))
+                    : ['cyan'];
+                if (SKINS.some(skin => skin.id === savedPlayerData.skin) && !owned.includes(savedPlayerData.skin)) {
+                    owned.push(savedPlayerData.skin);
+                }
+                playerData = {
+                    skin: owned.includes(savedPlayerData.skin) ? savedPlayerData.skin : 'cyan',
+                    ownedSkins: Array.from(new Set(['cyan', ...owned])),
+                    hasMagnet: savedPlayerData.hasMagnet === true,
+                    hasShield: savedPlayerData.hasShield === true
+                };
+            }
+            coinsEl.innerText = '0';
+            shopCoinsEl.innerText = totalCoins;
+            renderSkinShop();
+        }
+
+        function renderSkinShop() {
+            const list = document.getElementById('skin-shop-list');
+            list.replaceChildren();
+            SKINS.forEach(skin => {
+                const owned = playerData.ownedSkins.includes(skin.id);
+                const card = document.createElement('div');
+                card.className = 'skin-card';
+                const label = document.createElement('span');
+                const swatch = document.createElement('span');
+                swatch.className = 'skin-swatch';
+                swatch.style.background = skin.color;
+                swatch.style.color = skin.color;
+                label.append(swatch, document.createTextNode(skin.name));
+
+                const button = document.createElement('button');
+                button.className = 'shop-btn';
+                button.textContent = owned
+                    ? (playerData.skin === skin.id ? '使用中' : '選用')
+                    : `${skin.price} 金幣`;
+                button.disabled = owned && playerData.skin === skin.id;
+                button.onclick = () => buySkin(skin.id);
+                card.append(label, button);
+                list.appendChild(card);
+            });
+        }
+
+        function buySkin(skinId) {
+            const skin = SKINS.find(item => item.id === skinId);
+            if (!skin) return;
+            if (playerData.ownedSkins.includes(skinId)) {
+                playerData.skin = skinId;
+                saveRunnerData();
+                renderSkinShop();
+                return;
+            }
+            if (totalCoins < skin.price) {
+                alert('金幣不足！');
+                return;
+            }
+            totalCoins -= skin.price;
+            playerData.ownedSkins.push(skinId);
+            playerData.skin = skinId;
+            shopCoinsEl.innerText = totalCoins;
+            saveRunnerData();
+            renderSkinShop();
+        }
+
+        // --- 俯視 3D 投影核心 ---
+        function project(x, y, z) {
+            let relativeZ = z - camera.z;
+            if (relativeZ <= 0) relativeZ = 0.1;
+            let scale = camera.fov / relativeZ;
+            return {
+                x: w / 2 + (x - camera.x) * scale,
+                y: h / 2 - (y - camera.y) * scale,
+                scale: scale
+            };
+        }
+
+        // --- 控制邏輯 ---
         const handleInput = (dir) => {
             if (!gameActive) return;
             if (dir === 'L' && player.lane > 0) player.lane--;
             if (dir === 'R' && player.lane < 2) player.lane++;
-            if (dir === 'U' && !player.isJumping && !player.isDucking) {
-                player.isJumping = true; player.vY = 22;
-            }
-            if (dir === 'D' && !player.isJumping) {
-                player.isDucking = true;
-                player.duckTimer = 30; // 蹲下持續時間
+            if (dir === 'U' && !player.isJumping) { player.isJumping = true; player.vY = 22; }
+            if (dir === 'D') {
+                if (player.isJumping) player.vY = -30;
+                player.isDucking = true; player.duckTimer = 22;
             }
         };
 
@@ -88,8 +316,7 @@
 
         window.addEventListener('touchstart', e => { touchX = e.touches[0].clientX; touchY = e.touches[0].clientY; });
         window.addEventListener('touchend', e => {
-            let dx = e.changedTouches[0].clientX - touchX;
-            let dy = e.changedTouches[0].clientY - touchY;
+            let dx = e.changedTouches[0].clientX - touchX, dy = e.changedTouches[0].clientY - touchY;
             if (Math.abs(dx) > Math.abs(dy)) {
                 if (dx > 30) handleInput('R'); else if (dx < -30) handleInput('L');
             } else {
@@ -97,97 +324,423 @@
             }
         });
 
+        // --- 障礙物與金幣生成 ---
         function spawn() {
-            if (Math.random() < 0.04) {
-                let type = Math.random() > 0.7 ? 'HIGH' : 'LOW';
-                obstacles.push({ lane: Math.floor(Math.random()*3), y: -100, type });
-            }
+            let spawnZ = 2200;
             if (Math.random() < 0.05) {
-                items.push({ lane: Math.floor(Math.random()*3), y: -100 });
+                let lane = Math.floor(Math.random() * 3);
+                let type = Math.random() > 0.4 ? 'LOW' : 'HIGH';
+                obstacles.push({ x: LANE_X[lane], y: 0, z: spawnZ, lane, type, width: 90, height: type === 'LOW' ? 50 : 110 });
+            }
+            if (Math.random() < 0.08) {
+                let lane = Math.floor(Math.random() * 3);
+                for (let i = 0; i < 4; i++) {
+                    items.push({ x: LANE_X[lane], y: 25, z: spawnZ + (i * 100), lane, rot: 0 });
+                }
             }
         }
 
+        // --- 狀態更新 ---
         function update() {
             if (!gameActive) return;
-            score++; speed += 0.001; offset = (offset + speed) % 100;
+
+            saveTicker++;
+            score += Math.floor(speed / 6);
+            speed += 0.002;
             scoreEl.innerText = score;
+            if (saveTicker >= 120) {
+                saveTicker = 0;
+                saveRunnerData();
+            }
 
-            player.x += (lanes[player.lane] - player.x) * 0.2;
+            // 換軌與傾斜
+            player.targetX = LANE_X[player.lane];
+            let dx = player.targetX - player.x;
+            player.x += dx * 0.25;
+            player.rollRotation = -dx * 0.004;
 
-            // 跳躍與蹲下邏輯
+            // 跳躍與蹲下
             if (player.isJumping) {
-                player.jumpY += player.vY; player.vY -= 1.2;
-                if (player.jumpY <= 0) { player.jumpY = 0; player.isJumping = false; }
+                player.y += player.vY;
+                player.vY -= 1.3;
+                if (player.y <= 0) { player.y = 0; player.isJumping = false; }
             }
             if (player.isDucking) {
-                player.height = 30;
                 player.duckTimer--;
-                if (player.duckTimer <= 0) { player.isDucking = false; player.height = 60; }
+                if (player.duckTimer <= 0) player.isDucking = false;
             }
 
-            // 處理障礙物
+            // 磁鐵倒數
+            if (activeBuffs.magnetTimer > 0) {
+                activeBuffs.magnetTimer--;
+                updateBuffsUI();
+            }
+
+            // 障礙物碰撞
             for (let i = obstacles.length - 1; i >= 0; i--) {
-                let o = obstacles[i]; o.y += speed;
-                let pY = h - 150;
-                // 碰撞檢測
-                if (o.y > pY - 50 && o.y < pY + 20 && Math.abs(player.x - lanes[o.lane]) < 40) {
-                    if (o.type === 'LOW' && player.jumpY < 40) gameEnd();
-                    if (o.type === 'HIGH' && !player.isDucking) gameEnd();
+                let o = obstacles[i];
+                o.z -= speed;
+
+                if (o.z < player.z + 40 && o.z > player.z - 40 && o.lane === player.lane) {
+                    let hit = false;
+                    if (o.type === 'LOW' && player.y < 40) hit = true;
+                    if (o.type === 'HIGH' && !player.isDucking) hit = true;
+
+                    if (hit) {
+                        if (activeBuffs.hasShield) {
+                            activeBuffs.hasShield = false; // 抵擋一次
+                            obstacles.splice(i, 1);
+                            updateBuffsUI();
+                            createExplosion(player.x, player.y + 30, player.z, '#00f3ff');
+                        } else {
+                            createExplosion(player.x, player.y + 30, player.z, '#ff0055');
+                            gameEnd();
+                        }
+                    }
                 }
-                if (o.y > h) obstacles.splice(i, 1);
+                if (o.z < -100) obstacles.splice(i, 1);
             }
 
-            // 處理金幣
+            // 金幣吃取與磁鐵吸附
             for (let i = items.length - 1; i >= 0; i--) {
-                let it = items[i]; it.y += speed;
-                if (it.y > h - 180 && it.y < h - 100 && Math.abs(player.x - lanes[it.lane]) < 40) {
-                    coinCount++; coinsEl.innerText = coinCount;
+                let it = items[i];
+                it.z -= speed;
+                it.rot += 0.1;
+
+                // 磁鐵功能：自動將金幣吸向玩家
+                if (activeBuffs.magnetTimer > 0 && it.z < player.z + 600 && it.z > player.z - 100) {
+                    it.x += (player.x - it.x) * 0.2;
+                    it.y += (player.y + 20 - it.y) * 0.2;
+                    it.z += (player.z - it.z) * 0.2;
+                }
+
+                // 判定吃到金幣
+                if (Math.abs(it.z - player.z) < 50 && Math.abs(it.x - player.x) < 40 && Math.abs(player.y - it.y) < 50) {
+                    coinCount++;
+                    totalCoins++;
+                    coinsEl.innerText = coinCount;
+                    items.splice(i, 1);
+                } else if (it.z < -100) {
                     items.splice(i, 1);
                 }
-                if (it && it.y > h) items.splice(i, 1);
             }
+
+            // 粒子更新
+            for (let i = particles.length - 1; i >= 0; i--) {
+                let p = particles[i];
+                p.x += p.vx; p.y += p.vy; p.z += p.vz; p.alpha -= 0.03;
+                if (p.alpha <= 0) particles.splice(i, 1);
+            }
+
             spawn();
         }
 
+        // --- 繪製畫面 ---
         function draw() {
-            ctx.fillStyle = '#050510'; ctx.fillRect(0, 0, w, h);
-            
-            // 軌道
-            ctx.strokeStyle = '#112244'; ctx.lineWidth = 5;
-            lanes.forEach(lx => { ctx.beginPath(); ctx.moveTo(lx, 0); ctx.lineTo(lx, h); ctx.stroke(); });
+            ctx.fillStyle = '#060612';
+            ctx.fillRect(0, 0, w, h);
 
-            // 繪製金幣 (黃色閃爍)
+            // 繪製跑道與網格 (從遠處向近處繪製，視野更寬廣)
+            ctx.strokeStyle = '#00f3ff';
+            
+            // 3 條主跑道線
+            [-210, -70, 70, 210].forEach(xBound => {
+                let p1 = project(xBound, 0, 50);
+                let p2 = project(xBound, 0, 2400);
+                ctx.beginPath();
+                ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
+                ctx.strokeStyle = 'rgba(0, 243, 255, 0.3)';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            });
+
+            // 地面動態橫向線條
+            let zOffset = (Date.now() * (speed * 0.04)) % 120;
+            for (let z = 2400; z > 50; z -= 120) {
+                let cz = z - zOffset;
+                if (cz <= 50) continue;
+                let pL = project(-210, 0, cz), pR = project(210, 0, cz);
+                ctx.beginPath();
+                ctx.moveTo(pL.x, pL.y); ctx.lineTo(pR.x, pR.y);
+                ctx.strokeStyle = `rgba(0, 243, 255, ${0.05 + (1 - cz/2400)*0.25})`;
+                ctx.lineWidth = Math.max(1, (1 - cz/2400) * 3);
+                ctx.stroke();
+            }
+
+            // 繪製金幣
             items.forEach(it => {
-                ctx.fillStyle = '#ffcc00'; ctx.shadowBlur = 15; ctx.shadowColor = '#ffcc00';
-                ctx.beginPath(); ctx.arc(lanes[it.lane], it.y, 15, 0, Math.PI*2); ctx.fill();
+                let p = project(it.x, it.y, it.z);
+                if (p.scale <= 0) return;
+                ctx.save();
+                ctx.translate(p.x, p.y);
+                ctx.fillStyle = '#ffd700'; ctx.shadowColor = '#ffd700'; ctx.shadowBlur = 10;
+                ctx.beginPath();
+                ctx.ellipse(0, 0, Math.abs(Math.cos(it.rot)) * 14 * p.scale, 14 * p.scale, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
             });
 
             // 繪製障礙物
             obstacles.forEach(o => {
-                ctx.shadowBlur = 20;
+                let p = project(o.x, o.y, o.z);
+                if (p.scale <= 0) return;
+                let bw = o.width * p.scale, bh = o.height * p.scale;
+
+                ctx.save();
                 if (o.type === 'LOW') {
-                    ctx.fillStyle = '#ff0055'; ctx.shadowColor = '#ff0055';
-                    ctx.fillRect(lanes[o.lane]-50, o.y, 100, 40);
+                    ctx.fillStyle = '#ff0055'; ctx.shadowColor = '#ff0055'; ctx.shadowBlur = 15;
+                    ctx.fillRect(p.x - bw / 2, p.y - bh, bw, bh);
+                    ctx.fillStyle = '#fff'; ctx.fillRect(p.x - bw / 2, p.y - bh, bw, 4 * p.scale);
                 } else {
-                    ctx.fillStyle = '#00ffaa'; ctx.shadowColor = '#00ffaa';
-                    ctx.fillRect(lanes[o.lane]-60, o.y, 120, 20); // 高位障礙(橫桿)
-                    ctx.fillRect(lanes[o.lane]-60, o.y, 10, 100); // 支架
-                    ctx.fillRect(lanes[o.lane]+50, o.y, 10, 100);
+                    ctx.fillStyle = '#00ffaa'; ctx.shadowColor = '#00ffaa'; ctx.shadowBlur = 15;
+                    ctx.fillRect(p.x - bw / 2 - 5*p.scale, p.y - bh, bw + 10*p.scale, 20 * p.scale);
+                    ctx.fillRect(p.x - bw / 2 - 5*p.scale, p.y - bh, 12 * p.scale, bh);
+                    ctx.fillRect(p.x + bw / 2 - 7*p.scale, p.y - bh, 12 * p.scale, bh);
                 }
+                ctx.restore();
             });
 
-            // 繪製玩家
-            ctx.fillStyle = '#0ff'; ctx.shadowBlur = 25; ctx.shadowColor = '#0ff';
-            let py = h - 100 - player.jumpY - player.height;
-            ctx.fillRect(player.x - 25, py, 50, player.height);
+            // 繪製主角 (位於俯視焦點)
+            drawPlayer();
+
+            // 繪製粒子
+            particles.forEach(p => {
+                let proj = project(p.x, p.y, p.z);
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(proj.x, proj.y, p.size * proj.scale, 0, Math.PI * 2);
+                ctx.fill();
+            });
 
             if (gameActive) requestAnimationFrame(() => { update(); draw(); });
         }
 
-        function gameEnd() { gameActive = false; finalScoreEl.innerText = score + (coinCount * 100); menu.style.display = 'flex'; }
+        // --- 繪製主角 (支援皮膚與護盾狀態) ---
+        function drawPlayer() {
+            let curHeight = player.isDucking ? player.height * 0.5 : player.height;
+            let p = project(player.x, player.y, player.z);
+
+            ctx.save();
+            ctx.translate(p.x, p.y);
+            ctx.rotate(player.rollRotation);
+
+            let pw = player.width * p.scale;
+            let ph = curHeight * p.scale;
+
+            const skin = SKINS.find(item => item.id === playerData.skin) || SKINS[0];
+            const skinColor = skin.id === 'rainbow'
+                ? `hsl(${(Date.now() / 8) % 360}, 100%, 65%)`
+                : skin.color;
+
+            // 護盾光圈
+            if (activeBuffs.hasShield) {
+                ctx.strokeStyle = '#00f3ff'; ctx.lineWidth = 3; ctx.shadowBlur = 15; ctx.shadowColor = '#00f3ff';
+                ctx.beginPath();
+                ctx.arc(0, -ph / 2, pw * 1.2, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+
+            ctx.shadowColor = skinColor; ctx.shadowBlur = 20;
+            ctx.fillStyle = skinColor;
+            ctx.beginPath();
+            if (skin.shape === 'circle') {
+                ctx.ellipse(0, -ph / 2, pw / 2, ph / 2, 0, 0, Math.PI * 2);
+            } else if (skin.shape === 'diamond') {
+                ctx.moveTo(0, -ph); ctx.lineTo(pw / 2, -ph / 2); ctx.lineTo(0, 0); ctx.lineTo(-pw / 2, -ph / 2); ctx.closePath();
+            } else if (skin.shape === 'triangle') {
+                ctx.moveTo(0, -ph); ctx.lineTo(pw / 2, 0); ctx.lineTo(-pw / 2, 0); ctx.closePath();
+            } else if (skin.shape === 'star') {
+                for (let i = 0; i < 10; i++) {
+                    const angle = -Math.PI / 2 + i * Math.PI / 5;
+                    const radius = i % 2 === 0 ? pw / 2 : pw / 4;
+                    const x = Math.cos(angle) * radius;
+                    const y = -ph / 2 + Math.sin(angle) * Math.min(radius, ph / 2);
+                    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                }
+                ctx.closePath();
+            } else {
+                ctx.rect(-pw / 2, -ph, pw, ph);
+            }
+            ctx.fill();
+
+            // 視覺眼睛細節
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(-pw / 4, -ph * 0.8, pw / 2, ph * 0.18);
+
+            ctx.restore();
+
+            // 影子
+            let shadowP = project(player.x, 0, player.z);
+            ctx.fillStyle = 'rgba(0,0,0,0.4)';
+            ctx.beginPath();
+            ctx.ellipse(shadowP.x, shadowP.y, pw * 0.5, 8 * shadowP.scale, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // 爆炸特效
+        function createExplosion(x, y, z, color) {
+            for (let i = 0; i < 30; i++) {
+                particles.push({
+                    x: x, y: y, z: z,
+                    vx: (Math.random() - 0.5) * 25, vy: (Math.random() - 0.5) * 25, vz: (Math.random() - 0.5) * 25,
+                    size: Math.random() * 6 + 3, alpha: 1.0, color: color
+                });
+            }
+        }
+
+        function updateBuffsUI() {
+            let text = '';
+            if (activeBuffs.magnetTimer > 0) text += `🧲 磁鐵: ${Math.ceil(activeBuffs.magnetTimer/60)}s `;
+            if (activeBuffs.hasShield) text += `🛡️ 護盾中 `;
+            buffsEl.innerText = text;
+        }
+
+        // --- 商店機制 ---
+        function openShop() {
+            menu.style.display = 'none';
+            shopEl.style.display = 'flex';
+            shopCoinsEl.innerText = totalCoins;
+            renderSkinShop();
+        }
+
+        function closeShop() {
+            shopEl.style.display = 'none';
+            menu.style.display = 'flex';
+        }
+
+        function buyItem(item, price) {
+            if (totalCoins >= price) {
+                totalCoins -= price;
+                shopCoinsEl.innerText = totalCoins;
+                
+                if (item === 'magnet') playerData.hasMagnet = true;
+                if (item === 'shield') playerData.hasShield = true;
+
+                saveRunnerData();
+                alert('購買成功！');
+            } else {
+                alert('金幣不足！');
+            }
+        }
+
+        function gameEnd() {
+            gameActive = false; 
+            const finalScore = score + (coinCount * 100);
+            bestScore = Math.max(bestScore, finalScore);
+            finalScoreEl.innerText = finalScore;
+            menu.style.display = 'flex'; 
+            saveRunnerData();
+            uploadLeaderboardScore(finalScore);
+        }
+
         function restart() { init(); draw(); }
-        window.addEventListener('resize', init);
-        init(); draw();
+
+        window.openLeaderboard = async () => {
+            if (!await window.raingodRequireAuth('排行榜')) return;
+            document.getElementById('leaderboard').style.display = 'flex';
+            await window.refreshLeaderboard();
+        };
+
+        window.closeLeaderboard = () => {
+            document.getElementById('leaderboard').style.display = 'none';
+        };
+
+        window.refreshLeaderboard = async () => {
+            const status = document.getElementById('leaderboard-status');
+            const list = document.getElementById('leaderboard-list');
+            if (!await window.raingodRequireAuth('排行榜')) return;
+            const uid = window.raingodCurrentUser.uid;
+            status.textContent = '排行榜載入中…';
+            try {
+                const response = await fetch(`${LEADERBOARD_URL}.json`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                if (window.raingodCurrentUser?.uid !== uid) return;
+                const rows = await response.json() || {};
+                const entries = Object.entries(rows)
+                    .filter(([, row]) => row && Number.isFinite(Number(row.score)))
+                    .sort((a, b) => Number(b[1].score) - Number(a[1].score))
+                    .slice(0, 50);
+                list.replaceChildren();
+                entries.forEach(([entryUid, row], index) => {
+                    const line = document.createElement('div');
+                    line.className = 'leaderboard-row';
+                    const name = document.createElement('span');
+                    name.textContent = `${index + 1}. ${row.name || '玩家'}${entryUid === uid ? '（你）' : ''}`;
+                    const value = document.createElement('strong');
+                    value.textContent = `${Number(row.score).toLocaleString()} 分`;
+                    line.append(name, value);
+                    list.appendChild(line);
+                });
+                status.textContent = entries.length ? `已載入 ${entries.length} 位玩家，依最高分排序。` : '目前還沒有排行榜資料。';
+            } catch (error) {
+                console.error('載入雨神跑酷排行榜失敗：', error);
+                status.textContent = '排行榜載入失敗，請稍後重試。';
+            }
+        };
+
+        async function uploadLeaderboardScore(scoreToSubmit = bestScore) {
+            const user = window.raingodCurrentUser;
+            if (!user || !Number.isFinite(scoreToSubmit) || scoreToSubmit <= 0) return;
+            const uid = user.uid;
+            let previous;
+            try {
+                const previousResponse = await fetch(`${LEADERBOARD_URL}/${encodeURIComponent(uid)}.json`);
+                if (!previousResponse.ok) throw new Error(`HTTP ${previousResponse.status}`);
+                previous = await previousResponse.json();
+            } catch (error) {
+                console.error('讀取個人跑酷排行失敗：', error);
+                return;
+            }
+            if (window.raingodCurrentUser?.uid !== uid) return;
+            if (previous && Number(previous.score) >= scoreToSubmit) return;
+            const payload = {
+                name: user.email ? user.email.split('@')[0] : '雨神玩家',
+                score: Math.floor(scoreToSubmit),
+                coins: Math.max(0, Number(totalCoins) || 0),
+                updatedAt: Date.now()
+            };
+            try {
+                const response = await fetch(`${LEADERBOARD_URL}/${encodeURIComponent(uid)}.json`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            } catch (error) {
+                console.error('上傳雨神跑酷排行榜失敗：', error);
+            }
+        }
+
+        window.addEventListener('resize', () => {
+            w = canvas.width = window.innerWidth;
+            h = canvas.height = window.innerHeight;
+        });
+
+        async function startRunner() {
+            await window.raingodFirebaseReady;
+            await window.raingodAuthReady;
+            window.raingodBindStorage('raingod-runner', [SAVE_KEY], { [SAVE_KEY]: null }, data => {
+                loadRunnerData(data[SAVE_KEY]);
+                init();
+                draw();
+                if (window.raingodCurrentUser && bestScore > 0) uploadLeaderboardScore();
+            });
+            window.raingodOnAuthStateChanged(user => {
+                const button = document.getElementById('leaderboard-button');
+                button.textContent = user ? '🏆 排行榜' : '🏆 登入後查看排行榜';
+                if (user && bestScore > 0) uploadLeaderboardScore();
+                if (!user) {
+                    document.getElementById('leaderboard').style.display = 'none';
+                    document.getElementById('leaderboard-list').replaceChildren();
+                    document.getElementById('leaderboard-status').textContent = '請登入帳號後查看。';
+                }
+            });
+        }
+
+        startRunner().catch(error => {
+            console.error('雨神跑酷初始化失敗：', error);
+            document.getElementById('leaderboard-status').textContent = '遊戲初始化失敗，請重新整理頁面。';
+        });
     </script>
 </body>
 </html>
