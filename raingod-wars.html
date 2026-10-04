@@ -7,228 +7,343 @@
     <style>
         :root { 
             --p-color: #00d4ff; --e-color: #ff4d4d; --gold: #f1c40f; 
-            --rarity-r: #bdc3c7; --rarity-sr: #f39c12; --rarity-ssr: #9b59b6;
+            --rarity-r: #bdc3c7; --rarity-sr: #f39c12; --rarity-ssr: #9b59b6; 
+            --rarity-uber: #e74c3c; --rarity-ur: #00f0ff; --rarity-ex: #ff00ea;
         }
         * { box-sizing: border-box; touch-action: manipulation; -webkit-user-select: none; }
         
         body { 
-            margin: 0; background: #000; color: white; 
+            margin: 0; background: #0b0c10; color: white; 
             height: 100svh; width: 100vw; 
-            overflow: hidden; font-family: '微軟正黑體', sans-serif; 
+            overflow: hidden; font-family: 'PingFang TC', '微軟正黑體', sans-serif; 
         }
 
         .screen { 
             display: none; width: 100%; height: 100%; 
             flex-direction: column; align-items: center; 
-            background: #1a1a2e; padding: 15px; 
+            background: #111425; padding: 12px; 
         }
         .active { display: flex; }
-        .title { font-size: clamp(20px, 8vw, 32px); font-weight: 900; color: var(--p-color); margin-bottom: 15px; text-shadow: 0 0 10px #000; }
+        .title { font-size: clamp(20px, 6vw, 28px); font-weight: 900; color: var(--p-color); margin-bottom: 8px; text-shadow: 0 0 10px rgba(0,212,255,0.5); }
         
-        .top-res { width: 100%; display: flex; justify-content: space-around; background: rgba(0,0,0,0.5); padding: 8px; border-radius: 15px; margin-bottom: 10px; font-size: 14px; }
+        .top-res { width: 100%; display: flex; justify-content: space-around; background: rgba(0,0,0,0.6); padding: 8px; border-radius: 10px; margin-bottom: 8px; font-size: 14px; font-weight: bold; border: 1px solid #333; }
         
-        .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; width: 100%; overflow-y: auto; flex-grow: 1; padding: 5px; }
-        @media (min-width: 600px) { .grid { grid-template-columns: repeat(3, 1fr); } }
+        .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: 100%; overflow-y: auto; flex-grow: 1; padding: 4px; }
+        @media (min-width: 600px) { .grid { grid-template-columns: repeat(5, 1fr); } }
 
-        .card { background: #16213e; border: 2px solid #0f3460; border-radius: 12px; padding: 10px; text-align: center; cursor: pointer; transition: 0.2s; position: relative; }
+        .card { background: #1a233a; border: 2px solid #0f3460; border-radius: 10px; padding: 8px 4px; text-align: center; cursor: pointer; transition: 0.15s; position: relative; font-size: 12px; }
         .card:active { transform: scale(0.95); }
-        .card.locked { opacity: 0.4; filter: grayscale(1); }
+        .card.locked { opacity: 0.35; filter: grayscale(1); }
+        .card.selected { border-color: #2ecc71 !important; box-shadow: 0 0 10px #2ecc71; }
+
+        .rarity-R { border-color: var(--rarity-r); }
+        .rarity-SR { border-color: var(--rarity-sr); }
+        .rarity-SSR { border-color: var(--rarity-ssr); }
+        .rarity-UBER { border-color: var(--rarity-uber); box-shadow: 0 0 6px var(--rarity-uber); }
+        .rarity-UR { border-color: var(--rarity-ur); box-shadow: 0 0 8px var(--rarity-ur); }
+        .rarity-EX { border-color: var(--rarity-ex); box-shadow: 0 0 12px var(--rarity-ex); }
 
         #game-screen { padding: 0; position: relative; }
         #stage { 
             position: relative; width: 100%; flex-grow: 1; 
-            background: linear-gradient(to bottom, #1a1a2e, #16213e); 
+            background: linear-gradient(to bottom, #09131d, #162a38, #1d3c4d); 
             overflow: hidden; 
         }
-        .ground { position: absolute; bottom: 0; width: 100%; height: 60px; background: #1b1b1b; border-top: 4px solid #444; }
-        .base { position: absolute; bottom: 60px; width: 60px; height: 100px; border-radius: 8px 8px 0 0; z-index: 5; }
-        #p-base { left: 0; background: #2c3e50; border-right: 4px solid var(--p-color); }
-        #e-base { right: 0; background: #3e2723; border-left: 4px solid var(--e-color); }
-        .base-hp { position: absolute; top: -25px; width: 100%; text-align: center; font-size: 12px; font-weight: bold; }
+        .ground { position: absolute; bottom: 0; width: 100%; height: 50px; background: #111; border-top: 4px solid #333; }
+        .base { position: absolute; bottom: 50px; width: 65px; height: 100px; border-radius: 8px 8px 0 0; z-index: 5; }
+        #p-base { left: 0; background: #103156; border-right: 4px solid var(--p-color); }
+        #e-base { right: 0; background: #4a0e17; border-left: 4px solid var(--e-color); }
+        .base-hp { position: absolute; top: -22px; width: 120%; left: -10%; text-align: center; font-size: 11px; font-weight: bold; background: rgba(0,0,0,0.7); padding: 1px; border-radius: 4px; }
+
+        #battle-top-bar {
+            position: absolute; top: 8px; width: 95%; display: flex; justify-content: space-between; z-index: 100; font-weight: bold; font-size: 14px;
+        }
 
         #ui-panel { 
-            height: 100px; width: 100%; 
-            background: #0f3460; display: flex; 
-            gap: 8px; padding: 10px; overflow-x: auto;
-            border-top: 2px solid #1a1a2e;
+            height: 120px; width: 100%; 
+            background: #0b172a; display: flex; 
+            gap: 6px; padding: 8px; overflow-x: auto;
+            border-top: 2px solid #1e293b;
             padding-bottom: env(safe-area-inset-bottom);
         }
         .spawn-btn { 
-            min-width: 70px; height: 100%; 
-            background: #1a1a2e; border: 1px solid #555; 
+            min-width: 68px; height: 100%; 
+            background: #162032; border: 1.5px solid #475569; 
             border-radius: 8px; color: white; 
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            flex-shrink: 0;
+            display: flex; flex-direction: column; align-items: center; justify-content: space-around;
+            flex-shrink: 0; font-size: 11px; padding: 2px;
         }
-        .spawn-btn:disabled { opacity: 0.3; }
+        .spawn-btn:disabled { opacity: 0.3; filter: grayscale(1); }
 
-        .unit { position: absolute; bottom: 60px; width: 40px; text-align: center; z-index: 10; pointer-events: none; transition: transform 0.1s; }
-        .unit-body { font-size: 24px; }
+        .unit { position: absolute; bottom: 50px; width: 40px; text-align: center; z-index: 10; pointer-events: none; }
+        .unit-body { font-size: 26px; line-height: 1; }
         .hp-bar { width: 100%; height: 4px; background: #000; margin-bottom: 2px; border-radius: 2px; overflow: hidden; }
-        .hp-inner { height: 100%; background: #2ecc71; width: 100%; transition: width 0.2s; }
+        .hp-inner { height: 100%; background: #2ecc71; width: 100%; }
         
-        #gacha-anim { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 1000; display: none; align-items: center; justify-content: center; font-size: 80px; }
+        #gacha-anim { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.92); z-index: 1000; display: none; flex-direction: column; align-items: center; justify-content: center; font-size: 70px; }
         #ui-panel::-webkit-scrollbar { display: none; }
+        
+        .nav-btn { width: 100px; margin-top: 8px; background: #334155; color: white; border: none; padding: 6px; border-radius: 6px; cursor: pointer; }
     </style>
 </head>
 <body>
 
-<link rel="stylesheet" href="menu.css">
-
-<div id="nav_bar"></div>
-
-<script src="menu.js"></script>
-<div id="gacha-anim">❓</div>
+<div id="gacha-anim">
+    <div id="gacha-icon">🔮</div>
+    <div id="gacha-result-text" style="font-size:18px; color:#fff; margin-top:15px; text-align:center; padding:0 20px;"></div>
+</div>
 
 <!-- 主選單 -->
 <div id="main-screen" class="screen active">
-    <div class="title">雨神大戰爭</div>
+    <div class="title">雨神大戰爭 | Raingod</div>
     <div class="top-res">
         <span>💎 XP: <b id="res-xp">0</b></span>
-        <span>🚩 關卡: <b id="res-stage">0/4</b></span>
+        <span>📖 解鎖: <b id="res-count">0/120</b></span>
+        <span>🚩 通關: <b id="res-stage">0/10</b></span>
     </div>
     <div class="grid">
-        <div class="card" onclick="showScreen('map-screen')">🗺️ 遠征地圖</div>
-        <div class="card" onclick="showScreen('upgrade-screen'); renderUpgrade();">⛩️ 角色升級</div>
-        <div class="card" onclick="showScreen('gacha-screen')">🔮 祭壇抽卡</div>
-        <div class="card" onclick="showScreen('book-screen'); renderBook();">📖 角色圖鑑</div>
+        <div class="card" onclick="showScreen('map-screen')"><div style="font-size:28px">🗺️</div>出征地圖</div>
+        <div class="card" onclick="showScreen('deck-screen'); renderDeck();"><div style="font-size:28px">⚔️</div>隊伍編隊</div>
+        <div class="card" onclick="showScreen('upgrade-screen'); renderUpgrade();"><div style="font-size:28px">⛩️</div>神靈進化</div>
+        <div class="card" onclick="showScreen('gacha-screen')"><div style="font-size:28px">🔮</div>100+祭壇</div>
+        <div class="card" onclick="showScreen('book-screen'); renderBook();"><div style="font-size:28px">📖</div>神靈圖鑑</div>
     </div>
 </div>
 
 <!-- 祭壇抽卡 -->
 <div id="gacha-screen" class="screen">
-    <div class="title">神之祭壇</div>
-    <div id="gacha-hint">消耗 500 XP 祈禱</div>
-    <div style="font-size: 60px; margin: 30px;">🔮</div>
-    <button class="card" style="width: 180px; background: var(--gold); color: black;" onclick="drawGacha()">啟動祈禱</button>
-    <button class="card" style="margin-top: 15px; width: 120px;" onclick="showScreen('main-screen')">返回</button>
+    <div class="title">神聖召喚祭壇</div>
+    <div style="color:#aaa; font-size:13px; margin-bottom:10px;">包含 R, SR, SSR, UBER, UR, EX 120+位神靈形態！</div>
+    <div style="font-size: 65px; margin: 15px;">🔮</div>
+    <button class="card" style="width: 220px; background: var(--gold); color: black; font-weight:bold; font-size:16px; padding:10px;" onclick="drawGacha()">祈願召喚 (300 XP)</button>
+    <button class="nav-btn" onclick="showScreen('main-screen')">返回</button>
+</div>
+
+<!-- 隊伍編隊 -->
+<div id="deck-screen" class="screen">
+    <div class="title">出戰隊伍設定 (上限10隻)</div>
+    <div style="font-size:12px; color:#00d4ff; margin-bottom:5px;">點擊選擇/取消 裝備至戰鬥隊伍</div>
+    <div id="deck-list" class="grid"></div>
+    <button class="nav-btn" onclick="showScreen('main-screen')">返回</button>
 </div>
 
 <!-- 角色升級 -->
 <div id="upgrade-screen" class="screen">
-    <div class="title">雨神進化</div>
+    <div class="title">神靈強化與突破</div>
     <div id="upgrade-list" class="grid"></div>
-    <button class="card" style="width: 100px; margin-top:10px" onclick="showScreen('main-screen')">返回</button>
+    <button class="nav-btn" onclick="showScreen('main-screen')">返回</button>
 </div>
 
 <!-- 角色圖鑑 -->
 <div id="book-screen" class="screen">
-    <div class="title">神靈圖鑑</div>
+    <div class="title">百神圖鑑 (<span id="book-count">0</span>/120)</div>
     <div id="book-list" class="grid"></div>
-    <button class="card" style="width: 100px; margin-top:10px" onclick="showScreen('main-screen')">返回</button>
+    <button class="nav-btn" onclick="showScreen('main-screen')">返回</button>
 </div>
 
 <!-- 地圖選擇 -->
 <div id="map-screen" class="screen">
-    <div class="title">世界地圖</div>
+    <div class="title">世界遠征地圖</div>
     <div id="map-list" class="grid"></div>
-    <button class="card" style="width: 100px; margin-top:10px" onclick="showScreen('main-screen')">返回</button>
+    <button class="nav-btn" onclick="showScreen('main-screen')">返回</button>
 </div>
 
 <!-- 戰鬥畫面 -->
 <div id="game-screen" class="screen">
     <div id="stage">
-        <div id="battle-money" style="position:absolute; top:10px; right:20px; font-size:20px; color:var(--gold); z-index:100; font-weight:bold;">$0</div>
+        <div id="battle-top-bar">
+            <span style="color:#00d4ff;">雨神砲: <b id="cannon-status">準備中</b></span>
+            <span style="color:var(--gold);">金幣: <b id="battle-money">$0</b>/<b id="battle-max-money">$500</b></span>
+        </div>
         <div class="ground"></div>
-        <div id="p-base" class="base"><div class="base-hp" id="p-hp">1000</div></div>
-        <div id="e-base" class="base"><div class="base-hp" id="e-hp">1000</div></div>
+        <div id="p-base" class="base"><div class="base-hp" id="p-hp">1000/1000</div></div>
+        <div id="e-base" class="base"><div class="base-hp" id="e-hp">1000/1000</div></div>
     </div>
     <div id="ui-panel"></div>
 </div>
 
 <script>
-    const SAVE_KEY = 'RainGodPro';
-    const CHARS = {
-        'drop': { name: '雨滴', rarity: 'R', forms: ['💧', '💦', '🌊'], hp: 150, atk: 25, cost: 50 },
-        'bolt': { name: '雷霆', rarity: 'SR', forms: ['⚡', '🌩️', '⛈️'], hp: 450, atk: 90, cost: 250 },
-        'cloud': { name: '雲盾', rarity: 'SR', forms: ['☁️', '🌥️', '⛈️'], hp: 1300, atk: 12, cost: 400 },
-        'dragon': { name: '雨龍', rarity: 'SSR', forms: ['🐉', '🐲', '🔱'], hp: 2200, atk: 280, cost: 900 }
-    };
+    const SAVE_KEY = 'RainGod100_Save';
+    
+    // --- 100+ 角色動態產生器 (Procedural Character Generator) ---
+    const EMOJIS = ['🐱', '💧', '⚡', '☁️', '🐺', '🧚', '🐉', '🗿', '👼', '🔥', '🐸', '🐙', '🦁', '🦅', '🦈', '🐻', '🦄', '👺', '海', '風', '雷', '雨', '霜', '澤'];
+    const PREFIXES = ['小', '狂暴', '古代', '機械', '虛空', '極地', '神聖', '暗黑', '幻彩', '宇宙', '混沌', '覺醒'];
+    const SUFFIXES = ['靈', '獸', '將', '王', '帝', '神', '霸主', '使者', '巨神', '天尊'];
+    const RARITIES = ['R', 'SR', 'SSR', 'UBER', 'UR', 'EX'];
 
-    const STAGES = [
-        { name: "新手海灘", eHP: 1500, eType: '👺', diff: 1 },
-        { name: "雷鳴山谷", eHP: 4000, eType: '👻', diff: 2 },
-        { name: "熔岩地獄", eHP: 8500, eType: '🔥', diff: 3 },
-        { name: "虛空神域", eHP: 22000, eType: '💀', diff: 5 }
-    ];
+    const CHARS = {};
 
-    // 初始預設資料
+    // 建立 120 位特色神靈庫
+    function generate100Characters() {
+        // 1. 預設固定經典貓咪/雨神角色
+        CHARS['cat_god'] = { name: '雨神貓', rarity: 'UBER', forms: ['🐱', '😼', '🙀'], formNames: ['雨神貓咪', '狂暴雨神貓', '神超絕貓皇'], hp: 3200, atk: 450, cost: 600, cd: 90, range: 130, spd: 1.6 };
+        CHARS['drop']    = { name: '雨滴',   rarity: 'R',    forms: ['💧', '💦', '🌊'], formNames: ['小雨滴', '湧泉靈', '荒洋狂濤'], hp: 180, atk: 30, cost: 50, cd: 25, range: 45, spd: 1.8 };
+        CHARS['bolt']    = { name: '雷霆',   rarity: 'SR',   forms: ['⚡', '🌩️', '⛈️'], formNames: ['閃電幼獸', '狂雷怒獸', '萬劫天雷神'], hp: 450, atk: 120, cost: 200, cd: 50, range: 110, spd: 2.2 };
+
+        // 2. 演算法大量動態生成第 4 ~ 120 位角色
+        for (let i = 4; i <= 120; i++) {
+            const id = `god_${i}`;
+            const e1 = EMOJIS[i % EMOJIS.length];
+            const e2 = EMOJIS[(i * 3) % EMOJIS.length];
+            const e3 = EMOJIS[(i * 7) % EMOJIS.length];
+            
+            const rIdx = i % 10 === 0 ? 5 : (i % 7 === 0 ? 4 : (i % 5 === 0 ? 3 : (i % 3 === 0 ? 2 : (i % 2 === 0 ? 1 : 0))));
+            const rarity = RARITIES[rIdx];
+
+            const baseHp = 100 + (rIdx * 350) + (i * 12);
+            const baseAtk = 20 + (rIdx * 90) + (i * 4);
+            const cost = 60 + (rIdx * 180) + Math.floor(i * 3.5);
+
+            CHARS[id] = {
+                name: `${PREFIXES[i % PREFIXES.length]}${e1}`,
+                rarity: rarity,
+                forms: [e1, e2, e3],
+                formNames: [
+                    `${PREFIXES[i % PREFIXES.length]}${e1}`,
+                    `進階·${e2}${SUFFIXES[i % SUFFIXES.length]}`,
+                    `覺醒·${PREFIXES[(i+2)%PREFIXES.length]}${e3}${SUFFIXES[(i+5)%SUFFIXES.length]}`
+                ],
+                hp: Math.floor(baseHp),
+                atk: Math.floor(baseAtk),
+                cost: Math.min(1800, Math.floor(cost)),
+                cd: Math.floor(30 + rIdx * 25),
+                range: 40 + (i * 3) % 150,
+                spd: parseFloat((0.8 + (i % 5) * 0.3).toFixed(1))
+            };
+        }
+    }
+
+    generate100Characters();
+
+    // 關卡資料
+    const STAGES = Array.from({ length: 10 }, (_, i) => ({
+        name: `第 ${i+1} 遠征界域`,
+        eHP: 1500 * Math.pow(1.8, i),
+        eType: ['👺', '👻', '🔥', '🧟', '💀', '👾', '👹', '👽', '🤖', '👑'][i],
+        diff: i + 1,
+        reward: 600 * (i + 1)
+    }));
+
     let user = {
         xp: 1000,
-        owned: ['drop'],
-        lvs: { 'drop': 1, 'bolt': 1, 'cloud': 1, 'dragon': 1 },
+        owned: ['cat_god', 'drop', 'bolt', 'god_4', 'god_5'],
+        deck: ['cat_god', 'drop', 'bolt', 'god_4', 'god_5'],
+        lvs: {},
         cleared: 0
     };
 
-    // --- 存檔與加載核心邏輯 ---
-    function save() { 
-        // 1. 存本地
-        localStorage.setItem(SAVE_KEY, JSON.stringify(user));
-        
-        // 2. 更新 UI
-        document.getElementById('res-xp').innerText = Math.floor(user.xp);
-        document.getElementById('res-stage').innerText = `${user.cleared}/${STAGES.length}`;
+    // 初始化所有角色 Lv.1
+    Object.keys(CHARS).forEach(k => user.lvs[k] = 1);
 
+    function save() { 
+        localStorage.setItem(SAVE_KEY, JSON.stringify(user));
+        document.getElementById('res-xp').innerText = Math.floor(user.xp);
+        document.getElementById('res-count').innerText = `${user.owned.length}/120`;
+        document.getElementById('res-stage').innerText = `${user.cleared}/${STAGES.length}`;
     }
 
     function loadGame() {
-        // A. 讀取本地 LocalStorage
         const localData = localStorage.getItem(SAVE_KEY);
         if (localData) {
-            try {
-                user = { ...user, ...JSON.parse(localData) };
-                console.log("已載入本地進度");
-            } catch(e) { console.error("本地讀取出錯", e); }
+            try { 
+                const d = JSON.parse(localData);
+                user = { ...user, ...d };
+                user.lvs = { ...user.lvs, ...d.lvs };
+            } catch(e) {}
         }
-        save(); // 立即同步 UI 顯示
-
+        save();
     }
 
-    // --- 遊戲介面邏輯 ---
     function showScreen(id) {
         document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
         document.getElementById(id).classList.add('active');
         if(id === 'map-screen') renderMap();
     }
 
+    function getFormIdx(lv) { return lv >= 10 ? 2 : (lv >= 5 ? 1 : 0); }
+
+    // --- 隊伍編隊 ---
+    function renderDeck() {
+        const list = document.getElementById('deck-list');
+        list.innerHTML = '';
+        user.owned.forEach(id => {
+            const c = CHARS[id];
+            const inDeck = user.deck.includes(id);
+            const item = document.createElement('div');
+            item.className = `card rarity-${c.rarity} ${inDeck ? 'selected' : ''}`;
+            item.innerHTML = `
+                <div style="font-size:28px;">${c.forms[0]}</div>
+                <b>${c.name}</b><br>
+                <small style="color:${inDeck?'#2ecc71':'#aaa'}">${inDeck?'[出戰中]':'[未裝備]'}</small>
+            `;
+            item.onclick = () => toggleDeck(id);
+            list.appendChild(item);
+        });
+    }
+
+    function toggleDeck(id) {
+        if (user.deck.includes(id)) {
+            if (user.deck.length <= 1) return alert("隊伍至少要有 1 隻神靈！");
+            user.deck = user.deck.filter(x => x !== id);
+        } else {
+            if (user.deck.length >= 10) return alert("出戰隊伍最多 10 隻！");
+            user.deck.push(id);
+        }
+        renderDeck();
+        save();
+    }
+
+    // --- 升級介面 ---
     function renderUpgrade() {
         const list = document.getElementById('upgrade-list');
         list.innerHTML = '';
         user.owned.forEach(id => {
             const c = CHARS[id];
-            const lv = user.lvs[id];
+            const lv = user.lvs[id] || 1;
+            const fIdx = getFormIdx(lv);
+            const cost = lv * 120;
             const item = document.createElement('div');
-            item.className = 'card';
-            item.innerHTML = `<div>${c.forms[lv >= 10 ? 2 : (lv >= 5 ? 1 : 0)]}</div><small>${c.name} Lv.${lv}</small><br>
-                <button onclick="upLevel('${id}')" style="font-size:12px; margin-top:5px;">升級(${lv*200})</button>`;
+            item.className = `card rarity-${c.rarity}`;
+            item.innerHTML = `
+                <div style="font-size:30px;">${c.forms[fIdx]}</div>
+                <b>${c.formNames[fIdx]}</b><br>
+                <small>Lv.${lv}</small><br>
+                <button onclick="upLevel('${id}')" style="font-size:10px; margin-top:4px; background:var(--gold); border:none; border-radius:4px; padding:2px 6px; cursor:pointer;">升級(${cost}XP)</button>
+            `;
             list.appendChild(item);
         });
     }
 
     function upLevel(id) {
-        const cost = user.lvs[id] * 200;
+        const cost = (user.lvs[id] || 1) * 120;
         if (user.xp >= cost) {
             user.xp -= cost;
-            user.lvs[id]++;
+            user.lvs[id] = (user.lvs[id] || 1) + 1;
             renderUpgrade();
             save();
-        } else {
-            alert("XP 不足！");
-        }
+        } else { alert("XP 不足！"); }
     }
 
+    // --- 圖鑑 ---
     function renderBook() {
         const list = document.getElementById('book-list');
+        document.getElementById('book-count').innerText = user.owned.length;
         list.innerHTML = '';
         Object.keys(CHARS).forEach(id => {
             const has = user.owned.includes(id);
+            const c = CHARS[id];
             const item = document.createElement('div');
-            item.className = `card ${has ? '' : 'locked'}`;
-            item.innerHTML = `<div>${has ? CHARS[id].forms[0] : '？'}</div><small>${has ? CHARS[id].name : '未解鎖'}</small>`;
+            item.className = `card ${has ? 'rarity-' + c.rarity : 'locked'}`;
+            item.innerHTML = `
+                <div style="font-size:28px;">${has ? c.forms[0] : '❓'}</div>
+                <b>${has ? c.name : '???'}</b><br>
+                <small>${has ? c.rarity : '未解鎖'}</small>
+            `;
             list.appendChild(item);
         });
     }
 
+    // --- 地圖 ---
     function renderMap() {
         const list = document.getElementById('map-list');
         list.innerHTML = '';
@@ -236,127 +351,238 @@
             const locked = idx > user.cleared;
             const item = document.createElement('div');
             item.className = `card ${locked ? 'locked' : ''}`;
-            item.innerHTML = `<h3>${s.name}</h3><small>目標HP: ${s.eHP}</small>`;
+            item.innerHTML = `
+                <b style="color:var(--p-color);">${s.name}</b><br>
+                <small>HP:${Math.floor(s.eHP)}</small><br>
+                <small style="color:var(--gold);">+${s.reward}XP</small>
+            `;
             if (!locked) item.onclick = () => startBattle(idx);
             list.appendChild(item);
         });
     }
 
+    // --- 抽卡 ---
     function drawGacha() {
-        if (user.xp < 500) return alert("XP 不足以啟動祭壇！");
-        user.xp -= 500;
+        if (user.xp < 300) return alert("XP 不足！(需要 300 XP)");
+        user.xp -= 300;
         save();
+        
         const anim = document.getElementById('gacha-anim');
+        const icon = document.getElementById('gacha-icon');
+        const txt = document.getElementById('gacha-result-text');
+        
         anim.style.display = 'flex';
+        icon.innerText = '🔮';
+        txt.innerText = '祈願中...';
+
         setTimeout(() => {
             const keys = Object.keys(CHARS);
             const res = keys[Math.floor(Math.random() * keys.length)];
-            if (!user.owned.includes(res)) user.owned.push(res);
-            anim.innerText = CHARS[res].forms[0];
-            setTimeout(() => { anim.style.display = 'none'; anim.innerText = '❓'; save(); }, 1200);
+            const isNew = !user.owned.includes(res);
+            
+            if (isNew) {
+                user.owned.push(res);
+                if (user.deck.length < 10) user.deck.push(res);
+            } else {
+                user.xp += 150;
+            }
+
+            icon.innerText = CHARS[res].forms[0];
+            txt.innerText = isNew ? `🎉 召喚成功！\n${CHARS[res].name} (${CHARS[res].rarity})` : `重複獲得 ${CHARS[res].name}，轉為 150 XP`;
+
+            setTimeout(() => { anim.style.display = 'none'; save(); }, 1500);
         }, 800);
     }
 
     // --- 戰鬥引擎 ---
-    let battle = { active: false, units: [], money: 0, pHP: 0, eHP: 0, currentStage: null, width: 0 };
+    let battle = { active: false, units: [], money: 0, maxMoney: 500, walletLv: 1, pHP: 1000, pMaxHP: 1000, eHP: 0, eMaxHP: 0, currentStage: null, width: 0, cooldowns: {}, cannonCharge: 0 };
 
     function startBattle(idx) {
         showScreen('game-screen');
         const s = STAGES[idx];
         const stageWidth = document.getElementById('stage').offsetWidth;
-        battle = { active: true, units: [], money: 100, pHP: 1000, eHP: s.eHP, currentStage: idx, width: stageWidth };
         
-        const panel = document.getElementById('ui-panel');
-        panel.innerHTML = '';
-        user.owned.forEach(id => {
-            const btn = document.createElement('button');
-            btn.className = 'spawn-btn';
-            const lv = user.lvs[id];
-            btn.innerHTML = `<span>${CHARS[id].forms[lv >= 10 ? 2 : (lv >= 5 ? 1 : 0)]}</span><small>$${CHARS[id].cost}</small>`;
-            btn.onclick = () => spawn(id, 'player');
-            panel.appendChild(btn);
-        });
+        battle = { 
+            active: true, units: [], money: 100, maxMoney: 500, walletLv: 1,
+            pHP: 1500, pMaxHP: 1500, eHP: s.eHP, eMaxHP: s.eHP, 
+            currentStage: idx, width: stageWidth, cooldowns: {}, cannonCharge: 0 
+        };
+        
+        renderBattleUI();
         requestAnimationFrame(battleLoop);
     }
 
-    function spawn(id, side) {
-        const c = side === 'player' ? CHARS[id] : { forms: [STAGES[battle.currentStage].eType], hp: 200 * (battle.currentStage+1), atk: 35 * (battle.currentStage+1), cost: 0 };
-        if (side === 'player') {
-            if (battle.money < c.cost) return;
-            battle.money -= c.cost;
+    function renderBattleUI() {
+        const panel = document.getElementById('ui-panel');
+        panel.innerHTML = '';
+        
+        const walletBtn = document.createElement('button');
+        walletBtn.className = 'spawn-btn';
+        walletBtn.id = 'wallet-btn';
+        walletBtn.onclick = upgradeWallet;
+        panel.appendChild(walletBtn);
+
+        const cannonBtn = document.createElement('button');
+        cannonBtn.className = 'spawn-btn';
+        cannonBtn.id = 'cannon-btn';
+        cannonBtn.innerHTML = `<span>⚡</span><small>雨神砲</small>`;
+        cannonBtn.onclick = fireCannon;
+        panel.appendChild(cannonBtn);
+
+        // 僅加載「出戰隊伍 Deck」中的 10 隻角色
+        user.deck.forEach(id => {
+            const c = CHARS[id];
+            const lv = user.lvs[id] || 1;
+            const fIdx = getFormIdx(lv);
+            const btn = document.createElement('button');
+            btn.className = 'spawn-btn';
+            btn.id = `btn-${id}`;
+            btn.innerHTML = `<span style="font-size:18px;">${c.forms[fIdx]}</span><b>$${c.cost}</b>`;
+            btn.onclick = () => spawn(id, 'player');
+            panel.appendChild(btn);
+        });
+    }
+
+    function upgradeWallet() {
+        const cost = battle.walletLv * 150;
+        if (battle.money >= cost && battle.walletLv < 8) {
+            battle.money -= cost;
+            battle.walletLv++;
+            battle.maxMoney += 300;
         }
+    }
+
+    function fireCannon() {
+        if (battle.cannonCharge >= 100) {
+            battle.cannonCharge = 0;
+            battle.units.forEach(u => { if (u.side === 'enemy') u.hp -= 400; });
+            battle.eHP -= 600;
+        }
+    }
+
+    function spawn(id, side) {
+        if (side === 'player') {
+            const c = CHARS[id];
+            if (battle.money < c.cost || (battle.cooldowns[id] || 0) > 0) return;
+            battle.money -= c.cost;
+            battle.cooldowns[id] = c.cd;
+            
+            const lv = user.lvs[id] || 1;
+            const fIdx = getFormIdx(lv);
+            const mult = 1 + (lv - 1) * 0.12;
+
+            createUnitEntity({
+                side: 'player', icon: c.forms[fIdx],
+                x: 65, hp: c.hp * mult, max: c.hp * mult,
+                atk: c.atk * mult, spd: c.spd, range: c.range
+            });
+        } else {
+            const stg = STAGES[battle.currentStage];
+            const mult = 1 + stg.diff * 0.4;
+            createUnitEntity({
+                side: 'enemy', icon: stg.eType,
+                x: battle.width - 90,
+                hp: 150 * mult, max: 150 * mult,
+                atk: 25 * mult, spd: 1.1, range: 45
+            });
+        }
+    }
+
+    function createUnitEntity(cfg) {
         const el = document.createElement('div');
         el.className = 'unit';
-        const lv = side === 'player' ? user.lvs[id] : 1;
-        el.innerHTML = `<div class="hp-bar"><div class="hp-inner"></div></div><div class="unit-body">${c.forms[0]}</div>`;
+        el.innerHTML = `<div class="hp-bar"><div class="hp-inner"></div></div><div class="unit-body">${cfg.icon}</div>`;
         document.getElementById('stage').appendChild(el);
-        
-        battle.units.push({
-            el, side, x: side === 'player' ? 60 : battle.width - 100,
-            hp: c.hp * (side === 'player' ? (1 + lv * 0.12) : 1),
-            max: c.hp * (side === 'player' ? (1 + lv * 0.12) : 1),
-            atk: c.atk * (side === 'player' ? (1 + lv * 0.12) : 1),
-            spd: side === 'player' ? 1.6 : 1.1,
-            range: id === 'dragon' ? 120 : 45,
-            atkTimer: 0
-        });
+        battle.units.push({ ...cfg, el, atkTimer: 0 });
     }
 
     function battleLoop() {
         if (!battle.active) return;
-        battle.money += 0.4;
-        document.getElementById('battle-money').innerText = `$${Math.floor(battle.money)}`;
-        
-        if (Math.random() < 0.012) spawn(null, 'enemy');
+
+        battle.money = Math.min(battle.maxMoney, battle.money + 0.2 + (battle.walletLv * 0.1));
+        if (battle.cannonCharge < 100) battle.cannonCharge += 0.15;
+
+        Object.keys(battle.cooldowns).forEach(k => {
+            if (battle.cooldowns[k] > 0) battle.cooldowns[k]--;
+        });
+
+        if (Math.random() < (0.012 + battle.currentStage * 0.002)) spawn(null, 'enemy');
 
         battle.units.forEach(u => {
             const isP = u.side === 'player';
             let target = battle.units.find(en => en.side !== u.side && (isP ? (en.x - u.x < u.range && en.x > u.x) : (u.x - en.x < u.range && u.x > en.x)));
-            const baseDist = isP ? (battle.width - 60 - u.x) : (u.x - 60);
+            const baseDist = isP ? (battle.width - 65 - u.x) : (u.x - 65);
 
             if (target || baseDist < u.range) {
                 u.atkTimer++;
-                if (u.atkTimer > 40) {
+                if (u.atkTimer > 35) {
                     u.atkTimer = 0;
                     if (target) target.hp -= u.atk;
-                    else if (isP) battle.eHP -= u.atk; else battle.pHP -= u.atk;
-                    u.el.style.transform = `translateX(${isP?10:-10}px)`;
-                    setTimeout(() => { if(u.el) u.el.style.transform = ''; }, 50);
+                    else if (isP) battle.eHP -= u.atk; 
+                    else battle.pHP -= u.atk;
                 }
             } else {
                 u.x += isP ? u.spd : -u.spd;
                 u.el.style.left = u.x + 'px';
             }
+
             u.el.querySelector('.hp-inner').style.width = Math.max(0, (u.hp / u.max * 100)) + '%';
         });
 
-        battle.units = battle.units.filter(u => { if(u.hp <= 0) { u.el.remove(); return false; } return true; });
-        document.getElementById('p-hp').innerText = Math.max(0, Math.floor(battle.pHP));
-        document.getElementById('e-hp').innerText = Math.max(0, Math.floor(battle.eHP));
+        battle.units = battle.units.filter(u => { 
+            if(u.hp <= 0) { 
+                u.el.remove(); 
+                if (u.side === 'enemy') battle.money = Math.min(battle.maxMoney, battle.money + 35);
+                return false; 
+            } 
+            return true; 
+        });
+
+        // UI 渲染
+        document.getElementById('battle-money').innerText = `$${Math.floor(battle.money)}`;
+        document.getElementById('battle-max-money').innerText = `$${battle.maxMoney}`;
+        document.getElementById('p-hp').innerText = `${Math.max(0, Math.floor(battle.pHP))}/${battle.pMaxHP}`;
+        document.getElementById('e-hp').innerText = `${Math.max(0, Math.floor(battle.eHP))}/${Math.floor(battle.eMaxHP)}`;
+
+        const wBtn = document.getElementById('wallet-btn');
+        if (wBtn) {
+            wBtn.innerHTML = `<span>💰</span><small>錢包Lv.${battle.walletLv}</small>`;
+            wBtn.disabled = battle.walletLv >= 8 || battle.money < (battle.walletLv * 150);
+        }
+
+        const cBtn = document.getElementById('cannon-btn');
+        const cStatus = document.getElementById('cannon-status');
+        if (cBtn && cStatus) {
+            cStatus.innerText = battle.cannonCharge >= 100 ? '可發射！' : `${Math.floor(battle.cannonCharge)}%`;
+            cBtn.disabled = battle.cannonCharge < 100;
+        }
+
+        user.deck.forEach(id => {
+            const btn = document.getElementById(`btn-${id}`);
+            if (btn) btn.disabled = (battle.money < CHARS[id].cost) || ((battle.cooldowns[id] || 0) > 0);
+        });
 
         if (battle.pHP <= 0 || battle.eHP <= 0) {
             battle.active = false;
             document.querySelectorAll('.unit').forEach(u => u.remove());
+            
             if (battle.eHP <= 0) {
-                const reward = (battle.currentStage + 1) * 1200;
+                const reward = STAGES[battle.currentStage].reward;
                 user.xp += reward;
                 user.cleared = Math.max(user.cleared, battle.currentStage + 1);
-                alert("🚩 勝利！獲得 XP: " + reward);
+                alert(`🚩 突破成功！獲得 ${reward} XP！`);
             } else {
-                alert("💥 戰敗，撤退...");
+                alert("💥 堡壘被毀，戰敗撤退...");
             }
             save();
             showScreen('main-screen');
             return;
         }
+
         requestAnimationFrame(battleLoop);
     }
 
-    // 初始化啟動
-    window.raingodBindStorage('rain-god-wars', [SAVE_KEY], { [SAVE_KEY]: null }, data => {
-        if (data[SAVE_KEY]) user = { ...user, ...data[SAVE_KEY] };
-        save();
-    }, { path: 'raingod_pro_data', key: SAVE_KEY });
+    loadGame();
 </script>
 </body>
 </html>
