@@ -38,8 +38,9 @@
     const resize = () => { cvs.width = window.innerWidth; cvs.height = window.innerHeight; };
     window.onresize = resize; resize();
 
-    let money = 0, frame = 0, p = { x: 200, y: 200, r: 22, tx: 200, ty: 200, bag: [] };
-    let bots = [], items = [], customers = [], shakes = 0;
+    const SAVE_KEY = 'raingod_tycoon_save';
+    let money = 0, frame = 0, minerLevel = 0, p = { x: 200, y: 200, r: 22, tx: 200, ty: 200, bag: [] };
+    let bots = [], items = [], customers = [], shakes = 0, gameStarted = false;
 
     // 設施清單 (實體化、高飽和度)
     const buildings = [
@@ -51,7 +52,55 @@
     window.addEventListener('pointermove', e => { p.tx = e.clientX; p.ty = e.clientY; });
 
     function buyBot() {
-        if(money >= 500) { money -= 500; bots.push({ x: cvs.width/2, y: cvs.height/2, bag: [], speed: 4 }); }
+        if(money >= 500) {
+            money -= 500;
+            bots.push({ x: cvs.width/2, y: cvs.height/2, bag: [], speed: 4 });
+            saveGame();
+        }
+    }
+
+    function upgrade(type) {
+        if (type !== 'miner' || money < 1000) return;
+        money -= 1000;
+        minerLevel++;
+        saveGame();
+    }
+
+    function saveGame() {
+        if (!gameStarted) return;
+        localStorage.setItem(SAVE_KEY, JSON.stringify({
+            money,
+            frame,
+            minerLevel,
+            player: { x: p.x, y: p.y, tx: p.tx, ty: p.ty, bag: p.bag },
+            bots,
+            items,
+            customers
+        }));
+    }
+
+    function loadGame(data) {
+        money = 0;
+        frame = 0;
+        minerLevel = 0;
+        p = { x: 200, y: 200, r: 22, tx: 200, ty: 200, bag: [] };
+        bots = [];
+        items = [];
+        customers = [];
+        if (!data || typeof data !== 'object') return;
+        money = Math.max(0, Number(data.money) || 0);
+        frame = Math.max(0, Math.floor(Number(data.frame) || 0));
+        minerLevel = Math.max(0, Math.floor(Number(data.minerLevel) || 0));
+        if (data.player && typeof data.player === 'object') {
+            p.x = Number(data.player.x) || p.x;
+            p.y = Number(data.player.y) || p.y;
+            p.tx = Number(data.player.tx) || p.tx;
+            p.ty = Number(data.player.ty) || p.ty;
+            p.bag = Array.isArray(data.player.bag) ? data.player.bag : [];
+        }
+        bots = Array.isArray(data.bots) ? data.bots : [];
+        items = Array.isArray(data.items) ? data.items : [];
+        customers = Array.isArray(data.customers) ? data.customers : [];
     }
 
     function update() {
@@ -60,7 +109,7 @@
         p.y += (p.ty - p.y) * 0.15;
 
         // 採礦塔自動噴礦 (實體方塊)
-        if(frame % 70 === 0) {
+        if(frame % Math.max(15, 70 - minerLevel * 5) === 0) {
             items.push({ x: 170, y: 150 + (Math.random()-0.5)*40, type: 'RAW', color: '#ef4444' });
         }
 
@@ -84,6 +133,7 @@
 
         document.getElementById('m').innerText = money;
         document.getElementById('bots').innerText = bots.length;
+        if (frame % 60 === 0) saveGame();
     }
 
     function interact(obj) {
@@ -163,7 +213,22 @@
         });
     }
 
-    draw();
+    async function startGame() {
+        await window.raingodFirebaseReady;
+        await window.raingodAuthReady;
+        window.raingodBindStorage('tycoon', [SAVE_KEY], { [SAVE_KEY]: null }, data => {
+            loadGame(data[SAVE_KEY]);
+            if (!gameStarted) {
+                gameStarted = true;
+                draw();
+            }
+        });
+    }
+
+    startGame().catch(error => {
+        console.error('大亨存檔初始化失敗：', error);
+        alert('大亨存檔載入失敗，請重新整理頁面再試。');
+    });
 </script>
 </body>
 </html>
