@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>爆炸 | Raingod Eternal Boss & Talent</title>
+    <title>爆炸 | Raingod</title>
     <style>
         :root { 
             --neon: #00f2ff; --pink: #ff007b; --gold: #ffcc00; --purple: #bc13fe; 
@@ -31,6 +31,7 @@
         
         .ctrl-btn { padding: 10px 14px; background: #111; color: #fff; border: 1px solid var(--pink); cursor: pointer; pointer-events: auto; font-weight: bold; font-size: 12px; transition: 0.2s; }
         .ctrl-btn:active { background: var(--pink); color: #000; }
+        .ctrl-btn:disabled { color: #777; border-color: #555; cursor: not-allowed; }
 
         /* Boss Gauge */
         #boss-hud {
@@ -79,6 +80,7 @@
                 <div class="stat-group">
                     <button class="ctrl-btn" onclick="toggleModal('shop-window')">商店 (SHOP)</button>
                     <button class="ctrl-btn" style="border-color:var(--gold)" onclick="toggleModal('talent-window')">天賦 (TALENTS)</button>
+                    <button id="leaderboard-btn" class="ctrl-btn" style="border-color:var(--neon)" onclick="toggleLeaderboard()">登入後查看排行榜</button>
                     <button id="boss-btn" class="ctrl-btn" style="border-color:var(--pink); background:#200;" onclick="spawnBoss()">召喚 BOSS</button>
                     <button id="prestige-btn" class="ctrl-btn" style="border-color: var(--gold); display:none;" onclick="doPrestige()">轉生 (ASCEND)</button>
                 </div>
@@ -110,6 +112,14 @@
             <div id="talent-content"></div>
             <button onclick="toggleModal('talent-window')" style="width:100%; margin-top:20px; padding:12px; background:#222; color:#fff; border:none; cursor:pointer; font-weight:bold;">關閉</button>
         </div>
+
+        <div id="leaderboard-window" class="modal">
+            <h2 style="color:var(--neon); border-bottom:2px solid var(--neon); padding-bottom:10px; margin-top:0;">🏆 轉生排行榜</h2>
+            <p id="leaderboard-status" style="color:#aaa; font-size:12px;">登入帳號後即可查看排行榜。</p>
+            <div id="leaderboard-list"></div>
+            <button onclick="refreshLeaderboard()" style="width:100%; margin-top:10px; padding:12px; background:#123; color:#fff; border:1px solid var(--neon); cursor:pointer; font-weight:bold;">重新整理</button>
+            <button onclick="toggleModal('leaderboard-window')" style="width:100%; margin-top:10px; padding:12px; background:#222; color:#fff; border:none; cursor:pointer; font-weight:bold;">關閉</button>
+        </div>
     </div>
 
     <script>
@@ -131,33 +141,58 @@
         };
 
         const SAVE_KEY = 'raingod_eternal_v3_save';
-        let gameData = {
-            money: 0, totalEarned: 0, prestige: 1, tp: 0,
-            upgrades: {
-                damage: { lv: 1, cost: 50, mult: 1.4, name: "量子核心", desc: "提升每次點擊的基礎攻擊力" },
-                range:  { lv: 1, cost: 200, mult: 1.5, name: "共振距離", desc: "擴大連鎖爆炸的傳播範圍" },
-                luck:   { lv: 1, cost: 500, mult: 1.7, name: "命運干涉", desc: "提高高階稀有怪出現機率" }
-            },
-            talents: {
-                critDmg: { lv: 0, max: 10, cost: 1, name: "超頻暴擊", desc: "暴擊傷害倍率 +50% / 級" },
-                chainAtk:{ lv: 0, max: 5,  cost: 2, name: "量子連鎖", desc: "連鎖傳導傷害提升 +15% / 級" },
-                goldMult:{ lv: 0, max: 10, cost: 1, name: "點金術", desc: "所有金幣收益增加 +20% / 級" }
-            }
-        };
+        const LEADERBOARD_URL = 'https://game-24b43-default-rtdb.firebaseio.com/explosion_clicker_leaderboard';
+        let gameData = createDefaultGameData();
 
         let width, height, combo = 0;
         let cubes = [], particles = [], floaters = [];
         let activeBoss = null;
+        let gameStarted = false;
+        let leaderboardTimer = null;
 
-        function init() {
+        async function init() {
             width = canvas.width = container.clientWidth;
             height = canvas.height = container.clientHeight;
-            loadGame(); 
-            refreshUI();
+            await window.raingodFirebaseReady;
+            await window.raingodAuthReady;
+            window.raingodBindStorage('explosion-clicker', [SAVE_KEY], { [SAVE_KEY]: null }, data => {
+                gameData = createDefaultGameData();
+                loadGame(data[SAVE_KEY]);
+                gameStarted = true;
+                refreshUI();
+                scheduleLeaderboardUpload();
+            });
+            window.raingodOnAuthStateChanged(user => {
+                const button = document.getElementById('leaderboard-btn');
+                button.textContent = user ? '排行榜 (RANK)' : '登入後查看排行榜';
+                if (!user) {
+                    document.getElementById('leaderboard-window').style.display = 'none';
+                    document.getElementById('leaderboard-list').replaceChildren();
+                    document.getElementById('leaderboard-status').textContent = '登入帳號後即可查看排行榜。';
+                }
+            });
+        }
+
+        function createDefaultGameData() {
+            return {
+                money: 0, totalEarned: 0, prestige: 1, tp: 0,
+                upgrades: {
+                    damage: { lv: 1, cost: 50, mult: 1.4, name: "量子核心", desc: "提升每次點擊的基礎攻擊力" },
+                    range: { lv: 1, cost: 200, mult: 1.5, name: "共振距離", desc: "擴大連鎖爆炸的傳播範圍" },
+                    luck: { lv: 1, cost: 500, mult: 1.7, name: "命運干涉", desc: "提高高階稀有怪出現機率" }
+                },
+                talents: {
+                    critDmg: { lv: 0, max: 10, cost: 1, name: "超頻暴擊", desc: "暴擊傷害倍率 +50% / 級" },
+                    chainAtk: { lv: 0, max: 5, cost: 2, name: "量子連鎖", desc: "連鎖傳導傷害提升 +15% / 級" },
+                    goldMult: { lv: 0, max: 10, cost: 1, name: "點金術", desc: "所有金幣收益增加 +20% / 級" }
+                }
+            };
         }
 
         function saveGame() {
+            if (!gameStarted) return;
             localStorage.setItem(SAVE_KEY, JSON.stringify(gameData));
+            scheduleLeaderboardUpload();
         }
 
         function loadGame() {
@@ -384,6 +419,82 @@
             if(el.style.display === 'block') {
                 if(id === 'shop-window') renderShop();
                 if(id === 'talent-window') renderTalents();
+            }
+        }
+
+        window.toggleLeaderboard = async () => {
+            if (!await window.raingodRequireAuth('排行榜')) return;
+            const modal = document.getElementById('leaderboard-window');
+            modal.style.display = modal.style.display === 'block' ? 'none' : 'block';
+            if (modal.style.display === 'block') await window.refreshLeaderboard();
+        };
+
+        window.refreshLeaderboard = async () => {
+            const status = document.getElementById('leaderboard-status');
+            const list = document.getElementById('leaderboard-list');
+            if (!await window.raingodRequireAuth('排行榜')) return;
+            const uid = window.raingodCurrentUser.uid;
+            status.textContent = '排行榜載入中…';
+            try {
+                const response = await fetch(`${LEADERBOARD_URL}.json`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                if (window.raingodCurrentUser?.uid !== uid) return;
+                const rows = await response.json() || {};
+                const entries = Object.entries(rows)
+                    .filter(([, row]) => row && Number.isFinite(Number(row.prestige)))
+                    .map(([entryUid, row]) => ({ uid: entryUid, ...row }))
+                    .sort((a, b) => Number(b.prestige) - Number(a.prestige) ||
+                        Number(b.tp) - Number(a.tp) || Number(b.totalEarned) - Number(a.totalEarned))
+                    .slice(0, 50);
+                if (!entries.length) {
+                    list.innerHTML = '<div class="card"><span style="color:#aaa">目前還沒有排行榜資料</span></div>';
+                } else {
+                    list.innerHTML = entries.map((entry, index) => `
+                        <div class="card">
+                            <span class="card-title">${index + 1}. ${escapeLeaderboardText(entry.name || '玩家')}</span>
+                            <span style="color:#fff">轉生 ${Number(entry.prestige) || 1}｜TP ${Number(entry.tp) || 0}</span>
+                        </div>`).join('');
+                }
+                status.textContent = `已載入 ${entries.length} 位玩家，依轉生次數排序。`;
+            } catch (error) {
+                console.error('載入爆炸點擊排行榜失敗：', error);
+                status.textContent = '排行榜載入失敗，請稍後重試。';
+            }
+        };
+
+        function escapeLeaderboardText(value) {
+            return String(value).replace(/[&<>"']/g, char => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            })[char]);
+        }
+
+        function scheduleLeaderboardUpload() {
+            if (!gameStarted || !window.raingodCurrentUser) return;
+            clearTimeout(leaderboardTimer);
+            leaderboardTimer = setTimeout(uploadLeaderboardScore, 1200);
+        }
+
+        async function uploadLeaderboardScore() {
+            const user = window.raingodCurrentUser;
+            if (!gameStarted || !user) return;
+            const uid = user.uid;
+            const username = user.email ? user.email.split('@')[0] : '玩家';
+            const payload = {
+                name: username,
+                prestige: Math.max(1, Number(gameData.prestige) || 1),
+                tp: Math.max(0, Number(gameData.tp) || 0),
+                totalEarned: Math.max(0, Number(gameData.totalEarned) || 0),
+                updatedAt: Date.now()
+            };
+            try {
+                const response = await fetch(`${LEADERBOARD_URL}/${encodeURIComponent(uid)}.json`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            } catch (error) {
+                console.error('上傳爆炸點擊排行榜失敗：', error);
             }
         }
 
