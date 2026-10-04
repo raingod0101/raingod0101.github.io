@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none">
+    <title>單人棋 | Raingod</title>
+    <style>
+        :root { --sq-l: #ebecd0; --sq-d: #779556; --accent: #f6f669; --bg: #161618; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        
+        body { 
+            background: var(--bg); color: #fff; font-family: sans-serif;
+            margin: 0; padding: 0; display: flex; flex-direction: column; 
+            height: 100vh; width: 100vw; overflow: hidden;
+        }
+
+        #launcher {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: var(--bg); z-index: 2000; display: flex; flex-direction: column;
+            justify-content: center; align-items: center; cursor: pointer;
+        }
+
+        .header { 
+            width: 100%; z-index: 1000;
+            padding: 15px 10px; background: rgba(255,255,255,0.05);
+            display: flex; justify-content: space-around; align-items: center; flex-shrink: 0;
+        }
+
+        .stats { display: flex; flex-direction: column; gap: 5px; font-size: 16px; }
+        .controls { display: flex; gap: 10px; align-items: center; }
+        
+        button { 
+            padding: 10px 18px; border: none; border-radius: 8px; font-size: 16px;
+            font-weight: bold; cursor: pointer; background: #444; color: white;
+        }
+
+        input[type="range"] { width: 80px; height: 20px; }
+
+        #game-container { 
+            flex-grow: 1; width: 100vw; display: flex; justify-content: center; align-items: center; padding: 10px 0;
+        }
+
+        #board { 
+            display: grid; grid-template-columns: repeat(8, 1fr); grid-template-rows: repeat(8, 1fr);
+            width: min(95vw, 70vh); height: min(95vw, 70vh); border: 2px solid #000;
+            box-shadow: 0 0 30px rgba(0,0,0,0.8); touch-action: none;
+        }
+        
+        .cell { display: flex; justify-content: center; align-items: center; width: 100%; height: 100%; cursor: pointer; position: relative; }
+        .light { background: var(--sq-l); }
+        .dark { background: var(--sq-d); }
+        .selected { background: var(--accent) !important; }
+        .can-eat::after { content: ''; width: 35%; height: 35%; background: rgba(0,0,0,0.2); border-radius: 50%; position: absolute; z-index: 10; }
+        
+        .piece { font-size: min(12vw, 10vh); color: #000; z-index: 5; user-select: none; pointer-events: none; position: absolute; }
+        .cap-badge { position: absolute; bottom: 2px; right: 2px; font-size: 10px; background: #ff3b30; color: white; border-radius: 3px; padding: 1px 3px; font-weight: bold; z-index: 15; }
+
+        #log { position: absolute; bottom: 15px; width: 100%; text-align: center; color: #34c759; font-size: 20px; font-weight: bold; pointer-events: none; }
+    </style>
+</head>
+<body>
+    <link rel="stylesheet" href="menu.css">
+    <div id="nav_bar"></div>
+    <script src="menu.js"></script>
+
+    <div style="position: fixed; top: 5px; left: 5px; color: gray; font-size: 12px; font-family: sans-serif;">支援雲端儲存</div>
+    
+    <div id="launcher" onclick="launchGame()">
+        <h1 style="color:#fbd38d; margin-bottom:20px">單人棋</h1>
+        <div style="background:#34c759; padding:15px 50px; border-radius:15px; font-size:20px; font-weight:bold">開始對局</div>
+    </div>
+
+    <div class="header">
+        <div class="stats">
+            <div style="color:#fbd38d">🏆 連勝: <span id="win-count">0</span></div>
+            <div style="color:#fbd38d">⭐ 分數: <span id="score-count">0</span></div> 
+            <div style="color:#aaa">⏳ 遊玩: <span id="play-time">0m</span></div>
+        </div>
+        <div class="controls">
+            <input type="range" id="diff-slider" min="3" max="30" value="10" oninput="updateDifficulty(this.value)">
+            <span id="diff-val" style="width:18px; color:#fff">10</span>
+            <button style="background:#34c759" onclick="startNewGame()">新局</button>
+            <button onclick="undo()">悔棋</button>
+            <button onclick="undo30()">重新</button>
+        </div>
+    </div>
+
+    <div id="game-container">
+        <div id="board"></div>
+    </div>
+    <div id="log"></div>
+
+<script>
+const SAVE_KEY = 'raingod_chess_solo_v1';
+const PIECES = {
+    'K': { s: '♔', long: false, d: [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]] },
+    'Q': { s: '♛', long: true,  d: [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]] },
+    'R': { s: '♜', long: true,  d: [[1,0],[-1,0],[0,1],[0,-1]] },
+    'B': { s: '♝', long: true,  d: [[1,1],[1,-1],[-1,1],[-1,-1]] },
+    'N': { s: '♞', long: false, d: [[2,1],[2,-1],[-2,1],[-2,-1],[1,2],[1,-2],[-1,2],[-1,-2]] }
+};
+
+let state = { grid: [], history: [], selected: null };
+
+// 修改：gameData 加入 difficulty 預設值
+let gameData = {
+    wins: 0,
+    totalTime: 0,
+    score: 0,
+    difficulty: 10 
+};
+
+function undo30() { for (let ii = 0; ii <= 31; ii++) { undo(); } }
+
+function loadGame() {
+    const localData = localStorage.getItem(SAVE_KEY);
+    if (localData) {
+        try {
+            gameData = { ...gameData, ...JSON.parse(localData) };
+            refreshUI();
+        } catch(e) { console.error("解析本地存檔失敗", e); }
+    }
+
+}
+
+function saveGame() {
+    localStorage.setItem(SAVE_KEY, JSON.stringify(gameData));
+}
+
+// 修改：更新 UI 時同步滑桿數值
+function refreshUI() {
+    document.getElementById('win-count').innerText = gameData.wins;
+    document.getElementById('score-count').innerText = gameData.score;
+    
+    // 同步難度介面
+    const diffSlider = document.getElementById('diff-slider');
+    const diffVal = document.getElementById('diff-val');
+    diffSlider.value = gameData.difficulty;
+    diffVal.innerText = gameData.difficulty;
+
+    const mins = Math.floor(gameData.totalTime / 60);
+    const secs = gameData.totalTime % 60;
+    document.getElementById('play-time').innerText = `${mins}m ${secs}s`;
+}
+
+// 新增：處理難度變更與即時存檔
+window.updateDifficulty = (val) => {
+    document.getElementById('diff-val').innerText = val;
+    gameData.difficulty = parseInt(val);
+    saveGame();
+};
+
+setInterval(() => {
+    if (document.getElementById('launcher').style.display === 'none') {
+        gameData.totalTime++;
+        refreshUI();
+        if (gameData.totalTime % 30 === 0) saveGame();
+    }
+}, 1000);
+
+window.launchGame = () => { 
+    document.getElementById('launcher').style.display='none'; 
+    loadGame();
+    startNewGame(); 
+};
+
+let accountSaveReady = false;
+const launchWhenReady = window.launchGame;
+window.launchGame = () => {
+    if (accountSaveReady) launchWhenReady();
+};
+window.raingodBindStorage('solo-chess', [SAVE_KEY], { [SAVE_KEY]: null }, data => {
+    if (data[SAVE_KEY]) gameData = { ...gameData, ...data[SAVE_KEY] };
+    refreshUI();
+    accountSaveReady = true;
+}, { path: 'game_data', key: SAVE_KEY });
+
+function getMoves(r, c, grid) {
+    const p = grid[r][c]; if (!p || p.caps >= 2) return [];
+    let moves = []; const info = PIECES[p.type];
+    for (let [dr, dc] of info.d) {
+        for (let i = 1; i < (info.long ? 8 : 2); i++) {
+            let nr = r + dr*i, nc = c + dc*i;
+            if (nr>=0 && nr<8 && nc>=0 && nc<8) { 
+                if (grid[nr][nc]) { moves.push({r: nr, c: nc}); break; } 
+            } else break;
+        }
+    }
+    return moves;
+}
+
+window.generate = (n) => {
+    let g = Array(8).fill(0).map(()=>Array(8).fill(null));
+    let kr=Math.floor(Math.random()*8), kc=Math.floor(Math.random()*8);
+    g[kr][kc]={type:'K', split:0};
+    let pList=[{r:kr,c:kc}], count=1, safety = 0;
+    while(count < n && safety < 5000) {
+        safety++;
+        let idx = Math.floor(Math.random()*pList.length);
+        let src = pList[idx];
+        if (g[src.r][src.c].split >= 2) continue;
+        let info = PIECES[g[src.r][src.c].type];
+        let d = info.d[Math.floor(Math.random()*info.d.length)];
+        let dist = info.long ? Math.floor(Math.random()*7)+1 : 1;
+        let nr = src.r + d[0]*dist, nc = src.c + d[1]*dist;
+        if(nr>=0 && nr<8 && nc>=0 && nc<8 && !g[nr][nc]) {
+            g[nr][nc] = { type: g[src.r][src.c].type, split: g[src.r][src.c].split + 1 };
+            g[src.r][src.c] = { type: ['Q','R','B','N'][Math.floor(Math.random()*4)], split: 0 };
+            pList.push({r:nr, c:nc});
+            count++;
+        }
+    }
+    return g.map(row=>row.map(p=>p?{type:p.type, caps:0}:null));
+};
+
+window.render = () => {
+    const b = document.getElementById('board'); b.innerHTML='';
+    state.grid.forEach((row,r)=>{ row.forEach((p,c)=>{
+        const cell = document.createElement('div');
+        cell.className=`cell ${(r+c)%2===0?'light':'dark'}`;
+        if(state.selected?.r===r && state.selected?.c===c) cell.classList.add('selected');
+        if(state.selected && getMoves(state.selected.r, state.selected.c, state.grid).some(m=>m.r===r&&m.c===c)) cell.classList.add('can-eat');
+        if(p) {
+            const el = document.createElement('div'); el.className='piece'; el.innerText=PIECES[p.type].s;
+            cell.appendChild(el);
+            if(p.caps>0) { const bd=document.createElement('div'); bd.className='cap-badge'; bd.innerText=p.caps; cell.appendChild(bd); }
+        }
+        cell.onclick=()=>handle(r,c); b.appendChild(cell);
+    })});
+};
+
+function handle(r,c) {
+    if(state.selected) {
+        let m = getMoves(state.selected.r, state.selected.c, state.grid).find(x=>x.r===r&&x.c===c);
+        if(m) {
+            state.history.push(JSON.stringify(state.grid));
+            state.grid[r][c] = {...state.grid[state.selected.r][state.selected.c], caps:state.grid[state.selected.r][state.selected.c].caps+1};
+            state.grid[state.selected.r][state.selected.c]=null; state.selected=null; 
+            render(); check(); return;
+        }
+    }
+    if(state.grid[r][c] && state.grid[r][c].caps < 2) state.selected={r,c}; else state.selected=null;
+    render();
+}
+
+function check() {
+    let rs = state.grid.flat().filter(x=>x);
+    if(rs.length===1 && rs[0].type==='K') { 
+        gameData.wins++; 
+        const difficulty = gameData.difficulty;
+        gameData.score += (difficulty * difficulty);
+        saveGame();
+        refreshUI();
+        document.getElementById('log').innerText="挑戰成功！"; 
+        setTimeout(startNewGame, 1000); 
+    }
+}
+
+// 修改：生成遊戲時讀取 gameData.difficulty
+window.startNewGame = () => { 
+    state.grid = generate(gameData.difficulty); 
+    state.history=[]; state.selected=null; 
+    document.getElementById('log').innerText=""; render(); 
+};
+
+window.undo = () => { if(state.history.length) { state.grid=JSON.parse(state.history.pop()); render(); } };
+</script>
+</body>
+</html>

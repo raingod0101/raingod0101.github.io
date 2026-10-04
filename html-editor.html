@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTML編輯器 | Raingod</title>
+    <style>
+        :root {
+            --bg-color: #0d0d0d;
+            --accent-color: #00ff41; 
+            --text-color: #e0e0e0;
+            --border-color: #333;
+        }
+
+        body, html {
+            margin: 0; padding: 0; height: 100%;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
+        }
+
+        /* 頂部工具列 */
+        .toolbar {
+            height: 45px;
+            background: #1a1a1a;
+            display: flex;
+            align-items: center;
+            padding: 0 15px;
+            border-bottom: 1px solid var(--border-color);
+            justify-content: space-between;
+        }
+
+        .logo { color: #FFFFFF; font-weight: bold; letter-spacing: 2px; font-size: 14px; }
+
+        .btn-group { display: flex; gap: 5px; }
+
+        /* 主容器 */
+        .main-container {
+            display: flex;
+            height: calc(100vh - 45px);
+        }
+
+        .editor-container {
+            flex: 1;
+            position: relative;
+            border-right: 1px solid var(--border-color);
+            display: flex;
+        }
+
+        #line-numbers {
+            width: 40px; background: #050505; color: #555;
+            padding: 10px 5px; text-align: right; font-size: 14px;
+            line-height: 20px; user-select: none; border-right: 1px solid var(--border-color);
+            overflow: hidden;
+        }
+
+        .code-area { flex: 1; position: relative; background: var(--bg-color); }
+
+        #code-input, #code-highlight {
+            width: 100%; height: 100%; margin: 0; padding: 10px;
+            border: none; box-sizing: border-box;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 14px; line-height: 20px;
+            white-space: pre; tab-size: 4;
+            position: absolute; top: 0; left: 0; outline: none;
+        }
+
+        #code-input {
+            background: transparent; color: transparent;
+            caret-color: var(--accent-color); z-index: 2; resize: none;
+        }
+
+        #code-highlight { z-index: 1; color: var(--text-color); pointer-events: none; overflow: hidden; }
+
+        /* 預覽區 */
+        .preview-container { flex: 1; background: #fff; position: relative; }
+        iframe { width: 100%; height: 100%; border: none; }
+
+        /* 按鈕樣式 */
+        .btn {
+            background: transparent; border: 1px solid #444;
+            color: #FFFFFF; padding: 4px 10px; cursor: pointer;
+            font-size: 11px; transition: all 0.2s;
+        }
+
+        .btn:hover { background: var(--accent-color); color: #000; border-color: var(--accent-color); }
+
+        /* 全螢幕狀態微調 */
+        :-webkit-full-screen .toolbar { display: flex; }
+        :fullscreen .toolbar { display: flex; }
+    </style>
+</head>
+<body>
+<link rel="stylesheet" href="menu.css">
+
+<div id="nav_bar"></div>
+
+<script src="menu.js"></script>
+    <div class="toolbar">
+        <div class="logo">HTML編輯器</div>
+        <div class="btn-group">
+            <button class="btn" onclick="importFromUrl()">輸入網址</button>
+            <button class="btn" onclick="copyAll()">複製全部</button>
+            <button class="btn" onclick="clearCode()">清除</button>
+            <button class="btn" onclick="downloadCode()">儲存html檔案</button>
+            <button class="btn" onclick="toggleFullScreen()">切換全螢幕</button>
+        </div>
+    </div>
+
+    <div class="main-container" id="editor-main">
+        <div class="editor-container">
+            <div id="line-numbers">1</div>
+            <div class="code-area">
+                <textarea id="code-input" spellcheck="false" placeholder="在此輸入 HTML..."></textarea>
+                <div id="code-highlight"></div>
+            </div>
+        </div>
+
+        <div class="preview-container">
+            <iframe id="preview-window"></iframe>
+        </div>
+    </div>
+
+    <script>
+        const input = document.getElementById('code-input');
+        const highlight = document.getElementById('code-highlight');
+        const lineNumbers = document.getElementById('line-numbers');
+        const preview = document.getElementById('preview-window');
+
+        // 初始化
+        const defaultCode = `<!DOCTYPE html>\n<html>\n<head>\n    <style>\n        body { background: #f0f0f0; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; font-family: sans-serif; }\n        h1 { color: #333;}\n    </style>\n</head>\n<body>\n    <h1>Hello</h1>\n</body>\n</html>`;
+        input.value = defaultCode;
+        updateEditor();
+
+        // 監聽
+        input.addEventListener('input', updateEditor);
+        input.addEventListener('scroll', () => {
+            highlight.scrollTop = input.scrollTop;
+            highlight.scrollLeft = input.scrollLeft;
+            lineNumbers.scrollTop = input.scrollTop;
+        });
+
+        function updateEditor() {
+            const code = input.value;
+            // 更新預覽
+            const previewDoc = preview.contentDocument || preview.contentWindow.document;
+            previewDoc.open();
+            previewDoc.write(code);
+            previewDoc.close();
+
+            // 更新行號
+            const lines = code.split('\n').length;
+            lineNumbers.innerHTML = Array.from({length: lines}, (_, i) => i + 1).join('<br>');
+
+            // 轉義與顯示
+            highlight.innerHTML = code.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") + (code.endsWith('\n') ? ' ' : '');
+        }
+
+        // --- 新功能函數 ---
+
+        // 1. 複製全部
+        function copyAll() {
+            input.select();
+            document.execCommand('copy');
+            const originalText = event.target.innerText;
+            setTimeout(() => { event.target.innerText = originalText; }, 1500);
+        }
+
+        // 2. 輸入網址導入 (處理 CORS 問題，部分網站可能無法直接抓取)
+        async function importFromUrl() {
+            const url = prompt("請輸入 HTML 檔案的完整網址 (需支援 CORS):", "https://example.com");
+            if (url) {
+                try {
+                    const response = await fetch(url);
+                    if (!response.ok) throw new Error("連線失敗");
+                    const text = await response.text();
+                    input.value = text;
+                    updateEditor();
+                } catch (err) {
+                    alert("導入失敗: " + err.message + "\n請確保網址正確且該網站允許跨網域存取(CORS)。");
+                }
+            }
+        }
+
+        // 3. 全螢幕切換
+        function toggleFullScreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => {
+                    alert(`無法切換全螢幕: ${err.message}`);
+                });
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        // 原有功能
+        function clearCode() {
+            if(confirm("確定要清空所有代碼嗎？")) {
+                input.value = "";
+                updateEditor();
+            }
+        }
+
+        function downloadCode() {
+            const blob = new Blob([input.value], {type: "text/html"});
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = "index.html";
+            a.click();
+        }
+
+        // Tab 鍵處理
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                const start = input.selectionStart;
+                const end = input.selectionEnd;
+                input.value = input.value.substring(0, start) + "    " + input.value.substring(end);
+                input.selectionStart = input.selectionEnd = start + 4;
+                updateEditor();
+            }
+        });
+    </script>
+</body>
+</html>

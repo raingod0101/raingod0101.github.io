@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>大亨 | Raingod</title>
+    <style>
+        * { touch-action: none; user-select: none; box-sizing: border-box; }
+        body { margin: 0; background: #0f172a; overflow: hidden; font-family: 'Arial Black', sans-serif; }
+        #ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
+        .hud { position: absolute; top: 15px; left: 15px; background: #fff; border: 4px solid #334155; padding: 10px 20px; border-radius: 8px; pointer-events: auto; }
+        .money { color: #16a34a; font-size: 32px; font-weight: 900; }
+        .shop { position: absolute; bottom: 20px; right: 20px; pointer-events: auto; display: flex; flex-direction: column; gap: 8px; }
+        .btn { background: #3b82f6; color: #fff; border: 4px solid #1e3a8a; padding: 12px; font-weight: bold; border-radius: 8px; cursor: pointer; }
+        .btn:active { transform: translateY(2px); background: #2563eb; }
+    </style>
+</head>
+<body>
+
+<canvas id="c"></canvas>
+<div id="ui">
+    <div class="hud">
+        <div class="money">$<span id="m">0</span></div>
+        <div style="font-size:12px; color:#64748b;">自動化程度: <span id="bots">0</span></div>
+    </div>
+    <div class="shop">
+        <button class="btn" onclick="buyBot()">🤖 雇用搬運機兵 ($500)</button>
+        <button class="btn" onclick="upgrade('miner')">⚙️ 礦機提速 ($1000)</button>
+    </div>
+</div>
+
+<script>
+    const cvs = document.getElementById('c'), ctx = cvs.getContext('2d');
+    const resize = () => { cvs.width = window.innerWidth; cvs.height = window.innerHeight; };
+    window.onresize = resize; resize();
+
+    let money = 0, frame = 0, p = { x: 200, y: 200, r: 22, tx: 200, ty: 200, bag: [] };
+    let bots = [], items = [], customers = [], shakes = 0;
+
+    // 設施清單 (實體化、高飽和度)
+    const buildings = [
+        { x: 60, y: 100, w: 100, h: 100, type: 'EXTRACTOR', color: '#ef4444', label: '🔴 採礦塔', stock: 0 },
+        { x: 60, y: 400, w: 100, h: 100, type: 'FACTORY', color: '#f59e0b', label: '🟠 加工廠', stock: 0 },
+        { x: cvs.width - 200, y: 250, w: 120, h: 120, type: 'HUB', color: '#22c55e', label: '💎 貿易站', stock: 0 }
+    ];
+
+    window.addEventListener('pointermove', e => { p.tx = e.clientX; p.ty = e.clientY; });
+
+    function buyBot() {
+        if(money >= 500) { money -= 500; bots.push({ x: cvs.width/2, y: cvs.height/2, bag: [], speed: 4 }); }
+    }
+
+    function update() {
+        frame++;
+        p.x += (p.tx - p.x) * 0.15;
+        p.y += (p.ty - p.y) * 0.15;
+
+        // 採礦塔自動噴礦 (實體方塊)
+        if(frame % 70 === 0) {
+            items.push({ x: 170, y: 150 + (Math.random()-0.5)*40, type: 'RAW', color: '#ef4444' });
+        }
+
+        // 機器人邏輯
+        bots.forEach(bot => {
+            let target = null;
+            if (bot.bag.length === 0) target = items[0] || { x: 170, y: 150 };
+            else if (bot.bag[0].type === 'RAW') target = { x: 110, y: 450 };
+            else target = { x: cvs.width - 140, y: 310 };
+
+            let dx = target.x - bot.x, dy = target.y - bot.y, d = Math.hypot(dx, dy);
+            if(d > 5) { bot.x += dx/d * bot.speed; bot.y += dy/d * bot.speed; }
+            interact(bot);
+        });
+
+        interact(p);
+
+        // 客人系統
+        if(frame % 200 === 0 && customers.length < 4) customers.push({ x: cvs.width + 50, y: 310 });
+        customers.forEach((c, i) => { if(c.x > cvs.width - 60 + i*50) c.x -= 2; });
+
+        document.getElementById('m').innerText = money;
+        document.getElementById('bots').innerText = bots.length;
+    }
+
+    function interact(obj) {
+        // 撿地上物品
+        items.forEach((it, i) => {
+            if(Math.hypot(obj.x - it.x, obj.y - it.y) < 40 && obj.bag.length < 4) {
+                obj.bag.push(items.splice(i, 1)[0]);
+            }
+        });
+        // 靠近工廠加工 (RAW -> PRODUCT)
+        if(Math.hypot(obj.x - 110, obj.y - 450) < 60) {
+            obj.bag.forEach(it => { if(it.type === 'RAW') { it.type = 'PROD'; it.color = '#3b82f6'; shakes = 5; } });
+        }
+        // 賣給貿易站
+        if(Math.hypot(obj.x - (cvs.width - 140), obj.y - 310) < 70 && customers.length > 0) {
+            if(obj.bag.some(i => i.type === 'PROD')) {
+                obj.bag = obj.bag.filter(i => i.type !== 'PROD');
+                money += 300;
+                customers.shift();
+                shakes = 10;
+            }
+        }
+    }
+
+    function draw() {
+        // --- 核心：完全清空畫布，不留淡化殘影 ---
+        ctx.clearRect(0, 0, cvs.width, cvs.height);
+        ctx.fillStyle = '#1e293b'; ctx.fillRect(0,0,cvs.width,cvs.height);
+
+        // 地圖裝飾 (清晰的網格)
+        ctx.strokeStyle = '#334155'; ctx.lineWidth = 2;
+        for(let i=0; i<cvs.width; i+=100) { ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,cvs.height); ctx.stroke(); }
+        for(let i=0; i<cvs.height; i+=100) { ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(cvs.width,i); ctx.stroke(); }
+
+        // 畫建築 (厚重的邊框感)
+        buildings.forEach(b => {
+            ctx.fillStyle = '#000'; ctx.fillRect(b.x+6, b.y+6, b.w, b.h); // 實體陰影
+            ctx.fillStyle = b.color; ctx.strokeStyle = '#fff'; ctx.lineWidth = 4;
+            ctx.strokeRect(b.x, b.y, b.w, b.h); ctx.fillRect(b.x, b.y, b.w, b.h);
+            ctx.fillStyle = '#fff'; ctx.font = 'bold 14px Arial'; ctx.fillText(b.label, b.x, b.y-10);
+        });
+
+        // 畫掉在地上的物品
+        items.forEach(it => {
+            ctx.fillStyle = it.color; ctx.strokeStyle = '#000'; ctx.lineWidth = 2;
+            ctx.fillRect(it.x-10, it.y-10, 20, 20); ctx.strokeRect(it.x-10, it.y-10, 20, 20);
+        });
+
+        // 畫機器人 (有眼睛的機兵)
+        bots.forEach(bot => {
+            ctx.fillStyle = '#94a3b8'; ctx.strokeStyle = '#000'; ctx.beginPath(); ctx.arc(bot.x, bot.y, 16, 0, 7); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(bot.x-5, bot.y-2, 3, 0, 7); ctx.arc(bot.x+5, bot.y-2, 3, 0, 7); ctx.fill(); // 眼睛
+            // 噴射火花
+            if(frame % 4 < 2) { ctx.fillStyle = '#fbbf24'; ctx.fillRect(bot.x-4, bot.y+15, 8, 8); }
+            drawStack(bot);
+        });
+
+        // 畫玩家
+        ctx.fillStyle = '#fff'; ctx.strokeStyle = '#3b82f6'; ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 7); ctx.fill(); ctx.stroke();
+        drawStack(p);
+
+        // 畫客人
+        customers.forEach(c => {
+            ctx.fillStyle = '#ef4444'; ctx.beginPath(); ctx.moveTo(c.x, c.y-20); ctx.lineTo(c.x+20, c.y+20); ctx.lineTo(c.x-20, c.y+20); ctx.closePath(); ctx.fill();
+            ctx.fillStyle = '#fff'; ctx.fillText("$ PAY", c.x-20, c.y-30);
+        });
+
+        update();
+        requestAnimationFrame(draw);
+    }
+
+    function drawStack(obj) {
+        obj.bag.forEach((it, i) => {
+            ctx.fillStyle = it.color; ctx.strokeStyle = '#000'; ctx.lineWidth = 2;
+            ctx.fillRect(obj.x-15, obj.y - 45 - (i*15), 30, 12); ctx.strokeRect(obj.x-15, obj.y - 45 - (i*15), 30, 12);
+        });
+    }
+
+    draw();
+</script>
+</body>
+</html>

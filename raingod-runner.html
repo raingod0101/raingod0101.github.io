@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>雨神跑酷 - 終極版</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Arial Black', sans-serif; touch-action: none; }
+        canvas { display: block; }
+        #gui {
+            position: absolute; top: 20px; width: 100%; display: flex; justify-content: space-around;
+            color: #0ff; font-size: 24px; text-shadow: 0 0 10px #0ff; pointer-events: none;
+        }
+        #menu {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: none; flex-direction: column; justify-content: center; align-items: center;
+            background: rgba(0,0,0,0.9); z-index: 100;
+        }
+        .btn {
+            padding: 15px 50px; font-size: 24px; background: #ff0055; border: none;
+            color: #fff; border-radius: 50px; cursor: pointer; box-shadow: 0 0 30px #ff0055;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="gui">
+        <div>SCORE: <span id="score">0</span></div>
+        <div>COINS: <span id="coins">0</span></div>
+    </div>
+    <div id="menu">
+        <h1 style="color: #0ff; font-size: 60px; margin: 0;">WASTED</h1>
+        <p style="color: #fff; font-size: 20px;">總得分: <span id="finalScore">0</span></p>
+        <button class="btn" onclick="restart()">RETRY</button>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score'), coinsEl = document.getElementById('coins');
+        const finalScoreEl = document.getElementById('finalScore'), menu = document.getElementById('menu');
+
+        let w, h, score, coinCount, gameActive, speed, offset = 0;
+        let lanes = [], obstacles = [], items = [], particles = [];
+        let player = { 
+            lane: 1, x: 0, targetX: 0, 
+            jumpY: 0, vY: 0, isJumping: false, 
+            isDucking: false, duckTimer: 0, height: 60 
+        };
+
+        let touchX = 0, touchY = 0;
+
+        function init() {
+            w = canvas.width = window.innerWidth;
+            h = canvas.height = window.innerHeight;
+            lanes = [w * 0.2, w * 0.5, w * 0.8];
+            player.x = lanes[1]; player.targetX = lanes[1];
+            score = 0; coinCount = 0; speed = 10; 
+            obstacles = []; items = []; particles = [];
+            gameActive = true; menu.style.display = 'none';
+        }
+
+        // --- 控制系統 (鍵盤 + 手勢) ---
+        const handleInput = (dir) => {
+            if (!gameActive) return;
+            if (dir === 'L' && player.lane > 0) player.lane--;
+            if (dir === 'R' && player.lane < 2) player.lane++;
+            if (dir === 'U' && !player.isJumping && !player.isDucking) {
+                player.isJumping = true; player.vY = 22;
+            }
+            if (dir === 'D' && !player.isJumping) {
+                player.isDucking = true;
+                player.duckTimer = 30; // 蹲下持續時間
+            }
+        };
+
+        window.addEventListener('keydown', e => {
+            if (e.key === 'ArrowLeft' || e.key === 'a') handleInput('L');
+            if (e.key === 'ArrowRight' || e.key === 'd') handleInput('R');
+            if (e.key === 'ArrowUp' || e.key === 'w' || e.key === ' ') handleInput('U');
+            if (e.key === 'ArrowDown' || e.key === 's') handleInput('D');
+        });
+
+        window.addEventListener('touchstart', e => { touchX = e.touches[0].clientX; touchY = e.touches[0].clientY; });
+        window.addEventListener('touchend', e => {
+            let dx = e.changedTouches[0].clientX - touchX;
+            let dy = e.changedTouches[0].clientY - touchY;
+            if (Math.abs(dx) > Math.abs(dy)) {
+                if (dx > 30) handleInput('R'); else if (dx < -30) handleInput('L');
+            } else {
+                if (dy > 30) handleInput('D'); else if (dy < -30) handleInput('U');
+            }
+        });
+
+        function spawn() {
+            if (Math.random() < 0.04) {
+                let type = Math.random() > 0.7 ? 'HIGH' : 'LOW';
+                obstacles.push({ lane: Math.floor(Math.random()*3), y: -100, type });
+            }
+            if (Math.random() < 0.05) {
+                items.push({ lane: Math.floor(Math.random()*3), y: -100 });
+            }
+        }
+
+        function update() {
+            if (!gameActive) return;
+            score++; speed += 0.001; offset = (offset + speed) % 100;
+            scoreEl.innerText = score;
+
+            player.x += (lanes[player.lane] - player.x) * 0.2;
+
+            // 跳躍與蹲下邏輯
+            if (player.isJumping) {
+                player.jumpY += player.vY; player.vY -= 1.2;
+                if (player.jumpY <= 0) { player.jumpY = 0; player.isJumping = false; }
+            }
+            if (player.isDucking) {
+                player.height = 30;
+                player.duckTimer--;
+                if (player.duckTimer <= 0) { player.isDucking = false; player.height = 60; }
+            }
+
+            // 處理障礙物
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                let o = obstacles[i]; o.y += speed;
+                let pY = h - 150;
+                // 碰撞檢測
+                if (o.y > pY - 50 && o.y < pY + 20 && Math.abs(player.x - lanes[o.lane]) < 40) {
+                    if (o.type === 'LOW' && player.jumpY < 40) gameEnd();
+                    if (o.type === 'HIGH' && !player.isDucking) gameEnd();
+                }
+                if (o.y > h) obstacles.splice(i, 1);
+            }
+
+            // 處理金幣
+            for (let i = items.length - 1; i >= 0; i--) {
+                let it = items[i]; it.y += speed;
+                if (it.y > h - 180 && it.y < h - 100 && Math.abs(player.x - lanes[it.lane]) < 40) {
+                    coinCount++; coinsEl.innerText = coinCount;
+                    items.splice(i, 1);
+                }
+                if (it && it.y > h) items.splice(i, 1);
+            }
+            spawn();
+        }
+
+        function draw() {
+            ctx.fillStyle = '#050510'; ctx.fillRect(0, 0, w, h);
+            
+            // 軌道
+            ctx.strokeStyle = '#112244'; ctx.lineWidth = 5;
+            lanes.forEach(lx => { ctx.beginPath(); ctx.moveTo(lx, 0); ctx.lineTo(lx, h); ctx.stroke(); });
+
+            // 繪製金幣 (黃色閃爍)
+            items.forEach(it => {
+                ctx.fillStyle = '#ffcc00'; ctx.shadowBlur = 15; ctx.shadowColor = '#ffcc00';
+                ctx.beginPath(); ctx.arc(lanes[it.lane], it.y, 15, 0, Math.PI*2); ctx.fill();
+            });
+
+            // 繪製障礙物
+            obstacles.forEach(o => {
+                ctx.shadowBlur = 20;
+                if (o.type === 'LOW') {
+                    ctx.fillStyle = '#ff0055'; ctx.shadowColor = '#ff0055';
+                    ctx.fillRect(lanes[o.lane]-50, o.y, 100, 40);
+                } else {
+                    ctx.fillStyle = '#00ffaa'; ctx.shadowColor = '#00ffaa';
+                    ctx.fillRect(lanes[o.lane]-60, o.y, 120, 20); // 高位障礙(橫桿)
+                    ctx.fillRect(lanes[o.lane]-60, o.y, 10, 100); // 支架
+                    ctx.fillRect(lanes[o.lane]+50, o.y, 10, 100);
+                }
+            });
+
+            // 繪製玩家
+            ctx.fillStyle = '#0ff'; ctx.shadowBlur = 25; ctx.shadowColor = '#0ff';
+            let py = h - 100 - player.jumpY - player.height;
+            ctx.fillRect(player.x - 25, py, 50, player.height);
+
+            if (gameActive) requestAnimationFrame(() => { update(); draw(); });
+        }
+
+        function gameEnd() { gameActive = false; finalScoreEl.innerText = score + (coinCount * 100); menu.style.display = 'flex'; }
+        function restart() { init(); draw(); }
+        window.addEventListener('resize', init);
+        init(); draw();
+    </script>
+</body>
+</html>

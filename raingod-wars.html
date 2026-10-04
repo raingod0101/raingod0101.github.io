@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>雨神大戰爭 | Raingod</title>
+    <style>
+        :root { 
+            --p-color: #00d4ff; --e-color: #ff4d4d; --gold: #f1c40f; 
+            --rarity-r: #bdc3c7; --rarity-sr: #f39c12; --rarity-ssr: #9b59b6;
+        }
+        * { box-sizing: border-box; touch-action: manipulation; -webkit-user-select: none; }
+        
+        body { 
+            margin: 0; background: #000; color: white; 
+            height: 100svh; width: 100vw; 
+            overflow: hidden; font-family: '微軟正黑體', sans-serif; 
+        }
+
+        .screen { 
+            display: none; width: 100%; height: 100%; 
+            flex-direction: column; align-items: center; 
+            background: #1a1a2e; padding: 15px; 
+        }
+        .active { display: flex; }
+        .title { font-size: clamp(20px, 8vw, 32px); font-weight: 900; color: var(--p-color); margin-bottom: 15px; text-shadow: 0 0 10px #000; }
+        
+        .top-res { width: 100%; display: flex; justify-content: space-around; background: rgba(0,0,0,0.5); padding: 8px; border-radius: 15px; margin-bottom: 10px; font-size: 14px; }
+        
+        .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; width: 100%; overflow-y: auto; flex-grow: 1; padding: 5px; }
+        @media (min-width: 600px) { .grid { grid-template-columns: repeat(3, 1fr); } }
+
+        .card { background: #16213e; border: 2px solid #0f3460; border-radius: 12px; padding: 10px; text-align: center; cursor: pointer; transition: 0.2s; position: relative; }
+        .card:active { transform: scale(0.95); }
+        .card.locked { opacity: 0.4; filter: grayscale(1); }
+
+        #game-screen { padding: 0; position: relative; }
+        #stage { 
+            position: relative; width: 100%; flex-grow: 1; 
+            background: linear-gradient(to bottom, #1a1a2e, #16213e); 
+            overflow: hidden; 
+        }
+        .ground { position: absolute; bottom: 0; width: 100%; height: 60px; background: #1b1b1b; border-top: 4px solid #444; }
+        .base { position: absolute; bottom: 60px; width: 60px; height: 100px; border-radius: 8px 8px 0 0; z-index: 5; }
+        #p-base { left: 0; background: #2c3e50; border-right: 4px solid var(--p-color); }
+        #e-base { right: 0; background: #3e2723; border-left: 4px solid var(--e-color); }
+        .base-hp { position: absolute; top: -25px; width: 100%; text-align: center; font-size: 12px; font-weight: bold; }
+
+        #ui-panel { 
+            height: 100px; width: 100%; 
+            background: #0f3460; display: flex; 
+            gap: 8px; padding: 10px; overflow-x: auto;
+            border-top: 2px solid #1a1a2e;
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+        .spawn-btn { 
+            min-width: 70px; height: 100%; 
+            background: #1a1a2e; border: 1px solid #555; 
+            border-radius: 8px; color: white; 
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            flex-shrink: 0;
+        }
+        .spawn-btn:disabled { opacity: 0.3; }
+
+        .unit { position: absolute; bottom: 60px; width: 40px; text-align: center; z-index: 10; pointer-events: none; transition: transform 0.1s; }
+        .unit-body { font-size: 24px; }
+        .hp-bar { width: 100%; height: 4px; background: #000; margin-bottom: 2px; border-radius: 2px; overflow: hidden; }
+        .hp-inner { height: 100%; background: #2ecc71; width: 100%; transition: width 0.2s; }
+        
+        #gacha-anim { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 1000; display: none; align-items: center; justify-content: center; font-size: 80px; }
+        #ui-panel::-webkit-scrollbar { display: none; }
+    </style>
+</head>
+<body>
+
+<link rel="stylesheet" href="menu.css">
+
+<div id="nav_bar"></div>
+
+<script src="menu.js"></script>
+<div id="gacha-anim">❓</div>
+
+<!-- 主選單 -->
+<div id="main-screen" class="screen active">
+    <div class="title">雨神大戰爭</div>
+    <div class="top-res">
+        <span>💎 XP: <b id="res-xp">0</b></span>
+        <span>🚩 關卡: <b id="res-stage">0/4</b></span>
+    </div>
+    <div class="grid">
+        <div class="card" onclick="showScreen('map-screen')">🗺️ 遠征地圖</div>
+        <div class="card" onclick="showScreen('upgrade-screen'); renderUpgrade();">⛩️ 角色升級</div>
+        <div class="card" onclick="showScreen('gacha-screen')">🔮 祭壇抽卡</div>
+        <div class="card" onclick="showScreen('book-screen'); renderBook();">📖 角色圖鑑</div>
+    </div>
+</div>
+
+<!-- 祭壇抽卡 -->
+<div id="gacha-screen" class="screen">
+    <div class="title">神之祭壇</div>
+    <div id="gacha-hint">消耗 500 XP 祈禱</div>
+    <div style="font-size: 60px; margin: 30px;">🔮</div>
+    <button class="card" style="width: 180px; background: var(--gold); color: black;" onclick="drawGacha()">啟動祈禱</button>
+    <button class="card" style="margin-top: 15px; width: 120px;" onclick="showScreen('main-screen')">返回</button>
+</div>
+
+<!-- 角色升級 -->
+<div id="upgrade-screen" class="screen">
+    <div class="title">雨神進化</div>
+    <div id="upgrade-list" class="grid"></div>
+    <button class="card" style="width: 100px; margin-top:10px" onclick="showScreen('main-screen')">返回</button>
+</div>
+
+<!-- 角色圖鑑 -->
+<div id="book-screen" class="screen">
+    <div class="title">神靈圖鑑</div>
+    <div id="book-list" class="grid"></div>
+    <button class="card" style="width: 100px; margin-top:10px" onclick="showScreen('main-screen')">返回</button>
+</div>
+
+<!-- 地圖選擇 -->
+<div id="map-screen" class="screen">
+    <div class="title">世界地圖</div>
+    <div id="map-list" class="grid"></div>
+    <button class="card" style="width: 100px; margin-top:10px" onclick="showScreen('main-screen')">返回</button>
+</div>
+
+<!-- 戰鬥畫面 -->
+<div id="game-screen" class="screen">
+    <div id="stage">
+        <div id="battle-money" style="position:absolute; top:10px; right:20px; font-size:20px; color:var(--gold); z-index:100; font-weight:bold;">$0</div>
+        <div class="ground"></div>
+        <div id="p-base" class="base"><div class="base-hp" id="p-hp">1000</div></div>
+        <div id="e-base" class="base"><div class="base-hp" id="e-hp">1000</div></div>
+    </div>
+    <div id="ui-panel"></div>
+</div>
+
+<script>
+    const SAVE_KEY = 'RainGodPro';
+    const CHARS = {
+        'drop': { name: '雨滴', rarity: 'R', forms: ['💧', '💦', '🌊'], hp: 150, atk: 25, cost: 50 },
+        'bolt': { name: '雷霆', rarity: 'SR', forms: ['⚡', '🌩️', '⛈️'], hp: 450, atk: 90, cost: 250 },
+        'cloud': { name: '雲盾', rarity: 'SR', forms: ['☁️', '🌥️', '⛈️'], hp: 1300, atk: 12, cost: 400 },
+        'dragon': { name: '雨龍', rarity: 'SSR', forms: ['🐉', '🐲', '🔱'], hp: 2200, atk: 280, cost: 900 }
+    };
+
+    const STAGES = [
+        { name: "新手海灘", eHP: 1500, eType: '👺', diff: 1 },
+        { name: "雷鳴山谷", eHP: 4000, eType: '👻', diff: 2 },
+        { name: "熔岩地獄", eHP: 8500, eType: '🔥', diff: 3 },
+        { name: "虛空神域", eHP: 22000, eType: '💀', diff: 5 }
+    ];
+
+    // 初始預設資料
+    let user = {
+        xp: 1000,
+        owned: ['drop'],
+        lvs: { 'drop': 1, 'bolt': 1, 'cloud': 1, 'dragon': 1 },
+        cleared: 0
+    };
+
+    // --- 存檔與加載核心邏輯 ---
+    function save() { 
+        // 1. 存本地
+        localStorage.setItem(SAVE_KEY, JSON.stringify(user));
+        
+        // 2. 更新 UI
+        document.getElementById('res-xp').innerText = Math.floor(user.xp);
+        document.getElementById('res-stage').innerText = `${user.cleared}/${STAGES.length}`;
+
+    }
+
+    function loadGame() {
+        // A. 讀取本地 LocalStorage
+        const localData = localStorage.getItem(SAVE_KEY);
+        if (localData) {
+            try {
+                user = { ...user, ...JSON.parse(localData) };
+                console.log("已載入本地進度");
+            } catch(e) { console.error("本地讀取出錯", e); }
+        }
+        save(); // 立即同步 UI 顯示
+
+    }
+
+    // --- 遊戲介面邏輯 ---
+    function showScreen(id) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+        if(id === 'map-screen') renderMap();
+    }
+
+    function renderUpgrade() {
+        const list = document.getElementById('upgrade-list');
+        list.innerHTML = '';
+        user.owned.forEach(id => {
+            const c = CHARS[id];
+            const lv = user.lvs[id];
+            const item = document.createElement('div');
+            item.className = 'card';
+            item.innerHTML = `<div>${c.forms[lv >= 10 ? 2 : (lv >= 5 ? 1 : 0)]}</div><small>${c.name} Lv.${lv}</small><br>
+                <button onclick="upLevel('${id}')" style="font-size:12px; margin-top:5px;">升級(${lv*200})</button>`;
+            list.appendChild(item);
+        });
+    }
+
+    function upLevel(id) {
+        const cost = user.lvs[id] * 200;
+        if (user.xp >= cost) {
+            user.xp -= cost;
+            user.lvs[id]++;
+            renderUpgrade();
+            save();
+        } else {
+            alert("XP 不足！");
+        }
+    }
+
+    function renderBook() {
+        const list = document.getElementById('book-list');
+        list.innerHTML = '';
+        Object.keys(CHARS).forEach(id => {
+            const has = user.owned.includes(id);
+            const item = document.createElement('div');
+            item.className = `card ${has ? '' : 'locked'}`;
+            item.innerHTML = `<div>${has ? CHARS[id].forms[0] : '？'}</div><small>${has ? CHARS[id].name : '未解鎖'}</small>`;
+            list.appendChild(item);
+        });
+    }
+
+    function renderMap() {
+        const list = document.getElementById('map-list');
+        list.innerHTML = '';
+        STAGES.forEach((s, idx) => {
+            const locked = idx > user.cleared;
+            const item = document.createElement('div');
+            item.className = `card ${locked ? 'locked' : ''}`;
+            item.innerHTML = `<h3>${s.name}</h3><small>目標HP: ${s.eHP}</small>`;
+            if (!locked) item.onclick = () => startBattle(idx);
+            list.appendChild(item);
+        });
+    }
+
+    function drawGacha() {
+        if (user.xp < 500) return alert("XP 不足以啟動祭壇！");
+        user.xp -= 500;
+        save();
+        const anim = document.getElementById('gacha-anim');
+        anim.style.display = 'flex';
+        setTimeout(() => {
+            const keys = Object.keys(CHARS);
+            const res = keys[Math.floor(Math.random() * keys.length)];
+            if (!user.owned.includes(res)) user.owned.push(res);
+            anim.innerText = CHARS[res].forms[0];
+            setTimeout(() => { anim.style.display = 'none'; anim.innerText = '❓'; save(); }, 1200);
+        }, 800);
+    }
+
+    // --- 戰鬥引擎 ---
+    let battle = { active: false, units: [], money: 0, pHP: 0, eHP: 0, currentStage: null, width: 0 };
+
+    function startBattle(idx) {
+        showScreen('game-screen');
+        const s = STAGES[idx];
+        const stageWidth = document.getElementById('stage').offsetWidth;
+        battle = { active: true, units: [], money: 100, pHP: 1000, eHP: s.eHP, currentStage: idx, width: stageWidth };
+        
+        const panel = document.getElementById('ui-panel');
+        panel.innerHTML = '';
+        user.owned.forEach(id => {
+            const btn = document.createElement('button');
+            btn.className = 'spawn-btn';
+            const lv = user.lvs[id];
+            btn.innerHTML = `<span>${CHARS[id].forms[lv >= 10 ? 2 : (lv >= 5 ? 1 : 0)]}</span><small>$${CHARS[id].cost}</small>`;
+            btn.onclick = () => spawn(id, 'player');
+            panel.appendChild(btn);
+        });
+        requestAnimationFrame(battleLoop);
+    }
+
+    function spawn(id, side) {
+        const c = side === 'player' ? CHARS[id] : { forms: [STAGES[battle.currentStage].eType], hp: 200 * (battle.currentStage+1), atk: 35 * (battle.currentStage+1), cost: 0 };
+        if (side === 'player') {
+            if (battle.money < c.cost) return;
+            battle.money -= c.cost;
+        }
+        const el = document.createElement('div');
+        el.className = 'unit';
+        const lv = side === 'player' ? user.lvs[id] : 1;
+        el.innerHTML = `<div class="hp-bar"><div class="hp-inner"></div></div><div class="unit-body">${c.forms[0]}</div>`;
+        document.getElementById('stage').appendChild(el);
+        
+        battle.units.push({
+            el, side, x: side === 'player' ? 60 : battle.width - 100,
+            hp: c.hp * (side === 'player' ? (1 + lv * 0.12) : 1),
+            max: c.hp * (side === 'player' ? (1 + lv * 0.12) : 1),
+            atk: c.atk * (side === 'player' ? (1 + lv * 0.12) : 1),
+            spd: side === 'player' ? 1.6 : 1.1,
+            range: id === 'dragon' ? 120 : 45,
+            atkTimer: 0
+        });
+    }
+
+    function battleLoop() {
+        if (!battle.active) return;
+        battle.money += 0.4;
+        document.getElementById('battle-money').innerText = `$${Math.floor(battle.money)}`;
+        
+        if (Math.random() < 0.012) spawn(null, 'enemy');
+
+        battle.units.forEach(u => {
+            const isP = u.side === 'player';
+            let target = battle.units.find(en => en.side !== u.side && (isP ? (en.x - u.x < u.range && en.x > u.x) : (u.x - en.x < u.range && u.x > en.x)));
+            const baseDist = isP ? (battle.width - 60 - u.x) : (u.x - 60);
+
+            if (target || baseDist < u.range) {
+                u.atkTimer++;
+                if (u.atkTimer > 40) {
+                    u.atkTimer = 0;
+                    if (target) target.hp -= u.atk;
+                    else if (isP) battle.eHP -= u.atk; else battle.pHP -= u.atk;
+                    u.el.style.transform = `translateX(${isP?10:-10}px)`;
+                    setTimeout(() => { if(u.el) u.el.style.transform = ''; }, 50);
+                }
+            } else {
+                u.x += isP ? u.spd : -u.spd;
+                u.el.style.left = u.x + 'px';
+            }
+            u.el.querySelector('.hp-inner').style.width = Math.max(0, (u.hp / u.max * 100)) + '%';
+        });
+
+        battle.units = battle.units.filter(u => { if(u.hp <= 0) { u.el.remove(); return false; } return true; });
+        document.getElementById('p-hp').innerText = Math.max(0, Math.floor(battle.pHP));
+        document.getElementById('e-hp').innerText = Math.max(0, Math.floor(battle.eHP));
+
+        if (battle.pHP <= 0 || battle.eHP <= 0) {
+            battle.active = false;
+            document.querySelectorAll('.unit').forEach(u => u.remove());
+            if (battle.eHP <= 0) {
+                const reward = (battle.currentStage + 1) * 1200;
+                user.xp += reward;
+                user.cleared = Math.max(user.cleared, battle.currentStage + 1);
+                alert("🚩 勝利！獲得 XP: " + reward);
+            } else {
+                alert("💥 戰敗，撤退...");
+            }
+            save();
+            showScreen('main-screen');
+            return;
+        }
+        requestAnimationFrame(battleLoop);
+    }
+
+    // 初始化啟動
+    window.raingodBindStorage('rain-god-wars', [SAVE_KEY], { [SAVE_KEY]: null }, data => {
+        if (data[SAVE_KEY]) user = { ...user, ...data[SAVE_KEY] };
+        save();
+    }, { path: 'raingod_pro_data', key: SAVE_KEY });
+</script>
+</body>
+</html>

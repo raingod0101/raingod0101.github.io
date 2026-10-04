@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <!-- 關鍵：允許阿公用兩隻手指自由縮放畫面 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <title>阿公的全螢幕看書機</title>
+    <!-- 載入手機看 PDF 必備工具 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <style>
+        body {
+            font-family: "Microsoft JhengHei", "微軟正黑體", sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #222222; /* 深色背景，看白底黑字最舒服 */
+            text-align: center;
+        }
+
+        /* 頂部選檔案大按鈕 */
+        .top-box {
+            background-color: #0056b3;
+            padding: 20px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+
+        .file-btn {
+            background-color: #ffffff;
+            color: #0056b3;
+            font-size: 26px;
+            font-weight: bold;
+            padding: 15px 30px;
+            border-radius: 12px;
+            border: 3px solid #ffe600;
+            cursor: pointer;
+            position: relative;
+            display: inline-block;
+        }
+
+        .file-btn input[type="file"] {
+            position: absolute;
+            left: 0; top: 0; opacity: 0;
+            width: 100%; height: 100%;
+            cursor: pointer;
+        }
+
+        /* 初始歡迎提示 */
+        .welcome-msg {
+            margin-top: 100px;
+            font-size: 28px;
+            color: #eee;
+            line-height: 1.8;
+            padding: 20px;
+        }
+
+        /* PDF 顯示區域：選完檔案後全螢幕充滿 */
+        .pdf-container {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-top: 5px;
+            padding-bottom: 5px;
+        }
+
+        canvas {
+            background-color: white;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            margin-bottom: 10px;
+            width: 100%; /* 預設剛好塞滿手機螢幕寬度 */
+            max-width: 100%;
+            height: auto;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 頂部按鈕區（選完檔案會被程式藏起來） -->
+    <div id="upload-zone" class="top-box">
+        <div class="file-btn">
+            📂 按這裡選檔案看報紙
+            <input type="file" id="file-selector" accept=".pdf">
+        </div>
+    </div>
+
+    <!-- 初始歡迎畫面（選完檔案也會藏起來） -->
+    <div id="welcome" class="welcome-msg">
+        👴🏻 阿公好！<br><br>
+        1. 先按最上面<b>【選檔案】</b><br><br>
+        2. 看資料時，可以用<b>兩隻手指</b><br>在螢幕上撥開，字就會變大喔！
+    </div>
+
+    <!-- PDF 實際顯示區 -->
+    <div id="pdf-area" class="pdf-container"></div>
+
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+
+        const pdfArea = document.getElementById('pdf-area');
+        const welcome = document.getElementById('welcome');
+        const uploadZone = document.getElementById('upload-zone');
+
+        document.getElementById('file-selector').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            // 1. 阿公一選好檔案，立刻把按鈕和歡迎字句「隱藏」，把整個螢幕留給 PDF
+            welcome.style.display = 'none';
+            uploadZone.style.display = 'none';
+            
+            pdfArea.innerHTML = '<p style="color:white; font-size:24px; margin-top:50px;">資料載入中，請稍等...</p>';
+
+            const fileReader = new FileReader();
+            fileReader.onload = function() {
+                const typedarray = new Uint8Array(this.result);
+                
+                pdfjsLib.getDocument(typedarray).promise.then(function(pdf) {
+                    pdfArea.innerHTML = ''; // 清空載入中字樣
+                    
+                    // 2. 把 PDF 每一頁都畫出來
+                    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                        pdf.getPage(pageNum).then(function(page) {
+                            const canvas = document.createElement('canvas');
+                            pdfArea.appendChild(canvas);
+                            const context = canvas.getContext('2d');
+                            
+                            // 使用較高的解析度(2.0)，這樣阿公用手指放大時字體才不會模糊
+                            const viewport = page.getViewport({ scale: 2.0 });
+                            canvas.height = viewport.height;
+                            canvas.width = viewport.width;
+
+                            const renderContext = { canvasContext: context, viewport: viewport };
+                            page.render(renderContext);
+                        });
+                    }
+                }).catch(function(error) {
+                    pdfArea.innerHTML = '<p style="color:red; font-size:24px;">檔案打開失敗，請重試！</p>';
+                });
+            };
+            fileReader.readAsArrayBuffer(file);
+        });
+    </script>
+</body>
+</html>
