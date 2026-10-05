@@ -85,6 +85,10 @@
             background: rgba(15, 23, 42, 0.85); border: 1px solid #eab308; padding: 6px 10px;
             border-radius: 6px; color: #fef08a; font-size: 10px; font-weight: bold; backdrop-filter: blur(4px);
         }
+        #tycoon-leaderboard-button { position: absolute; top: 160px; right: 15px; z-index: 20; pointer-events: auto; padding: 9px 14px; border: 1px solid #38bdf8; border-radius: 20px; color: #fff; background: rgba(15,23,42,0.9); font-weight: bold; cursor: pointer; }
+        #tycoon-leaderboard { position: fixed; inset: 0; z-index: 2000; display: none; align-items: center; justify-content: center; padding: 16px; background: rgba(2,6,23,0.94); color: #fff; }
+        .tycoon-leaderboard-card { width: min(520px, 100%); max-height: 80vh; overflow-y: auto; padding: 20px; border: 1px solid #38bdf8; border-radius: 16px; background: #0b1020; }
+        .tycoon-leaderboard-row { display: flex; justify-content: space-between; gap: 12px; padding: 10px 4px; border-bottom: 1px solid #26334a; }
     </style>
 </head>
 <body>
@@ -197,10 +201,26 @@
     </div>
 </div>
 
+<button id="tycoon-leaderboard-button" onclick="openTycoonLeaderboard()">🏆 登入後查看排行榜</button>
+<div id="tycoon-leaderboard">
+    <div class="tycoon-leaderboard-card">
+        <h2 style="color:#38bdf8; margin-top:0;">🏆 雨神大亨排行榜</h2>
+        <p id="tycoon-leaderboard-status" style="color:#aaa;">請登入帳號後查看。</p>
+        <div id="tycoon-leaderboard-list"></div>
+        <div style="display:flex; gap:8px; justify-content:center; margin-top:14px;">
+            <button class="btn" onclick="refreshTycoonLeaderboard()">重新整理</button>
+            <button class="btn" onclick="closeTycoonLeaderboard()">關閉</button>
+        </div>
+    </div>
+</div>
+
 <script>
     const cvs = document.getElementById('c'), ctx = cvs.getContext('2d');
+    const SAVE_KEY = 'raingod_tycoon_save';
+    const TYCOON_LEADERBOARD_URL = 'https://game-24b43-default-rtdb.firebaseio.com/raingod_tycoon_leaderboard';
 
     let money = 2000, darkMatter = 0, frame = 0;
+    let bestWave = 0;
     let baseHp = 100, maxHp = 100;
     let minerLevel = 0, capacity = 4, techTier = 1;
     let p = { x: 350, y: 350, r: 18, tx: 350, ty: 350, bag: [], atkRange: 220, cooldown: 0 };
@@ -224,6 +244,141 @@
 
     // 任務
     let quest = { type: 'kill', target: 20, current: 0, reward: 1500, desc: '擊殺 20 隻異形蟲' };
+    let storageReady = false;
+
+    function saveGame() {
+        if (!storageReady) return;
+        localStorage.setItem(SAVE_KEY, JSON.stringify({
+            money, darkMatter, baseHp, maxHp, minerLevel, capacity, techTier,
+            player: p, bots, turrets, artifacts, talents, wave, bestWave, waveTimer,
+            isWaveActive, items, enemies, chests, skillCd, isOverclocked, overclockTimer, quest
+        }));
+    }
+
+    function loadGame(data) {
+        if (!data || typeof data !== 'object' || Array.isArray(data)) return;
+        const finiteOr = (value, fallback) => Number.isFinite(Number(value)) ? Number(value) : fallback;
+        const objectArray = value => Array.isArray(value) ? value.filter(item => item && typeof item === 'object').slice(0, 1000) : [];
+        money = Math.max(0, finiteOr(data.money, money));
+        darkMatter = Math.max(0, finiteOr(data.darkMatter, darkMatter));
+        baseHp = finiteOr(data.baseHp, baseHp);
+        maxHp = Math.max(1, finiteOr(data.maxHp, maxHp));
+        minerLevel = Math.max(0, Math.floor(finiteOr(data.minerLevel, minerLevel)));
+        capacity = Math.max(1, Math.floor(finiteOr(data.capacity, capacity)));
+        techTier = Math.min(5, Math.max(1, Math.floor(finiteOr(data.techTier, techTier))));
+        if (data.player && typeof data.player === 'object') Object.assign(p, data.player);
+        bots = objectArray(data.bots);
+        turrets = objectArray(data.turrets);
+        artifacts = Array.isArray(data.artifacts) ? data.artifacts.filter(item => typeof item === 'string') : [];
+        if (data.talents && typeof data.talents === 'object') talents = { ...talents, ...data.talents };
+        wave = Math.max(1, Math.floor(finiteOr(data.wave, wave)));
+        bestWave = Math.max(0, Math.floor(finiteOr(data.bestWave, bestWave)));
+        waveTimer = Math.max(0, Math.floor(finiteOr(data.waveTimer, waveTimer)));
+        const wasWaveActive = data.isWaveActive === true;
+        isWaveActive = false;
+        items = objectArray(data.items);
+        enemies = wasWaveActive ? [] : objectArray(data.enemies);
+        if (wasWaveActive) waveTimer = 0;
+        chests = objectArray(data.chests);
+        if (Array.isArray(data.skillCd) && data.skillCd.length === 3) skillCd = data.skillCd.map(value => Math.max(0, finiteOr(value, 0)));
+        isOverclocked = data.isOverclocked === true;
+        overclockTimer = Math.max(0, Math.floor(finiteOr(data.overclockTimer, overclockTimer)));
+        if (data.quest && typeof data.quest === 'object') quest = { ...quest, ...data.quest };
+    }
+
+    async function openTycoonLeaderboard() {
+        if (!await window.raingodRequireAuth('排行榜')) return;
+        document.getElementById('tycoon-leaderboard').style.display = 'flex';
+        await refreshTycoonLeaderboard();
+    }
+
+    function closeTycoonLeaderboard() {
+        document.getElementById('tycoon-leaderboard').style.display = 'none';
+    }
+
+    async function refreshTycoonLeaderboard() {
+        const status = document.getElementById('tycoon-leaderboard-status');
+        const list = document.getElementById('tycoon-leaderboard-list');
+        if (!await window.raingodRequireAuth('排行榜')) return;
+        const uid = window.raingodCurrentUser.uid;
+        status.textContent = '排行榜載入中…';
+        try {
+            const response = await fetch(`${TYCOON_LEADERBOARD_URL}.json`);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            if (window.raingodCurrentUser?.uid !== uid) return;
+            const rows = await response.json() || {};
+            const entries = Object.entries(rows)
+                .filter(([, row]) => row && Number.isFinite(Number(row.wave)))
+                .sort((a, b) => Number(b[1].wave) - Number(a[1].wave) || Number(b[1].darkMatter || 0) - Number(a[1].darkMatter || 0))
+                .slice(0, 50);
+            list.replaceChildren();
+            entries.forEach(([entryUid, row], index) => {
+                const item = document.createElement('div');
+                item.className = 'tycoon-leaderboard-row';
+                const name = document.createElement('span');
+                name.textContent = `${index + 1}. ${row.name || '玩家'}${entryUid === uid ? '（你）' : ''}`;
+                const value = document.createElement('strong');
+                value.textContent = `第 ${Math.floor(Number(row.wave))} 波 · ${Math.floor(Number(row.darkMatter) || 0)} 暗物質`;
+                item.append(name, value);
+                list.appendChild(item);
+            });
+            status.textContent = entries.length ? `已載入 ${entries.length} 位玩家，依最高波數排序。` : '目前還沒有排行榜資料。';
+        } catch (error) {
+            console.error('載入雨神大亨排行榜失敗：', error);
+            status.textContent = '排行榜載入失敗，請稍後重試。';
+        }
+    }
+
+    async function uploadTycoonLeaderboardScore() {
+        const currentUser = window.raingodCurrentUser;
+        if (!currentUser || bestWave <= 0) return;
+        const uid = currentUser.uid;
+        const entryUrl = `${TYCOON_LEADERBOARD_URL}/${encodeURIComponent(uid)}.json`;
+        try {
+            const previousResponse = await fetch(entryUrl);
+            if (!previousResponse.ok) throw new Error(`HTTP ${previousResponse.status}`);
+            const previous = await previousResponse.json();
+            if (window.raingodCurrentUser?.uid !== uid) return;
+            if (previous && (Number(previous.wave) > bestWave ||
+                (Number(previous.wave) === bestWave && Number(previous.darkMatter) >= darkMatter))) return;
+            const response = await fetch(entryUrl, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: currentUser.email ? currentUser.email.split('@')[0] : '雨神玩家',
+                    wave: Math.floor(bestWave),
+                    darkMatter: Math.floor(darkMatter),
+                    updatedAt: Date.now()
+                })
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        } catch (error) {
+            console.error('上傳雨神大亨排行榜失敗：', error);
+        }
+    }
+
+    async function initializeTycoon() {
+        await window.raingodFirebaseReady;
+        await window.raingodAuthReady;
+        await window.raingodBindStorage('raingod-tycoon', [SAVE_KEY], { [SAVE_KEY]: null }, data => {
+            loadGame(data[SAVE_KEY]);
+            storageReady = true;
+            updateArtifactUI();
+            saveGame();
+            if (window.raingodCurrentUser) uploadTycoonLeaderboardScore();
+        });
+        window.raingodOnAuthStateChanged(currentUser => {
+            const button = document.getElementById('tycoon-leaderboard-button');
+            button.textContent = currentUser ? '🏆 排行榜' : '🏆 登入後查看排行榜';
+            if (currentUser) uploadTycoonLeaderboardScore();
+            else {
+                closeTycoonLeaderboard();
+                document.getElementById('tycoon-leaderboard-list').replaceChildren();
+                document.getElementById('tycoon-leaderboard-status').textContent = '請登入帳號後查看。';
+            }
+        });
+        draw();
+    }
 
     const ITEMS = {
         RAW:     { name: '原礦', val: 10, color: '#ef4444' },
@@ -318,10 +473,18 @@
         }
     }
 
-    function triggerNextWave() { if (!isWaveActive) waveTimer = 0; }
+    function triggerNextWave() {
+        if (!isWaveActive) {
+            waveTimer = 0;
+            saveGame();
+        }
+    }
 
     function spawnWave() {
         isWaveActive = true;
+        bestWave = Math.max(bestWave, wave);
+        saveGame();
+        uploadTycoonLeaderboardScore();
         let count = 8 + wave * 4;
         let isBossWave = (wave % 5 === 0);
 
@@ -353,16 +516,16 @@
 
     function buyBot() {
         let cost = Math.floor(500 * Math.pow(1.3, bots.length));
-        if(money >= cost) { money -= cost; bots.push({ x: 120, y: cvs.height/2, bag: [], speed: 4.5 }); }
+        if(money >= cost) { money -= cost; bots.push({ x: 120, y: cvs.height/2, bag: [], speed: 4.5 }); saveGame(); }
     }
 
     function upgrade(type) {
         if (type === 'miner') {
             let cost = Math.floor(1000 * Math.pow(1.5, minerLevel));
-            if (money >= cost) { money -= cost; minerLevel++; }
+            if (money >= cost) { money -= cost; minerLevel++; saveGame(); }
         } else if (type === 'capacity') {
             let cost = Math.floor(1500 * (capacity / 2));
-            if (money >= cost) { money -= cost; capacity += 2; }
+            if (money >= cost) { money -= cost; capacity += 2; saveGame(); }
         }
     }
 
@@ -374,12 +537,14 @@
         } else if (type === 'repair' && darkMatter >= (talents.repLv + 1) * 10) {
             darkMatter -= (talents.repLv + 1) * 10; talents.repLv++;
         }
+        saveGame();
     }
 
     function unlockTier(tier) {
         const costs = { 2: 2500, 3: 25000, 4: 200000, 5: 2000000 };
         if (money >= costs[tier] && techTier === tier - 1) {
             money -= costs[tier]; techTier = tier;
+            saveGame();
         }
     }
 
@@ -391,6 +556,7 @@
             p.bag = []; bots = []; items = []; turrets = []; enemies = []; wave = 1;
             spawnFloatText(cvs.width/2, cvs.height/2, `🌌 暗物質量子轉生成功！`, '#c084fc');
             triggerShake(30);
+            saveGame();
         }
     }
 
@@ -429,6 +595,8 @@
                 isWaveActive = false; wave++; waveTimer = 20 * 60;
                 money += 1200 * wave; darkMatter += 1;
                 spawnFloatText(cvs.width/2, cvs.height/2, `🎉 第 ${wave-1} 波完成！`, '#f59e0b');
+                saveGame();
+                uploadTycoonLeaderboardScore();
             }
         }
 
@@ -600,6 +768,7 @@
         document.getElementById('cCost').innerText = `$${Math.floor(1500 * (capacity / 2)).toLocaleString()}`;
 
         document.getElementById('rebirthGain').innerText = `+${Math.floor(money / 100000)} DM`;
+        if (frame % 180 === 0) saveGame();
     }
 
     function processConvert(obj, from, to, bld) {
@@ -728,7 +897,12 @@
         });
     }
 
-    draw();
+    window.addEventListener('pagehide', saveGame);
+    window.addEventListener('beforeunload', saveGame);
+    initializeTycoon().catch(error => {
+        console.error('雨神大亨初始化失敗：', error);
+        document.getElementById('tycoon-leaderboard-status').textContent = '遊戲初始化失敗，請重新整理頁面。';
+    });
 </script>
 </body>
 </html>
