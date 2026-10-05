@@ -68,9 +68,9 @@
         #test-panel .modal-panel { max-width: 780px; width: 100%; }
         .test-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
         .test-row label { flex: 1 1 180px; font-size: 0.92rem; color: #fff; }
-        #test-active-list, #test-passive-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; margin-top: 10px; }
-        #test-active-list label, #test-passive-list label { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border: 1px solid rgba(0,210,255,0.22); border-radius: 10px; background: rgba(255,255,255,0.04); cursor: pointer; }
-        #test-active-list input, #test-passive-list input { transform: scale(1.1); }
+        #test-active-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; margin-top: 10px; }
+        #test-active-list label { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border: 1px solid rgba(0,210,255,0.22); border-radius: 10px; background: rgba(255,255,255,0.04); cursor: pointer; }
+        #test-active-list input { transform: scale(1.1); }
         .skin-collection { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
         .skin-card { width: 128px; border: 1px solid rgba(0,210,255,0.18); border-radius: 12px; padding: 8px; background: rgba(255,255,255,0.04); text-align:center; }
         .skin-card img { width: 100%; height: 100px; object-fit: contain; border-radius: 10px; }
@@ -266,7 +266,7 @@
         <div class="stat-text" style="margin-bottom:4px;">關卡 <span id="stage-title">1. 荒原</span></div>
         <div class="hp-bar-bg clickable"><div id="hp-bar-fill" style="width:100%"></div></div>
         <div class="xp-bar-bg"><div id="xp-bar-fill"></div></div>
-        <div class="stat-text">Lv.<span id="player-lv">1</span> 殺敵 <span id="kill-count">0</span> 時間 <span id="timer">0</span>s 主動<span id="active-count">0</span> 被動<span id="passive-count">0</span></div>
+        <div class="stat-text">Lv.<span id="player-lv">1</span> 殺敵 <span id="kill-count">0</span> 時間 <span id="timer">0</span>s 主動<span id="active-count">0</span></div>
         <div id="alert-banner" class="stat-text" style="color:#ffea00;text-shadow:0 0 10px #ffea00;min-height:18px;"></div>
         <div id="skill-strip"></div>
     </div>
@@ -296,8 +296,6 @@
             <div style="margin-top:8px;color:#fff;font-size:0.92rem;">按 <strong>R + A + I + N + Ctrl</strong> 再按一次返回原本模式。</div>
             <h3 style="margin-top:16px;color:#00d2ff;">主動技能</h3>
             <div id="test-active-list"></div>
-            <h3 style="margin-top:16px;color:#00d2ff;">被動技能</h3>
-            <div id="test-passive-list"></div>
         </div></div>
 </div>
 
@@ -372,55 +370,66 @@ function rollPet() {
     return { id, uid: Date.now().toString(36) + Math.random().toString(36).slice(2, 8) };
 }
 
-// ─── 主動技能 (id, 名稱, 對應被動, 超武名) ─────────────────────────────────────
+// ─── 主動技能 (id, 名稱, 超武名) ───────────────────────────────────────────────
 const ACTIVE_SKILLS = {
-    kunai:        { name:'流光飛刃',   passiveEvo:'expBook',    evoName:'幻影風刃' },
-    football:     { name:'量子球',     passiveEvo:'runShoe',    evoName:'星巡球' },
-    droneA:       { name:'守護機甲',   passiveEvo:'droneB',     evoName:'終極守護者' },
-    droneB:       { name:'戰鬥陀螺',   passiveEvo:'droneA',     evoName:'終極守護者' },
-    lightning:    { name:'電磁脈衝',   passiveEvo:'energyBlock', evoName:'雷霆震爆' },
-    guardian:     { name:'能量護盾',   passiveEvo:'exoskeleton',evoName:'鋼鐵法環' },
-    forcefield:   { name:'磁力場',     passiveEvo:'drink',       evoName:'壓制地帶' },
-    brick:        { name:'重擊方塊',   passiveEvo:'bloodVial',   evoName:'巨磚猛擊' },
-    baseball:     { name:'震盪棍',     passiveEvo:'bloodVial',   evoName:'破天槌' },
-    revolver:     { name:'旋轉炮',     passiveEvo:'atk',         evoName:'暗影暴擊' },
-    lightchaser:  { name:'追光導彈',   passiveEvo:'dmgReduct',   evoName:'星光狂襲' },
-    destruction:  { name:'終焉震波',   passiveEvo:'atk',         evoName:'黯滅裂痕' },
-    flamethrower: { name:'熾焰噴射',   passiveEvo:'atk',         evoName:'地獄噴泉' },
-    iceRing:      { name:'寒霜環',     passiveEvo:'dmgReduct',   evoName:'凜冬暴旋' },
-    meteor:       { name:'隕石衝擊',   passiveEvo:'expBook',     evoName:'流星審判' },
-    thunderField: { name:'雷域',       passiveEvo:'energyBlock', evoName:'超導雷獄' },
-    whirlwind:    { name:'風暴斬',     passiveEvo:'runShoe',    evoName:'颶風亂舞' },
-    singularity:  { name:'奇點',       passiveEvo:'dmgReduct',   evoName:'終焉奇點' },
-    flare:        { name:'熾焰爆裂',   passiveEvo:'cooldown',   evoName:'熾焰終焰' },
-    pulse:        { name:'能量脈衝',   passiveEvo:'critBoost',  evoName:'脈衝爆裂' },
-    gravity:      { name:'重力投射',   passiveEvo:'lifesteal',  evoName:'重力崩壞' },
-    ionBeam:      { name:'離子光束',   passiveEvo:'energyBlock', evoName:'極限離子光' },
-    plasmaOrb:    { name:'等離子球',   passiveEvo:'cooldown',    evoName:'核爆等離子' },
-    chainSpark:   { name:'鏈式電擊',   passiveEvo:'critBoost',  evoName:'電弧磁爆' },
-    voidBomb:     { name:'虛空炸彈',   passiveEvo:'magnet',      evoName:'虛空裂縫' },
-    bladeDance:   { name:'刀鋒旋舞',   passiveEvo:'atk',         evoName:'終焰刀陣' },
-    arcWave:      { name:'弧形波',     passiveEvo:'dmgReduct',   evoName:'裂界弧波' },
-    gravityPulse: { name:'重力脈衝',   passiveEvo:'lifesteal',   evoName:'黑洞脈衝' },
-    solarFlare:   { name:'日耀爆發',   passiveEvo:'fireAura',    evoName:'恆星焚爆' },
-    burnBottle:   { name:'燃燒瓶',     passiveEvo:'fireAura',    evoName:'烈焰投擲' },
-    cdSurge:      { name:'CD 爆破',    passiveEvo:'energyBlock', evoName:'音速震擊' },
-    meowClaw:     { name:'貓爪亂舞',   passiveEvo:'critBoost',   evoName:'極影喵爪' },
-    purrWave:     { name:'貓咪波動',   passiveEvo:'dmgReduct',   evoName:'喵力護盾' },
-    gojoDomain:   { name:'領域展開',   passiveEvo:'energyBlock', evoName:'無限刻印' }
-};
-const PASSIVE_SKILLS = {
-    expBook:'能量書', runShoe:'速度鞋', energyBlock:'能量方塊', exoskeleton:'外骨骼',
-    drink:'飲料', bloodVial:'健身指南', atk:'強力彈頭', dmgReduct:'護甲', magnet:'磁鐵',
-    droneB:'戰鬥陀螺', droneA:'守護機甲', coinBox:'金幣箱', cooldown:'冷卻縮減', critBoost:'暴擊提升', lifesteal:'吸血',
-    fireAura:'火焰光環', fastRegen:'迅速再生', pierce:'穿透彈', burst:'爆裂能量'
+    kunai:        { name:'流光飛刃',   evoName:'幻影風刃' },
+    football:     { name:'量子球',     evoName:'星巡球' },
+    droneA:       { name:'守護機甲',   evoName:'終極守護者' },
+    droneB:       { name:'戰鬥陀螺',   evoName:'終極守護者' },
+    lightning:    { name:'電磁脈衝',   evoName:'雷霆震爆' },
+    guardian:     { name:'能量護盾',   evoName:'鋼鐵法環' },
+    forcefield:   { name:'磁力場',     evoName:'壓制地帶' },
+    brick:        { name:'重擊方塊',   evoName:'巨磚猛擊' },
+    baseball:     { name:'震盪棍',     evoName:'破天槌' },
+    revolver:     { name:'旋轉炮',     evoName:'暗影暴擊' },
+    lightchaser:  { name:'追光導彈',   evoName:'星光狂襲' },
+    destruction:  { name:'終焉震波',   evoName:'黯滅裂痕' },
+    flamethrower: { name:'熾焰噴射',   evoName:'地獄噴泉' },
+    iceRing:      { name:'寒霜環',     evoName:'凜冬暴旋' },
+    meteor:       { name:'隕石衝擊',   evoName:'流星審判' },
+    thunderField: { name:'雷域',       evoName:'超導雷獄' },
+    whirlwind:    { name:'風暴斬',     evoName:'颶風亂舞' },
+    singularity:  { name:'奇點',       evoName:'終焉奇點' },
+    flare:        { name:'熾焰爆裂',   evoName:'熾焰終焰' },
+    pulse:        { name:'能量脈衝',   evoName:'脈衝爆裂' },
+    gravity:      { name:'重力投射',   evoName:'重力崩壞' },
+    ionBeam:      { name:'離子光束',   evoName:'極限離子光' },
+    plasmaOrb:    { name:'等離子球',   evoName:'核爆等離子' },
+    chainSpark:   { name:'鏈式電擊',   evoName:'電弧磁爆' },
+    voidBomb:     { name:'虛空炸彈',   evoName:'虛空裂縫' },
+    bladeDance:   { name:'刀鋒旋舞',   evoName:'終焰刀陣' },
+    arcWave:      { name:'弧形波',     evoName:'裂界弧波' },
+    gravityPulse: { name:'重力脈衝',   evoName:'黑洞脈衝' },
+    solarFlare:   { name:'日耀爆發',   evoName:'恆星焚爆' },
+    burnBottle:   { name:'燃燒瓶',     evoName:'烈焰投擲' },
+    cdSurge:      { name:'CD 爆破',    evoName:'音速震擊' },
+    meowClaw:     { name:'貓爪亂舞',   evoName:'極影喵爪' },
+    purrWave:     { name:'貓咪波動',   evoName:'喵力護盾' },
+    gojoDomain:   { name:'領域展開',   evoName:'無限刻印' },
+    shardStorm:   { name:'碎晶風暴',   evoName:'無限碎晶' },
+    archon:       { name:'雷霆聖裁',   evoName:'天穹審判' },
+    vortex:       { name:'旋渦刃輪',   evoName:'時空漩渦' },
+    laserGrid:    { name:'雷射矩陣',   evoName:'終極光網' },
+    ripple:       { name:'環形脈衝',   evoName:'無盡波紋' },
+    spikeMine:    { name:'荊棘地雷',   evoName:'荊棘領域' },
+    thunderNova:  { name:'雷鳴新星',   evoName:'萬雷天降' },
+    shieldWall:   { name:'守護光刃',   evoName:'聖盾風暴' },
+    novaBlast:    { name:'星核爆裂',   evoName:'超新星' },
+    ionCannon:    { name:'離子炮台',   evoName:'終極離子炮', description:'鎖定目標持續掃射光束，穿透路徑上的敵人。' },
+    chakram:      { name:'回旋刃輪',   evoName:'無盡輪舞', description:'飛出後折返玩家，沿途敵人各受一次傷害。' },
+    minefield:    { name:'獵殺雷區',   evoName:'連鎖雷區', description:'在周圍埋下感應地雷，敵人靠近後範圍爆炸。' },
+    orbitBlades:  { name:'星環刃衛',   evoName:'星辰風暴', description:'刀刃持續環繞玩家，近身碰撞反覆造成傷害。' },
+    stormCaller:  { name:'天降隕星',   evoName:'滅世星雨', description:'在敵群位置標記落點，短暫延遲後重擊一大片區域。' },
+    shockwave:    { name:'地裂震波',   evoName:'大地崩裂', description:'從玩家位置向外擴散衝擊環，掃過時傷害敵人。' },
+    drillShot:    { name:'穿甲鑽彈',   evoName:'深空鑽擊', description:'發射高速鑽彈，貫穿直線上的多名敵人。' },
+    ricochet:     { name:'彈跳晶刃',   evoName:'連鎖晶刃', description:'命中後自動跳向附近尚未受傷的敵人。' },
+    gravityWell:  { name:'引力漩渦',   evoName:'潮汐黑洞', description:'在敵群中形成短暫引力場，牽引並持續傷害敵人。' }
 };
 const GOJO_DOMAIN_COOLDOWN = 30 * 60;
 const GOJO_DOMAIN_DURATION = 5 * 60;
 const GOJO_DOMAIN_WARN = 3 * 60;
 const GOJO_DOMAIN_RADIUS = 320;
-const RUN_ACTIVE_POOL_SIZE = 7;
-const RUN_PASSIVE_POOL_SIZE = 5;
+const RUN_ACTIVE_POOL_SIZE = 16;
 function shuffleArr(arr) {
     const a = arr.slice();
     for (let i = a.length - 1; i > 0; i--) {
@@ -432,20 +441,19 @@ function shuffleArr(arr) {
 function pickFromPool(pool, n) {
     return shuffleArr(pool).slice(0, Math.min(n, pool.length));
 }
-/** 1 星最多 3 發，每升 1 星 +1～2 發；EVO 可再 +evoExtra */
+/** 控制技能升級時的彈數成長，避免高星與 EVO 讓彈幕失控。 */
 function skillProjCount(star1Design, stars, evo, evoExtra = 0) {
-    const base = Math.min(3, star1Design);
-    let n = base + Math.floor(Math.max(0, (stars || 1) - 1) * 1.35);
-    if (evo) n += evoExtra;
+    const base = Math.min(2, star1Design);
+    let n = base + Math.floor(Math.max(0, (stars || 1) - 1) * 0.75);
+    if (evo && evoExtra > 0) n += 1;
     return Math.max(1, Math.floor(n));
 }
 function skillLevelDamageMult(stars, evo) {
     const s = stars || 1;
-    return (1 + (s - 1) * 0.22) * (evo ? 2.6 : 1);
+    return (1 + (s - 1) * 0.16) * (evo ? 1.7 : 1);
 }
 function skillLevelCdBonus(skillId, stars) {
-    // 流光飛刃 (kunai) 冷卻成長大幅下調 (5 -> 1.8)，防止高等級鬼畜發射
-    const bonusPerStar = (skillId === 'kunai') ? 1.8 : 5;
+    const bonusPerStar = (skillId === 'kunai') ? 1.5 : 2.5;
     return Math.max(0, ((stars || 1) - 1) * bonusPerStar);
 }
 const PLAYER_SKINS = {
@@ -695,7 +703,6 @@ const SaveSystem = {
                         }
                         return;
                     }
-
                     if (user) this.bindAccount(user).catch(console.error);
                     else {
                         this._accountUid = '';
@@ -1392,9 +1399,9 @@ class ExpOrb {
         const dx = player.x - this.x;
         const dy = player.y - this.y;
         const dist = Math.hypot(dx, dy);
-        const magnet = player.magnetDist + (BattleSkills.hasPassive('magnet') ? 90 : 0);
+        const magnet = player.getMagnetRadius();
         if (dist < magnet) {
-            const force = 0.25 + (BattleSkills.hasPassive('expBook') ? 0.4 : 0);
+            const force = 0.25;
             const nx = dist ? dx / dist : 0;
             const ny = dist ? dy / dist : 0;
             this.vx += nx * force * dt;
@@ -1411,11 +1418,11 @@ class ExpOrb {
     draw(ctx, cam) {
         ctx.save();
         ctx.translate(this.x, this.y);
-        const glow = BattleSkills.hasPassive('expBook') ? '#b2ff59' : '#00ffcc';
+        const glow = '#00ffcc';
         ctx.fillStyle = glow;
         ctx.strokeStyle = 'rgba(255,255,255,0.6)';
         ctx.shadowColor = glow;
-        ctx.shadowBlur = BattleSkills.hasPassive('expBook') ? 10 : 5;
+        ctx.shadowBlur = 5;
         ctx.lineWidth = 1.5;
         ctx.beginPath();
         for (let i = 0; i < 4; i++) {
@@ -1426,13 +1433,6 @@ class ExpOrb {
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
-        if (BattleSkills.hasPassive('magnet')) {
-            ctx.strokeStyle = 'rgba(80,220,255,0.35)';
-            ctx.lineWidth = 1.2;
-            ctx.beginPath();
-            ctx.arc(0, 0, this.r + 6, 0, Math.PI * 2);
-            ctx.stroke();
-        }
         ctx.restore();
     }
 }
@@ -1444,6 +1444,7 @@ class Projectile {
         this.dmg = dmg; this.color = color || '#00d2ff'; this.isDead = false;
         this.homing = opts.homing || false; this.r = opts.r || 5; this.life = opts.life || 400;
         this.bounceLeft = opts.bounce !== undefined ? opts.bounce : 0;
+        this.bounceOnHit = opts.bounceOnHit || false;
         this.shape = opts.shape || 'diamond';
         this.skillId = opts.skillId || null;
         this.lockTarget = opts.lockTarget || null;
@@ -1452,10 +1453,149 @@ class Projectile {
         this.returning = false;
         this.burn = opts.burn || false;
         this.burnDmg = opts.burnDmg || 0;
-        this.pierceLeft = opts.pierceLeft != null ? opts.pierceLeft : (BattleSkills.hasPassive('pierce') ? 1 : 0);
+        this.pierceLeft = opts.pierceLeft != null ? opts.pierceLeft : 0;
         this.hostile = !!opts.hostile;
+        this.boomerang = opts.boomerang || false;
+        this.originX = x; this.originY = y;
+        this.maxRange = opts.maxRange || 0;
+        this.hitTargets = new Set();
+        this.chainLeft = opts.chainLeft || 0;
+        this.chainRadius = opts.chainRadius || 0;
+        this.orbitRadius = opts.orbitRadius || 0;
+        this.orbitAngle = opts.orbitAngle || 0;
+        this.orbitSpeed = opts.orbitSpeed || 0;
+        this.orbitHitTimers = new Map();
+        this.beamLength = opts.beamLength || 0;
+        this.beamAngle = opts.beamAngle || 0;
+        this.beamWidth = opts.beamWidth || 0;
+        this.beamHitTimers = new Map();
+        this.explosionRadius = opts.explosionRadius || 0;
+        this.areaField = opts.areaField || false;
+        this.explosionDelay = opts.explosionDelay || 0;
+        this.triggerRadius = opts.triggerRadius || 0;
+        this.mine = opts.mine || false;
+        this.shockwaveMaxRadius = opts.shockwaveMaxRadius || 0;
+        this.shockwaveThickness = opts.shockwaveThickness || 0;
+        this.shockwaveRadius = 0;
     }
     update(dt, player, enemies) {
+        for (const [target, timer] of this.orbitHitTimers) {
+            const nextTimer = timer - dt;
+            if (nextTimer <= 0) this.orbitHitTimers.delete(target);
+            else this.orbitHitTimers.set(target, nextTimer);
+        }
+        if (this.boomerang) {
+            const distance = Math.hypot(this.x - this.originX, this.y - this.originY);
+            if (distance >= this.maxRange) this.returning = true;
+            if (this.returning) {
+                const angle = Math.atan2(player.y - this.y, player.x - this.x);
+                const speed = Math.max(1, Math.hypot(this.vx, this.vy));
+                this.vx = Math.cos(angle) * speed;
+                this.vy = Math.sin(angle) * speed;
+                if (Math.hypot(player.x - this.x, player.y - this.y) < player.r + this.r) {
+                    this.isDead = true;
+                    return;
+                }
+            }
+        }
+        if (this.orbitRadius > 0) {
+            this.orbitAngle += this.orbitSpeed * dt;
+            this.x = player.x + Math.cos(this.orbitAngle) * this.orbitRadius;
+            this.y = player.y + Math.sin(this.orbitAngle) * this.orbitRadius;
+        } else if (this.beamLength > 0) {
+            this.x = player.x;
+            this.y = player.y;
+            let target = null, targetDistance = Infinity;
+            for (const e of enemies) {
+                if (e.isDead) continue;
+                const distance = Math.hypot(e.x - player.x, e.y - player.y);
+                if (distance < targetDistance) { target = e; targetDistance = distance; }
+            }
+            if (target) this.beamAngle = Math.atan2(target.y - player.y, target.x - player.x);
+            const dx = Math.cos(this.beamAngle), dy = Math.sin(this.beamAngle);
+            for (const e of enemies) {
+                if (e.isDead) continue;
+                const ex = e.x - player.x, ey = e.y - player.y;
+                const along = ex * dx + ey * dy;
+                const across = Math.abs(ex * dy - ey * dx);
+                if (along < 0 || along > this.beamLength || across > this.beamWidth + e.r) continue;
+                const timer = Math.max(0, (this.beamHitTimers.get(e) || 0) - dt);
+                if (timer > 0) { this.beamHitTimers.set(e, timer); continue; }
+                const damage = e instanceof Boss && e.shield ? this.dmg * 0.5 : this.dmg;
+                if (e.isRemotePlayer) OnlineSession.queueDamage(damage);
+                else {
+                    OnlineSession.queueWorldDamage(e.netId, damage * dt / 60);
+                    e.hp -= damage * dt / 60;
+                }
+                this.beamHitTimers.set(e, 8);
+            }
+            this.life -= dt;
+            if (this.life <= 0) this.isDead = true;
+            return;
+        } else if (this.shockwaveMaxRadius > 0) {
+            this.shockwaveRadius = Math.min(this.shockwaveMaxRadius, this.shockwaveRadius + this.vx * dt);
+            this.r = this.shockwaveRadius;
+            for (const e of enemies) {
+                if (e.isDead || this.hitTargets.has(e) || (this.orbitRadius > 0 && this.orbitHitTimers.has(e))) continue;
+                const distance = Math.hypot(e.x - this.originX, e.y - this.originY);
+                if (Math.abs(distance - this.shockwaveRadius) > this.shockwaveThickness + e.r) continue;
+                this.hitTargets.add(e);
+                const damage = e instanceof Boss && e.shield ? this.dmg * 0.5 : this.dmg;
+                if (e.isRemotePlayer) OnlineSession.queueDamage(damage);
+                else { OnlineSession.queueWorldDamage(e.netId, damage); e.hp -= damage; }
+            }
+            if (this.shockwaveRadius >= this.shockwaveMaxRadius) this.isDead = true;
+            return;
+        } else if (this.mine) {
+            this.explosionDelay -= dt;
+            if (this.explosionDelay <= 0 && enemies.some(e => !e.isDead && Math.hypot(e.x - this.x, e.y - this.y) < this.triggerRadius + e.r)) {
+                for (const e of enemies) {
+                    if (e.isDead || Math.hypot(e.x - this.x, e.y - this.y) > this.explosionRadius + e.r) continue;
+                    const damage = e instanceof Boss && e.shield ? this.dmg * 0.5 : this.dmg;
+                    if (e.isRemotePlayer) OnlineSession.queueDamage(damage);
+                    else { OnlineSession.queueWorldDamage(e.netId, damage); e.hp -= damage; }
+                }
+                GameEngine.spawnParticles(this.x, this.y, this.color, 20, 3);
+                this.isDead = true;
+                return;
+            }
+            this.life -= dt;
+            if (this.life <= 0) this.isDead = true;
+            return;
+        } else if (this.explosionRadius > 0) {
+            this.explosionDelay -= dt;
+            if (this.explosionDelay <= 0) {
+                for (const e of enemies) {
+                    if (e.isDead || Math.hypot(e.x - this.x, e.y - this.y) > this.explosionRadius + e.r) continue;
+                    const damage = e instanceof Boss && e.shield ? this.dmg * 0.5 : this.dmg;
+                    if (e.isRemotePlayer) OnlineSession.queueDamage(damage);
+                    else { OnlineSession.queueWorldDamage(e.netId, damage); e.hp -= damage; }
+                    GameEngine.spawnParticles(e.x, e.y, this.color, 8, 2);
+                }
+                GameEngine.spawnParticles(this.x, this.y, this.color, 24, 3);
+                this.isDead = true;
+                return;
+            }
+            this.life -= dt;
+            if (this.life <= 0) this.isDead = true;
+            return;
+        } else if (this.triggerRadius > 0) {
+            this.explosionDelay -= dt;
+            if (this.explosionDelay <= 0 && enemies.some(e => !e.isDead && Math.hypot(e.x - this.x, e.y - this.y) < this.triggerRadius + e.r)) {
+                for (const e of enemies) {
+                    if (e.isDead || Math.hypot(e.x - this.x, e.y - this.y) > (this.explosionRadius || this.r) + e.r) continue;
+                    const damage = e instanceof Boss && e.shield ? this.dmg * 0.5 : this.dmg;
+                    if (e.isRemotePlayer) OnlineSession.queueDamage(damage);
+                    else { OnlineSession.queueWorldDamage(e.netId, damage); e.hp -= damage; }
+                }
+                GameEngine.spawnParticles(this.x, this.y, this.color, 20, 3);
+                this.isDead = true;
+                return;
+            }
+            this.life -= dt;
+            if (this.life <= 0) this.isDead = true;
+            return;
+        }
         if (!this.isPuddle) {
             this.x += this.vx * dt; this.y += this.vy * dt;
         }
@@ -1466,12 +1606,25 @@ class Projectile {
         if (this.gravityPull > 0) {
             enemies.forEach(e => {
                 const d = Math.hypot(e.x - this.x, e.y - this.y);
-                if (d < this.r * 4 && !e.isDead) {
+                if (d > 0 && d < this.r * 4 && !e.isDead) {
                     const pull = this.gravityPull * dt;
                     e.x += (this.x - e.x) / d * pull;
                     e.y += (this.y - e.y) / d * pull;
                 }
             });
+        }
+
+        if (this.areaField) {
+            for (const e of enemies) {
+                if (e.isDead || Math.hypot(e.x - this.x, e.y - this.y) > this.r + e.r) continue;
+                const damage = this.dmg * dt / 60 * (e instanceof Boss && e.shield ? 0.5 : 1);
+                if (e.isRemotePlayer) OnlineSession.queueDamage(damage);
+                else {
+                    OnlineSession.queueWorldDamage(e.netId, damage);
+                    e.hp -= damage;
+                }
+            }
+            return;
         }
 
         if (this.hostile && player) {
@@ -1491,11 +1644,11 @@ class Projectile {
             return;
         }
         if (this.homing) {
-            let t = this.lockTarget && !this.lockTarget.isDead ? this.lockTarget : null;
+            let t = this.lockTarget && !this.lockTarget.isDead && !this.hitTargets.has(this.lockTarget) ? this.lockTarget : null;
             if (!t && enemies.length) {
                 let best = null, bestD = 1e9;
                 for (const e of enemies) {
-                    if (e.isDead) continue;
+                    if (e.isDead || this.hitTargets.has(e)) continue;
                     const d = Math.hypot(e.x - this.x, this.y - this.y);
                     if (d < bestD) { bestD = d; best = e; }
                 }
@@ -1518,7 +1671,7 @@ class Projectile {
             }
         }
         for (const e of enemies) {
-            if (e.isDead) continue;
+            if (e.isDead || this.hitTargets.has(e)) continue;
             if (Math.hypot(this.x - e.x, this.y - e.y) < e.r + this.r) {
                 let dmg = this.dmg;
                 if (e.isRemotePlayer) {
@@ -1549,6 +1702,48 @@ class Projectile {
                 }
                 if (e instanceof Boss) GameEngine.shake(4, 0.15);
                 else GameEngine.shake(2, 0.08);
+                if (this.orbitRadius > 0) {
+                    this.orbitHitTimers.set(e, 24);
+                    continue;
+                }
+                if (this.bounceOnHit && this.bounceLeft > 0) {
+                    this.hitTargets.add(e);
+                    this.bounceLeft--;
+                    let next = null, nextDistance = 260;
+                    for (const candidate of enemies) {
+                        if (candidate.isDead || this.hitTargets.has(candidate)) continue;
+                        const distance = Math.hypot(candidate.x - e.x, candidate.y - e.y);
+                        if (distance < nextDistance) { next = candidate; nextDistance = distance; }
+                    }
+                    if (!next) { this.isDead = true; return; }
+                    const angle = Math.atan2(next.y - e.y, next.x - e.x);
+                    const speed = Math.max(1, Math.hypot(this.vx, this.vy));
+                    this.x = e.x;
+                    this.y = e.y;
+                    this.vx = Math.cos(angle) * speed;
+                    this.vy = Math.sin(angle) * speed;
+                    return;
+                }
+                if (this.boomerang) {
+                    this.hitTargets.add(e);
+                    continue;
+                }
+                if (this.chainLeft > 0) {
+                    this.hitTargets.add(e);
+                    this.chainLeft--;
+                    let next = null, nextDistance = this.chainRadius;
+                    for (const candidate of enemies) {
+                        if (candidate.isDead || this.hitTargets.has(candidate)) continue;
+                        const distance = Math.hypot(candidate.x - e.x, candidate.y - e.y);
+                        if (distance < nextDistance) { next = candidate; nextDistance = distance; }
+                    }
+                    if (next) {
+                        this.x = e.x; this.y = e.y;
+                        this.lockTarget = next;
+                        this.homing = true;
+                    } else this.isDead = true;
+                    return;
+                }
                 if (this.pierceLeft > 0) {
                     this.pierceLeft--;
                 } else {
@@ -1562,6 +1757,47 @@ class Projectile {
     draw(ctx, cam) {
         ctx.save();
         ctx.translate(this.x, this.y);
+        if (this.beamLength > 0) {
+            ctx.strokeStyle = this.color;
+            ctx.lineWidth = this.beamWidth * 2;
+            ctx.shadowColor = this.color;
+            ctx.shadowBlur = 18;
+            ctx.globalAlpha = 0.82;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(Math.cos(this.beamAngle) * this.beamLength, Math.sin(this.beamAngle) * this.beamLength);
+            ctx.stroke();
+            ctx.restore();
+            return;
+        }
+        if (this.shockwaveMaxRadius > 0) {
+            ctx.strokeStyle = this.color;
+            ctx.lineWidth = Math.max(4, this.shockwaveThickness);
+            ctx.globalAlpha = 0.8;
+            ctx.beginPath();
+            ctx.arc(0, 0, this.shockwaveRadius, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+            return;
+        }
+        if (this.explosionRadius > 0 || this.triggerRadius > 0 || this.mine || this.areaField) {
+            const radius = this.triggerRadius || this.explosionRadius || this.r;
+            ctx.strokeStyle = this.color;
+            ctx.fillStyle = this.color;
+            ctx.globalAlpha = 0.2 + Math.sin(Date.now() / 90) * 0.08;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(0, 0, radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+            ctx.beginPath();
+            ctx.moveTo(-this.r, 0); ctx.lineTo(this.r, 0);
+            ctx.moveTo(0, -this.r); ctx.lineTo(0, this.r);
+            ctx.stroke();
+            ctx.restore();
+            return;
+        }
         ctx.rotate(Math.atan2(this.vy, this.vx));
         // 通用拖尾
         const speed = Math.hypot(this.vx, this.vy);
@@ -2128,6 +2364,10 @@ class Player {
         this.domainWarning = 0;
         this.domainRadius = GOJO_DOMAIN_RADIUS;
     }
+    getMagnetRadius() {
+        const forcefield = BattleSkills.getActive('forcefield');
+        return forcefield ? 160 + forcefield.stars * 36 + (forcefield.evo ? 80 : 0) : this.magnetDist;
+    }
     applyTalents() {
         const t = SaveSystem.currentData.talents;
         this.equipAtk = (t.ATK || 0) * 6;
@@ -2177,7 +2417,6 @@ class Player {
         const len = Math.hypot(dx, dy);
         if (len > 0 && canMove) {
             let speedBase = this.speed;
-            if (BattleSkills.hasPassive('runShoe')) speedBase += 1.5;
             const sp = speedBase * dt;
             this.x += dx / len * sp;
             this.y += dy / len * sp;
@@ -2188,8 +2427,6 @@ class Player {
             this.y *= MAP_RADIUS / dist;
         }
         if (this.regenPerSec) this.hp = Math.min(this.maxHp, this.hp + this.regenPerSec * dt / 60);
-        if (BattleSkills.hasPassive('drink')) this.hp = Math.min(this.maxHp, this.hp + 0.12 * dt / 60);
-        if (BattleSkills.hasPassive('fastRegen')) this.hp = Math.min(this.maxHp, this.hp + 0.24 * dt / 60);
         this.regenTimer += dt;
         if (this.regenTimer > 180) { // 3 seconds no damage
             this.hp = Math.min(this.maxHp, this.hp + this.maxHp * 0.012 * (dt / 60));
@@ -2277,29 +2514,35 @@ class Player {
         }
     }
     takeDamage(amt) {
-        let def = 1;
-        if (BattleSkills.hasPassive('dmgReduct')) def *= 0.85;
-        if (BattleSkills.hasPassive('exoskeleton')) def *= 0.88;
-        this.hp = Math.max(0, this.hp - amt * def * Math.max(0.5, 1 - this.petDefense));
+        this.hp = Math.max(0, this.hp - amt * Math.max(0.5, 1 - this.petDefense));
         this.regenTimer = 0; // reset out-of-combat regen
         GameEngine.shake(3, 0.12);
         if (this.hp <= 0) GameEngine.gameOver();
     }
     addXp(value) {
         this.xp += value;
-        if (BattleSkills.hasPassive('expBook')) {
-            GameEngine.spawnParticles(this.x, this.y, '#80d8ff', 14, 2);
-        }
-        if (this.xp >= this.xpToNext) {
+        while (this.xp >= this.xpToNext) {
             this.xp -= this.xpToNext;
             this.lv++;
-            this.xpToNext = Math.floor(100 + this.lv * 22);
+            this.xpToNext = Math.floor(100 + this.lv * 18 + Math.pow(this.lv, 1.7) * 8);
             GameEngine.queueLevelUp();
         }
     }
     draw(ctx, cam) {
         ctx.save();
         ctx.translate(this.x, this.y);
+        const forcefield = BattleSkills.getActive('forcefield');
+        if (forcefield) {
+            const radius = this.getMagnetRadius();
+            const pulse = 0.38 + Math.sin(Date.now() / 180) * 0.08;
+            ctx.strokeStyle = 'rgba(77,208,225,' + pulse + ')';
+            ctx.fillStyle = 'rgba(77,208,225,0.045)';
+            ctx.lineWidth = forcefield.evo ? 4 : 2.5;
+            ctx.beginPath();
+            ctx.arc(0, 0, radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+        }
         if (this.domainWarning > 0) {
             const r = this.domainRadius || GOJO_DOMAIN_RADIUS;
             const prog = 1 - this.domainWarning / GOJO_DOMAIN_WARN;
@@ -2378,66 +2621,14 @@ class Player {
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
-        if (BattleSkills.hasPassive('magnet')) {
-            ctx.strokeStyle = 'rgba(80,220,255,0.45)';
-            ctx.lineWidth = 3;
-            ctx.setLineDash([8, 8]);
-            ctx.beginPath();
-            ctx.arc(0, 0, this.r + 28, 0, Math.PI * 2);
-            ctx.stroke();
-            ctx.setLineDash([]);
-        }
-        if (BattleSkills.hasPassive('expBook')) {
-            ctx.strokeStyle = 'rgba(120,240,255,0.45)';
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.arc(0, 0, this.r + 34, 0, Math.PI * 2);
-            ctx.stroke();
-            for (let i = 0; i < 4; i++) {
-                const ang = Math.PI * 2 * i / 4 + Date.now() / 220;
-                ctx.fillStyle = 'rgba(120,240,255,0.16)';
-                ctx.beginPath();
-                ctx.arc(Math.cos(ang) * (this.r + 22), Math.sin(ang) * (this.r + 22), 4, 0, Math.PI * 2);
-                ctx.fill();
-            }
-        }
-        if (BattleSkills.hasPassive('drink') || BattleSkills.hasPassive('fastRegen')) {
-            const regenAlpha = BattleSkills.hasPassive('fastRegen') ? 0.45 : 0.3;
-            ctx.strokeStyle = `rgba(255,120,120,${regenAlpha})`;
-            ctx.lineWidth = 4;
-            ctx.beginPath();
-            ctx.arc(0, 0, this.r + 20 + Math.sin(Date.now()/120) * 4, 0, Math.PI * 2);
-            ctx.stroke();
-        }
-        if (BattleSkills.hasPassive('fireAura')) {
-            ctx.strokeStyle = 'rgba(255,130,50,0.45)';
-            ctx.lineWidth = 4;
-            ctx.beginPath();
-            ctx.arc(0, 0, this.r + 16, 0, Math.PI * 2);
-            ctx.stroke();
-        }
-        if (BattleSkills.hasPassive('lifesteal')) {
-            ctx.strokeStyle = 'rgba(120,255,140,0.45)';
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.arc(0, 0, this.r + 10, 0, Math.PI * 2);
-            ctx.stroke();
-        }
-        if (BattleSkills.hasPassive('critBoost')) {
-            ctx.strokeStyle = 'rgba(255,255,255,0.55)';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.arc(0, 0, this.r + 22, 0, Math.PI * 2);
-            ctx.stroke();
-        }
         ctx.shadowBlur = 0;
         ctx.restore();
     }
 }
 
-// ─── 局內技能 (6 主動 + 6 被動，每局重置、可升級疊加) ───────────────────────────
+// ─── 局內主動技能（每局重置、可升級疊加）───────────────────────────────────────
 const BattleSkills = {
-    active: [], passive: [], maxActive: Infinity, maxPassive: Infinity,
+    active: [], maxActive: Infinity,
     addActive(id) {
         const ex = this.active.find(a => a.id === id);
         if (ex) {
@@ -2451,30 +2642,23 @@ const BattleSkills = {
         if (GameEngine.onSkillLeveled) GameEngine.onSkillLeveled(id, 1);
         return true;
     },
-    addPassive(id) {
-        if (this.passive.some(p => p.id === id)) return;
-        this.passive.push({ id });
-    },
-    hasPassive(id) { return this.passive.some(p => p.id === id); },
     getActive(id) { return this.active.find(a => a.id === id); },
     canEvo(activeId) {
         const a = this.getActive(activeId);
         if (!a || a.stars < 5 || a.evo) return null;
         const conf = ACTIVE_SKILLS[activeId];
-        if (!conf || !this.hasPassive(conf.passiveEvo)) return null;
-        return conf.evoName;
+        return conf ? conf.evoName : null;
     },
     doEvo(activeId) { const a = this.getActive(activeId); if (a) a.evo = true; },
-    reset() { this.active = []; this.passive = []; }
+    reset() { this.active = []; }
 };
 
-// ─── 武器發射邏輯（1 星每輪最多 3 發，升級 +1，EVO 再加）────────────────────
+// ─── 武器發射邏輯 ─────────────────────────────────────────────────────────────
 function fireWeapon(skillId, player, projectiles, enemies, stats) {
     const a = BattleSkills.getActive(skillId);
     if (!a) return;
-    const baseDmg = 25 + a.stars * 20 + (stats.atk || 0) + (player.equipAtk || 0);
-    // 平衡流光飛刃傷害
-    const mult = (skillId === 'kunai' ? 0.55 : 1.15);
+    const baseDmg = 30 + a.stars * 12 + (stats.atk || 0) + (player.equipAtk || 0);
+    const mult = (skillId === 'kunai' ? 0.8 : 0.95);
     const dmg = baseDmg * skillLevelDamageMult(a.stars, a.evo) * mult;
     const crit = ((player.critRate || 0) + (stats.crit || 0)) > Math.random() ? 2 : 1;
     const finalDmg = dmg * crit * (1 + (stats.burst || 0)) * (GameEngine.skillBuff || 1) * (player.petDamageMult || 1);
@@ -2492,6 +2676,123 @@ function fireWeapon(skillId, player, projectiles, enemies, stats) {
             });
             projectiles.push(proj);
         }
+        return;
+    }
+    if (skillId === 'ionCannon') {
+        const target = enemies.filter(e => !e.isDead).sort((left, right) =>
+            Math.hypot(left.x - player.x, left.y - player.y) - Math.hypot(right.x - player.x, right.y - player.y))[0];
+        const angle = target ? Math.atan2(target.y - player.y, target.x - player.x) : Math.random() * Math.PI * 2;
+        projectiles.push(new Projectile(player.x, player.y, 0, 0, finalDmg * 0.28, '#64ffda', {
+            skillId, life: a.evo ? 30 : 20, beamLength: 360 + a.stars * 45 + (a.evo ? 180 : 0),
+            beamAngle: angle, beamWidth: 9 + a.stars * 1.5
+        }));
+        return;
+    }
+    if (skillId === 'chakram') {
+        const count = skillProjCount(1, a.stars, a.evo, 2);
+        for (let i = 0; i < count; i++) {
+            const angle = (Math.PI * 2 * i / count) + Math.atan2(player.y, player.x);
+            projectiles.push(new Projectile(player.x, player.y, Math.cos(angle) * spd * 1.4, Math.sin(angle) * spd * 1.4,
+                finalDmg * 0.9, '#ffca28', {
+                    skillId, r: a.evo ? 14 : 10, shape: 'blade', life: 180,
+                    boomerang: true, maxRange: 230 + a.stars * 36 + (a.evo ? 120 : 0)
+                }));
+        }
+        return;
+    }
+    if (skillId === 'drillShot') {
+        const target = enemies.filter(e => !e.isDead).sort((left, right) =>
+            Math.hypot(left.x - player.x, left.y - player.y) - Math.hypot(right.x - player.x, right.y - player.y))[0];
+        const count = skillProjCount(1, a.stars, a.evo, 1);
+        const angle = target ? Math.atan2(target.y - player.y, target.x - player.x) : Math.atan2(player.y, player.x);
+        for (let i = 0; i < count; i++) {
+            const spread = (i - (count - 1) / 2) * 0.1;
+            const shotAngle = angle + spread;
+            projectiles.push(new Projectile(player.x, player.y, Math.cos(shotAngle) * spd * 1.8, Math.sin(shotAngle) * spd * 1.8,
+                finalDmg * 1.25, '#80cbc4', {
+                    skillId, r: a.evo ? 10 : 7, shape: 'lightning', life: 360,
+                    pierceLeft: 2 + Math.floor((a.stars - 1) / 2) + (a.evo ? 1 : 0)
+                }));
+        }
+        return;
+    }
+    if (skillId === 'ricochet') {
+        const target = enemies.filter(e => !e.isDead).sort((left, right) =>
+            Math.hypot(left.x - player.x, left.y - player.y) - Math.hypot(right.x - player.x, right.y - player.y))[0];
+        const count = skillProjCount(1, a.stars, a.evo, 1);
+        for (let i = 0; i < count; i++) {
+            const angle = target
+                ? Math.atan2(target.y - player.y, target.x - player.x) + (i - (count - 1) / 2) * 0.18
+                : Math.random() * Math.PI * 2;
+            projectiles.push(new Projectile(player.x, player.y, Math.cos(angle) * spd * 1.25, Math.sin(angle) * spd * 1.25,
+                finalDmg * 0.82, '#ce93d8', {
+                    skillId, r: a.evo ? 10 : 7, shape: 'hex', life: 420,
+                    bounceLeft: 2 + Math.floor((a.stars - 1) / 2) + (a.evo ? 1 : 0), bounceOnHit: true
+                }));
+        }
+        return;
+    }
+    if (skillId === 'gravityWell') {
+        const target = enemies.filter(e => !e.isDead).sort((left, right) =>
+            Math.hypot(left.x - player.x, left.y - player.y) - Math.hypot(right.x - player.x, right.y - player.y))[0];
+        const angle = target ? Math.atan2(target.y - player.y, target.x - player.x) : Math.random() * Math.PI * 2;
+        const distance = target ? Math.min(150, Math.hypot(target.x - player.x, target.y - player.y)) : 110;
+        const radius = 48 + a.stars * 5 + (a.evo ? 18 : 0);
+        projectiles.push(new Projectile(player.x + Math.cos(angle) * distance, player.y + Math.sin(angle) * distance, 0, 0,
+            finalDmg * 0.35, '#7e57c2', {
+                skillId, r: radius, shape: 'orb', life: a.evo ? 150 : 120,
+                isPuddle: true, areaField: true, gravityPull: a.evo ? 1.1 : 0.8
+            }));
+        return;
+    }
+    if (skillId === 'minefield') {
+        const count = skillProjCount(3, a.stars, a.evo, 3);
+        for (let i = 0; i < count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const distance = 100 + Math.random() * 180;
+            const x = player.x + Math.cos(angle) * distance;
+            const y = player.y + Math.sin(angle) * distance;
+            projectiles.push(new Projectile(x, y, 0, 0, finalDmg * 1.6, '#b2ff59', {
+                skillId, r: 13, shape: 'hex', life: 420, explosionDelay: 45,
+                mine: true, triggerRadius: 72 + a.stars * 8, explosionRadius: 76 + a.stars * 10 + (a.evo ? 50 : 0)
+            }));
+        }
+        return;
+    }
+    if (skillId === 'orbitBlades') {
+        const count = skillProjCount(2, a.stars, a.evo, 3);
+        for (let i = 0; i < count; i++) {
+            projectiles.push(new Projectile(player.x, player.y, 0, 0, finalDmg * 0.75, '#f06292', {
+                skillId, r: a.evo ? 13 : 10, shape: 'blade', life: 150 + a.stars * 12,
+                orbitRadius: 58 + a.stars * 9 + (a.evo ? 45 : 0),
+                orbitAngle: Math.PI * 2 * i / count,
+                orbitSpeed: (i % 2 ? -1 : 1) * (0.045 + a.stars * 0.004)
+            }));
+        }
+        return;
+    }
+    if (skillId === 'stormCaller') {
+        const count = skillProjCount(2, a.stars, a.evo, 2);
+        const targets = enemies.filter(e => !e.isDead);
+        for (let i = 0; i < count; i++) {
+            const target = targets.length ? targets[Math.floor(Math.random() * targets.length)] : null;
+            const angle = Math.random() * Math.PI * 2;
+            const distance = target ? 45 + Math.random() * 50 : 80 + Math.random() * 220;
+            const x = target ? target.x + Math.cos(angle) * distance : player.x + Math.cos(angle) * distance;
+            const y = target ? target.y + Math.sin(angle) * distance : player.y + Math.sin(angle) * distance;
+            projectiles.push(new Projectile(x, y, 0, 0, finalDmg * 2.1, '#ff7043', {
+                skillId, r: 8, shape: 'hex', life: 80, isPuddle: true,
+                explosionDelay: 34, explosionRadius: 88 + a.stars * 12 + (a.evo ? 60 : 0)
+            }));
+        }
+        return;
+    }
+    if (skillId === 'shockwave') {
+        const maxRadius = 360 + a.stars * 35 + (a.evo ? 220 : 0);
+        projectiles.push(new Projectile(player.x, player.y, 8 + a.stars * 1.2, 0, finalDmg * 1.35, '#90caf9', {
+            skillId, life: 180, shape: 'orb', shockwaveMaxRadius: maxRadius,
+            shockwaveThickness: 20 + a.stars * 3
+        }));
         return;
     }
     // 其他技能重構：燃燒瓶改為地面區域
@@ -2689,9 +2990,16 @@ function fireWeapon(skillId, player, projectiles, enemies, stats) {
     }
     if (skillId === 'chainSpark') {
         const bolts = skillProjCount(3, a.stars, a.evo, 3);
+        const targets = enemies.filter(e => !e.isDead).sort((left, right) =>
+            Math.hypot(left.x - player.x, left.y - player.y) - Math.hypot(right.x - player.x, right.y - player.y));
         for (let i = 0; i < bolts; i++) {
-            const ang = Math.random() * Math.PI * 2;
-            projectiles.push(new Projectile(player.x, player.y, Math.cos(ang) * spd * 1.2, Math.sin(ang) * spd * 1.2, finalDmg * 0.9, '#b2ff59', { r: 6, shape:'lightning', skillId, life:340 }));
+            const target = targets[i % Math.max(1, targets.length)] || null;
+            const angle = target ? Math.atan2(target.y - player.y, target.x - player.x) : Math.random() * Math.PI * 2;
+            projectiles.push(new Projectile(player.x, player.y, Math.cos(angle) * spd * 1.2, Math.sin(angle) * spd * 1.2, finalDmg * 0.85, '#b2ff59', {
+                r: 7, shape: 'lightning', skillId, life: 340, homing: !!target,
+                lockTarget: target || undefined, chainLeft: a.stars + (a.evo ? 4 : 0),
+                chainRadius: 180 + a.stars * 25 + (a.evo ? 100 : 0)
+            }));
         }
         return;
     }
@@ -2939,13 +3247,12 @@ window.GameEngine = {
     swarmCount: 0,
     shakeTime: 0, shakeDuration: 0, shakeMagnitude: 0,
     testMode: false,
-    testSettings: { enemyTarget:'monster', selectedStage:1, customGold:0, selectedSkin:'default', selectedActives:[], selectedPassives:[] },
+    testSettings: { enemyTarget:'monster', selectedStage:1, customGold:0, selectedSkin:'default', selectedActives:[] },
     skillBuff: 1.08,
     _forceBossOnly: false,
     _forceMonsterOnly: false,
     _testModePaused: false,
     runActivePool: [],
-    runPassivePool: [],
 
     async init() {
         await SaveSystem.init();
@@ -3006,9 +3313,6 @@ window.GameEngine = {
             this.testSettings.selectedActives.forEach(id => {
                 if (id && id !== 'kunai' && this.runActivePool.includes(id)) BattleSkills.addActive(id);
             });
-            this.testSettings.selectedPassives.forEach(id => {
-                if (this.runPassivePool.includes(id)) BattleSkills.addPassive(id);
-            });
         }
         if (this._forceBossOnly) {
             const ang = Math.random() * Math.PI * 2;
@@ -3057,14 +3361,10 @@ window.GameEngine = {
             return !req || skin === req;
         };
         const allActive = Object.keys(ACTIVE_SKILLS).filter(filterSkin);
-        const allPassive = Object.keys(PASSIVE_SKILLS);
-        if (fromTest && (this.testSettings.selectedActives.length || this.testSettings.selectedPassives.length)) {
+        if (fromTest && this.testSettings.selectedActives.length) {
             const act = new Set(['kunai']);
             this.testSettings.selectedActives.forEach(id => { if (id && filterSkin(id)) act.add(id); });
             this.runActivePool = [...act];
-            this.runPassivePool = this.testSettings.selectedPassives.length
-                ? this.testSettings.selectedPassives.filter(filterSkin)
-                : pickFromPool(allPassive, RUN_PASSIVE_POOL_SIZE);
         } else {
             const others = allActive.filter(id => id !== 'kunai');
             const picked = pickFromPool(others, RUN_ACTIVE_POOL_SIZE - 1);
@@ -3082,11 +3382,9 @@ window.GameEngine = {
                     }
                 });
             }
-            this.runPassivePool = pickFromPool(allPassive, RUN_PASSIVE_POOL_SIZE);
         }
         const names = this.runActivePool.map(id => ACTIVE_SKILLS[id]?.name || id).join('、');
-        const pnames = this.runPassivePool.map(id => PASSIVE_SKILLS[id] || id).join('、');
-        this._runPoolSummary = '主動：' + names + '｜被動：' + pnames;
+        this._runPoolSummary = '主動：' + names;
         this.showAlert('本局固定技能池（僅能升級這些）');
     },
     onSkillLeveled(skillId, newStars) {
@@ -3184,10 +3482,8 @@ window.GameEngine = {
             const o = this.expOrbs[i];
             o.update(dt, this.player);
             const dist = Math.hypot(this.player.x - o.x, this.player.y - o.y);
-            const magnet = this.player.magnetDist + (BattleSkills.hasPassive('magnet') ? 90 : 0);
-            if (dist < magnet) {
-                const xpGain = BattleSkills.hasPassive('expBook') ? Math.floor(o.value * 1.2) : o.value;
-                this.player.addXp(xpGain);
+            if (dist < this.player.getMagnetRadius()) {
+                this.player.addXp(o.value);
                 this.expOrbs.splice(i, 1);
             }
         }
@@ -3313,21 +3609,14 @@ window.GameEngine = {
             }
         }
 
-        const stats = {
-            atk: BattleSkills.hasPassive('atk') ? 18 : 0,
-            cdReduct: (BattleSkills.hasPassive('energyBlock') ? 10 : 0) + (BattleSkills.hasPassive('cooldown') ? 5 : 0),
-            range: BattleSkills.hasPassive('atk') ? 1 : 0,
-            crit: BattleSkills.hasPassive('critBoost') ? 0.15 : 0,
-            burst: BattleSkills.hasPassive('burst') ? 0.2 : 0,
-            lifesteal: BattleSkills.hasPassive('lifesteal') ? 0.08 : 0
-        };
+        const stats = { atk: 0, cdReduct: 0, range: 0, crit: 0, burst: 0, lifesteal: 0 };
         this.player.lifesteal = stats.lifesteal;
         const visibleOpponent = this.onlineMode === 'versus' ? allEnemies.find(enemy => enemy.isRemotePlayer) : null;
         const weaponTargets = visibleOpponent ? [visibleOpponent] : allEnemies;
         for (const a of BattleSkills.active) {
             if (a.id === 'gojoDomain') continue;
             this.shootTimers[a.id] = (this.shootTimers[a.id] || 0) + dt;
-            const cd = Math.max(10, (a.evo ? 20 : 30) - stats.cdReduct - skillLevelCdBonus(a.id, a.stars));
+            const cd = Math.max(12, (a.evo ? 30 : 36) - stats.cdReduct - skillLevelCdBonus(a.id, a.stars));
             if (this.shootTimers[a.id] >= cd) {
                 fireWeapon(a.id, this.player, this.projectiles, weaponTargets, stats);
                 this.shootTimers[a.id] = 0;
@@ -3345,13 +3634,6 @@ window.GameEngine = {
                 this.hitFx.push({ x:e.x, y:e.y, r:10, life:30, maxLife:30, color:'#ffab91' });
                 this.kills++;
                 this.player.addXp(e.expValue);
-                if (BattleSkills.hasPassive('bloodVial')) {
-                    this.player.hp = Math.min(this.player.maxHp, this.player.hp + e.expValue * 0.06);
-                    GameEngine.spawnParticles(this.player.x, this.player.y, '#ff8a80', 7, 2);
-                }
-                if (BattleSkills.hasPassive('coinBox') && this.canEarnGoldThisRun()) {
-                    SaveSystem.currentData.resources.gold += Math.max(1, Math.floor(e.expValue * 0.35));
-                }
                 this.expOrbs.push(new ExpOrb(e.x, e.y, e.expValue));
                 this.enemies.splice(i, 1);
             }
@@ -3376,10 +3658,8 @@ window.GameEngine = {
         document.getElementById('xp-bar-fill').style.width = (this.player.xp / this.player.xpToNext * 100) + '%';
         document.getElementById('hp-bar-fill').style.width = (this.player.hp / this.player.maxHp * 100) + '%';
         document.getElementById('active-count').textContent = BattleSkills.active.length;
-        document.getElementById('passive-count').textContent = BattleSkills.passive.length;
         const strip = (this._runPoolSummary ? '[' + this._runPoolSummary + '] ' : '') +
-            BattleSkills.active.map(a => ACTIVE_SKILLS[a.id]?.name + ' Lv.' + a.stars + (a.evo ? ' EVO' : '')).join(' | ') +
-            ' || ' + BattleSkills.passive.map(p => PASSIVE_SKILLS[p.id]).join(', ');
+            BattleSkills.active.map(a => ACTIVE_SKILLS[a.id]?.name + ' Lv.' + a.stars + (a.evo ? ' EVO' : '')).join(' | ');
         document.getElementById('skill-strip').textContent = strip || '(本局技能可疊加升級)';
     },
     queueLevelUp() {
@@ -3400,8 +3680,6 @@ window.GameEngine = {
     showLevelUp() {
         this.pendingLevelUp = true;
         const actPool = this.runActivePool || ['kunai'];
-        const pasPool = this.runPassivePool || [];
-        const ownedPassive = new Set(BattleSkills.passive.map(p => p.id));
         const options = [];
         actPool.forEach(id => {
             const cur = BattleSkills.getActive(id);
@@ -3409,9 +3687,6 @@ window.GameEngine = {
             if (!cur || stars < 5) {
                 options.push({ id, isActive: true, weight: cur ? 4 : 2, stars });
             }
-        });
-        pasPool.forEach(id => {
-            if (!ownedPassive.has(id)) options.push({ id, isActive: false, weight: 2, stars: 0 });
         });
         if (!options.length) {
             this.pendingLevelUp = false;
@@ -3431,8 +3706,8 @@ window.GameEngine = {
                 if (roll <= 0) { pick = o; break; }
             }
             used.add(pick.id);
-            const name = pick.isActive ? ACTIVE_SKILLS[pick.id].name : (PASSIVE_SKILLS[pick.id] || pick.id);
-            const nextLv = pick.isActive ? (pick.stars || 0) + 1 : 1;
+            const name = ACTIVE_SKILLS[pick.id].name;
+            const nextLv = (pick.stars || 0) + 1;
             let sub = '';
             if (pick.isActive) {
                 const curS = pick.stars || 0;
@@ -3440,19 +3715,18 @@ window.GameEngine = {
                 const shots = skillProjCount(3, nextLv, false, 0);
                 const cdCut = skillLevelCdBonus(nextLv) - skillLevelCdBonus(curS);
                 sub = curS ? (' → Lv.' + nextLv + ' 傷害+' + dmgPct + '% 彈數' + shots + ' 冷卻-' + cdCut) : (' (新技能 Lv.1 彈數' + shots + ')');
-            } else sub = ' (新被動)';
-            choices.push({ id: pick.id, name, isActive: pick.isActive, sub });
+            }
+            choices.push({ id: pick.id, name, isActive: true, sub, description: ACTIVE_SKILLS[pick.id].description });
         }
         const modal = document.getElementById('levelup-modal');
         const box = document.getElementById('levelup-choices');
-        box.innerHTML = '<p style="color:rgba(255,255,255,0.8);font-size:0.85rem;margin-bottom:8px;">本局僅能從固定技能池升級（主動' + actPool.length + '／被動' + pasPool.length + '），Lv.5+對應被動可 EVO</p>';
+        box.innerHTML = '<p style="color:rgba(255,255,255,0.8);font-size:0.85rem;margin-bottom:8px;">本局僅能從固定主動技能池升級；主動技能達 Lv.5 後可 EVO。</p>';
         choices.forEach(c => {
             const btn = document.createElement('button');
             btn.className = 'choice-btn';
-            btn.textContent = c.name + (c.sub || (c.isActive ? ' (主動)' : ' (被動)'));
+            btn.textContent = c.name + (c.sub || ' (主動)') + (c.description ? ' — ' + c.description : '');
             btn.onclick = () => {
-                if (c.isActive) BattleSkills.addActive(c.id);
-                else BattleSkills.addPassive(c.id);
+                BattleSkills.addActive(c.id);
                 modal.classList.remove('show');
                 this.pendingLevelUp = false;
                 const evoName = c.isActive ? BattleSkills.canEvo(c.id) : null;
@@ -4191,7 +4465,6 @@ window.GameEngine = {
         this.testSettings.customGold = Math.max(0, parseInt(goldInput.value, 10) || 0);
         this.testSettings.selectedSkin = skinSelect.value || 'default';
         this.testSettings.selectedActives = Array.from(document.querySelectorAll('#test-active-list input:checked')).map(input => input.value);
-        this.testSettings.selectedPassives = Array.from(document.querySelectorAll('#test-passive-list input:checked')).map(input => input.value);
         SaveSystem.currentData.resources.gold = this.testSettings.customGold;
         SaveSystem.currentData.skin = this.testSettings.selectedSkin;
         SaveSystem.save();
@@ -4212,9 +4485,8 @@ window.GameEngine = {
     },
     populateTestPanel() {
         const activeBox = document.getElementById('test-active-list');
-        const passiveBox = document.getElementById('test-passive-list');
         const stageSelect = document.getElementById('test-stage-select');
-        if (!activeBox || !passiveBox || !stageSelect) return;
+        if (!activeBox || !stageSelect) return;
         stageSelect.innerHTML = '';
         for (let i = 1; i <= MAX_STAGES; i++) {
             const opt = document.createElement('option');
@@ -4227,12 +4499,6 @@ window.GameEngine = {
             const label = document.createElement('label');
             label.innerHTML = '<input type="checkbox" value="' + id + '"> ' + cfg.name;
             activeBox.appendChild(label);
-        });
-        passiveBox.innerHTML = '';
-        Object.entries(PASSIVE_SKILLS).forEach(([id, name]) => {
-            const label = document.createElement('label');
-            label.innerHTML = '<input type="checkbox" value="' + id + '"> ' + name;
-            passiveBox.appendChild(label);
         });
         this.refreshTestPanel();
         // populate joystick inputs
@@ -4257,7 +4523,6 @@ window.GameEngine = {
         if (stageSelect) stageSelect.value = settings.selectedStage || 1;
         if (skinSelect) skinSelect.value = settings.selectedSkin || 'default';
         document.querySelectorAll('#test-active-list input').forEach(input => { input.checked = settings.selectedActives.includes(input.value); });
-        document.querySelectorAll('#test-passive-list input').forEach(input => { input.checked = settings.selectedPassives.includes(input.value); });
     },
     toggleTestMode() {
         if (this.testMode) this.closeTestMode(); else this.openTestMode();
@@ -4287,14 +4552,12 @@ window.GameEngine = {
         this.testSettings.customGold = Math.max(0, parseInt(goldInput.value, 10) || 0);
         this.testSettings.selectedSkin = skinSelect.value || 'default';
         this.testSettings.selectedActives = Array.from(document.querySelectorAll('#test-active-list input:checked')).map(input => input.value);
-        this.testSettings.selectedPassives = Array.from(document.querySelectorAll('#test-passive-list input:checked')).map(input => input.value);
         SaveSystem.currentData.resources.gold = this.testSettings.customGold;
         SaveSystem.currentData.skin = this.testSettings.selectedSkin;
         SaveSystem.save();
         if (this.player) this.player.skin = this.testSettings.selectedSkin;
         BattleSkills.reset();
         this.testSettings.selectedActives.forEach(id => BattleSkills.addActive(id));
-        this.testSettings.selectedPassives.forEach(id => BattleSkills.addPassive(id));
         this.shootTimers = {};
         this.renderLobby();
         this.showAlert('測試設定已套用');
@@ -4335,12 +4598,10 @@ window.GameEngine = {
     },
     selectAllTestSkills() {
         this.testSettings.selectedActives = Object.keys(ACTIVE_SKILLS);
-        this.testSettings.selectedPassives = Object.keys(PASSIVE_SKILLS);
         this.refreshTestPanel();
     },
     deselectAllTestSkills() {
         this.testSettings.selectedActives = [];
-        this.testSettings.selectedPassives = [];
         this.refreshTestPanel();
     },
     async showSection(section) {
