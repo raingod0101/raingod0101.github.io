@@ -3,24 +3,49 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>工業帝國大亨 | Raingod</title>
+    <title>雨神大亨 | Raingod</title>
     <style>
         * { touch-action: none; user-select: none; box-sizing: border-box; }
         body { margin: 0; background: #020617; overflow: hidden; font-family: 'Segoe UI', system-ui, sans-serif; }
         #ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
         
-        /* HUD 主面板 */
-        .hud { 
-            position: absolute; top: 15px; left: 15px; 
-            background: rgba(15, 23, 42, 0.92); border: 2px solid #0ea5e9; 
-            box-shadow: 0 0 25px rgba(14, 165, 233, 0.35);
-            padding: 14px 22px; border-radius: 12px; pointer-events: auto; backdrop-filter: blur(10px);
-        }
-        .money { color: #4ade80; font-size: 34px; font-weight: 900; text-shadow: 0 0 12px rgba(74, 222, 128, 0.6); }
-        .dark-matter { color: #c084fc; font-size: 14px; font-weight: bold; margin-top: 2px; }
-        .stats { font-size: 12px; color: #94a3b8; margin-top: 6px; display: flex; gap: 10px; flex-wrap: wrap; }
+        /* 頂部 HUD：避開遊戲畫面主體 */
+        .top-bar {
+    position: absolute !important;
+    top: 110px !important; /* 👈 改這個數字！(例如 50px 表示距離頂部 50px，數字越大越靠下) */
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    background: rgba(15, 23, 42, 0.92);
+    border: 1px solid #38bdf8;
+    box-shadow: 0 0 20px rgba(56, 189, 248, 0.2);
+    padding: 8px 20px;
+    border-radius: 30px;
+    pointer-events: auto;
+    backdrop-filter: blur(8px);
+    display: flex;
+    gap: 20px;
+    align-items: center;
+    white-space: nowrap;
+    z-index: 999 !important; /* 確保放在最上層 */
+}
+        .hud-item { font-size: 13px; font-weight: bold; color: #f8fafc; }
+        .money { color: #4ade80; font-size: 16px; font-weight: 900; }
+        .dark-matter { color: #c084fc; font-size: 13px; }
+        .hp-box { width: 100px; height: 8px; background: #334155; border-radius: 4px; overflow: hidden; display: inline-block; vertical-align: middle; }
+        .hp-fill { height: 100%; background: #ef4444; width: 100%; transition: width 0.3s; }
 
-        /* 右側多頁籤控制面板 */
+        .skill-bar {
+            position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 8px; pointer-events: auto;
+        }
+        .skill-btn {
+            background: rgba(15, 23, 42, 0.9); border: 1px solid #38bdf8; color: #fff;
+            padding: 8px 12px; border-radius: 8px; font-size: 11px; font-weight: bold; cursor: pointer;
+            display: flex; flex-direction: column; align-items: center; transition: all 0.2s;
+        }
+        .skill-btn:hover:not(:disabled) { background: #0284c7; }
+        .skill-btn:disabled { opacity: 0.4; border-color: #475569; cursor: not-allowed; }
+
         .panel { 
             position: absolute; bottom: 15px; right: 15px; 
             width: 320px; max-height: 80vh; overflow-y: auto;
@@ -31,118 +56,175 @@
         .panel::-webkit-scrollbar { width: 4px; }
         .panel::-webkit-scrollbar-thumb { background: #38bdf8; border-radius: 4px; }
 
-        .tabs { display: flex; gap: 4px; margin-bottom: 6px; }
+        .tabs { display: flex; gap: 4px; margin-bottom: 4px; }
         .tab-btn { 
-            flex: 1; background: #1e293b; color: #94a3b8; border: none; padding: 6px; 
-            font-size: 12px; font-weight: bold; border-radius: 6px; cursor: pointer;
+            flex: 1; background: #1e293b; color: #94a3b8; border: none; padding: 6px 2px; 
+            font-size: 10px; font-weight: bold; border-radius: 6px; cursor: pointer;
         }
         .tab-btn.active { background: #0284c7; color: #fff; }
 
         .btn { 
             background: linear-gradient(135deg, #1e293b, #0f172a); color: #fff; border: 1px solid #38bdf8; 
-            padding: 10px 12px; font-weight: bold; font-size: 13px; border-radius: 8px; cursor: pointer; 
+            padding: 8px 10px; font-weight: bold; font-size: 11px; border-radius: 8px; cursor: pointer; 
             display: flex; justify-content: space-between; align-items: center; transition: all 0.2s;
         }
         .btn:hover:not(:disabled) { background: linear-gradient(135deg, #0284c7, #0369a1); border-color: #38bdf8; }
         .btn:disabled { opacity: 0.35; border-color: #475569; cursor: not-allowed; }
-        
-        /* 轉生與成就面板 */
-        .rebirth-btn { background: linear-gradient(135deg, #7e22ce, #581c87); border-color: #c084fc; margin-top: 4px; }
-        .rebirth-btn:hover:not(:disabled) { background: linear-gradient(135deg, #9333ea, #6b21a8); }
+        .rebirth-btn { background: linear-gradient(135deg, #7e22ce, #581c87); border-color: #c084fc; }
 
-        .chain-hud {
-            position: absolute; bottom: 15px; left: 15px;
-            background: rgba(15, 23, 42, 0.9); border: 1px solid #334155;
-            padding: 8px 14px; border-radius: 8px; color: #94a3b8; font-size: 11px;
-            display: flex; gap: 8px; pointer-events: auto; align-items: center;
+        .quest-box {
+            background: rgba(30, 41, 59, 0.6); border: 1px dashed #38bdf8; padding: 6px 8px;
+            border-radius: 6px; font-size: 10px; color: #e2e8f0; margin-bottom: 2px;
+        }
+        
+        .artifacts-bar {
+            position: absolute; top: 60px; left: 15px; display: flex; flex-direction: column; gap: 6px;
+            pointer-events: auto;
+        }
+        .art-item {
+            background: rgba(15, 23, 42, 0.85); border: 1px solid #eab308; padding: 6px 10px;
+            border-radius: 6px; color: #fef08a; font-size: 10px; font-weight: bold; backdrop-filter: blur(4px);
         }
     </style>
 </head>
 <body>
-<link rel="stylesheet" href="menu.css">
-<div id="nav_bar"></div>
-<script src="menu.js"></script>
+        <link rel="stylesheet" href="menu.css">
 
+<div id="nav_bar"></div>
+
+<script src="menu.js"></script>
 <canvas id="c"></canvas>
 <div id="ui">
-    <div class="hud">
-        <div class="money">$<span id="m">0</span></div>
-        <div class="dark-matter">🌌 暗物質點數: <span id="dm">0</span> (收益加成: +<span id="dmMult">0</span>%)</div>
-        <div class="stats">
-            <span>🤖 自動機兵: <span id="botsCount">0</span></span>
-            <span>⚙ 採礦等級: Lv.<span id="minerLv">0</span></span>
-            <span>🎒 負重: <span id="capLv">4</span></span>
-            <span>❄ 冷卻效率: Lv.<span id="coolLv">0</span></span>
+    <div class="top-bar">
+        <div class="hud-item">$<span id="m" class="money">0</span></div>
+        <div class="hud-item dark-matter">🌌 暗物質: <span id="dm">0</span></div>
+        <div class="hud-item" style="color: #ef4444;">⚔️ 第 <span id="waveNum">1</span> 波 (剩餘 <span id="enemyCount">0</span>)</div>
+        <div class="hud-item">
+            🛡️ <div class="hp-box"><div id="hpFill" class="hp-fill"></div></div>
         </div>
     </div>
 
-    <div class="chain-hud">
-        <span style="color:#ef4444">🔴 原礦</span>➔
-        <span style="color:#f59e0b">🟠 鋼鐵</span>➔
-        <span style="color:#3b82f6">🔵 晶片</span>➔
-        <span style="color:#22c55e">🟢 鈾電池</span>➔
-        <span style="color:#a855f7">🟣 量子核心</span>➔
-        <span style="color:#e11d48">💎 反物質</span>
+    <div class="artifacts-bar" id="artList">
+        <!-- 寶物顯示區 -->
+    </div>
+
+    <div class="skill-bar">
+        <button class="skill-btn" onclick="useSkill(1)">
+            <span>⚡ 超頻過載</span><span id="cd1" style="font-size:9px; color:#f59e0b;">就緒</span>
+        </button>
+        <button class="skill-btn" onclick="useSkill(2)">
+            <span>💥 軌道砲轟炸</span><span id="cd2" style="font-size:9px; color:#f59e0b;">就緒</span>
+        </button>
+        <button class="skill-btn" onclick="useSkill(3)">
+            <span>🛡️ 緊急修復</span><span id="cd3" style="font-size:9px; color:#f59e0b;">就緒</span>
+        </button>
     </div>
 
     <div class="panel">
-        <div class="tabs">
-            <button class="tab-btn active" onclick="switchTab('tab-prod')">產線擴展</button>
-            <button class="tab-btn" onclick="switchTab('tab-upg')">基礎升級</button>
-            <button class="tab-btn" onclick="switchTab('tab-tech')">深層科技</button>
+        <div class="quest-box">
+            🎯 任務：<span id="questText">載入中...</span> (<span id="questProg">0/0</span>)
         </div>
 
-        <div id="tab-prod">
-            <button class="btn" id="btnUnlock2" onclick="unlockTier(2)">
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('tab-turret')">⚔️ 武器塔</button>
+            <button class="tab-btn" onclick="switchTab('tab-prod')">🏭 工廠解鎖</button>
+            <button class="tab-btn" onclick="switchTab('tab-upg')">⚙️ 基礎升級</button>
+            <button class="tab-btn" onclick="switchTab('tab-tech')">🌌 暗天賦</button>
+        </div>
+
+        <div id="tab-turret">
+            <button class="btn" onclick="buildTurret('gatling')">
+                <span>🔫 機槍塔</span><span style="color:#4ade80" id="costGatling">$1,000</span>
+            </button>
+            <button class="btn" onclick="buildTurret('laser')">
+                <span>⚡ 雷射塔</span><span style="color:#4ade80" id="costLaser">$5,000</span>
+            </button>
+            <button class="btn" onclick="buildTurret('mortar')">
+                <span>💥 迫擊砲塔</span><span style="color:#4ade80" id="costMortar">$20,000</span>
+            </button>
+            <button class="btn" onclick="buildTurret('frost')">
+                <span>❄️ 緩慢冰凍塔</span><span style="color:#4ade80" id="costFrost">$50,000</span>
+            </button>
+            <button class="btn" onclick="buildTurret('blackhole')">
+                <span>🌌 暗物質黑洞塔</span><span style="color:#c084fc" id="costBlackhole">$200,000</span>
+            </button>
+            <button class="btn" style="background: linear-gradient(135deg, #b91c1c, #991b1b); border-color: #f87171; margin-top:4px;" onclick="triggerNextWave()">
+                <span>⚠️️ 立即召喚下一波敵人</span>
+            </button>
+        </div>
+
+        <div id="tab-prod" style="display:none;">
+            <button class="btn" onclick="unlockTier(2)">
                 <span>🔓 矽晶/晶片廠</span><span style="color:#4ade80">$2,500</span>
             </button>
-            <button class="btn" id="btnUnlock3" onclick="unlockTier(3)">
+            <button class="btn" onclick="unlockTier(3)">
                 <span>🔓 鈾能/電池中心</span><span style="color:#4ade80">$25,000</span>
             </button>
-            <button class="btn" id="btnUnlock4" onclick="unlockTier(4)">
+            <button class="btn" onclick="unlockTier(4)">
                 <span>🔓 量子合成廠</span><span style="color:#4ade80">$200,000</span>
             </button>
-            <button class="btn" id="btnUnlock5" onclick="unlockTier(5)">
+            <button class="btn" onclick="unlockTier(5)">
                 <span>🔓 反物質研究所</span><span style="color:#4ade80">$2,000,000</span>
             </button>
         </div>
 
         <div id="tab-upg" style="display:none;">
-            <button class="btn" id="btnBot" onclick="buyBot()">
-                <span>🤖 雇用自動機兵</span><span style="color:#4ade80" id="bCost">$500</span>
+            <button class="btn" onclick="buyBot()">
+                <span>🤖 雇用運輸機兵</span><span style="color:#4ade80" id="bCost">$500</span>
             </button>
-            <button class="btn" id="btnMiner" onclick="upgrade('miner')">
-                <span>⚙️ 採礦機提速</span><span style="color:#4ade80" id="mCost">$1,000</span>
+            <button class="btn" onclick="upgrade('miner')">
+                <span>⚙️ 採礦速率 Lv.<span id="minerLv">0</span></span><span style="color:#4ade80" id="mCost">$1,000</span>
             </button>
-            <button class="btn" id="btnCap" onclick="upgrade('capacity')">
-                <span>🎒 機兵容量 (+2)</span><span style="color:#4ade80" id="cCost">$1,500</span>
-            </button>
-            <button class="btn" id="btnCool" onclick="upgrade('cooling')">
-                <span>❄ 水冷系統升級</span><span style="color:#4ade80" id="coolCost">$3,000</span>
+            <button class="btn" onclick="upgrade('capacity')">
+                <span>🎒 機兵容量 Lv.<span id="capLv">4</span></span><span style="color:#4ade80" id="cCost">$1,500</span>
             </button>
         </div>
 
         <div id="tab-tech" style="display:none;">
-            <button class="btn rebirth-btn" id="btnRebirth" onclick="triggerRebirth()">
-                <span>🌌 星際轉生 (重置獲得暗物質)</span><span style="color:#c084fc" id="rebirthGain">+0 DM</span>
+            <button class="btn rebirth-btn" onclick="buyTalent('dmg')">
+                <span>🧬 基因傷害 +20%</span><span style="color:#c084fc" id="tDmgCost">5 DM</span>
             </button>
-            <div style="font-size:11px; color:#64748b; margin-top:4px;">需要資產達到 $1,000,000 方可觸發轉生。</div>
+            <button class="btn rebirth-btn" onclick="buyTalent('speed')">
+                <span>🤖 自動化機兵速度 +15%</span><span style="color:#c084fc" id="tSpdCost">5 DM</span>
+            </button>
+            <button class="btn rebirth-btn" onclick="buyTalent('repair')">
+                <span>🛡️ 基地每秒修復 +2 HP</span><span style="color:#c084fc" id="tRepCost">10 DM</span>
+            </button>
+            <button class="btn rebirth-btn" style="margin-top:8px;" onclick="triggerRebirth()">
+                <span>🌌 暗物質量子轉生</span><span style="color:#c084fc" id="rebirthGain">+0 DM</span>
+            </button>
         </div>
     </div>
 </div>
 
 <script>
     const cvs = document.getElementById('c'), ctx = cvs.getContext('2d');
-    const SAVE_KEY = 'raingod_mega_tycoon_save';
 
-    let money = 0, darkMatter = 0, frame = 0;
-    let minerLevel = 0, capacity = 4, coolingLevel = 0, techTier = 1;
-    let heat = 0; // 工廠過熱值
-    let p = { x: 300, y: 300, r: 20, tx: 300, ty: 300, bag: [] };
-    let bots = [], items = [], floatTexts = [], particles = [];
-    let gameStarted = false;
+    let money = 2000, darkMatter = 0, frame = 0;
+    let baseHp = 100, maxHp = 100;
+    let minerLevel = 0, capacity = 4, techTier = 1;
+    let p = { x: 350, y: 350, r: 18, tx: 350, ty: 350, bag: [], atkRange: 220, cooldown: 0 };
+    
+    let bots = [], items = [], floatTexts = [], particles = [], bullets = [], chests = [];
+    let turrets = [], enemies = [];
+    let shakeTime = 0;
 
-    // 10 大資源定義
+    // 天賦系統
+    let talents = { dmgLv: 0, spdLv: 0, repLv: 0 };
+    let artifacts = [];
+
+    // 波次
+    let wave = 1;
+    let waveTimer = 20 * 60;
+    let isWaveActive = false;
+
+    // 技能
+    let skillCd = [0, 0, 0];
+    let isOverclocked = false, overclockTimer = 0;
+
+    // 任務
+    let quest = { type: 'kill', target: 20, current: 0, reward: 1500, desc: '擊殺 20 隻異形蟲' };
+
     const ITEMS = {
         RAW:     { name: '原礦', val: 10, color: '#ef4444' },
         STEEL:   { name: '鋼鐵', val: 50, color: '#f59e0b' },
@@ -158,19 +240,21 @@
         document.querySelectorAll('.panel > div[id^="tab-"]').forEach(d => d.style.display = 'none');
         document.getElementById(tabId).style.display = 'block';
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        event.target.classList.add('active');
+        if (event) event.target.classList.add('active');
     }
 
+    // 📍 調整建築位置：整體向下向右移動，避免與左上角 UI 重疊
     function getBuildings() {
+        const startX = 80, startY = 100;
         const b = {
-            extractor: { x: 60, y: 80, w: 100, h: 80, color: '#ef4444', label: '🔴 採礦塔' },
-            smelter:   { x: 60, y: 200, w: 100, h: 80, color: '#f59e0b', label: '🟠 鋼鐵廠' },
-            hub:       { x: cvs.width - 180, y: cvs.height / 2 - 80, w: 130, h: 160, color: '#38bdf8', label: '💎 總貿易站' }
+            extractor: { x: startX, y: startY, w: 110, h: 70, color: '#ef4444', label: '🔴 採礦塔' },
+            smelter:   { x: startX, y: startY + 110, w: 110, h: 70, color: '#f59e0b', label: '🟠 鋼鐵廠' },
+            hub:       { x: startX, y: cvs.height - 150, w: 140, h: 100, color: '#38bdf8', label: '💎 總部基地' }
         };
-        if (techTier >= 2) b.chipFab  = { x: 60, y: 320, w: 100, h: 80, color: '#3b82f6', label: '🔵 晶片廠' };
-        if (techTier >= 3) b.nukeFab  = { x: 60, y: 440, w: 100, h: 80, color: '#22c55e', label: '🟢 鈾能廠' };
-        if (techTier >= 4) b.qFab     = { x: 60, y: 560, w: 100, h: 80, color: '#a855f7', label: '🟣 量子合成' };
-        if (techTier >= 5) b.antiFab  = { x: 60, y: 680, w: 100, h: 80, color: '#e11d48', label: '💎 反物質所' };
+        if (techTier >= 2) b.chipFab = { x: startX, y: startY + 220, w: 110, h: 70, color: '#3b82f6', label: '🔵 晶片廠' };
+        if (techTier >= 3) b.nukeFab = { x: startX, y: startY + 330, w: 110, h: 70, color: '#22c55e', label: '🟢 鈾能廠' };
+        if (techTier >= 4) b.qFab    = { x: startX, y: startY + 440, w: 110, h: 70, color: '#a855f7', label: '🟣 量子合成' };
+        if (techTier >= 5) b.antiFab = { x: startX, y: startY + 550, w: 110, h: 70, color: '#e11d48', label: '💎 反物質所' };
         return b;
     }
 
@@ -178,74 +262,149 @@
     window.addEventListener('resize', resize); resize();
     window.addEventListener('pointermove', e => { p.tx = e.clientX; p.ty = e.clientY; });
 
+    // 點擊拾取星際寶箱
+    window.addEventListener('pointerdown', e => {
+        for (let i = chests.length - 1; i >= 0; i--) {
+            let c = chests[i];
+            if (Math.hypot(e.clientX - c.x, e.clientY - c.y) < 30) {
+                let artListNames = ['⚡ 疾風核心', '💥 暴擊晶片', '🛡️ 奈米甲殼', '🌌 磁場擴幅器'];
+                let name = artListNames[Math.floor(Math.random() * artListNames.length)];
+                artifacts.push(name);
+                spawnFloatText(c.x, c.y, `獲得裝備: ${name}!`, '#eab308');
+                chests.splice(i, 1);
+                updateArtifactUI();
+                break;
+            }
+        }
+    });
+
+    function updateArtifactUI() {
+        const el = document.getElementById('artList');
+        el.innerHTML = artifacts.map(a => `<div class="art-item">👑 ${a}</div>`).join('');
+    }
+
+    function triggerShake(duration = 10) { shakeTime = duration; }
     function spawnFloatText(x, y, text, color='#4ade80') { floatTexts.push({ x, y, text, color, alpha: 1 }); }
     function spawnParticles(x, y, color, count=6) {
         for(let i=0; i<count; i++) {
-            particles.push({ x, y, vx: (Math.random()-0.5)*6, vy: (Math.random()-0.5)*6, size: Math.random()*4+2, color, alpha: 1 });
+            particles.push({ x, y, vx: (Math.random()-0.5)*8, vy: (Math.random()-0.5)*8, size: Math.random()*5+2, color, alpha: 1 });
+        }
+    }
+
+    function useSkill(num) {
+        if (skillCd[num-1] > 0) return;
+        if (num === 1) {
+            isOverclocked = true; overclockTimer = 600; skillCd[0] = 1800;
+            spawnFloatText(p.x, p.y, "⚡ 系統極速超頻！", "#f59e0b");
+        } else if (num === 2) {
+            enemies.forEach(e => { e.hp -= 300 + wave * 60; spawnParticles(e.x, e.y, '#e11d48', 12); });
+            triggerShake(25); skillCd[1] = 2400;
+            spawnFloatText(cvs.width/2, cvs.height/2, "💥 軌道離子砲全螢幕打擊！", "#e11d48");
+        } else if (num === 3) {
+            baseHp = Math.min(maxHp, baseHp + 50); skillCd[2] = 1500;
+            spawnFloatText(100, cvs.height - 150, "🛡️ 基地耐久度修復 +50", "#22c55e");
+        }
+    }
+
+    function buildTurret(type) {
+        const costs = { gatling: 1000, laser: 5000, mortar: 20000, frost: 50000, blackhole: 200000 };
+        let cost = costs[type] * Math.pow(1.3, turrets.filter(t=>t.type===type).length);
+        if (money >= cost) {
+            money -= cost;
+            let tx = 260 + Math.random() * 200;
+            let ty = 100 + Math.random() * (cvs.height - 220);
+            turrets.push({ x: tx, y: ty, type, cd: 0, range: type==='laser'?350:(type==='blackhole'?280:240) });
+            spawnFloatText(tx, ty, `防禦塔建造完成！`, '#38bdf8');
+        }
+    }
+
+    function triggerNextWave() { if (!isWaveActive) waveTimer = 0; }
+
+    function spawnWave() {
+        isWaveActive = true;
+        let count = 8 + wave * 4;
+        let isBossWave = (wave % 5 === 0);
+
+        for (let i = 0; i < count; i++) {
+            setTimeout(() => {
+                let type = 'normal';
+                let rand = Math.random();
+                if (rand < 0.25) type = 'runner';
+                else if (rand < 0.45) type = 'tank';
+                else if (rand < 0.6) type = 'bomber';
+
+                if (isBossWave && i === count - 1) type = 'boss';
+
+                let hpMap = { normal: 50, runner: 30, tank: 180, bomber: 40, boss: 1800 + wave * 600 };
+                let spdMap = { normal: 1.5, runner: 2.8, tank: 0.8, bomber: 2.0, boss: 0.5 };
+
+                enemies.push({
+                    x: cvs.width + 40,
+                    y: 80 + Math.random() * (cvs.height - 160),
+                    type,
+                    hp: (hpMap[type] + wave * 35),
+                    maxHp: (hpMap[type] + wave * 35),
+                    speed: spdMap[type],
+                    reward: (type === 'boss' ? 3500 : 80) + wave * 30
+                });
+            }, i * 400);
         }
     }
 
     function buyBot() {
         let cost = Math.floor(500 * Math.pow(1.3, bots.length));
-        if(money >= cost) {
-            money -= cost;
-            bots.push({ x: cvs.width/2, y: cvs.height/2, bag: [], speed: 5 });
-            saveGame();
-        }
+        if(money >= cost) { money -= cost; bots.push({ x: 120, y: cvs.height/2, bag: [], speed: 4.5 }); }
     }
 
     function upgrade(type) {
         if (type === 'miner') {
             let cost = Math.floor(1000 * Math.pow(1.5, minerLevel));
-            if (money >= cost) { money -= cost; minerLevel++; saveGame(); }
+            if (money >= cost) { money -= cost; minerLevel++; }
         } else if (type === 'capacity') {
             let cost = Math.floor(1500 * (capacity / 2));
-            if (money >= cost) { money -= cost; capacity += 2; saveGame(); }
-        } else if (type === 'cooling') {
-            let cost = Math.floor(3000 * Math.pow(1.6, coolingLevel));
-            if (money >= cost) { money -= cost; coolingLevel++; saveGame(); }
+            if (money >= cost) { money -= cost; capacity += 2; }
+        }
+    }
+
+    function buyTalent(type) {
+        if (type === 'dmg' && darkMatter >= (talents.dmgLv + 1) * 5) {
+            darkMatter -= (talents.dmgLv + 1) * 5; talents.dmgLv++;
+        } else if (type === 'speed' && darkMatter >= (talents.spdLv + 1) * 5) {
+            darkMatter -= (talents.spdLv + 1) * 5; talents.spdLv++;
+        } else if (type === 'repair' && darkMatter >= (talents.repLv + 1) * 10) {
+            darkMatter -= (talents.repLv + 1) * 10; talents.repLv++;
         }
     }
 
     function unlockTier(tier) {
         const costs = { 2: 2500, 3: 25000, 4: 200000, 5: 2000000 };
         if (money >= costs[tier] && techTier === tier - 1) {
-            money -= costs[tier];
-            techTier = tier;
-            spawnFloatText(p.x, p.y, `階層 ${tier} 產線解鎖!`, '#38bdf8');
-            saveGame();
+            money -= costs[tier]; techTier = tier;
         }
     }
 
     function triggerRebirth() {
-        if (money >= 1000000) {
-            let earnedDM = Math.floor(money / 100000);
-            darkMatter += earnedDM;
-            money = 0; minerLevel = 0; capacity = 4; techTier = 1; coolingLevel = 0;
-            p.bag = []; bots = []; items = [];
-            spawnFloatText(cvs.width/2, cvs.height/2, `轉生成功！獲得 ${earnedDM} 暗物質`, '#c084fc');
-            saveGame();
+        let earnedDM = Math.floor(money / 100000);
+        if (earnedDM > 0 || money >= 100000) {
+            darkMatter += Math.max(1, earnedDM);
+            money = 2000; minerLevel = 0; capacity = 4; techTier = 1;
+            p.bag = []; bots = []; items = []; turrets = []; enemies = []; wave = 1;
+            spawnFloatText(cvs.width/2, cvs.height/2, `🌌 暗物質量子轉生成功！`, '#c084fc');
+            triggerShake(30);
         }
     }
 
-    function saveGame() {
-        if (!gameStarted) return;
-        localStorage.setItem(SAVE_KEY, JSON.stringify({
-            money, darkMatter, minerLevel, capacity, coolingLevel, techTier,
-            player: { x: p.x, y: p.y, bag: p.bag }, bots, items
-        }));
-    }
-
-    function loadGame(data) {
-        if (!data || typeof data !== 'object') return;
-        money = Number(data.money) || 0;
-        darkMatter = Number(data.darkMatter) || 0;
-        minerLevel = Number(data.minerLevel) || 0;
-        capacity = Number(data.capacity) || 4;
-        coolingLevel = Number(data.coolingLevel) || 0;
-        techTier = Number(data.techTier) || 1;
-        bots = Array.isArray(data.bots) ? data.bots : [];
-        items = Array.isArray(data.items) ? data.items : [];
+    function updateQuests(type, amount = 1) {
+        if (quest.type === type) {
+            quest.current += amount;
+            if (quest.current >= quest.target) {
+                money += quest.reward;
+                spawnFloatText(cvs.width/2, 100, `🎉 完成任務！獲得 +$${quest.reward}`, '#f59e0b');
+                let targets = [30, 50, 100];
+                let t = targets[Math.floor(Math.random() * targets.length)];
+                quest = { type: 'kill', target: t, current: 0, reward: t * 120, desc: `擊殺 ${t} 隻異形蟲` };
+            }
+        }
     }
 
     function update() {
@@ -254,18 +413,34 @@
 
         p.x += (p.tx - p.x) * 0.18; p.y += (p.ty - p.y) * 0.18;
 
-        // 冷卻過熱
-        if (heat > 0) heat = Math.max(0, heat - (0.2 + coolingLevel * 0.1));
-
-        // 產礦 logic
-        const spawnInterval = Math.max(8, 45 - minerLevel * 5);
-        if(frame % spawnInterval === 0 && items.length < 40 && heat < 90) {
-            items.push({ x: b.extractor.x + b.extractor.w + 15, y: b.extractor.y + b.extractor.h/2 + (Math.random()-0.5)*30, type: 'RAW' });
-            heat += 1.5;
+        // 基地自動修復天賦
+        if (frame % 60 === 0 && talents.repLv > 0) {
+            baseHp = Math.min(maxHp, baseHp + talents.repLv * 2);
         }
 
-        // 智慧機兵 AI 鏈
+        for (let i = 0; i < 3; i++) { if (skillCd[i] > 0) skillCd[i]--; }
+        if (overclockTimer > 0) { overclockTimer--; if (overclockTimer === 0) isOverclocked = false; }
+
+        if (!isWaveActive) {
+            waveTimer--;
+            if (waveTimer <= 0) spawnWave();
+        } else {
+            if (enemies.length === 0) {
+                isWaveActive = false; wave++; waveTimer = 20 * 60;
+                money += 1200 * wave; darkMatter += 1;
+                spawnFloatText(cvs.width/2, cvs.height/2, `🎉 第 ${wave-1} 波完成！`, '#f59e0b');
+            }
+        }
+
+        // 產礦
+        const spawnInterval = isOverclocked ? 4 : Math.max(6, 35 - minerLevel * 4);
+        if(frame % spawnInterval === 0 && items.length < 50) {
+            items.push({ x: b.extractor.x + b.extractor.w + 15, y: b.extractor.y + b.extractor.h/2 + (Math.random()-0.5)*30, type: 'RAW' });
+        }
+
+        // 機兵 AI
         bots.forEach(bot => {
+            let speed = (bot.speed * (1 + talents.spdLv * 0.15)) * (isOverclocked ? 1.8 : 1);
             let target = null;
             if (bot.bag.length === 0) {
                 let it = items[0];
@@ -281,50 +456,150 @@
             }
 
             let dx = target.x - bot.x, dy = target.y - bot.y, dist = Math.hypot(dx, dy);
-            if(dist > 5) { bot.x += (dx / dist) * bot.speed; bot.y += (dy / dist) * bot.speed; }
+            if(dist > 5) { bot.x += (dx / dist) * speed; bot.y += (dy / dist) * speed; }
             interact(bot, b);
         });
 
         interact(p, b);
 
-        // 特效更新
-        for(let i = floatTexts.length-1; i>=0; i--) { floatTexts[i].y -= 1; floatTexts[i].alpha -= 0.025; if(floatTexts[i].alpha<=0) floatTexts.splice(i,1); }
+        // 玩家電漿砲
+        p.cooldown--;
+        let totalDmgMult = (1 + darkMatter * 0.1) * (1 + talents.dmgLv * 0.2);
+        if (p.cooldown <= 0 && enemies.length > 0) {
+            let target = enemies.find(e => Math.hypot(p.x - e.x, p.y - e.y) < p.atkRange);
+            if (target) {
+                bullets.push({ x: p.x, y: p.y, tx: target.x, ty: target.y, dmg: 30 * totalDmgMult, speed: 15, color: '#38bdf8' });
+                p.cooldown = isOverclocked ? 4 : 9;
+            }
+        }
+
+        // 🏰 防衛塔射擊
+        turrets.forEach(t => {
+            t.cd--;
+            if (t.cd <= 0 && enemies.length > 0) {
+                let target = enemies.find(e => Math.hypot(t.x - e.x, t.y - e.y) < t.range);
+                if (target) {
+                    if (t.type === 'gatling') {
+                        bullets.push({ x: t.x, y: t.y, tx: target.x, ty: target.y, dmg: 18 * totalDmgMult, speed: 16, color: '#f59e0b' });
+                        t.cd = isOverclocked ? 3 : 8;
+                    } else if (t.type === 'laser') {
+                        bullets.push({ x: t.x, y: t.y, tx: target.x, ty: target.y, dmg: 60 * totalDmgMult, speed: 22, color: '#3b82f6' });
+                        t.cd = 24;
+                    } else if (t.type === 'mortar') {
+                        bullets.push({ x: t.x, y: t.y, tx: target.x, ty: target.y, dmg: 140 * totalDmgMult, speed: 11, color: '#a855f7', splash: 90 });
+                        t.cd = 48;
+                    } else if (t.type === 'frost') {
+                        target.speed = Math.max(0.4, target.speed * 0.5);
+                        spawnParticles(target.x, target.y, '#0284c7', 4);
+                        t.cd = 15;
+                    } else if (t.type === 'blackhole') {
+                        enemies.forEach(e => {
+                            if (Math.hypot(t.x - e.x, t.y - e.y) < t.range) {
+                                e.hp -= 8 * totalDmgMult;
+                                e.x += (t.x - e.x) * 0.05; // 牽引吸引效果
+                            }
+                        });
+                        spawnParticles(t.x, t.y, '#c084fc', 3);
+                        t.cd = 5;
+                    }
+                }
+            }
+        });
+
+        // 子彈傷害處理
+        for (let i = bullets.length - 1; i >= 0; i--) {
+            let bul = bullets[i];
+            let dx = bul.tx - bul.x, dy = bul.ty - bul.y, dist = Math.hypot(dx, dy);
+            if (dist < 12) {
+                if (bul.splash) {
+                    enemies.forEach(e => {
+                        if (Math.hypot(bul.x - e.x, bul.y - e.y) < bul.splash) {
+                            e.hp -= bul.dmg; spawnParticles(e.x, e.y, bul.color, 6);
+                        }
+                    });
+                    triggerShake(10);
+                } else {
+                    enemies.forEach(e => {
+                        if (Math.hypot(bul.x - e.x, bul.y - e.y) < 25) {
+                            e.hp -= bul.dmg; spawnParticles(e.x, e.y, bul.color, 3);
+                        }
+                    });
+                }
+                bullets.splice(i, 1);
+            } else {
+                bul.x += (dx / dist) * bul.speed; bul.y += (dy / dist) * bul.speed;
+            }
+        }
+
+        // 👾 敵群更新
+        for (let i = enemies.length - 1; i >= 0; i--) {
+            let e = enemies[i];
+            e.x -= e.speed;
+
+            if (e.x < 220) {
+                let dmg = e.type === 'bomber' ? 25 : (e.type === 'boss' ? 50 : 6);
+                baseHp -= dmg;
+                spawnParticles(e.x, e.y, '#ef4444', 12);
+                triggerShake(15);
+                enemies.splice(i, 1);
+                if (baseHp <= 0) {
+                    alert("⚠️ 基地遭到摧毀！發動量子轉生！");
+                    triggerRebirth();
+                }
+                continue;
+            }
+
+            if (e.hp <= 0) {
+                money += e.reward;
+                updateQuests('kill', 1);
+
+                // 掉落寶箱機率
+                if (Math.random() < 0.15 || e.type === 'boss') {
+                    chests.push({ x: e.x, y: e.y });
+                }
+
+                spawnFloatText(e.x, e.y, `+$${Math.floor(e.reward)}`, '#4ade80');
+                spawnParticles(e.x, e.y, '#22c55e', 8);
+                enemies.splice(i, 1);
+            }
+        }
+
+        if (shakeTime > 0) shakeTime--;
+        for(let i = floatTexts.length-1; i>=0; i--) { floatTexts[i].y -= 1; floatTexts[i].alpha -= 0.02; if(floatTexts[i].alpha<=0) floatTexts.splice(i,1); }
         for(let i = particles.length-1; i>=0; i--) { particles[i].x += particles[i].vx; particles[i].y += particles[i].vy; particles[i].alpha -= 0.04; if(particles[i].alpha<=0) particles.splice(i,1); }
 
-        // 面板與按鈕數值更新
+        // UI 數據同步
         document.getElementById('m').innerText = Math.floor(money).toLocaleString();
         document.getElementById('dm').innerText = darkMatter;
-        document.getElementById('dmMult').innerText = darkMatter * 20;
-        document.getElementById('botsCount').innerText = bots.length;
+        document.getElementById('hpFill').style.width = `${Math.max(0, (baseHp/maxHp)*100)}%`;
+        document.getElementById('waveNum').innerText = wave;
+        document.getElementById('enemyCount').innerText = enemies.length;
+
+        document.getElementById('cd1').innerText = skillCd[0] > 0 ? `${Math.ceil(skillCd[0]/60)}s` : '就緒';
+        document.getElementById('cd2').innerText = skillCd[1] > 0 ? `${Math.ceil(skillCd[1]/60)}s` : '就緒';
+        document.getElementById('cd3').innerText = skillCd[2] > 0 ? `${Math.ceil(skillCd[2]/60)}s` : '就緒';
+
+        document.getElementById('questText').innerText = quest.desc;
+        document.getElementById('questProg').innerText = `${quest.current}/${quest.target}`;
+
+        document.getElementById('tDmgCost').innerText = `${(talents.dmgLv + 1) * 5} DM`;
+        document.getElementById('tSpdCost').innerText = `${(talents.spdLv + 1) * 5} DM`;
+        document.getElementById('tRepCost').innerText = `${(talents.repLv + 1) * 10} DM`;
+
+        const getTurretCost = (type, base) => Math.floor(base * Math.pow(1.3, turrets.filter(t=>t.type===type).length));
+        document.getElementById('costGatling').innerText = `$${getTurretCost('gatling', 1000).toLocaleString()}`;
+        document.getElementById('costLaser').innerText = `$${getTurretCost('laser', 5000).toLocaleString()}`;
+        document.getElementById('costMortar').innerText = `$${getTurretCost('mortar', 20000).toLocaleString()}`;
+        document.getElementById('costFrost').innerText = `$${getTurretCost('frost', 50000).toLocaleString()}`;
+        document.getElementById('costBlackhole').innerText = `$${getTurretCost('blackhole', 200000).toLocaleString()}`;
+
         document.getElementById('minerLv').innerText = minerLevel;
         document.getElementById('capLv').innerText = capacity;
-        document.getElementById('coolLv').innerText = coolingLevel;
+        document.getElementById('bCost').innerText = `$${Math.floor(500 * Math.pow(1.3, bots.length)).toLocaleString()}`;
+        document.getElementById('mCost').innerText = `$${Math.floor(1000 * Math.pow(1.5, minerLevel)).toLocaleString()}`;
+        document.getElementById('cCost').innerText = `$${Math.floor(1500 * (capacity / 2)).toLocaleString()}`;
 
-        let bCost = Math.floor(500 * Math.pow(1.3, bots.length));
-        let mCost = Math.floor(1000 * Math.pow(1.5, minerLevel));
-        let cCost = Math.floor(1500 * (capacity / 2));
-        let coolCost = Math.floor(3000 * Math.pow(1.6, coolingLevel));
-
-        document.getElementById('bCost').innerText = `$${bCost.toLocaleString()}`;
-        document.getElementById('mCost').innerText = `$${mCost.toLocaleString()}`;
-        document.getElementById('cCost').innerText = `$${cCost.toLocaleString()}`;
-        document.getElementById('coolCost').innerText = `$${coolCost.toLocaleString()}`;
-
-        document.getElementById('btnBot').disabled = money < bCost;
-        document.getElementById('btnMiner').disabled = money < mCost;
-        document.getElementById('btnCap').disabled = money < cCost;
-        document.getElementById('btnCool').disabled = money < coolCost;
-
-        document.getElementById('btnUnlock2').disabled = techTier !== 1 || money < 2500;
-        document.getElementById('btnUnlock3').disabled = techTier !== 2 || money < 25000;
-        document.getElementById('btnUnlock4').disabled = techTier !== 3 || money < 200000;
-        document.getElementById('btnUnlock5').disabled = techTier !== 4 || money < 2000000;
-
-        let potentialDM = Math.floor(money / 100000);
-        document.getElementById('rebirthGain').innerText = `+${potentialDM} DM`;
-        document.getElementById('btnRebirth').disabled = money < 1000000;
-
-        if (frame % 120 === 0) saveGame();
+        document.getElementById('rebirthGain').innerText = `+${Math.floor(money / 100000)} DM`;
     }
 
     function processConvert(obj, from, to, bld) {
@@ -348,32 +623,34 @@
         if (b.qFab && Math.hypot(obj.x - (b.qFab.x + b.qFab.w/2), obj.y - (b.qFab.y + b.qFab.h/2)) < 50) processConvert(obj, 'BATTERY', 'CORE', b.qFab);
         if (b.antiFab && Math.hypot(obj.x - (b.antiFab.x + b.antiFab.w/2), obj.y - (b.antiFab.y + b.antiFab.h/2)) < 50) processConvert(obj, 'CORE', 'ANTIM', b.antiFab);
 
-        // 出售
         if (Math.hypot(obj.x - (b.hub.x + b.hub.w/2), obj.y - (b.hub.y + b.hub.h/2)) < 70) {
             if (obj.bag.length > 0) {
-                let mult = 1 + (darkMatter * 0.2);
+                let mult = 1 + (darkMatter * 0.1);
                 let total = obj.bag.reduce((sum, item) => sum + (ITEMS[item.type].val * mult), 0);
                 obj.bag = []; money += total;
                 spawnFloatText(b.hub.x, b.hub.y - 20, `+$${Math.floor(total).toLocaleString()}`, '#4ade80');
-                spawnParticles(b.hub.x + b.hub.w/2, b.hub.y + b.hub.h/2, '#4ade80', 10);
             }
         }
     }
 
     function draw() {
+        ctx.save();
         ctx.clearRect(0, 0, cvs.width, cvs.height);
+
+        if (shakeTime > 0) ctx.translate((Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8);
+
         ctx.fillStyle = '#020617'; ctx.fillRect(0, 0, cvs.width, cvs.height);
 
-        // 網格
-        ctx.strokeStyle = 'rgba(30, 41, 59, 0.3)'; ctx.lineWidth = 1;
+        // 網格底圖
+        ctx.strokeStyle = 'rgba(30, 41, 59, 0.25)'; ctx.lineWidth = 1;
         for (let x = 0; x < cvs.width; x += 50) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, cvs.height); ctx.stroke(); }
         for (let y = 0; y < cvs.height; y += 50) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(cvs.width, y); ctx.stroke(); }
 
         const b = getBuildings();
 
-        // 建築
+        // 繪製建築物
         Object.values(b).forEach(bld => {
-            ctx.shadowColor = bld.color; ctx.shadowBlur = 12;
+            ctx.shadowColor = bld.color; ctx.shadowBlur = 10;
             ctx.fillStyle = 'rgba(15, 23, 42, 0.9)'; ctx.strokeStyle = bld.color; ctx.lineWidth = 2.5;
             ctx.beginPath(); ctx.roundRect(bld.x, bld.y, bld.w, bld.h, 10); ctx.fill(); ctx.stroke();
             ctx.shadowBlur = 0;
@@ -381,30 +658,66 @@
             ctx.fillText(bld.label, bld.x + bld.w/2, bld.y - 8);
         });
 
-        // 物品
-        items.forEach(it => {
-            ctx.shadowColor = ITEMS[it.type].color; ctx.shadowBlur = 6;
-            ctx.fillStyle = ITEMS[it.type].color;
-            ctx.beginPath(); ctx.roundRect(it.x - 7, it.y - 7, 14, 14, 3); ctx.fill();
+        // 繪製防衛塔
+        turrets.forEach(t => {
+            let colorMap = { gatling: '#f59e0b', laser: '#3b82f6', mortar: '#a855f7', frost: '#0284c7', blackhole: '#c084fc' };
+            ctx.fillStyle = colorMap[t.type];
+            ctx.beginPath(); ctx.arc(t.x, t.y, 16, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+        });
+
+        // 星際寶箱
+        chests.forEach(c => {
+            ctx.fillStyle = '#eab308'; ctx.shadowColor = '#eab308'; ctx.shadowBlur = 12;
+            ctx.beginPath(); ctx.roundRect(c.x - 10, c.y - 10, 20, 20, 4); ctx.fill();
             ctx.shadowBlur = 0;
         });
 
-        // 機器人
+        // 子彈
+        bullets.forEach(bul => {
+            ctx.fillStyle = bul.color;
+            ctx.beginPath(); ctx.arc(bul.x, bul.y, bul.splash ? 7 : 4, 0, Math.PI * 2); ctx.fill();
+        });
+
+        // 異形敵人
+        enemies.forEach(e => {
+            let sizeMap = { normal: 14, runner: 10, tank: 20, bomber: 12, boss: 32 };
+            let colorMap = { normal: '#ef4444', runner: '#f59e0b', tank: '#64748b', bomber: '#22c55e', boss: '#e11d48' };
+
+            ctx.shadowColor = colorMap[e.type]; ctx.shadowBlur = e.type === 'boss' ? 15 : 0;
+            ctx.fillStyle = colorMap[e.type];
+            ctx.beginPath(); ctx.arc(e.x, e.y, sizeMap[e.type], 0, Math.PI * 2); ctx.fill();
+            ctx.shadowBlur = 0;
+
+            let barW = sizeMap[e.type] * 2.2;
+            ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(e.x - barW/2, e.y - sizeMap[e.type] - 10, barW, 4);
+            ctx.fillStyle = '#22c55e'; ctx.fillRect(e.x - barW/2, e.y - sizeMap[e.type] - 10, (e.hp / e.maxHp) * barW, 4);
+        });
+
+        // 掉落物
+        items.forEach(it => {
+            ctx.fillStyle = ITEMS[it.type].color;
+            ctx.beginPath(); ctx.roundRect(it.x - 7, it.y - 7, 14, 14, 3); ctx.fill();
+        });
+
+        // 運輸機兵
         bots.forEach(bot => {
             ctx.fillStyle = '#38bdf8'; ctx.beginPath(); ctx.arc(bot.x, bot.y, 12, 0, Math.PI * 2); ctx.fill();
             drawStack(bot);
         });
 
-        // 玩家
-        ctx.shadowColor = '#38bdf8'; ctx.shadowBlur = 10;
+        // 玩家機兵
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.15)'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.atkRange, 0, Math.PI * 2); ctx.stroke();
         ctx.fillStyle = '#38bdf8'; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
-        ctx.shadowBlur = 0; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
         drawStack(p);
 
-        // 粒子與文字
+        // 特效與文字
         particles.forEach(pt => { ctx.fillStyle = pt.color; ctx.globalAlpha = Math.max(0, pt.alpha); ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1; });
-        floatTexts.forEach(ft => { ctx.fillStyle = ft.color; ctx.globalAlpha = Math.max(0, ft.alpha); ctx.font = 'bold 16px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(ft.text, ft.x, ft.y); ctx.globalAlpha = 1; });
+        floatTexts.forEach(ft => { ctx.fillStyle = ft.color; ctx.globalAlpha = Math.max(0, ft.alpha); ctx.font = 'bold 15px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(ft.text, ft.x, ft.y); ctx.globalAlpha = 1; });
 
+        ctx.restore();
         update(); requestAnimationFrame(draw);
     }
 
@@ -415,15 +728,7 @@
         });
     }
 
-    async function startGame() {
-        if (window.raingodFirebaseReady) await window.raingodFirebaseReady;
-        if (window.raingodAuthReady) await window.raingodAuthReady;
-        let localData = localStorage.getItem(SAVE_KEY);
-        if (localData) loadGame(JSON.parse(localData));
-        gameStarted = true; draw();
-    }
-
-    startGame().catch(e => { gameStarted = true; draw(); });
+    draw();
 </script>
 </body>
 </html>
