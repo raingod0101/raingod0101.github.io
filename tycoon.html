@@ -331,23 +331,25 @@
 
     async function uploadTycoonLeaderboardScore() {
         const currentUser = window.raingodCurrentUser;
-        if (!currentUser || bestWave <= 0) return;
+        if (!currentUser) return;
         const uid = currentUser.uid;
+        const scoreWave = Math.max(1, bestWave, wave);
+        const scoreDarkMatter = Math.floor(darkMatter);
         const entryUrl = `${TYCOON_LEADERBOARD_URL}/${encodeURIComponent(uid)}.json`;
         try {
             const previousResponse = await fetch(entryUrl);
             if (!previousResponse.ok) throw new Error(`HTTP ${previousResponse.status}`);
             const previous = await previousResponse.json();
             if (window.raingodCurrentUser?.uid !== uid) return;
-            if (previous && (Number(previous.wave) > bestWave ||
-                (Number(previous.wave) === bestWave && Number(previous.darkMatter) >= darkMatter))) return;
+            if (previous && (Number(previous.wave) > scoreWave ||
+                (Number(previous.wave) === scoreWave && Number(previous.darkMatter) >= scoreDarkMatter))) return;
             const response = await fetch(entryUrl, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    name: currentUser.email ? currentUser.email.split('@')[0] : '雨神玩家',
-                    wave: Math.floor(bestWave),
-                    darkMatter: Math.floor(darkMatter),
+                    name: currentUser.displayName || (currentUser.email ? currentUser.email.split('@')[0] : '雨神玩家'),
+                    wave: scoreWave,
+                    darkMatter: scoreDarkMatter,
                     updatedAt: Date.now()
                 })
             });
