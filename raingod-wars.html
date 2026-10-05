@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>雨神大戰爭 | Raingod</title>
+    <title>雨神大戰爭 | Raingod Battle</title>
     <style>
         :root { 
             --p-color: #00d4ff; --e-color: #ff4d4d; --gold: #f1c40f; 
@@ -97,6 +97,9 @@
         .nav-btn { width: 110px; margin-top: 8px; background: #334155; color: white; border: none; padding: 8px; border-radius: 6px; cursor: pointer; font-weight: bold; }
         .tab-btn { background: #1e293b; color: #aaa; border: none; padding: 6px 12px; border-radius: 6px 6px 0 0; cursor: pointer; margin-right: 4px; font-size: 12px; }
         .tab-btn.active { background: #0f3460; color: white; font-weight: bold; border-top: 2px solid var(--p-color); }
+        #wars-leaderboard { position: fixed; inset: 0; z-index: 2000; display: none; align-items: center; justify-content: center; padding: 16px; background: rgba(0,0,0,0.88); }
+        .wars-leaderboard-card { width: min(480px, 100%); max-height: 80vh; overflow-y: auto; padding: 18px; border: 1px solid var(--p-color); border-radius: 12px; background: #111425; }
+        .wars-leaderboard-row { display: flex; justify-content: space-between; gap: 12px; padding: 9px 4px; border-bottom: 1px solid #26334a; }
     </style>
 </head>
 <body>
@@ -113,6 +116,7 @@
 <!-- 主選單 -->
 <div id="main-screen" class="screen active">
     <div class="title">雨神大戰爭 | Raingod</div>
+    <button class="nav-btn" style="margin:0 0 8px;" id="wars-leaderboard-button" onclick="openWarsLeaderboard()">🏆 登入後查看排行榜</button>
     <div class="top-res">
         <span>💎 XP: <b id="res-xp">0</b></span>
         <span>📖 解鎖: <b id="res-count">0/120</b></span>
@@ -182,8 +186,21 @@
     <div id="ui-panel"></div>
 </div>
 
+<div id="wars-leaderboard">
+    <div class="wars-leaderboard-card">
+        <h2 style="color:var(--p-color); margin-top:0;">🏆 雨神大戰爭排行榜</h2>
+        <p id="wars-leaderboard-status" style="color:#aaa;">請登入帳號後查看。</p>
+        <div id="wars-leaderboard-list"></div>
+        <div style="display:flex; gap:8px; justify-content:center; margin-top:14px;">
+            <button class="nav-btn" onclick="refreshWarsLeaderboard()">重新整理</button>
+            <button class="nav-btn" onclick="closeWarsLeaderboard()">關閉</button>
+        </div>
+    </div>
+</div>
+
 <script>
     const SAVE_KEY = 'RainGod100_Save_v2';
+    const WARS_LEADERBOARD_URL = 'https://game-24b43-default-rtdb.firebaseio.com/raingod_wars_leaderboard';
     
     // 屬性系統：紅(Red)、飛(Float)、聖(Angel)、星(Alien)、屍(Undead)、無(None)
     const ATTRS = ['紅', '飛', '聖', '星', '屍', '無'];
@@ -309,23 +326,116 @@
 
     Object.keys(CHARS).forEach(k => user.lvs[k] = 1);
 
-    function save() { 
+    function save() {
         localStorage.setItem(SAVE_KEY, JSON.stringify(user));
         document.getElementById('res-xp').innerText = Math.floor(user.xp);
         document.getElementById('res-count').innerText = `${user.owned.length}/120`;
         document.getElementById('res-stage').innerText = `${user.cleared}/${STAGES.length}`;
     }
 
-    function loadGame() {
-        const localData = localStorage.getItem(SAVE_KEY);
-        if (localData) {
-            try { 
-                const d = JSON.parse(localData);
+    function loadGame(savedData) {
+        const data = savedData === undefined ? localStorage.getItem(SAVE_KEY) : savedData;
+        if (data) {
+            try {
+                const d = typeof data === 'string' ? JSON.parse(data) : data;
+                if (!d || typeof d !== 'object' || Array.isArray(d)) throw new Error('存檔格式無效');
                 user = { ...user, ...d };
-                user.lvs = { ...user.lvs, ...d.lvs };
-            } catch(e) {}
+                user.lvs = { ...user.lvs, ...(d.lvs || {}) };
+            } catch (error) {
+                console.error('載入雨神大戰爭存檔失敗：', error);
+            }
         }
         save();
+    }
+
+    async function openWarsLeaderboard() {
+        if (!await window.raingodRequireAuth('排行榜')) return;
+        document.getElementById('wars-leaderboard').style.display = 'flex';
+        await refreshWarsLeaderboard();
+    }
+
+    function closeWarsLeaderboard() {
+        document.getElementById('wars-leaderboard').style.display = 'none';
+    }
+
+    async function refreshWarsLeaderboard() {
+        const status = document.getElementById('wars-leaderboard-status');
+        const list = document.getElementById('wars-leaderboard-list');
+        if (!await window.raingodRequireAuth('排行榜')) return;
+        const uid = window.raingodCurrentUser.uid;
+        status.textContent = '排行榜載入中…';
+        try {
+            const response = await fetch(`${WARS_LEADERBOARD_URL}.json`);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            if (window.raingodCurrentUser?.uid !== uid) return;
+            const rows = await response.json() || {};
+            const entries = Object.entries(rows)
+                .filter(([, row]) => row && Number.isFinite(Number(row.cleared)))
+                .sort((a, b) => Number(b[1].cleared) - Number(a[1].cleared) || Number(b[1].xp || 0) - Number(a[1].xp || 0))
+                .slice(0, 50);
+            list.replaceChildren();
+            entries.forEach(([entryUid, row], index) => {
+                const item = document.createElement('div');
+                item.className = 'wars-leaderboard-row';
+                const name = document.createElement('span');
+                name.textContent = `${index + 1}. ${row.name || '玩家'}${entryUid === uid ? '（你）' : ''}`;
+                const value = document.createElement('strong');
+                value.textContent = `${Number(row.cleared)} 關 · ${Math.floor(Number(row.xp) || 0).toLocaleString()} XP`;
+                item.append(name, value);
+                list.appendChild(item);
+            });
+            status.textContent = entries.length ? `已載入 ${entries.length} 位玩家，依通關遠征數排序。` : '目前還沒有排行榜資料。';
+        } catch (error) {
+            console.error('載入雨神大戰爭排行榜失敗：', error);
+            status.textContent = '排行榜載入失敗，請稍後重試。';
+        }
+    }
+
+    async function uploadWarsLeaderboardScore() {
+        const currentUser = window.raingodCurrentUser;
+        if (!currentUser || user.cleared <= 0) return;
+        const uid = currentUser.uid;
+        const entryUrl = `${WARS_LEADERBOARD_URL}/${encodeURIComponent(uid)}.json`;
+        try {
+            const previousResponse = await fetch(entryUrl);
+            if (!previousResponse.ok) throw new Error(`HTTP ${previousResponse.status}`);
+            const previous = await previousResponse.json();
+            if (window.raingodCurrentUser?.uid !== uid) return;
+            if (previous && (Number(previous.cleared) > user.cleared ||
+                (Number(previous.cleared) === user.cleared && Number(previous.xp) >= user.xp))) return;
+            const response = await fetch(entryUrl, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: currentUser.email ? currentUser.email.split('@')[0] : '雨神玩家',
+                    cleared: Math.floor(user.cleared),
+                    xp: Math.floor(user.xp),
+                    updatedAt: Date.now()
+                })
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        } catch (error) {
+            console.error('上傳雨神大戰爭排行榜失敗：', error);
+        }
+    }
+
+    async function initializeWars() {
+        await window.raingodFirebaseReady;
+        await window.raingodAuthReady;
+        await window.raingodBindStorage('raingod-wars', [SAVE_KEY], { [SAVE_KEY]: null }, data => {
+            loadGame(data[SAVE_KEY]);
+            if (window.raingodCurrentUser) uploadWarsLeaderboardScore();
+        });
+        window.raingodOnAuthStateChanged(currentUser => {
+            const button = document.getElementById('wars-leaderboard-button');
+            button.textContent = currentUser ? '🏆 排行榜' : '🏆 登入後查看排行榜';
+            if (currentUser) uploadWarsLeaderboardScore();
+            else {
+                closeWarsLeaderboard();
+                document.getElementById('wars-leaderboard-list').replaceChildren();
+                document.getElementById('wars-leaderboard-status').textContent = '請登入帳號後查看。';
+            }
+        });
     }
 
     function showScreen(id) {
@@ -727,6 +837,7 @@
                 user.xp += reward;
                 user.cleared = Math.max(user.cleared, battle.currentStage + 1);
                 alert(`🚩 遠征勝利！獲得 ${reward} XP！`);
+                uploadWarsLeaderboardScore();
             } else {
                 alert("💥 主堡被摧毀，遠征失敗...");
             }
@@ -738,7 +849,10 @@
         requestAnimationFrame(battleLoop);
     }
 
-    loadGame();
+    initializeWars().catch(error => {
+        console.error('雨神大戰爭初始化失敗：', error);
+        document.getElementById('wars-leaderboard-status').textContent = '遊戲初始化失敗，請重新整理頁面。';
+    });
 </script>
 </body>
 </html>
