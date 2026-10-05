@@ -673,18 +673,8 @@
                     if (userInfo) userInfo.style.setProperty('display', 'flex', 'important');
                     if (userAvatar) {
                         userAvatar.src = user.photoURL || `${baseUrl}catdragon.png`;
-                        const displayUsername = user.email ? user.email.split('@')[0] : 'User';
-                        userAvatar.title = "帳號：" + displayUsername;
-                        userAvatar.onclick = () => {
-                            if (confirm(`目前登入帳號：${displayUsername}\n確定要登出嗎？`)) {
-                                firebase.auth().signOut().then(() => {
-                                    window.raingodClearLocalAccountData();
-                                    location.reload();
-                                }).catch(err => {
-                                    alert("登出失敗：" + err.message);
-                                });
-                            }
-                        };
+                        const displayUsername = user.displayName || (user.email ? user.email.split('@')[0] : 'User');
+                        userAvatar.title = "個人檔案：" + displayUsername;
                     }
                     syncData(user);
                 } else {
