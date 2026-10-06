@@ -89,6 +89,130 @@
         #tycoon-leaderboard { position: fixed; inset: 0; z-index: 2000; display: none; align-items: center; justify-content: center; padding: 16px; background: rgba(2,6,23,0.94); color: #fff; }
         .tycoon-leaderboard-card { width: min(520px, 100%); max-height: 80vh; overflow-y: auto; padding: 20px; border: 1px solid #38bdf8; border-radius: 16px; background: #0b1020; }
         .tycoon-leaderboard-row { display: flex; justify-content: space-between; gap: 12px; padding: 10px 4px; border-bottom: 1px solid #26334a; }
+        .mobile-shop-toggle, .mobile-panel-close { display: none; }
+
+        @media (max-width: 700px), (max-height: 500px) and (pointer: coarse) {
+            .nav-content { gap: 6px; padding: 0 8px !important; }
+            .brand { flex: 0 0 auto; white-space: nowrap; }
+            .nav-links {
+                flex: 1;
+                min-width: 0;
+                justify-content: space-evenly;
+                gap: 0 !important;
+                margin-left: 4px !important;
+            }
+            .nav-item {
+                padding: 6px 3px !important;
+                font-size: 11px !important;
+                white-space: nowrap;
+            }
+            .login-btn { flex: 0 0 auto; padding: 6px 8px !important; white-space: nowrap; }
+
+            .top-bar {
+                top: calc(60px + env(safe-area-inset-top)) !important;
+                left: 8px !important;
+                width: calc(100% - 16px) !important;
+                transform: none !important;
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 5px 8px;
+                padding: 7px 10px;
+                border-radius: 12px;
+                white-space: normal;
+            }
+            .hud-item { font-size: 11px; }
+            .money { font-size: 14px; }
+            .dark-matter { font-size: 11px; }
+            .hp-box { width: min(80px, 26vw); }
+
+            .artifacts-bar {
+                top: 132px;
+                left: 8px;
+                right: 48%;
+                max-height: 22dvh;
+                overflow-y: auto;
+                gap: 4px;
+                touch-action: pan-y;
+                -webkit-overflow-scrolling: touch;
+            }
+            .art-item { padding: 5px 7px; font-size: 9px; }
+            #tycoon-leaderboard-button {
+                top: 132px;
+                right: 8px;
+                max-width: 46%;
+                padding: 8px 10px;
+                font-size: 11px;
+            }
+
+            .skill-bar {
+                bottom: max(8px, env(safe-area-inset-bottom));
+                left: 8px;
+                right: 8px;
+                transform: none;
+                gap: 5px;
+            }
+            .skill-btn {
+                flex: 1;
+                min-width: 0;
+                padding: 7px 4px;
+                font-size: 9px;
+            }
+
+            .panel {
+                display: none;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                width: 100%;
+                max-height: 52dvh;
+                padding: 10px max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+                border-radius: 14px 14px 0 0;
+                touch-action: pan-y;
+                -webkit-overflow-scrolling: touch;
+            }
+            #ui.shop-open .panel { display: flex; }
+            #ui.shop-open .skill-bar { display: none; }
+            .mobile-panel-close {
+                display: block;
+                align-self: flex-end;
+                padding: 7px 12px;
+                border: 1px solid #64748b;
+                border-radius: 8px;
+                background: #1e293b;
+                color: #fff;
+                font-weight: bold;
+                touch-action: manipulation;
+            }
+            .mobile-shop-toggle {
+                display: block;
+                position: absolute;
+                right: 10px;
+                bottom: calc(62px + env(safe-area-inset-bottom));
+                z-index: 15;
+                padding: 9px 13px;
+                border: 1px solid #38bdf8;
+                border-radius: 20px;
+                background: rgba(15, 23, 42, 0.95);
+                color: #fff;
+                font-weight: bold;
+                pointer-events: auto;
+                touch-action: manipulation;
+            }
+            #ui.shop-open .mobile-shop-toggle { display: none; }
+
+            .tab-btn { min-height: 38px; font-size: 10px; }
+            .btn { min-height: 40px; font-size: 11px; touch-action: manipulation; }
+            #tycoon-leaderboard {
+                padding: max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom));
+            }
+            .tycoon-leaderboard-card {
+                max-height: 85dvh;
+                padding: 14px;
+                touch-action: pan-y;
+                -webkit-overflow-scrolling: touch;
+            }
+            .tycoon-leaderboard-row { flex-direction: column; gap: 4px; }
+        }
     </style>
 </head>
 <body>
@@ -124,7 +248,8 @@
         </button>
     </div>
 
-    <div class="panel">
+    <div class="panel" id="tycoon-panel">
+        <button class="mobile-panel-close" type="button" onclick="toggleTycoonShop(false)">收起商店 ▲</button>
         <div class="quest-box">
             🎯 任務：<span id="questText">載入中...</span> (<span id="questProg">0/0</span>)
         </div>
@@ -199,6 +324,7 @@
             </button>
         </div>
     </div>
+    <button class="mobile-shop-toggle" type="button" aria-controls="tycoon-panel" aria-expanded="false" onclick="toggleTycoonShop()">🛠️ 建造 / 升級</button>
 </div>
 
 <button id="tycoon-leaderboard-button" onclick="openTycoonLeaderboard()">🏆 登入後查看排行榜</button>
@@ -400,6 +526,13 @@
         if (event) event.target.classList.add('active');
     }
 
+    function toggleTycoonShop(open = !document.getElementById('ui').classList.contains('shop-open')) {
+        const ui = document.getElementById('ui');
+        const toggle = document.querySelector('.mobile-shop-toggle');
+        ui.classList.toggle('shop-open', open);
+        toggle.setAttribute('aria-expanded', String(open));
+    }
+
     // 📍 調整建築位置：整體向下向右移動，避免與左上角 UI 重疊
     function getBuildings() {
         const startX = 80, startY = 100;
@@ -417,7 +550,15 @@
 
     const resize = () => { cvs.width = window.innerWidth; cvs.height = window.innerHeight; };
     window.addEventListener('resize', resize); resize();
-    window.addEventListener('pointermove', e => { p.tx = e.clientX; p.ty = e.clientY; });
+    window.addEventListener('pointermove', e => {
+        if (e.pointerType !== 'touch') { p.tx = e.clientX; p.ty = e.clientY; }
+    });
+    cvs.addEventListener('pointerdown', e => {
+        if (e.pointerType === 'touch') { p.tx = e.clientX; p.ty = e.clientY; }
+    });
+    cvs.addEventListener('pointermove', e => {
+        if (e.pointerType === 'touch') { p.tx = e.clientX; p.ty = e.clientY; }
+    });
 
     // 點擊拾取星際寶箱
     window.addEventListener('pointerdown', e => {
