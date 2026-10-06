@@ -267,7 +267,10 @@
                     <div id="skin-fragment-count" style="margin-top:6px;color:#ffd54f;font-weight:bold;">共用碎片 0/5</div>
                     <div id="skin-lottery-msg" style="margin-top:8px; color:#ffea00; min-height:20px;"></div>
                 </div>
-                <button class="main-btn small" onclick="GameEngine.drawSkin()">抽碎片 100💰</button>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                    <button class="main-btn small" onclick="GameEngine.drawSkin(1)">單抽 100💰</button>
+                    <button class="main-btn small" onclick="GameEngine.drawSkin(10)">十連抽 1000💰</button>
+                </div>
             </div>
             <div class="glass-panel skin-collection" id="skin-collection"></div>
         </div>
@@ -4538,9 +4541,11 @@ window.GameEngine = {
         this.renderLobby();
         this.showAlert('已使用 ' + SKIN_FRAGMENT_COST + ' 片兌換 ' + PLAYER_SKINS[id].name + '，可到造型卡片選擇使用。');
     },
-    drawSkin() {
+    drawSkin(drawCount = 1) {
         const d = SaveSystem.currentData;
-        if (d.resources.gold < 100) {
+        const count = drawCount === 10 ? 10 : 1;
+        const cost = count * 100;
+        if (d.resources.gold < cost) {
             this.showAlert('金幣不足，無法抽碎片。');
             return;
         }
@@ -4549,7 +4554,7 @@ window.GameEngine = {
             this.showAlert('所有造型已解鎖，無需再抽碎片。');
             return;
         }
-        d.resources.gold -= 100;
+        d.resources.gold -= cost;
         const msgEl = document.getElementById('skin-lottery-msg');
         // show overlay "rolling"
         try {
@@ -4560,50 +4565,42 @@ window.GameEngine = {
                 ol.classList.add('show');
             }
         } catch (e) {}
-        // gacha: 1% base drop chance, require 5 fragments. Pity: guaranteed 1 fragment every 20 draws.
         const BASE_CHANCE = 0.01;
-        // check pity
         const pity = d.skinLottery = d.skinLottery || { drawsSinceLastFragment: 0 };
-        let gotFragment = false;
-        if ((pity.drawsSinceLastFragment || 0) >= 19) {
-            gotFragment = true; // pity triggers on 20th draw (0-based count)
-        } else {
-            gotFragment = Math.random() < BASE_CHANCE;
+        let fragmentsWon = 0;
+        for (let i = 0; i < count; i++) {
+            const guaranteed = (pity.drawsSinceLastFragment || 0) >= 19;
+            const gotFragment = guaranteed || Math.random() < BASE_CHANCE;
+            if (gotFragment) {
+                fragmentsWon++;
+                d.skinFragments.common += 1;
+                pity.drawsSinceLastFragment = 0;
+            } else {
+                pity.drawsSinceLastFragment = (pity.drawsSinceLastFragment || 0) + 1;
+            }
         }
-        if (gotFragment) {
-            d.skinFragments.common += 1;
-            pity.drawsSinceLastFragment = 0;
-            // visual effect
-            this.spawnParticles(window.innerWidth / 2, window.innerHeight / 2 - 80, '#ffd54f', 36, 4);
+        const fragmentCount = d.skinFragments.common;
+        const pityRemaining = 20 - pity.drawsSinceLastFragment;
+        const msg = fragmentsWon
+            ? (count === 10 ? '十連抽' : '單抽') + '獲得共用造型碎片 ' + fragmentsWon + ' 片，目前 ' + fragmentCount + '/' + SKIN_FRAGMENT_COST + (fragmentCount >= SKIN_FRAGMENT_COST ? '，可自選兌換造型' : '') + '。'
+            : (count === 10 ? '十連抽' : '單抽') + '未抽到碎片，下次保底還需 ' + pityRemaining + ' 抽。';
+        if (fragmentsWon) {
+            this.spawnParticles(window.innerWidth / 2, window.innerHeight / 2 - 80, '#ffd54f', 36 + fragmentsWon * 8, 4);
             this.shake(12, 0.45);
-            const fragmentCount = d.skinFragments.common;
-            const msg = '獲得共用造型碎片！(' + fragmentCount + '/' + SKIN_FRAGMENT_COST + ')' + (fragmentCount >= SKIN_FRAGMENT_COST ? ' 可自選兌換造型' : '');
-            SaveSystem.save();
-            this.drawSkinCollection();
-            if (msgEl) msgEl.textContent = msg;
-            // show success overlay
-            try {
-                const ol = document.getElementById('lottery-overlay');
-                if (ol) {
-                    ol.innerHTML = '<div class="panel"><h3>獲得共用碎片</h3><div style="font-size:72px;">🧩</div><div style="color:#fff;margin-top:8px;">造型碎片 (' + fragmentCount + '/' + SKIN_FRAGMENT_COST + ')</div></div>';
-                    setTimeout(() => { ol.classList.remove('show'); ol.setAttribute('aria-hidden','true'); }, 1400);
-                }
-            } catch (e) {}
-            this.showAlert(msg);
-        } else {
-            pity.drawsSinceLastFragment = (pity.drawsSinceLastFragment || 0) + 1;
-            SaveSystem.save();
-            if (msgEl) msgEl.textContent = '未抽到碎片，再試一次吧。（保底 ' + (20 - pity.drawsSinceLastFragment) + ' 抽）';
-            this.showAlert('這次沒有抽到碎片。');
-            // show fail overlay briefly
-            try {
-                const ol = document.getElementById('lottery-overlay');
-                if (ol) {
-                    ol.innerHTML = '<div class="panel"><h3>未抽中</h3><div style="color:#ddd;margin-top:6px;">再接再厲！保底 ' + (20 - pity.drawsSinceLastFragment) + ' 抽</div></div>';
-                    setTimeout(() => { ol.classList.remove('show'); ol.setAttribute('aria-hidden','true'); }, 900);
-                }
-            } catch (e) {}
         }
+        SaveSystem.save();
+        this.drawSkinCollection();
+        if (msgEl) msgEl.textContent = msg + (fragmentsWon ? ' 保底還需 ' + pityRemaining + ' 抽。' : '');
+        try {
+            const ol = document.getElementById('lottery-overlay');
+            if (ol) {
+                ol.innerHTML = fragmentsWon
+                    ? '<div class="panel"><h3>' + (count === 10 ? '十連抽結果' : '抽獎結果') + '</h3><div style="font-size:72px;">🧩</div><div style="color:#fff;margin-top:8px;">獲得共用造型碎片 ' + fragmentsWon + ' 片</div><div style="color:#ffd54f;margin-top:6px;">目前 ' + fragmentCount + '/' + SKIN_FRAGMENT_COST + ' · 保底還需 ' + pityRemaining + ' 抽</div></div>'
+                    : '<div class="panel"><h3>' + (count === 10 ? '十連抽結果' : '抽獎結果') + '</h3><div style="color:#ddd;margin-top:6px;">沒有抽到碎片，保底還需 ' + pityRemaining + ' 抽</div></div>';
+                setTimeout(() => { ol.classList.remove('show'); ol.setAttribute('aria-hidden','true'); }, fragmentsWon ? 1600 : 1000);
+            }
+        } catch (e) {}
+        this.showAlert(msg);
         this.renderLobby();
     },
     startTestBattle() {
