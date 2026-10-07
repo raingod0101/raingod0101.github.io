@@ -40,6 +40,14 @@
             z-index: 90; pointer-events: none;
         }
 
+        #reconnect-hint {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            color: #ffffff; font-weight: bold; font-size: 20px;
+            background: rgba(0, 0, 0, 0.7); padding: 12px 24px; border-radius: 30px;
+            border: 1px solid #a855f7; pointer-events: none; display: none; z-index: 150;
+            box-shadow: 0 0 15px rgba(168, 85, 247, 0.5);
+        }
+
         #joy-base {
             position: absolute; bottom: 30px; left: 30px; width: 120px; height: 120px;
             background: rgba(255, 255, 255, 0.08); border: 2px solid rgba(168, 85, 247, 0.5);
@@ -148,6 +156,7 @@
     </div>
 
     <div id="tracker-info">📍 雷達搜尋中...</div>
+    <div id="reconnect-hint">🖱️ 點擊畫面重新控制視角</div>
     
     <div id="joy-base"><div id="joy-stick"></div></div>
     <div id="jump-btn">JUMP</div>
@@ -182,6 +191,7 @@
 
         const radarCanvas = document.getElementById('radar-canvas');
         const radarCtx = radarCanvas.getContext('2d');
+        const hintEl = document.getElementById('reconnect-hint');
 
         function normalizeProfile(value) {
             if (!value || typeof value !== 'object' || Array.isArray(value)) return { ...DEFAULT_PROFILE };
@@ -334,7 +344,7 @@
 
         document.getElementById('start-btn').onclick = () => {
             document.getElementById('overlay').style.display = 'none';
-            if (!isTouch) document.body.requestPointerLock();
+            if (!isTouch) requestLock();
             if (isTouch) {
                 document.getElementById('joy-base').style.display = 'block';
                 document.getElementById('jump-btn').style.display = 'flex';
@@ -347,6 +357,28 @@
             }
             gameRunning = true;
         };
+
+        function requestLock() {
+            document.body.requestPointerLock();
+        }
+
+        // 監聽 Pointer Lock 狀態變更
+        document.addEventListener('pointerlockchange', () => {
+            if (!document.pointerLockElement && gameRunning && !isTouch) {
+                hintEl.style.display = 'block'; // 顯示提示提示玩家點擊重新鎖定
+            } else {
+                hintEl.style.display = 'none';
+            }
+        });
+
+        // 點擊任意遊戲區域重新鎖定視角
+        window.addEventListener('click', (e) => {
+            if (gameRunning && !isTouch && !document.pointerLockElement) {
+                // 確保不是點擊選單或排行榜
+                if (e.target.closest('#overlay') || e.target.closest('#leaderboard') || e.target.closest('#leaderboard-button')) return;
+                requestLock();
+            }
+        });
 
         function resetGame() {
             score = 0;
@@ -372,7 +404,7 @@
             scene.background = new THREE.Color(0x020205);
             scene.fog = new THREE.FogExp2(0x020205, 0.0015);
             
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 2000);
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / (window.innerHeight - 60), 0.1, 2000);
             
             player = new THREE.Mesh(
                 new THREE.BoxGeometry(1.2, 1.4, 1.2), 
@@ -390,8 +422,11 @@
             createMap();
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setSize(window.innerWidth, window.innerHeight - 60);
             renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.domElement.style.position = 'absolute';
+            renderer.domElement.style.top = '60px';
+            renderer.domElement.style.left = '0';
             document.body.appendChild(renderer.domElement);
 
             window.addEventListener('resize', onResize);
@@ -585,9 +620,9 @@
         }
 
         function onResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.aspect = window.innerWidth / (window.innerHeight - 60);
             camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setSize(window.innerWidth, window.innerHeight - 60);
         }
 
         function gameOver(isWin, msg) {
