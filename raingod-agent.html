@@ -2394,7 +2394,6 @@ class Player {
         this.facingAngle = -Math.PI / 2;
         this.isMoving = false;
         this.regenTimer = 0;
-        this.applyTalents();
         this.equipAtk = 0;
         this.critRate = 0;
         this.petDmg = 0;
@@ -2403,6 +2402,7 @@ class Player {
         this.petDmg = petDef ? (petDef.assist || 0) : 0;
         this.petDamageMult = petDef ? 1 + (petDef.damage || 0) : 1;
         this.petDefense = petDef ? (petDef.defense || 0) + (petDef.shield || 0) : 0;
+        this.applyTalents();
         this.skin = SaveSystem.currentData.skin || 'default';
         this.skinAttackTimer = 0;
         this.domainActive = 0;
@@ -4014,14 +4014,22 @@ window.GameEngine = {
         }
         const list = document.getElementById('upgrade-list');
         list.innerHTML = '';
-        [{ id:'ATK', name:'攻擊', cost:100 }, { id:'HP', name:'血量', cost:100 }, { id:'SPD', name:'速度', cost:150, max:10 }, { id:'REC', name:'恢復', cost:120, max:10 }].forEach(t => {
+        [
+            { id:'ATK', name:'攻擊', cost:100, gain:'+6 武器傷害／級' },
+            { id:'HP', name:'血量', cost:100, gain:'+22 最大生命／級' },
+            { id:'SPD', name:'速度', cost:150, max:10, gain:'+0.4 移動速度／級' },
+            { id:'REC', name:'恢復', cost:120, max:10, gain:'+1.2 生命／秒／級' }
+        ].forEach(t => {
             const lv = SaveSystem.currentData.talents[t.id] || 0;
             const cost = t.cost + lv * 50;
             const maxLevel = t.max || Infinity;
             const isMaxed = lv >= maxLevel;
             const card = document.createElement('div');
             card.className = 'talent-row glass-panel';
-            const label = t.name + ' Lv.' + lv + (isMaxed ? '（已達上限）' : '');
+            const totalGain = t.id === 'ATK' ? lv * 6 : t.id === 'HP' ? lv * 22 : t.id === 'SPD' ? Math.min(lv, 10) * 0.4 : Math.min(lv, 10) * 1.2;
+            const currentEffect = t.id === 'SPD' ? '目前 +' + totalGain.toFixed(1) : t.id === 'REC' ? '目前 +' + totalGain.toFixed(1) + ' 生命／秒' : '目前 +' + totalGain + (t.id === 'HP' ? ' 最大生命' : ' 傷害');
+            const label = t.name + ' Lv.' + lv + (isMaxed ? '（已達上限）' : '') +
+                '<br><small style="color:#b8c9d2">' + t.gain + '；' + currentEffect + '</small>';
             const btnLabel = isMaxed ? '已滿級' : cost + '💰';
             const btnDisabled = isMaxed || SaveSystem.currentData.resources.gold < cost;
             card.innerHTML = '<span>' + label + '</span><button class="main-btn small" onclick="GameEngine.buyTalent(\'' + t.id + '\',' + cost + ')"' + (btnDisabled ? ' disabled' : '') + '>' + btnLabel + '</button>';
@@ -4798,6 +4806,8 @@ window.GameEngine = {
             d.talents[id] = currentLv + 1;
             SaveSystem.save();
             this.renderLobby();
+            const gains = { ATK:'武器傷害 +6', HP:'最大生命 +22', SPD:'移動速度 +0.4', REC:'每秒恢復 +1.2 生命' };
+            this.showAlert(gains[id] + '（下場戰鬥生效）');
         } else {
             alert('金幣不足');
         }
