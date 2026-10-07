@@ -297,6 +297,13 @@
             margin-top: 4px;
         }
 
+        .magnet-status {
+            font-size: 13px;
+            color: #74c0fc;
+            font-weight: bold;
+            margin-top: 4px;
+        }
+
         canvas {
             display: block;
             background-color: #bbada0;
@@ -357,6 +364,10 @@
         const AI_COUNT = 8;
         const BODY_SPACING = 28;
         const SHIELD_DURATION = 3000;
+        const MAGNET_DURATION = 8000;
+        const MAGNET_RADIUS = 180;
+        const MAGNET_PULL_SPEED = 0.65;
+        const MAGNET_RESPAWN_DELAY = 22000;
         const AFK_TIMEOUT = 15000;
 
         const canvas = document.getElementById("gameCanvas");
@@ -368,6 +379,8 @@
         const killsDisplay = document.getElementById("kills");
         const shieldUi = document.getElementById("shield-ui");
         const shieldTimeDisplay = document.getElementById("shield-time");
+        const magnetUi = document.getElementById("magnet-ui");
+        const magnetTimeDisplay = document.getElementById("magnet-time");
         const leaderboardList = document.getElementById("leaderboard-list");
         const killFeedContainer = document.getElementById("kill-feed");
 
@@ -419,6 +432,9 @@
         let remotePlayers = {}; 
         let aiSnakes = [];
         let foods = [];
+        let magnetPickup = null;
+        let magnetUntil = 0;
+        let magnetRespawnAt = 0;
         let historyLeaderboard = {};
         let gameOver = false;
         let playerRef = null;
@@ -532,6 +548,7 @@
 
         for (let i = 0; i < FOOD_COUNT; i++) foods.push(generateFood());
         for (let i = 0; i < AI_COUNT; i++) aiSnakes.push(generateAISnake(i));
+        magnetPickup = generateMagnetPickup();
 
         function generateFood() {
             const possibleValues = [2, 4, 8, 16, 32, 64, 128];
@@ -539,6 +556,16 @@
                 x: Math.random() * (MAP_SIZE - 300) + 150,
                 y: Math.random() * (MAP_SIZE - 300) + 150,
                 value: possibleValues[Math.floor(Math.random() * possibleValues.length)]
+            };
+        }
+
+        function generateMagnetPickup() {
+            const angle = Math.random() * Math.PI * 2;
+            const distance = 350 + Math.random() * 250;
+            const head = player.body[0];
+            return {
+                x: Math.max(BLOCK_SIZE, Math.min(MAP_SIZE - BLOCK_SIZE, head.x + Math.cos(angle) * distance)),
+                y: Math.max(BLOCK_SIZE, Math.min(MAP_SIZE - BLOCK_SIZE, head.y + Math.sin(angle) * distance))
             };
         }
 
@@ -846,9 +873,39 @@
                 shieldUi.style.display = 'none';
             }
 
+            if (now < magnetUntil) {
+                magnetUi.style.display = 'block';
+                magnetTimeDisplay.innerText = ((magnetUntil - now) / 1000).toFixed(1);
+            } else {
+                magnetUi.style.display = 'none';
+            }
+
             if (!moveSnake(player)) {
                 endGame("撞到地圖邊界牆壁了！");
                 return;
+            }
+
+            const playerHead = player.body[0];
+            if (magnetPickup && Math.hypot(playerHead.x - magnetPickup.x, playerHead.y - magnetPickup.y) < BLOCK_SIZE) {
+                magnetUntil = now + MAGNET_DURATION;
+                magnetPickup = null;
+                magnetRespawnAt = now + MAGNET_RESPAWN_DELAY;
+            } else if (!magnetPickup && now >= magnetRespawnAt) {
+                magnetPickup = generateMagnetPickup();
+            }
+
+            if (now < magnetUntil) {
+                foods.forEach(food => {
+                    if (food.value > playerHead.value) return;
+                    const dx = playerHead.x - food.x;
+                    const dy = playerHead.y - food.y;
+                    const distance = Math.hypot(dx, dy);
+                    if (distance > BLOCK_SIZE * 0.8 && distance < MAGNET_RADIUS) {
+                        const pull = Math.min(MAGNET_PULL_SPEED, (distance / MAGNET_RADIUS) * MAGNET_PULL_SPEED);
+                        food.x += (dx / distance) * pull;
+                        food.y += (dy / distance) * pull;
+                    }
+                });
             }
 
             if (isHost()) {
@@ -974,6 +1031,23 @@
                 drawBlock(f.x, f.y, f.value, false, "#ffffff", "", false);
             });
 
+            if (magnetPickup) {
+                ctx.save();
+                ctx.translate(magnetPickup.x, magnetPickup.y);
+                ctx.beginPath();
+                ctx.arc(0, 0, BLOCK_SIZE * 0.65, 0, Math.PI * 2);
+                ctx.fillStyle = "rgba(116, 192, 252, 0.25)";
+                ctx.fill();
+                ctx.strokeStyle = "#74c0fc";
+                ctx.lineWidth = 3;
+                ctx.stroke();
+                ctx.font = "28px Arial";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText("🧲", 0, 1);
+                ctx.restore();
+            }
+
             aiSnakes.forEach(ai => {
                 if (ai.body && ai.body.length > 0) {
                     const isShielded = Date.now() < ai.shieldUntil;
@@ -991,6 +1065,16 @@
                     }
                 }
             });
+
+            if (Date.now() < magnetUntil) {
+                ctx.beginPath();
+                ctx.arc(head.x, head.y, MAGNET_RADIUS, 0, Math.PI * 2);
+                ctx.strokeStyle = "rgba(116, 192, 252, 0.35)";
+                ctx.lineWidth = 2;
+                ctx.setLineDash([8, 8]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
 
             const isPlayerShielded = Date.now() < player.shieldUntil;
             for (let i = player.body.length - 1; i >= 0; i--) {
@@ -1147,6 +1231,7 @@
         <h1>2048 貪吃蛇</h1>
         <div class="score-container">分數: <span id="score">0</span> | 擊殺: <span id="kills">0</span></div>
         <div id="shield-ui" class="shield-status">🛡️ 防護罩倒數: <span id="shield-time">3.0</span>s</div>
+        <div id="magnet-ui" class="magnet-status" style="display: none;">🧲 磁鐵效果: <span id="magnet-time">8.0</span>s</div>
     </div>
 
     <!-- 擊殺播報容器 -->
