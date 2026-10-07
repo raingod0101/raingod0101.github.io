@@ -31,7 +31,7 @@
         
         .ctrl-btn { padding: 10px 14px; background: #111; color: #fff; border: 1px solid var(--pink); cursor: pointer; pointer-events: auto; font-weight: bold; font-size: 12px; transition: 0.2s; }
         .ctrl-btn:active { background: var(--pink); color: #000; }
-        .ctrl-btn:disabled { color: #777; border-color: #555; cursor: not-allowed; }
+        .ctrl-btn:disabled { color: #777; border-color: #555; cursor: not-allowed; opacity: 0.6; }
 
         /* Boss Gauge */
         #boss-hud {
@@ -128,16 +128,14 @@
         const container = document.getElementById('game-container');
 
         const MOB_TYPES = {
-            COMMON:   { name: 'Drone', color: '#00f2ff', hp: 5, reward: 10, size: 30, behavior: 'normal' },
-            ELITE:    { name: 'Hunter', color: '#ff007b', hp: 80, reward: 400, size: 45, behavior: 'fast' },
-            VOID:     { name: 'Void', color: '#bc13fe', hp: 800, reward: 3500, size: 55, behavior: 'sine' },
-            MAGMA:    { name: 'Magma', color: '#ff6600', hp: 5000, reward: 25000, size: 65, behavior: 'jitter' },
-            SOLAR:    { name: 'Solar', color: '#ffcc00', hp: 40000, reward: 200000, size: 85, behavior: 'pulse' },
-            RAINGOD:  { name: 'RAINGOD', color: '#00ff88', hp: 2000000, reward: 12000000, size: 140, behavior: 'chaos' },
-            
-            // 超稀有怪物
-            CREATOR:  { name: '創世神', color: '#ffeeaa', hp: 1000000000, reward: 15000000000, size: 180, behavior: 'vortex' },
-            ZENITH:   { name: '絕對頂點', color: '#ffffff', hp: 10000000000, reward: 99999999999, size: 210, behavior: 'chaos' }
+            COMMON:   { name: 'Drone', color: '#00f2ff', hp: 2, reward: 15, size: 30, behavior: 'normal' },
+            ELITE:    { name: 'Hunter', color: '#ff007b', hp: 12, reward: 120, size: 45, behavior: 'fast' },
+            VOID:     { name: 'Void', color: '#bc13fe', hp: 60, reward: 750, size: 55, behavior: 'sine' },
+            MAGMA:    { name: 'Magma', color: '#ff6600', hp: 300, reward: 4500, size: 65, behavior: 'jitter' },
+            SOLAR:    { name: 'Solar', color: '#ffcc00', hp: 1800, reward: 30000, size: 85, behavior: 'pulse' },
+            RAINGOD:  { name: 'RAINGOD', color: '#00ff88', hp: 12000, reward: 250000, size: 140, behavior: 'chaos' },
+            CREATOR:  { name: '創世神', color: '#ffeeaa', hp: 100000, reward: 2500000, size: 180, behavior: 'vortex' },
+            ZENITH:   { name: '絕對頂點', color: '#ffffff', hp: 800000, reward: 20000000, size: 210, behavior: 'chaos' }
         };
 
         const SAVE_KEY = 'raingod_eternal_v3_save';
@@ -149,6 +147,11 @@
         let activeBoss = null;
         let gameStarted = false;
         let leaderboardTimer = null;
+
+        // BOSS 冷卻與動態難度變數
+        let bossSpawnCount = 0;
+        let bossCooldownTime = 0;
+        let bossCooldownTimer = null;
 
         async function init() {
             width = canvas.width = container.clientWidth;
@@ -177,9 +180,9 @@
             return {
                 money: 0, totalEarned: 0, prestige: 1, tp: 0,
                 upgrades: {
-                    damage: { lv: 1, cost: 50, mult: 1.4, name: "量子核心", desc: "提升每次點擊的基礎攻擊力" },
-                    range: { lv: 1, cost: 200, mult: 1.5, name: "共振距離", desc: "擴大連鎖爆炸的傳播範圍" },
-                    luck: { lv: 1, cost: 500, mult: 1.7, name: "命運干涉", desc: "提高高階稀有怪出現機率" }
+                    damage: { lv: 1, cost: 25, mult: 1.35, name: "量子核心", desc: "提升每次點擊的基礎攻擊力" },
+                    range: { lv: 1, cost: 100, mult: 1.45, name: "共振距離", desc: "擴大連鎖爆炸的傳播範圍" },
+                    luck: { lv: 1, cost: 200, mult: 1.8, name: "命運干涉", desc: "提高高階與極稀有怪出現機率" }
                 },
                 talents: {
                     critDmg: { lv: 0, max: 10, cost: 1, name: "超頻暴擊", desc: "暴擊傷害倍率 +50% / 級" },
@@ -199,45 +202,48 @@
             const localData = localStorage.getItem(SAVE_KEY);
             if (localData) {
                 try {
-                    gameData = { ...gameData, ...JSON.parse(localData) };
+                    const parsed = JSON.parse(localData);
+                    gameData = { ...gameData, ...parsed };
+                    // 確保舊存檔相容 luck 屬性
+                    if (!gameData.upgrades.luck) {
+                        gameData.upgrades.luck = { lv: 1, cost: 200, mult: 1.8, name: "命運干涉", desc: "提高高階與極稀有怪出現機率" };
+                    }
                 } catch(e) { console.error(e); }
             }
         }
 
-        // --- 平滑成長曲線算式 ---
         function getAtkPower() {
-            // 基礎傷害隨等級呈 1.35 成長，並享受天賦加成
-            let dmg = Math.pow(1.35, gameData.upgrades.damage.lv - 1) * Math.pow(1.5, gameData.prestige - 1);
-            return dmg;
+            let baseDmg = gameData.upgrades.damage.lv;
+            let mult = Math.pow(1.3, gameData.upgrades.damage.lv - 1) * Math.pow(2.0, gameData.prestige - 1);
+            return Math.floor(baseDmg * mult);
         }
 
         function getUpgradeCost(upKey) {
             const up = gameData.upgrades[upKey];
-            // 使用遞增指數曲線防止早期暴漲、中後期過平緩
-            return Math.floor(up.cost * Math.pow(up.mult, Math.pow(up.lv - 1, 0.95)));
+            return Math.floor(up.cost * Math.pow(up.mult, up.lv - 1));
         }
 
         class Cube {
             constructor() {
                 const roll = Math.random();
-                const luckFactor = gameData.upgrades.luck.lv * 0.03;
+                // 命運干涉 (Luck) 等級越高，稀有怪機率提升越明顯
+                const luckFactor = (gameData.upgrades.luck.lv - 1) * 0.03;
 
-                if (roll < 0.001 + luckFactor * 0.01)      this.type = MOB_TYPES.ZENITH;
-                else if (roll < 0.005 + luckFactor * 0.02)  this.type = MOB_TYPES.CREATOR;
-                else if (roll < 0.05 + luckFactor * 0.08)   this.type = MOB_TYPES.RAINGOD;
-                else if (roll < 0.15 + luckFactor * 0.12)   this.type = MOB_TYPES.SOLAR;
-                else if (roll < 0.35 + luckFactor * 0.15)   this.type = MOB_TYPES.MAGMA;
-                else if (roll < 0.60)                       this.type = MOB_TYPES.VOID;
-                else if (roll < 0.80)                       this.type = MOB_TYPES.ELITE;
+                if (roll < 0.0005 + luckFactor * 0.005)     this.type = MOB_TYPES.ZENITH;
+                else if (roll < 0.003 + luckFactor * 0.015) this.type = MOB_TYPES.CREATOR;
+                else if (roll < 0.015 + luckFactor * 0.035) this.type = MOB_TYPES.RAINGOD;
+                else if (roll < 0.05 + luckFactor * 0.06)   this.type = MOB_TYPES.SOLAR;
+                else if (roll < 0.12 + luckFactor * 0.08)   this.type = MOB_TYPES.MAGMA;
+                else if (roll < 0.22 + luckFactor * 0.10)   this.type = MOB_TYPES.VOID;
+                else if (roll < 0.40)                       this.type = MOB_TYPES.ELITE;
                 else                                        this.type = MOB_TYPES.COMMON;
 
                 this.x = Math.random() * (width - 100) + 50;
                 this.y = Math.random() * (height - 100) + 50;
                 this.size = this.type.size;
 
-                // 怪物血量複合平滑曲線
-                const hpScale = Math.pow(1.2, (gameData.upgrades.damage.lv - 1) / 3) * Math.pow(1.25, gameData.prestige - 1);
-                this.hp = this.type.hp * hpScale;
+                const hpScale = Math.pow(1.15, gameData.prestige - 1);
+                this.hp = Math.max(1, Math.floor(this.type.hp * hpScale));
                 this.maxHp = this.hp;
                 this.color = this.type.color;
                 this.vx = (Math.random() - 0.5) * 2;
@@ -249,12 +255,12 @@
             update() {
                 this.tick += 0.05;
                 switch(this.type.behavior) {
-                    case 'fast': this.x += this.vx * 3; this.y += this.vy * 3; break;
-                    case 'sine': this.x += this.vx; this.y += Math.sin(this.tick) * 5; break;
-                    case 'jitter': this.x += this.vx + (Math.random()-0.5)*6; this.y += this.vy + (Math.random()-0.5)*6; break;
-                    case 'pulse': this.size = this.type.size + Math.sin(this.tick * 2) * 8; this.x += this.vx; this.y += this.vy; break;
-                    case 'vortex': this.x += this.vx + Math.cos(this.tick) * 4; this.y += this.vy + Math.sin(this.tick) * 4; break;
-                    case 'chaos': this.vx += (Math.random()-0.5)*0.4; this.vy += (Math.random()-0.5)*0.4; this.x += this.vx; this.y += this.vy; break;
+                    case 'fast': this.x += this.vx * 2.5; this.y += this.vy * 2.5; break;
+                    case 'sine': this.x += this.vx; this.y += Math.sin(this.tick) * 4; break;
+                    case 'jitter': this.x += this.vx + (Math.random()-0.5)*4; this.y += this.vy + (Math.random()-0.5)*4; break;
+                    case 'pulse': this.size = this.type.size + Math.sin(this.tick * 2) * 6; this.x += this.vx; this.y += this.vy; break;
+                    case 'vortex': this.x += this.vx + Math.cos(this.tick) * 3; this.y += this.vy + Math.sin(this.tick) * 3; break;
+                    case 'chaos': this.vx += (Math.random()-0.5)*0.3; this.vy += (Math.random()-0.5)*0.3; this.x += this.vx; this.y += this.vy; break;
                     default: this.x += this.vx; this.y += this.vy;
                 }
                 
@@ -280,32 +286,30 @@
             explode() {
                 combo++;
                 let goldBonus = 1 + (gameData.talents.goldMult.lv * 0.2);
-                let reward = this.type.reward * Math.pow(1.3, gameData.prestige - 1) * goldBonus;
+                let reward = this.type.reward * Math.pow(1.5, gameData.prestige - 1) * goldBonus;
                 gameData.money += reward;
                 gameData.totalEarned += reward;
 
                 spawnEffect(this.x, this.y, this.color);
                 spawnText(this.x, this.y, `+$${Math.floor(reward).toLocaleString()}`, this.color);
 
-                // 連鎖傷害機制 (受天賦影響)
-                let range = 110 + (gameData.upgrades.range.lv * 18);
-                let chainFactor = 0.5 + (gameData.talents.chainAtk.lv * 0.15);
+                let range = 100 + (gameData.upgrades.range.lv * 20);
+                let chainFactor = 0.6 + (gameData.talents.chainAtk.lv * 0.15);
 
                 cubes.forEach(c => {
                     if(!c.dead && Math.hypot(this.x - c.x, this.y - c.y) < range) {
-                        setTimeout(() => c.takeDamage(getAtkPower() * chainFactor), 70);
+                        setTimeout(() => c.takeDamage(getAtkPower() * chainFactor), 60);
                     }
                 });
 
-                if(gameData.totalEarned > 1000000) document.getElementById('prestige-btn').style.display = 'block';
+                if(gameData.totalEarned >= 50000) document.getElementById('prestige-btn').style.display = 'block';
                 refreshUI(); saveGame();
             }
 
             takeDamage(dmg) {
                 if(this.dead) return;
 
-                // 暴擊判定
-                let isCrit = Math.random() < 0.25; // 基礎 25% 暴擊
+                let isCrit = Math.random() < 0.25;
                 if(isCrit) {
                     let critMult = 2.0 + (gameData.talents.critDmg.lv * 0.5);
                     dmg *= critMult;
@@ -317,16 +321,18 @@
             }
         }
 
-        // --- 大 Boss 戰場機制 ---
+        // --- 大 Boss 戰場機制 (防刷 TP 強化版) ---
         class Boss {
             constructor() {
-                this.name = "【滅世核心·虛空主宰】";
+                this.name = `【滅世核心·虛空主宰 MK-${bossSpawnCount + 1}】`;
                 this.x = width / 2;
                 this.y = height / 3;
-                this.size = 200;
+                this.size = 180;
                 
-                let scale = Math.pow(1.5, gameData.prestige - 1);
-                this.maxHp = 5000000 * scale;
+                // 基礎倍率 + 轉生倍率 + 本次召喚遞增指數 (每次召喚血量 * 1.8)
+                let baseHp = 150000;
+                let scale = Math.pow(1.8, gameData.prestige - 1) * Math.pow(1.8, bossSpawnCount);
+                this.maxHp = Math.floor(baseHp * scale);
                 this.hp = this.maxHp;
                 this.color = "#ff007b";
                 this.dead = false;
@@ -354,7 +360,6 @@
                 ctx.shadowBlur = 25; ctx.shadowColor = this.color;
                 ctx.strokeRect(-this.size/2, -this.size/2, this.size, this.size);
 
-                // 核心漩渦特效
                 ctx.rotate(Date.now() * 0.001);
                 ctx.strokeStyle = '#00f2ff';
                 ctx.lineWidth = 2;
@@ -378,21 +383,40 @@
             onDefeat() {
                 document.getElementById('boss-hud').style.display = 'none';
                 activeBoss = null;
+                bossSpawnCount++; // 召喚次數加 1
 
-                // 擊敗 Boss 獎勵大量 TP 與 資金
-                let rewardMoney = this.maxHp * 2;
-                let rewardTP = 3 + Math.floor(gameData.prestige * 1.5);
+                let rewardMoney = this.maxHp * 1.2;
+                let rewardTP = 2 + Math.floor(gameData.prestige * 1.2);
                 
                 gameData.money += rewardMoney;
                 gameData.tp += rewardTP;
 
                 spawnText(width/2, height/2, `BOSS CLEAR! +${rewardTP} TP`, '#ffcc00', 30);
+                startBossCooldown(30); // 觸發 30 秒冷卻
                 refreshUI(); saveGame();
             }
         }
 
+        function startBossCooldown(seconds) {
+            bossCooldownTime = seconds;
+            const btn = document.getElementById('boss-btn');
+            btn.disabled = true;
+
+            clearInterval(bossCooldownTimer);
+            bossCooldownTimer = setInterval(() => {
+                bossCooldownTime--;
+                if (bossCooldownTime <= 0) {
+                    clearInterval(bossCooldownTimer);
+                    btn.disabled = false;
+                    btn.innerText = '召喚 BOSS';
+                } else {
+                    btn.innerText = `冷卻中 (${bossCooldownTime}s)`;
+                }
+            }, 1000);
+        }
+
         function spawnBoss() {
-            if(activeBoss) return;
+            if(activeBoss || bossCooldownTime > 0) return;
             activeBoss = new Boss();
         }
 
@@ -545,12 +569,12 @@
         }
 
         function doPrestige() {
-            // 轉生可獲得更多天賦點數
-            let tpEarned = Math.floor(Math.log10(gameData.totalEarned) * 2);
-            gameData.tp += Math.max(1, tpEarned);
+            let tpEarned = Math.max(1, Math.floor(Math.log10(gameData.totalEarned) - 3));
+            gameData.tp += tpEarned;
             gameData.prestige++;
             gameData.money = 0; gameData.totalEarned = 0;
-            
+            bossSpawnCount = 0; // 轉生時重置 BOSS 難度疊加
+
             for (let k in gameData.upgrades) gameData.upgrades[k].lv = 1;
             document.getElementById('prestige-btn').style.display = 'none';
             refreshUI(); saveGame();
@@ -592,7 +616,6 @@
             const mouseY = ey - rect.top;
             let hit = false;
 
-            // 優先攻擊 Boss
             if(activeBoss) {
                 if(Math.hypot(mouseX - activeBoss.x, mouseY - activeBoss.y) < activeBoss.size / 1.2) {
                     activeBoss.takeDamage(getAtkPower());
