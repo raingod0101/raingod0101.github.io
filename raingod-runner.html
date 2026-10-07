@@ -96,14 +96,14 @@
                     <strong>金幣磁鐵 (1次性)</strong><br>
                     <small style="color: #aaa;">遊戲開局自動吸取金幣 15秒</small>
                 </div>
-                <button class="shop-btn" onclick="buyItem('magnet', 20)">200 金幣</button>
+                <button class="shop-btn" onclick="buyItem('magnet', 20)">20 金幣</button>
             </div>
             <div class="shop-item">
                 <div>
                     <strong>防護盾 (1次性)</strong><br>
                     <small style="color: #aaa;">抵擋一次撞擊死亡</small>
                 </div>
-                <button class="shop-btn" onclick="buyItem('shield', 30)">300 金幣</button>
+                <button class="shop-btn" onclick="buyItem('shield', 30)">30 金幣</button>
             </div>
         </div>
         <button class="btn" style="margin-top: 20px; padding: 10px 40px;" onclick="closeShop()">BACK</button>
@@ -137,23 +137,24 @@
         const LEADERBOARD_URL = 'https://game-24b43-default-rtdb.firebaseio.com/raingod_runner_leaderboard';
         const SKINS = [
             { id: 'cyan', name: '霓虹青跑者', color: '#00f3ff', shape: 'rect', price: 0 },
-            { id: 'gold', name: '黃金跑者', color: '#ffd700', shape: 'rect', price: 500 },
-            { id: 'pink', name: '粉紅魅影', color: '#ff00aa', shape: 'circle', price: 500 },
-            { id: 'purple', name: '紫晶幽影', color: '#a855f7', shape: 'diamond', price: 1000 },
-            { id: 'lime', name: '酸橙閃電', color: '#a3e635', shape: 'triangle', price: 1000 },
-            { id: 'fire', name: '烈焰衝刺', color: '#ff5a36', shape: 'star', price: 1500 },
-            { id: 'ice', name: '極地冰晶', color: '#8be9ff', shape: 'diamond', price: 1500 },
-            { id: 'white', name: '月光白影', color: '#f8fafc', shape: 'circle', price: 2000 },
-            { id: 'orange', name: '熔岩橘子', color: '#fb923c', shape: 'triangle', price: 2500 },
-            { id: 'blue', name: '深海藍鯊', color: '#2563eb', shape: 'rect', price: 2500 },
-            { id: 'mint', name: '薄荷幻彩', color: '#34d399', shape: 'star', price: 3000 },
-            { id: 'red', name: '赤焰武士', color: '#ef4444', shape: 'diamond', price: 3500 },
-            { id: 'rainbow', name: '彩虹傳說', color: '#f472b6', shape: 'star', price: 50000 }
+            { id: 'gold', name: '黃金跑者', color: '#ffd700', shape: 'rect', price: 50 },
+            { id: 'pink', name: '粉紅魅影', color: '#ff00aa', shape: 'circle', price: 50 },
+            { id: 'purple', name: '紫晶幽影', color: '#a855f7', shape: 'diamond', price: 100 },
+            { id: 'lime', name: '酸橙閃電', color: '#a3e635', shape: 'triangle', price: 100 },
+            { id: 'fire', name: '烈焰衝刺', color: '#ff5a36', shape: 'star', price: 150 },
+            { id: 'ice', name: '極地冰晶', color: '#8be9ff', shape: 'diamond', price: 150 },
+            { id: 'white', name: '月光白影', color: '#f8fafc', shape: 'circle', price: 200 },
+            { id: 'orange', name: '熔岩橘子', color: '#fb923c', shape: 'triangle', price: 250 },
+            { id: 'blue', name: '深海藍鯊', color: '#2563eb', shape: 'rect', price: 250 },
+            { id: 'mint', name: '薄荷幻彩', color: '#34d399', shape: 'star', price: 300 },
+            { id: 'red', name: '赤焰武士', color: '#ef4444', shape: 'diamond', price: 350 },
+            { id: 'rainbow', name: '彩虹傳說', color: '#f472b6', shape: 'star', price: 500 }
         ];
         
         // 攝影機：拉高 Y 軸、往前 Tilt，實現極佳的俯視俯瞰視角
         let camera = { x: 0, y: 320, z: -220, fov: 320 };
         let obstacles = [], items = [], particles = [];
+        let worldDistance = 0, nextObstacleDistance = 650;
 
         // 玩家資料與商店道具
         let playerData = {
@@ -172,7 +173,7 @@
             lane: 1, x: 0, targetX: 0,
             y: 0, vY: 0, z: 150, // 人物放置在螢幕中下方 (z:150)
             rollRotation: 0, duckTimer: 0,
-            isJumping: false, isDucking: false,
+            isJumping: false, isDucking: false, onBridge: false,
             width: 40, height: 75
         };
 
@@ -186,9 +187,12 @@
             player.lane = 1; player.x = LANE_X[1]; player.targetX = LANE_X[1];
             player.y = 0; player.vY = 0; player.rollRotation = 0;
             player.isJumping = false; player.isDucking = false;
+            player.onBridge = false;
 
             score = 0; coinCount = 0; speed = 16;
             obstacles = []; items = []; particles = [];
+            worldDistance = 0;
+            nextObstacleDistance = 650;
             
             // 載入商店道具效果
             activeBuffs.magnetTimer = playerData.hasMagnet ? 600 : 0; // 約10秒磁鐵
@@ -329,11 +333,63 @@
 
         // --- 障礙物與金幣生成 ---
         function spawn() {
-            let spawnZ = 2200;
-            if (Math.random() < 0.05) {
-                let lane = Math.floor(Math.random() * 3);
-                let type = Math.random() > 0.4 ? 'LOW' : 'HIGH';
-                obstacles.push({ x: LANE_X[lane], y: 0, z: spawnZ, lane, type, width: 90, height: type === 'LOW' ? 50 : 110 });
+            const spawnZ = 2200;
+            worldDistance += speed;
+            if (worldDistance >= nextObstacleDistance) {
+                if (Math.random() < 0.24) {
+                    const bridgeZ = 2600;
+                    const course = createBridgeCourse(bridgeZ);
+                    obstacles.push(course);
+                    obstacles = obstacles.filter(obstacle =>
+                        obstacle.type === 'BRIDGE' ||
+                        !course.sections.some(section =>
+                            section.lane === obstacle.lane &&
+                            obstacle.z + 70 >= bridgeZ + section.near &&
+                            obstacle.z - 70 <= bridgeZ + section.far
+                        )
+                    );
+
+                    course.sections.forEach(section => {
+                        const coinSteps = section.kind === 'DECK'
+                            ? [0.15, 0.35, 0.55, 0.75, 0.95]
+                            : [0.35, 0.7];
+                        coinSteps.forEach(step => {
+                            const zOffset = section.far + (section.near - section.far) * step;
+                            const y = section.yFar + (section.yNear - section.yFar) * step;
+                            items.push({
+                                x: LANE_X[section.lane],
+                                y: y + 28,
+                                z: bridgeZ + zOffset,
+                                lane: section.lane,
+                                rot: 0
+                            });
+                        });
+                    });
+                    nextObstacleDistance = worldDistance + 9500;
+                } else {
+                    const lanes = [0, 1, 2].filter(lane => !isBridgeOverhead(lane, spawnZ, 70));
+                    if (!lanes.length) {
+                        nextObstacleDistance = worldDistance + 260;
+                        return;
+                    }
+                    const firstLane = lanes.splice(Math.floor(Math.random() * lanes.length), 1)[0];
+                    const type = Math.random() < 0.54 ? 'LOW' : 'HIGH';
+                    const wave = [{
+                        lane: firstLane,
+                        type
+                    }];
+                    if (lanes.length && Math.random() < 0.88) {
+                        const lane = lanes.splice(Math.floor(Math.random() * lanes.length), 1)[0];
+                        wave.push({ lane, type: Math.random() < 0.54 ? 'LOW' : 'HIGH' });
+                    }
+                    wave.forEach(({ lane, type }) => {
+                        obstacles.push({
+                            x: LANE_X[lane], y: 0, z: spawnZ, lane, type,
+                            width: 90, height: type === 'LOW' ? 50 : 110
+                        });
+                    });
+                    nextObstacleDistance = worldDistance + 380 + Math.random() * 140;
+                }
             }
             if (Math.random() < 0.08) {
                 let lane = Math.floor(Math.random() * 3);
@@ -343,13 +399,100 @@
             }
         }
 
+        const BRIDGE_HEIGHT = 125;
+        const BRIDGE_RAMP_LENGTH = 420;
+        const BRIDGE_DECK_LENGTH = 500;
+        const BRIDGE_GAP_LENGTH = 130;
+        const BRIDGE_DECK_COUNT = 8;
+        const BRIDGE_HALF_WIDTH = 58;
+
+        function createBridgeCourse(z) {
+            const startLane = Math.floor(Math.random() * 3);
+            const laneOrder = Array.from(
+                { length: BRIDGE_DECK_COUNT },
+                (_, index) => (startLane + Math.floor(index / 2)) % 3
+            );
+            const laneRuns = laneOrder.reduce((runs, lane) => {
+                const lastRun = runs[runs.length - 1];
+                if (lastRun && lastRun.lane === lane) {
+                    lastRun.length += BRIDGE_DECK_LENGTH;
+                } else {
+                    runs.push({ lane, length: BRIDGE_DECK_LENGTH });
+                }
+                return runs;
+            }, []);
+            const sections = [];
+            let far = 0;
+            sections.push({
+                lane: startLane,
+                kind: 'RAMP_UP',
+                near: far - BRIDGE_RAMP_LENGTH,
+                far,
+                yNear: 0,
+                yFar: BRIDGE_HEIGHT
+            });
+
+            laneRuns.forEach(({ lane, length }, index) => {
+                if (index > 0) far += BRIDGE_GAP_LENGTH;
+                sections.push({
+                    lane,
+                    kind: 'DECK',
+                    near: far,
+                    far: far + length,
+                    yNear: BRIDGE_HEIGHT,
+                    yFar: BRIDGE_HEIGHT
+                });
+                far += length;
+            });
+
+            const finalLane = laneRuns[laneRuns.length - 1].lane;
+            sections.push({
+                lane: finalLane,
+                kind: 'RAMP_DOWN',
+                near: far,
+                far: far + BRIDGE_RAMP_LENGTH,
+                yNear: BRIDGE_HEIGHT,
+                yFar: 0
+            });
+
+            return { type: 'BRIDGE', z, sections };
+        }
+
+        function getBridgeUndersideCollision() {
+            if (player.onBridge) return null;
+            const playerHeight = player.isDucking ? player.height * 0.5 : player.height;
+            for (const course of obstacles) {
+                if (course.type !== 'BRIDGE' || course.undersideShieldUsed) continue;
+                for (const section of course.sections) {
+                    if (section.kind !== 'DECK' || section.lane !== player.lane) continue;
+                    const sectionNear = course.z + section.near;
+                    const sectionFar = course.z + section.far;
+                    if (player.z + 40 < sectionNear || player.z - 40 > sectionFar) continue;
+                    const underside = BRIDGE_HEIGHT - 18;
+                    if (player.y < BRIDGE_HEIGHT && player.y + playerHeight > underside) return course;
+                }
+            }
+            return null;
+        }
+
+        function isBridgeOverhead(lane, z, margin = 0) {
+            return obstacles.some(course =>
+                course.type === 'BRIDGE' &&
+                course.sections.some(section =>
+                    section.lane === lane &&
+                    z + margin >= course.z + section.near &&
+                    z - margin <= course.z + section.far
+                )
+            );
+        }
+
         // --- 狀態更新 ---
         function update() {
             if (!gameActive) return;
 
             saveTicker++;
             score += Math.floor(speed / 6);
-            speed += 0.002;
+            speed = Math.min(speed + 0.001, 24);
             scoreEl.innerText = score;
             if (saveTicker >= 120) {
                 saveTicker = 0;
@@ -362,15 +505,50 @@
             player.x += dx * 0.25;
             player.rollRotation = -dx * 0.004;
 
-            // 跳躍與蹲下
+            // 上坡會帶玩家升高；平台間的空隙則必須跳過。
+            const bridgeSurface = getBridgeSurface(player.lane);
             if (player.isJumping) {
                 player.y += player.vY;
                 player.vY -= 1.3;
-                if (player.y <= 0) { player.y = 0; player.isJumping = false; }
+                if (bridgeSurface && player.vY <= 0 && player.y <= bridgeSurface.height) {
+                    player.y = bridgeSurface.height;
+                    player.vY = 0;
+                    player.isJumping = false;
+                    player.onBridge = bridgeSurface.height > 0;
+                } else if (player.y <= 0) {
+                    player.y = 0;
+                    player.vY = 0;
+                    player.isJumping = false;
+                    player.onBridge = false;
+                }
+            } else if (bridgeSurface && (bridgeSurface.kind === 'RAMP_UP' || player.onBridge)) {
+                player.y = bridgeSurface.height;
+                player.vY = 0;
+                player.onBridge = bridgeSurface.height > 0;
+            } else {
+                player.onBridge = false;
+                if (player.y > 0) {
+                    player.vY -= 1.3;
+                    player.y = Math.max(0, player.y + player.vY);
+                }
             }
             if (player.isDucking) {
                 player.duckTimer--;
                 if (player.duckTimer <= 0) player.isDucking = false;
+            }
+
+            const undersideCollision = getBridgeUndersideCollision();
+            if (undersideCollision) {
+                if (activeBuffs.hasShield) {
+                    activeBuffs.hasShield = false;
+                    undersideCollision.undersideShieldUsed = true;
+                    updateBuffsUI();
+                    createExplosion(player.x, player.y + 30, player.z, '#00f3ff');
+                } else {
+                    createExplosion(player.x, player.y + 30, player.z, '#ff0055');
+                    gameEnd();
+                    return;
+                }
             }
 
             // 磁鐵倒數
@@ -386,8 +564,9 @@
 
                 if (o.z < player.z + 40 && o.z > player.z - 40 && o.lane === player.lane) {
                     let hit = false;
-                    if (o.type === 'LOW' && player.y < 40) hit = true;
-                    if (o.type === 'HIGH' && !player.isDucking) hit = true;
+                    const protectedByBridge = isBridgeOverhead(o.lane, o.z, 40);
+                    if (!protectedByBridge && o.type === 'LOW' && player.y < 40) hit = true;
+                    if (!protectedByBridge && o.type === 'HIGH' && !player.isDucking && player.y < 110) hit = true;
 
                     if (hit) {
                         if (activeBuffs.hasShield) {
@@ -401,7 +580,13 @@
                         }
                     }
                 }
-                if (o.z < -100) obstacles.splice(i, 1);
+                const bridgeEnd = o.type === 'BRIDGE'
+                    ? Math.max(...o.sections.map(section => section.far))
+                    : 0;
+                const passedEnd = o.type === 'BRIDGE'
+                    ? o.z + bridgeEnd < -100
+                    : o.z < -100;
+                if (passedEnd) obstacles.splice(i, 1);
             }
 
             // 金幣吃取與磁鐵吸附
@@ -438,6 +623,22 @@
             spawn();
         }
 
+        function getBridgeSurface(lane) {
+            for (const course of obstacles) {
+                if (course.type !== 'BRIDGE') continue;
+                const relativeZ = player.z - course.z;
+                for (const section of course.sections) {
+                    if (section.lane !== lane || relativeZ < section.near || relativeZ > section.far) continue;
+                    const progress = (relativeZ - section.near) / (section.far - section.near);
+                    return {
+                        height: section.yNear + (section.yFar - section.yNear) * progress,
+                        kind: section.kind
+                    };
+                }
+            }
+            return null;
+        }
+
         // --- 繪製畫面 ---
         function draw() {
             ctx.fillStyle = '#060612';
@@ -470,6 +671,9 @@
                 ctx.stroke();
             }
 
+            // 繪製斜坡與高架路：路面以投影後的 3D 四邊形連成一體。
+            obstacles.filter(o => o.type === 'BRIDGE').forEach(drawBridgeCourse);
+
             // 繪製金幣
             items.forEach(it => {
                 let p = project(it.x, it.y, it.z);
@@ -484,7 +688,7 @@
             });
 
             // 繪製障礙物
-            obstacles.forEach(o => {
+            obstacles.filter(o => o.type !== 'BRIDGE' && !isBridgeOverhead(o.lane, o.z, 70)).forEach(o => {
                 let p = project(o.x, o.y, o.z);
                 if (p.scale <= 0) return;
                 let bw = o.width * p.scale, bh = o.height * p.scale;
@@ -516,6 +720,78 @@
             });
 
             if (gameActive) requestAnimationFrame(() => { update(); draw(); });
+        }
+
+        function drawBridgeCourse(course) {
+            ctx.save();
+            [...course.sections].reverse().forEach(section => {
+                const nearZ = course.z + section.near;
+                const farZ = course.z + section.far;
+                if (farZ <= 50 || nearZ >= 3000) return;
+                const clippedNearZ = Math.max(50, nearZ);
+                const clippedFarZ = Math.min(3000, farZ);
+                const nearProgress = (clippedNearZ - nearZ) / (farZ - nearZ);
+                const farProgress = (clippedFarZ - nearZ) / (farZ - nearZ);
+                const clippedNearY = section.yNear + (section.yFar - section.yNear) * nearProgress;
+                const clippedFarY = section.yNear + (section.yFar - section.yNear) * farProgress;
+                const x = LANE_X[section.lane];
+                const leftNear = project(x - BRIDGE_HALF_WIDTH, clippedNearY, clippedNearZ);
+                const rightNear = project(x + BRIDGE_HALF_WIDTH, clippedNearY, clippedNearZ);
+                const rightFar = project(x + BRIDGE_HALF_WIDTH, clippedFarY, clippedFarZ);
+                const leftFar = project(x - BRIDGE_HALF_WIDTH, clippedFarY, clippedFarZ);
+                const corners = [leftNear, rightNear, rightFar, leftFar];
+                if (corners.some(point => point.scale <= 0)) return;
+
+                ctx.fillStyle = section.kind === 'DECK' ? '#087e91' : '#f59e0b';
+                ctx.strokeStyle = '#a5f3fc';
+                ctx.lineWidth = 2;
+                ctx.shadowColor = section.kind === 'DECK' ? '#22d3ee' : '#fb923c';
+                ctx.shadowBlur = 14;
+                ctx.beginPath();
+                ctx.moveTo(leftNear.x, leftNear.y);
+                corners.slice(1).forEach(point => ctx.lineTo(point.x, point.y));
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+
+                [-1, 1].forEach(side => {
+                    const railNear = project(x + side * BRIDGE_HALF_WIDTH, clippedNearY + 14, clippedNearZ);
+                    const railFar = project(x + side * BRIDGE_HALF_WIDTH, clippedFarY + 14, clippedFarZ);
+                    ctx.beginPath();
+                    ctx.moveTo(railNear.x, railNear.y);
+                    ctx.lineTo(railFar.x, railFar.y);
+                    ctx.strokeStyle = '#e0f2fe';
+                    ctx.lineWidth = Math.max(2, 5 * railFar.scale);
+                    ctx.stroke();
+                });
+
+                if (section.kind === 'DECK') {
+                    ctx.strokeStyle = 'rgba(224, 242, 254, 0.75)';
+                    ctx.lineWidth = 2;
+                    for (let z = Math.ceil(clippedNearZ / 110) * 110; z < clippedFarZ; z += 110) {
+                        const left = project(x - BRIDGE_HALF_WIDTH, BRIDGE_HEIGHT + 1, z);
+                        const right = project(x + BRIDGE_HALF_WIDTH, BRIDGE_HEIGHT + 1, z);
+                        ctx.beginPath();
+                        ctx.moveTo(left.x, left.y);
+                        ctx.lineTo(right.x, right.y);
+                        ctx.stroke();
+                    }
+
+                    ctx.strokeStyle = 'rgba(34, 211, 238, 0.8)';
+                    ctx.lineWidth = 2;
+                    for (let z = Math.ceil(clippedNearZ / 180) * 180; z < clippedFarZ; z += 180) {
+                        [-1, 1].forEach(side => {
+                            const top = project(x + side * (BRIDGE_HALF_WIDTH - 8), BRIDGE_HEIGHT, z);
+                            const bottom = project(x + side * (BRIDGE_HALF_WIDTH - 8), 0, z);
+                            ctx.beginPath();
+                            ctx.moveTo(top.x, top.y);
+                            ctx.lineTo(bottom.x, bottom.y);
+                            ctx.stroke();
+                        });
+                    }
+                }
+            });
+            ctx.restore();
         }
 
         // --- 繪製主角 (支援皮膚與護盾狀態) ---
