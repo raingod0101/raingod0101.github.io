@@ -148,7 +148,6 @@
         let gameStarted = false;
         let leaderboardTimer = null;
 
-        // BOSS 冷卻與動態難度變數
         let bossSpawnCount = 0;
         let bossCooldownTime = 0;
         let bossCooldownTimer = null;
@@ -182,7 +181,7 @@
                 upgrades: {
                     damage: { lv: 1, cost: 25, mult: 1.35, name: "量子核心", desc: "提升每次點擊的基礎攻擊力" },
                     range: { lv: 1, cost: 100, mult: 1.45, name: "共振距離", desc: "擴大連鎖爆炸的傳播範圍" },
-                    luck: { lv: 1, cost: 200, mult: 1.8, name: "命運干涉", desc: "提高高階與極稀有怪出現機率" }
+                    luck: { lv: 1, cost: 200, mult: 1.8, name: "命運干涉", desc: "降低弱怪機率，大幅提升稀有與極限怪出現率" }
                 },
                 talents: {
                     critDmg: { lv: 0, max: 10, cost: 1, name: "超頻暴擊", desc: "暴擊傷害倍率 +50% / 級" },
@@ -204,9 +203,8 @@
                 try {
                     const parsed = JSON.parse(localData);
                     gameData = { ...gameData, ...parsed };
-                    // 確保舊存檔相容 luck 屬性
                     if (!gameData.upgrades.luck) {
-                        gameData.upgrades.luck = { lv: 1, cost: 200, mult: 1.8, name: "命運干涉", desc: "提高高階與極稀有怪出現機率" };
+                        gameData.upgrades.luck = { lv: 1, cost: 200, mult: 1.8, name: "命運干涉", desc: "降低弱怪機率，大幅提升稀有與極限怪出現率" };
                     }
                 } catch(e) { console.error(e); }
             }
@@ -225,19 +223,36 @@
 
         class Cube {
             constructor() {
-                const roll = Math.random();
-                // 命運干涉 (Luck) 等級越高，稀有怪機率提升越明顯
-                const luckFactor = (gameData.upgrades.luck.lv - 1) * 0.03;
+                const luckLv = gameData.upgrades.luck.lv;
 
-                if (roll < 0.0005 + luckFactor * 0.005)     this.type = MOB_TYPES.ZENITH;
-                else if (roll < 0.003 + luckFactor * 0.015) this.type = MOB_TYPES.CREATOR;
-                else if (roll < 0.015 + luckFactor * 0.035) this.type = MOB_TYPES.RAINGOD;
-                else if (roll < 0.05 + luckFactor * 0.06)   this.type = MOB_TYPES.SOLAR;
-                else if (roll < 0.12 + luckFactor * 0.08)   this.type = MOB_TYPES.MAGMA;
-                else if (roll < 0.22 + luckFactor * 0.10)   this.type = MOB_TYPES.VOID;
-                else if (roll < 0.40)                       this.type = MOB_TYPES.ELITE;
-                else                                        this.type = MOB_TYPES.COMMON;
+                // --- 使用加權隨機抽樣 (Weighted Random) ---
+                // Luck 越高級，COMMON / ELITE 權重快速衰減，高階怪權重暴增！
+                const weights = {
+                    COMMON:  Math.max(10, 600 - luckLv * 80),
+                    ELITE:   Math.max(20, 300 - luckLv * 30),
+                    VOID:    150 + luckLv * 40,
+                    MAGMA:   80 + luckLv * 50,
+                    SOLAR:   30 + luckLv * 40,
+                    RAINGOD: 5 + luckLv * 25,
+                    CREATOR: 1 + luckLv * 10,
+                    ZENITH:  0.2 + luckLv * 4
+                };
 
+                let totalWeight = 0;
+                for (let k in weights) totalWeight += weights[k];
+
+                let randomNum = Math.random() * totalWeight;
+                let chosenType = MOB_TYPES.COMMON;
+
+                for (let k in weights) {
+                    if (randomNum < weights[k]) {
+                        chosenType = MOB_TYPES[k];
+                        break;
+                    }
+                    randomNum -= weights[k];
+                }
+
+                this.type = chosenType;
                 this.x = Math.random() * (width - 100) + 50;
                 this.y = Math.random() * (height - 100) + 50;
                 this.size = this.type.size;
@@ -321,7 +336,6 @@
             }
         }
 
-        // --- 大 Boss 戰場機制 (防刷 TP 強化版) ---
         class Boss {
             constructor() {
                 this.name = `【滅世核心·虛空主宰 MK-${bossSpawnCount + 1}】`;
@@ -329,7 +343,6 @@
                 this.y = height / 3;
                 this.size = 180;
                 
-                // 基礎倍率 + 轉生倍率 + 本次召喚遞增指數 (每次召喚血量 * 1.8)
                 let baseHp = 150000;
                 let scale = Math.pow(1.8, gameData.prestige - 1) * Math.pow(1.8, bossSpawnCount);
                 this.maxHp = Math.floor(baseHp * scale);
@@ -383,7 +396,7 @@
             onDefeat() {
                 document.getElementById('boss-hud').style.display = 'none';
                 activeBoss = null;
-                bossSpawnCount++; // 召喚次數加 1
+                bossSpawnCount++;
 
                 let rewardMoney = this.maxHp * 1.2;
                 let rewardTP = 2 + Math.floor(gameData.prestige * 1.2);
@@ -392,7 +405,7 @@
                 gameData.tp += rewardTP;
 
                 spawnText(width/2, height/2, `BOSS CLEAR! +${rewardTP} TP`, '#ffcc00', 30);
-                startBossCooldown(30); // 觸發 30 秒冷卻
+                startBossCooldown(30);
                 refreshUI(); saveGame();
             }
         }
@@ -573,7 +586,7 @@
             gameData.tp += tpEarned;
             gameData.prestige++;
             gameData.money = 0; gameData.totalEarned = 0;
-            bossSpawnCount = 0; // 轉生時重置 BOSS 難度疊加
+            bossSpawnCount = 0;
 
             for (let k in gameData.upgrades) gameData.upgrades[k].lv = 1;
             document.getElementById('prestige-btn').style.display = 'none';
