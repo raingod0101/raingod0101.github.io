@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>3D無盡宇宙尋寶迷宮 | Raingod</title>
+    <title>宇宙跑酷 | Raingod</title>
     <style>
         * { touch-action: none; user-select: none; -webkit-tap-highlight-color: transparent; }
         html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; position: fixed; background: #020205; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -84,6 +84,10 @@
         #save-status {
             min-height: 1.5em; margin: 10px 0 0; color: #b9a1d8; font-size: 13px;
         }
+        .mode-btn { padding: 12px 20px; margin: 5px; border: 1px solid #06b6d4; border-radius: 24px; color: #fff; background: #111827; font-weight: bold; cursor: pointer; }
+        .mode-btn.selected { background: #7c3aed; border-color: #c4b5fd; box-shadow: 0 0 14px #7c3aed; }
+        #duel-status { color: #67e8f9; min-height: 1.5em; max-width: 420px; }
+        #opponent-hud { position:absolute; top:150px; left:15px; z-index:100; color:#fff; background:rgba(8,15,30,.88); border:1px solid #06b6d4; border-radius:12px; padding:9px 13px; display:none; font-weight:bold; pointer-events:none; }
 
         #leaderboard-button {
             position: absolute; top: 210px; right: 15px; z-index: 210;
@@ -129,6 +133,11 @@
             寶藏隨機散落於無數平台之中，善用彈跳板與地形探索整個宇宙吧。
         </p>
         <p id="record-info" style="margin:0; color:#c4b5fd; font-size:14px;">個人最佳：尚無通關紀錄</p>
+        <div id="mode-picker" style="margin-top:14px;">
+            <button class="mode-btn selected" id="solo-mode-btn" type="button">🌌 單人探索</button>
+            <button class="mode-btn" id="duel-mode-btn" type="button">⚔️ 1 對 1 單挑</button>
+        </div>
+        <p id="duel-status" role="status">單挑模式：配對成功後，雙方在相同地圖比賽，先收集 13 個寶藏獲勝。</p>
         <p id="save-status" role="status">登入後可將成績同步至帳號。</p>
         <button class="start-btn" id="start-btn">開始探索大地圖</button>
     </div>
@@ -146,8 +155,9 @@
         </section>
     </div>
 
+    <div id="opponent-hud">⚔️ 對手：等待配對…<br>對手寶藏：<span id="opponent-score">0</span> / 13</div>
     <div id="ui-container">
-        <div class="ui-badge">💎 寶藏: <span id="score">0</span> / 25</div>
+        <div class="ui-badge">💎 寶藏: <span id="score">0</span> / <span id="target-count">25</span></div>
         <div class="ui-badge" id="timer">⏱️ 時間: 0.00s</div>
     </div>
 
@@ -170,7 +180,13 @@
 
         const DEFAULT_PROFILE = { bestTime: null, completedRuns: 0, bestTreasureCount: 0 };
         const LEADERBOARD_URL = 'https://game-24b43-default-rtdb.firebaseio.com/space_runner_leaderboard';
+        const DUEL_ROOT = 'https://game-24b43-default-rtdb.firebaseio.com/space_runner_duel';
 
+        let gameMode = 'solo';
+        let duelRoomId = null, duelUid = null, duelName = '玩家', opponentUid = null;
+        let duelSeed = 1, opponentScore = 0, opponentMesh = null, opponentLabel = null;
+        let duelPollTimer = null, duelQueueId = null, duelStartedAt = 0, lastDuelPublish = 0;
+        let mapSeed = 1;
         let scene, camera, renderer, player;
         let score = 0, prevTime = performance.now();
         let moveInput = { x: 0, y: 0 }, velocityY = 0;
@@ -179,9 +195,13 @@
         let gameProfile = { ...DEFAULT_PROFILE };
 
         const MOVE_SPEED = 28;
-        const JUMP_POWER = 16;
+        const JUMP_POWER = 17;
+        const GRAVITY = 42;
+        const MAX_FALL_SPEED = 70;
         let elapsedTime = 0;
         const TOTAL_TARGETS = 25;
+        const DUEL_TARGETS = 13;
+        const activeTargetCount = () => gameMode === 'duel' ? DUEL_TARGETS : TOTAL_TARGETS;
 
         const platforms = [];
         const targets = [];
@@ -342,7 +362,30 @@
             document.getElementById('leaderboard').style.display = 'none';
         });
 
-        document.getElementById('start-btn').onclick = () => {
+        document.getElementById('solo-mode-btn').addEventListener('click', () => {
+            if (gameRunning) return;
+            gameMode = 'solo';
+            document.getElementById('solo-mode-btn').classList.add('selected');
+            document.getElementById('duel-mode-btn').classList.remove('selected');
+            document.getElementById('duel-status').textContent = '單人探索：收集 25 個寶藏。';
+            document.getElementById('start-btn').textContent = '開始探索大地圖';
+            document.getElementById('target-count').textContent = TOTAL_TARGETS;
+        });
+        document.getElementById('duel-mode-btn').addEventListener('click', () => {
+            if (gameRunning) return;
+            gameMode = 'duel';
+            document.getElementById('duel-mode-btn').classList.add('selected');
+            document.getElementById('solo-mode-btn').classList.remove('selected');
+            document.getElementById('duel-status').textContent = '單挑：需要登入帳號，配對成功後雙方在相同地圖比賽，先收集 13 個獲勝。';
+            document.getElementById('start-btn').textContent = '尋找單挑對手';
+            document.getElementById('target-count').textContent = DUEL_TARGETS;
+        });
+
+        document.getElementById('start-btn').onclick = async () => {
+            if (gameMode === 'duel') {
+                const ok = await joinDuelQueue();
+                if (!ok) return;
+            }
             document.getElementById('overlay').style.display = 'none';
             if (!isTouch) requestLock();
             if (isTouch) {
@@ -356,6 +399,7 @@
                 animate();
             }
             gameRunning = true;
+            document.getElementById('opponent-hud').style.display = gameMode === 'duel' ? 'block' : 'none';
         };
 
         function requestLock() {
@@ -383,7 +427,16 @@
         function resetGame() {
             score = 0;
             elapsedTime = 0;
+            duelResultShown = false;
+            opponentScore = 0;
             document.getElementById('score').innerText = score;
+            document.getElementById('target-count').innerText = activeTargetCount();
+            document.getElementById('opponent-score').textContent = '0';
+            if (gameMode === 'duel') mapSeed = duelSeed >>> 0;
+            else mapSeed = (Date.now() >>> 0) || 1;
+            if (opponentMesh && scene) { scene.remove(opponentMesh); opponentMesh = null; }
+            if (opponentLabel && scene) { scene.remove(opponentLabel); opponentLabel = null; }
+            document.getElementById('target-count').innerText = activeTargetCount();
             
             if (player) {
                 player.position.set(0, 5, 0);
@@ -451,7 +504,13 @@
             scene.add(new THREE.Points(starGeo, starMat));
         }
 
+        function seededRandom() {
+            mapSeed = (mapSeed * 1664525 + 1013904223) >>> 0;
+            return mapSeed / 4294967296;
+        }
+
         function createMap() {
+            // 單挑時使用房間提供的相同種子，確保兩位玩家的平台與寶藏一致。
             const addP = (x, y, z, w, d, type = 'normal') => {
                 let color = 0x1f1f3a;
                 if (type === 'bounce') color = 0xec4899;
@@ -502,7 +561,7 @@
             }
 
             for (let i = candidatePlatforms.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
+                const j = Math.floor(seededRandom() * (i + 1));
                 [candidatePlatforms[i], candidatePlatforms[j]] = [candidatePlatforms[j], candidatePlatforms[i]];
             }
 
@@ -628,7 +687,7 @@
         function gameOver(isWin, msg) {
             gameRunning = false;
             if (document.pointerLockElement) document.exitPointerLock();
-            saveCompletedRun(isWin);
+            if (gameMode === 'solo') saveCompletedRun(isWin);
 
             const title = document.getElementById('game-title');
             const desc = document.getElementById('game-desc');
@@ -638,6 +697,199 @@
             desc.innerHTML = `${msg}<br>最終費時：<b>${elapsedTime.toFixed(2)} 秒</b>`;
             document.getElementById('start-btn').innerText = "重新探索";
             overlay.style.display = 'flex';
+        }
+
+
+        function getCurrentAccount() {
+            const user = window.raingodCurrentUser || (window.firebase && firebase.auth && firebase.auth().currentUser);
+            if (!user) return null;
+            return {
+                uid: user.uid,
+                name: (user.displayName || (user.email ? user.email.split('@')[0] : '') || '玩家').slice(0, 24)
+            };
+        }
+
+        async function dbRequest(path, method = 'GET', body) {
+            const response = await fetch(`${DUEL_ROOT}/${path}.json`, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                ...(body === undefined ? {} : { body: JSON.stringify(body) })
+            });
+            if (!response.ok) throw new Error(`Firebase HTTP ${response.status}`);
+            return response.json();
+        }
+
+        async function joinDuelQueue() {
+            const account = getCurrentAccount();
+            if (!account) {
+                document.getElementById('duel-status').textContent = '請先登入網站帳號，再開始單挑配對。';
+                return false;
+            }
+            duelUid = account.uid;
+            duelName = account.name;
+            const btn = document.getElementById('start-btn');
+            btn.disabled = true;
+            btn.textContent = '正在尋找對手…';
+            document.getElementById('duel-status').textContent = '正在配對，請稍候；不要關閉頁面。';
+            try {
+                const queue = await dbRequest('queue');
+                const now = Date.now();
+                let waiting = Object.entries(queue || {}).find(([id, row]) =>
+                    id !== duelQueueId && row && row.status === 'waiting' &&
+                    row.uid !== duelUid && now - Number(row.createdAt || 0) < 90000
+                );
+
+                if (waiting) {
+                    const [queueId, row] = waiting;
+                    const roomId = `duel_${queueId}_${Math.random().toString(36).slice(2, 9)}`;
+                    const room = {
+                        status: 'playing', seed: ((now ^ Math.floor(Math.random() * 0xffffffff)) >>> 0) || 1,
+                        createdAt: now, players: {
+                            [row.uid]: { uid: row.uid, name: row.name || '玩家', score: 0, x: 0, y: 5, z: 0, done: false },
+                            [duelUid]: { uid: duelUid, name: duelName, score: 0, x: 0, y: 5, z: 0, done: false }
+                        }, winner: null
+                    };
+                    await dbRequest(`rooms/${roomId}`, 'PUT', room);
+                    await dbRequest(`queue/${queueId}`, 'PATCH', { status: 'matched', roomId, matchedAt: now });
+                    const myQueue = await dbRequest('queue', 'POST', { uid: duelUid, name: duelName, status: 'matched', roomId, createdAt: now });
+                    duelQueueId = myQueue && myQueue.name;
+                    await activateDuel(roomId, room);
+                    return true;
+                }
+
+                const created = await dbRequest('queue', 'POST', {
+                    uid: duelUid, name: duelName, status: 'waiting', createdAt: now
+                });
+                duelQueueId = created && created.name;
+                const started = Date.now();
+                while (Date.now() - started < 60000) {
+                    await new Promise(resolve => setTimeout(resolve, 1200));
+                    const mine = duelQueueId ? await dbRequest(`queue/${duelQueueId}`) : null;
+                    if (mine && mine.status === 'matched' && mine.roomId) {
+                        const room = await dbRequest(`rooms/${mine.roomId}`);
+                        if (room && room.status === 'playing') {
+                            await activateDuel(mine.roomId, room);
+                            return true;
+                        }
+                    }
+                    const latest = await dbRequest('queue');
+                    const candidate = Object.entries(latest || {}).find(([id, row]) =>
+                        id !== duelQueueId && row && row.status === 'waiting' &&
+                        row.uid !== duelUid && Date.now() - Number(row.createdAt || 0) < 90000
+                    );
+                    if (candidate) {
+                        const [otherId, row] = candidate;
+                        const roomId = `duel_${otherId}_${Math.random().toString(36).slice(2, 9)}`;
+                        const room = {
+                            status: 'playing', seed: ((Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0) || 1,
+                            createdAt: Date.now(), players: {
+                                [row.uid]: { uid: row.uid, name: row.name || '玩家', score: 0, x: 0, y: 5, z: 0, done: false },
+                                [duelUid]: { uid: duelUid, name: duelName, score: 0, x: 0, y: 5, z: 0, done: false }
+                            }, winner: null
+                        };
+                        await dbRequest(`rooms/${roomId}`, 'PUT', room);
+                        await dbRequest(`queue/${otherId}`, 'PATCH', { status: 'matched', roomId, matchedAt: Date.now() });
+                        await dbRequest(`queue/${duelQueueId}`, 'PATCH', { status: 'matched', roomId, matchedAt: Date.now() });
+                        await activateDuel(roomId, room);
+                        return true;
+                    }
+                    document.getElementById('duel-status').textContent = '等待另一位玩家加入…';
+                }
+                if (duelQueueId) await dbRequest(`queue/${duelQueueId}`, 'PATCH', { status: 'expired' }).catch(() => {});
+                document.getElementById('duel-status').textContent = '60 秒內沒有配對成功，請再試一次。';
+            } catch (error) {
+                console.error('單挑配對失敗：', error);
+                document.getElementById('duel-status').textContent = '配對失敗：請確認 Firebase Realtime Database 規則允許讀寫 space_runner_duel。';
+            }
+            btn.disabled = false;
+            btn.textContent = '重新尋找對手';
+            return false;
+        }
+
+        async function activateDuel(roomId, room) {
+            duelRoomId = roomId;
+            duelSeed = Number(room.seed) || 1;
+            opponentUid = Object.keys(room.players || {}).find(uid => uid !== duelUid) || null;
+            const opponent = opponentUid ? room.players[opponentUid] : null;
+            document.getElementById('duel-status').textContent = `配對成功！對手：${opponent?.name || '玩家'}。先收集 13 個寶藏獲勝！`;
+            document.getElementById('opponent-hud').style.display = 'block';
+            document.getElementById('opponent-hud').innerHTML = `⚔️ 對手：<span id="opponent-name">${escapeHtml(opponent?.name || '玩家')}</span><br>對手寶藏：<span id="opponent-score">0</span> / 13`;
+            await publishDuelState();
+            if (duelPollTimer) clearInterval(duelPollTimer);
+            duelPollTimer = setInterval(pollDuelState, 900);
+        }
+
+        function escapeHtml(value) {
+            return String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        }
+
+        async function publishDuelState() {
+            if (!duelRoomId || !duelUid || !player) return;
+            try {
+                await dbRequest(`rooms/${duelRoomId}/players/${duelUid}`, 'PATCH', {
+                    uid: duelUid, name: duelName, score, x: player.position.x, y: player.position.y,
+                    z: player.position.z, done: score >= DUEL_TARGETS, updatedAt: Date.now()
+                });
+                if (score >= DUEL_TARGETS) {
+                    const room = await dbRequest(`rooms/${duelRoomId}`);
+                    if (room && !room.winner) await dbRequest(`rooms/${duelRoomId}`, 'PATCH', { winner: duelUid, status: 'finished' });
+                }
+            } catch (e) { console.warn('同步單挑狀態失敗', e); }
+        }
+
+        async function pollDuelState() {
+            if (!duelRoomId || !gameRunning) return;
+            try {
+                const room = await dbRequest(`rooms/${duelRoomId}`);
+                if (!room) return;
+                const other = room.players && room.players[opponentUid];
+                if (other) {
+                    opponentScore = Number(other.score) || 0;
+                    const scoreEl = document.getElementById('opponent-score');
+                    if (scoreEl) scoreEl.textContent = opponentScore;
+                    if (!opponentMesh && scene) {
+                        opponentMesh = new THREE.Mesh(
+                            new THREE.BoxGeometry(1.2, 1.4, 1.2),
+                            new THREE.MeshPhongMaterial({ color: 0xffd166, emissive: 0x664400 })
+                        );
+                        scene.add(opponentMesh);
+                        const canvas = document.createElement('canvas');
+                        canvas.width = 512; canvas.height = 128;
+                        const ctx = canvas.getContext('2d');
+                        ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.fillRect(0, 0, 512, 128);
+                        ctx.font = 'bold 38px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#ffffff';
+                        ctx.fillText(String(other.name || '玩家').slice(0, 24), 256, 80);
+                        const texture = new THREE.CanvasTexture(canvas);
+                        opponentLabel = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true }));
+                        opponentLabel.scale.set(7, 1.75, 1);
+                        scene.add(opponentLabel);
+                    }
+                    if (opponentMesh) {
+                        opponentMesh.position.set(Number(other.x) || 0, Number(other.y) || 5, Number(other.z) || 0);
+                        if (opponentLabel) opponentLabel.position.set(opponentMesh.position.x, opponentMesh.position.y + 1.8, opponentMesh.position.z);
+                    }
+                }
+                if (room.winner && !duelResultShown) {
+                    duelResultShown = true;
+                    finishDuel(room.winner === duelUid, room.winner === duelUid ? '你先收集到 13 個寶藏！' : '對手先收集到 13 個寶藏。');
+                }
+            } catch (e) { console.warn('讀取單挑狀態失敗', e); }
+        }
+
+        let duelResultShown = false;
+        async function finishDuel(won, message) {
+            if (duelResultShown && gameRunning === false) return;
+            duelResultShown = true;
+            if (duelPollTimer) { clearInterval(duelPollTimer); duelPollTimer = null; }
+            gameRunning = false;
+            if (document.pointerLockElement) document.exitPointerLock();
+            await publishDuelState().catch(() => {});
+            const title = document.getElementById('game-title');
+            title.textContent = won ? '🏆 單挑勝利！' : '💥 單挑結束';
+            document.getElementById('game-desc').innerHTML = `${escapeHtml(message)}<br>你的寶藏：${score} / 13 · 對手：${opponentScore} / 13`;
+            document.getElementById('start-btn').textContent = '再玩一次';
+            document.getElementById('overlay').style.display = 'flex';
+            document.getElementById('start-btn').disabled = false;
         }
 
         function updateRadar() {
@@ -690,7 +942,8 @@
                 elapsedTime += delta;
                 document.getElementById('timer').innerText = `⏱️ 時間: ${elapsedTime.toFixed(2)}s`;
 
-                velocityY -= 32 * delta;
+                velocityY = Math.max(velocityY - GRAVITY * delta, -MAX_FALL_SPEED);
+                const previousY = player.position.y;
                 player.position.y += velocityY * delta;
 
                 const fwd = new THREE.Vector3(Math.sin(theta), 0, Math.cos(theta)).negate();
@@ -707,11 +960,12 @@
                     if (Math.abs(player.position.x - p.x) < p.w / 2 + 0.6 && 
                         Math.abs(player.position.z - p.z) < p.d / 2 + 0.6) {
                         
-                        if (player.position.y - 0.7 <= p.y && player.position.y - 0.7 > p.y - 2.0 && velocityY <= 0) {
+                        if (velocityY <= 0 && previousY - 0.7 >= p.y - 0.15 &&
+                            player.position.y - 0.7 <= p.y && player.position.y - 0.7 > p.y - 3.5) {
                             player.position.y = p.y + 0.7;
                             
                             if (p.type === 'bounce') {
-                                velocityY = 24;
+                                velocityY = 25;
                                 jumpCount = 1;
                             } else {
                                 velocityY = 0;
@@ -732,9 +986,14 @@
                         score++;
                         document.getElementById('score').innerText = score;
 
-                        if (score >= TOTAL_TARGETS) {
-                            gameOver(true, "太強了！你走遍廣闊星區，收集完全部寶藏！");
+                        if (score >= activeTargetCount()) {
+                            if (gameMode === 'duel') {
+                                publishDuelState().finally(() => finishDuel(true, '你先收集到 13 個寶藏！'));
+                            } else {
+                                gameOver(true, "太強了！你走遍廣闊星區，收集完全部寶藏！");
+                            }
                         }
+                        if (gameMode === 'duel') publishDuelState();
                     }
                 });
 
@@ -744,6 +1003,10 @@
                 }
 
                 updateRadar();
+                if (gameMode === 'duel' && performance.now() - lastDuelPublish > 350) {
+                    lastDuelPublish = performance.now();
+                    publishDuelState();
+                }
             }
 
             if (player) {
