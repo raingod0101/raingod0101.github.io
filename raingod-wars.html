@@ -1,954 +1,1069 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>雨神大戰爭 | Raingod</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>雨神跑酷 | Raingod</title>
     <style>
-        :root { 
-            --p-color: #00d4ff; --e-color: #ff4d4d; --gold: #f1c40f; 
-            --rarity-r: #95a5a6; --rarity-sr: #3498db; --rarity-ssr: #9b59b6; 
-            --rarity-uber: #e67e22; --rarity-ur: #e74c3c; --rarity-ex: #00f0ff;
-            --attr-red: #ff4757; --attr-float: #70a1ff; --attr-angel: #eccc68;
-            --attr-alien: #2ed573; --attr-undead: #a4b0be; --attr-none: #ced6e0;
-        }
-        * { box-sizing: border-box; touch-action: manipulation; -webkit-user-select: none; }
-        
+        * { box-sizing: border-box; }
         body { 
-            margin: 0; background: #0b0c10; color: white; 
-            height: 100svh; width: 100vw; 
-            overflow: hidden; font-family: 'PingFang TC', '微軟正黑體', sans-serif; 
+            margin: 0; overflow: hidden; background: #05050d; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            touch-action: none; user-select: none;
         }
-
-        .screen { 
-            display: none; width: 100%; height: 100%; 
-            flex-direction: column; align-items: center; 
-            background: #111425; padding: 12px; 
+        canvas { 
+    display: block; 
+    transform: translateY(-40px); /* 向上平移 40px，數字越大往越上面 */
+}
+        #gui {
+            position: absolute; top: 15px; left: 0; width: 100%; 
+            display: flex; justify-content: space-between; padding: 0 25px;
+            color: #00f3ff; font-size: 22px; font-weight: 900;
+            text-shadow: 0 0 10px rgba(0,243,255,0.8); pointer-events: none; z-index: 10;
         }
-        .active { display: flex; }
-        .title { font-size: clamp(20px, 5vw, 26px); font-weight: 900; color: var(--p-color); margin-bottom: 6px; text-shadow: 0 0 10px rgba(0,212,255,0.5); }
+        .active-buff {
+            font-size: 14px; color: #ffcc00; margin-top: 4px;
+        }
+        #menu, #shop {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: none; flex-direction: column; justify-content: center; align-items: center;
+            background: rgba(10, 10, 20, 0.9); backdrop-filter: blur(10px); z-index: 100;
+        }
+        .btn-group { display: flex; gap: 15px; margin-top: 20px; }
+        .btn {
+            padding: 14px 40px; font-size: 22px; font-weight: bold; background: linear-gradient(45deg, #ff0055, #ff5500);
+            border: none; color: #fff; border-radius: 50px; cursor: pointer;
+            box-shadow: 0 0 25px rgba(255,0,85,0.6); transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .btn-shop { background: linear-gradient(45deg, #00f3ff, #0055ff); box-shadow: 0 0 25px rgba(0,243,255,0.6); }
+        .btn:hover { transform: scale(1.05); }
         
-        .top-res { width: 100%; display: flex; justify-content: space-around; background: rgba(0,0,0,0.6); padding: 8px; border-radius: 10px; margin-bottom: 8px; font-size: 13px; font-weight: bold; border: 1px solid #333; }
-        
-        .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: 100%; overflow-y: auto; flex-grow: 1; padding: 4px; }
-        @media (min-width: 600px) { .grid { grid-template-columns: repeat(5, 1fr); } }
-
-        .card { background: #1a233a; border: 2px solid #0f3460; border-radius: 10px; padding: 8px 4px; text-align: center; cursor: pointer; transition: 0.15s; position: relative; font-size: 11px; }
-        .card:active { transform: scale(0.95); }
-        .card.locked { opacity: 0.3; filter: grayscale(1); }
-        .card.selected { border-color: #2ecc71 !important; box-shadow: 0 0 10px #2ecc71; }
-
-        .rarity-R { border-color: var(--rarity-r); }
-        .rarity-SR { border-color: var(--rarity-sr); }
-        .rarity-SSR { border-color: var(--rarity-ssr); }
-        .rarity-UBER { border-color: var(--rarity-uber); box-shadow: 0 0 6px var(--rarity-uber); }
-        .rarity-UR { border-color: var(--rarity-ur); box-shadow: 0 0 8px var(--rarity-ur); }
-        .rarity-EX { border-color: var(--rarity-ex); box-shadow: 0 0 12px var(--rarity-ex); }
-
-        .tag { display: inline-block; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: bold; color: #000; margin-top: 2px; }
-        .tag-紅 { background: var(--attr-red); color: white; }
-        .tag-飛 { background: var(--attr-float); color: white; }
-        .tag-聖 { background: var(--attr-angel); }
-        .tag-星 { background: var(--attr-alien); }
-        .tag-屍 { background: var(--attr-undead); color: white; }
-        .tag-無 { background: var(--attr-none); }
-
-        #game-screen { padding: 0; position: relative; }
-        #stage { 
-            position: relative; width: 100%; flex-grow: 1; 
-            background: linear-gradient(to bottom, #09131d, #162a38, #1d3c4d); 
-            overflow: hidden; 
+        /* 商店樣式 */
+        .shop-container {
+            width: 85%; max-width: 500px; background: rgba(250,250,250,0.05);
+            border: 2px solid #00f3ff; border-radius: 20px; padding: 20px;
+            color: #fff; box-shadow: 0 0 30px rgba(0,243,255,0.2);
         }
-        .ground { position: absolute; bottom: 0; width: 100%; height: 50px; background: #111; border-top: 4px solid #333; }
-        .base { position: absolute; bottom: 50px; width: 70px; height: 110px; border-radius: 8px 8px 0 0; z-index: 5; }
-        #p-base { left: 0; background: #103156; border-right: 4px solid var(--p-color); }
-        #e-base { right: 0; background: #4a0e17; border-left: 4px solid var(--e-color); }
-        .base-hp { position: absolute; top: -22px; width: 130%; left: -15%; text-align: center; font-size: 11px; font-weight: bold; background: rgba(0,0,0,0.8); padding: 2px; border-radius: 4px; border: 1px solid #444; }
-
-        #battle-top-bar {
-            position: absolute; top: 8px; width: 95%; left: 2.5%; display: flex; justify-content: space-between; z-index: 100; font-weight: bold; font-size: 13px;
+        .shop-item {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.1);
         }
-
-        #ui-panel { 
-            height: 125px; width: 100%; 
-            background: #0b172a; display: flex; 
-            gap: 6px; padding: 8px; overflow-x: auto;
-            border-top: 2px solid #1e293b;
-            padding-bottom: env(safe-area-inset-bottom);
+        .shop-btn {
+            padding: 8px 18px; font-size: 16px; background: #ffcc00; border: none;
+            color: #000; font-weight: bold; border-radius: 20px; cursor: pointer;
         }
-        .spawn-btn { 
-            min-width: 72px; height: 100%; 
-            background: #162032; border: 1.5px solid #475569; 
-            border-radius: 8px; color: white; 
-            display: flex; flex-direction: column; align-items: center; justify-content: space-around;
-            flex-shrink: 0; font-size: 10px; padding: 2px; position: relative;
-        }
-        .spawn-btn:disabled { opacity: 0.35; filter: grayscale(1); }
-        .cd-mask { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px; border-radius: 6px; }
-
-        .unit { position: absolute; bottom: 50px; width: 45px; text-align: center; z-index: 10; pointer-events: none; transition: transform 0.1s; }
-        .unit-body { font-size: 28px; line-height: 1; }
-        .hp-bar { width: 100%; height: 4px; background: #000; margin-bottom: 2px; border-radius: 2px; overflow: hidden; border: 0.5px solid #555; }
-        .hp-inner { height: 100%; background: #2ecc71; width: 100%; transition: width 0.1s; }
-        
-        #gacha-anim { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.92); z-index: 1000; display: none; flex-direction: column; align-items: center; justify-content: center; font-size: 70px; }
-        #ui-panel::-webkit-scrollbar { display: none; }
-        
-        .nav-btn { width: 110px; margin-top: 8px; background: #334155; color: white; border: none; padding: 8px; border-radius: 6px; cursor: pointer; font-weight: bold; }
-        .tab-btn { background: #1e293b; color: #aaa; border: none; padding: 6px 12px; border-radius: 6px 6px 0 0; cursor: pointer; margin-right: 4px; font-size: 12px; }
-        .tab-btn.active { background: #0f3460; color: white; font-weight: bold; border-top: 2px solid var(--p-color); }
-        #wars-leaderboard { position: fixed; inset: 0; z-index: 2000; display: none; align-items: center; justify-content: center; padding: 16px; background: rgba(0,0,0,0.88); }
-        .wars-leaderboard-card { width: min(480px, 100%); max-height: 80vh; overflow-y: auto; padding: 18px; border: 1px solid var(--p-color); border-radius: 12px; background: #111425; }
-        .wars-leaderboard-row { display: flex; justify-content: space-between; gap: 12px; padding: 9px 4px; border-bottom: 1px solid #26334a; }
+        .shop-btn:disabled { background: #555; color: #888; cursor: not-allowed; }
+        .skin-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; max-height: 38vh; overflow-y: auto; }
+        .skin-card { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px; background: rgba(255,255,255,0.06); border-radius: 10px; color: #fff; }
+        .skin-swatch { display: inline-block; width: 18px; height: 18px; margin-right: 8px; vertical-align: middle; border-radius: 5px; box-shadow: 0 0 10px currentColor; }
+        #leaderboard-button { position: absolute; top: 96px; right: 20px; z-index: 20; pointer-events: auto; padding: 10px 16px; border: 1px solid #00f3ff; border-radius: 20px; color: #fff; background: rgba(0,0,0,0.75); font-weight: bold; cursor: pointer; }
+        #leaderboard { position: absolute; inset: 0; z-index: 130; display: none; align-items: center; justify-content: center; padding: 20px; background: rgba(5,5,13,0.92); color: #fff; }
+        .leaderboard-card { width: min(520px, 100%); max-height: 80vh; overflow-y: auto; padding: 20px; border: 2px solid #00f3ff; border-radius: 18px; background: #0b1020; }
+        .leaderboard-row { display: flex; justify-content: space-between; gap: 12px; padding: 10px; border-bottom: 1px solid #26334a; }
     </style>
 </head>
 <body>
-    <link rel="stylesheet" href="menu.css">
-
+<link rel="stylesheet" href="menu.css">
 <div id="nav_bar"></div>
-
 <script src="menu.js"></script>
-<div id="gacha-anim">
-    <div id="gacha-icon">🔮</div>
-    <div id="gacha-result-text" style="font-size:18px; color:#fff; margin-top:15px; text-align:center; padding:0 20px; white-space:pre-line;"></div>
-</div>
-
-<!-- 主選單 -->
-<div id="main-screen" class="screen active">
-    <div class="title">雨神大戰爭 | Raingod</div>
-    <button class="nav-btn" style="margin:0 0 8px;" id="wars-leaderboard-button" onclick="openWarsLeaderboard()">🏆 登入後查看排行榜</button>
-    <div class="top-res">
-        <span>💎 XP: <b id="res-xp">0</b></span>
-        <span>📖 解鎖: <b id="res-count">0/500</b></span>
-        <span>🚩 遠征: <b id="res-stage">0/100</b></span>
-    </div>
-    <div class="grid">
-        <div class="card" onclick="showScreen('map-screen')"><div style="font-size:28px">🗺️</div><b>世界遠征</b></div>
-        <div class="card" onclick="showScreen('deck-screen'); renderDeck();"><div style="font-size:28px">⚔️</div><b>隊伍編隊</b></div>
-        <div class="card" onclick="showScreen('upgrade-screen'); renderUpgrade();"><div style="font-size:28px">⛩️</div><b>神靈進化</b></div>
-        <div class="card" onclick="showScreen('gacha-screen')"><div style="font-size:28px">🔮</div><b>祈願祭壇</b></div>
-        <div class="card" onclick="showScreen('book-screen'); renderBook('gods');"><div style="font-size:28px">📖</div><b>萬神百科</b></div>
-    </div>
-</div>
-
-<!-- 祭壇抽卡 -->
-<div id="gacha-screen" class="screen">
-    <div class="title">神聖祈願祭壇</div>
-    <div style="color:#aaa; font-size:12px; margin-bottom:10px;">概率包含 EX, UR, UBER, SSR, SR, R 等 500 位強大神靈形態！</div>
-    <div style="font-size: 65px; margin: 15px;">🔮</div>
-    <button class="card" style="width: 220px; background: var(--gold); color: black; font-weight:bold; font-size:15px; padding:12px;" onclick="drawGacha()">祈願召喚 (300 XP)</button>
-    <button class="nav-btn" onclick="showScreen('main-screen')">返回主選單</button>
-</div>
-
-<!-- 隊伍編隊 -->
-<div id="deck-screen" class="screen">
-    <div class="title">隊伍編隊 (上限 10 隻)</div>
-    <div style="font-size:11px; color:#00d4ff; margin-bottom:5px;">點擊選擇或取消裝備，搭配屬性剋制出戰</div>
-    <div id="deck-list" class="grid"></div>
-    <button class="nav-btn" onclick="showScreen('main-screen')">返回主選單</button>
-</div>
-
-<!-- 角色升級 -->
-<div id="upgrade-screen" class="screen">
-    <div class="title">神靈強化與型態突破</div>
-    <div id="upgrade-list" class="grid"></div>
-    <button class="nav-btn" onclick="showScreen('main-screen')">返回主選單</button>
-</div>
-
-<!-- 雙圖鑑系統 -->
-<div id="book-screen" class="screen">
-    <div style="display:flex; width:100%; justify-content:center; margin-bottom:6px;">
-        <button id="tab-gods" class="tab-btn active" onclick="renderBook('gods')">神靈圖鑑 (<span id="book-god-count">0</span>/<span id="book-god-total">500</span>)</button>
-        <button id="tab-enemies" class="tab-btn" onclick="renderBook('enemies')">怪獸敵圖鑑 (<span id="book-enemy-count">0</span>/<span id="book-enemy-total">120</span>)</button>
-    </div>
-    <div id="book-list" class="grid"></div>
-    <button class="nav-btn" onclick="showScreen('main-screen')">返回主選單</button>
-</div>
-
-<!-- 地圖選擇 -->
-<div id="map-screen" class="screen">
-    <div class="title">世界遠征地圖</div>
-    <div id="map-list" class="grid"></div>
-    <button class="nav-btn" onclick="showScreen('main-screen')">返回主選單</button>
-</div>
-
-<!-- 戰鬥畫面 -->
-<div id="game-screen" class="screen">
-    <div id="stage">
-        <div id="battle-top-bar">
-            <span style="color:#00d4ff;">雨神砲: <b id="cannon-status">準備中</b></span>
-            <span style="color:var(--gold);">金幣: <b id="battle-money">$0</b>/<b id="battle-max-money">$500</b></span>
+    <div id="gui">
+        <div>
+            SCORE: <span id="score">0</span>
+            <div id="buffs" class="active-buff"></div>
         </div>
-        <div class="ground"></div>
-        <div id="p-base" class="base"><div class="base-hp" id="p-hp">1500/1500</div></div>
-        <div id="e-base" class="base"><div class="base-hp" id="e-hp">1500/1500</div></div>
+        <div>COINS: <span id="coins">0</span></div>
     </div>
-    <div id="ui-panel"></div>
-</div>
 
-<div id="wars-leaderboard">
-    <div class="wars-leaderboard-card">
-        <h2 style="color:var(--p-color); margin-top:0;">🏆 雨神大戰爭排行榜</h2>
-        <p id="wars-leaderboard-status" style="color:#aaa;">請登入帳號後查看。</p>
-        <div id="wars-leaderboard-list"></div>
-        <div style="display:flex; gap:8px; justify-content:center; margin-top:14px;">
-            <button class="nav-btn" onclick="refreshWarsLeaderboard()">重新整理</button>
-            <button class="nav-btn" onclick="closeWarsLeaderboard()">關閉</button>
+    <!-- 結算選單 -->
+    <div id="menu">
+        <h1 style="color: #ff0055; font-size: 60px; margin: 0; text-shadow: 0 0 20px #ff0055;">WASTED</h1>
+        <p style="color: #fff; font-size: 22px; margin-top: 10px;">總得分: <span id="finalScore" style="color: #00f3ff;">0</span></p>
+        <p style="color: #fff; font-size: 20px; margin-top: 0;">本局金幣: <span id="finalCoins" style="color: #ffcc00;">0</span></p>
+        <div class="btn-group">
+            <button class="btn" onclick="restart()">RETRY</button>
+            <button class="btn btn-shop" onclick="openShop()">SHOP</button>
         </div>
     </div>
-</div>
 
-<script>
-    const SAVE_KEY = 'RainGod100_Save_v2';
-    const WARS_LEADERBOARD_URL = 'https://game-24b43-default-rtdb.firebaseio.com/raingod_wars_leaderboard';
-    
-    // 屬性系統：紅(Red)、飛(Float)、聖(Angel)、星(Alien)、屍(Undead)、無(None)
-    const ATTRS = ['紅', '飛', '聖', '星', '屍', '無'];
+    <!-- 商店介面 -->
+    <div id="shop">
+        <h2 style="color: #00f3ff; font-size: 36px; margin: 0 0 10px 0;">ITEM SHOP</h2>
+        <p style="color: #ffcc00; font-size: 20px; margin-bottom: 15px;">持有金幣: <span id="shopCoins">0</span></p>
+        <div class="shop-container">
+            <h3 style="color:#fff;">造型收藏</h3>
+            <div id="skin-shop-list" class="skin-grid"></div>
+            <div class="shop-item">
+                <div>
+                    <strong>金幣磁鐵 (1次性)</strong><br>
+                    <small style="color: #aaa;">遊戲開局自動吸取金幣 15秒</small>
+                </div>
+                <button class="shop-btn" onclick="buyItem('magnet', 20)">20 金幣</button>
+            </div>
+            <div class="shop-item">
+                <div>
+                    <strong>防護盾 (1次性)</strong><br>
+                    <small style="color: #aaa;">抵擋一次撞擊死亡</small>
+                </div>
+                <button class="shop-btn" onclick="buyItem('shield', 30)">30 金幣</button>
+            </div>
+        </div>
+        <button class="btn" style="margin-top: 20px; padding: 10px 40px;" onclick="closeShop()">BACK</button>
+    </div>
 
-    // 擴充至 30 個手工設計主題名稱庫
-    const THEMES = [
-        { name: '雨神貓', icons: ['🐱', '😼', '🙀'], attr: '無' },
-        { name: '水滴精靈', icons: ['💧', '💦', '🌊'], attr: '星' },
-        { name: '雷霆幼獸', icons: ['⚡', '🌩️', '⛈️'], attr: '飛' },
-        { name: '熾焰烈犬', icons: ['🐕', '🐩', '🐺'], attr: '紅' },
-        { name: '聖光幼天使', icons: ['👼', '🧚', '👑'], attr: '聖' },
-        { name: '虛空幼龍', icons: ['🐲', '🐉', '🦖'], attr: '星' },
-        { name: '骷髏戰士', icons: ['💀', '☠️', '🧟'], attr: '屍' },
-        { name: '機械企鵝', icons: ['🐧', '🤖', '🛸'], attr: '無' },
-        { name: '石像鬼', icons: ['🗿', '👹', '👺'], attr: '飛' },
-        { name: '深海巨章', icons: ['🐙', '🦑', '🦈'], attr: '紅' },
-        { name: '雪域冰熊', icons: ['🐻', '🧊', '❄️'], attr: '無' },
-        { name: '夢幻獨角獸', icons: ['🦄', '✨', '🌟'], attr: '聖' },
-        { name: '暗影獵手', icons: ['🥷', '🗡️', '👤'], attr: '屍' },
-        { name: '鳳凰幼雛', icons: ['🐤', '🐦', '🔥'], attr: '紅' },
-        { name: '幻象狐仙', icons: ['🦊', '🔮', '🎭'], attr: '星' },
-        { name: '泰坦巨人', icons: ['🗿', '⛰️', '🌋'], attr: '無' },
-        { name: '暴風神鷹', icons: ['🦅', '🌪️', '⚡'], attr: '飛' },
-        { name: '極光仙子', icons: ['🧚‍♀️', '❇️', '🌌'], attr: '聖' },
-        { name: '冥界噬魂者', icons: ['👻', '🖤', '☠️'], attr: '屍' },
-        { name: '機械巨魔', icons: ['🤖', '⚙️', '💥'], attr: '星' },
-        { name: '熔岩怪獸', icons: ['🌋', '💥', '🔥'], attr: '紅' },
-        { name: '海芒水母', icons: ['🪼', '✨', '🌊'], attr: '星' },
-        { name: '狂暴野豬', icons: ['🐗', '💢', '💨'], attr: '無' },
-        { name: '毒藤巨獸', icons: ['🪴', '🐍', '🌲'], attr: '飛' },
-        { name: '天界守護神', icons: ['🛡️', '⚔️', '✨'], attr: '聖' },
-        { name: '死靈術士', icons: ['🧙‍♂️', '📜', '💀'], attr: '屍' },
-        { name: '賽博機器人', icons: ['🤖', '💻', '⚡'], attr: '星' },
-        { name: '深淵巨鯨', icons: ['🐳', '🌊', '🌀'], attr: '紅' },
-        { name: '風暴神龍', icons: ['🐲', '🌪️', '🌩️'], attr: '飛' },
-        { name: '終極雨神尊', icons: ['🌧️', '👑', '⚡'], attr: '無' }
-    ];
+    <canvas id="gameCanvas"></canvas>
+    <button id="leaderboard-button" onclick="openLeaderboard()">🏆 登入後查看排行榜</button>
 
-    const PREFIX_EVO1 = ['強化型', '進階·', '狂暴的', '覺醒·', '極致·', '真力·', '超能·', '霸者·', '滅世·', '天啟·'];
-    const PREFIX_EVO2 = ['神超絕·', '超光速·', '萬劫天尊·', '宇宙主宰·', '終極降臨·', '創世神光·', '毀滅之眼·', '無上尊者·', '星穹之主·', '混沌原初·'];
+    <div id="leaderboard">
+        <div class="leaderboard-card">
+            <h2 style="color:#00f3ff; margin-top:0;">🏆 雨神跑酷排行榜</h2>
+            <p id="leaderboard-status" style="color:#aaa;">請登入帳號後查看。</p>
+            <div id="leaderboard-list"></div>
+            <div class="btn-group">
+                <button class="btn btn-shop" onclick="refreshLeaderboard()">重新整理</button>
+                <button class="btn" onclick="closeLeaderboard()">關閉</button>
+            </div>
+        </div>
+    </div>
 
-    const RARITIES = ['R', 'SR', 'SSR', 'UBER', 'UR', 'EX'];
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score'), coinsEl = document.getElementById('coins');
+        const finalScoreEl = document.getElementById('finalScore'), finalCoinsEl = document.getElementById('finalCoins'), menu = document.getElementById('menu');
+        const shopEl = document.getElementById('shop'), shopCoinsEl = document.getElementById('shopCoins');
+        const buffsEl = document.getElementById('buffs');
 
-    const CHARS = {};
-    const ENEMIES = {};
-
-    // 生成 500 位神靈
-    function generateGods() {
-        for (let i = 1; i <= 500; i++) {
-            const id = `god_${i}`;
-            const theme = THEMES[(i - 1) % THEMES.length];
-            const cycle = Math.floor((i - 1) / THEMES.length);
-            
-            const rIdx = i % 12 === 0 ? 5 : (i % 8 === 0 ? 4 : (i % 5 === 0 ? 3 : (i % 3 === 0 ? 2 : (i % 2 === 0 ? 1 : 0))));
-            const rarity = RARITIES[rIdx];
-
-            const nameBase = cycle === 0 ? theme.name : `${theme.name} ${i}代`;
-            const form1 = nameBase;
-            const form2 = `${PREFIX_EVO1[i % PREFIX_EVO1.length]}${nameBase}`;
-            const form3 = `${PREFIX_EVO2[i % PREFIX_EVO2.length]}${nameBase}`;
-
-            const isArea = rIdx >= 2 || i % 2 === 0;
-            const targetAttr = theme.attr;
-
-            const baseHp = 180 + (rIdx * 280) + (i * 12);
-            const baseAtk = 35 + (rIdx * 75) + (i * 4);
-            const cost = 60 + (rIdx * 150) + Math.floor(i * 2.5);
-
-            CHARS[id] = {
-                id,
-                name: form1,
-                rarity: rarity,
-                forms: theme.icons,
-                formNames: [form1, form2, form3],
-                targetAttr: targetAttr,
-                isArea: isArea,
-                hp: Math.floor(baseHp),
-                atk: Math.floor(baseAtk),
-                cost: Math.min(3000, Math.floor(cost)),
-                cd: Math.floor(18 + rIdx * 12),
-                range: 50 + ((i * 7) % 150),
-                spd: parseFloat((1.0 + (i % 4) * 0.3).toFixed(1))
-            };
-        }
-    }
-
-    // 生成 120 種怪獸敵人
-    function generateEnemies() {
-        const enemyTypes = [
-            { name: '小紅惡魔', icon: '👺', attr: '紅' },
-            { name: '幽靈水母', icon: '👻', attr: '飛' },
-            { name: '邪教天使', icon: '👼', attr: '聖' },
-            { name: '外星毒蛛', icon: '👾', attr: '星' },
-            { name: '腐爛喪屍', icon: '🧟', attr: '屍' },
-            { name: '無名野犬', icon: '🐕', attr: '無' },
-            { name: '赤焰野豬', icon: '🐗', attr: '紅' },
-            { name: '蝙蝠魔王', icon: '🦇', attr: '飛' },
-            { name: '機械守衛', icon: '🤖', attr: '星' },
-            { name: '骷髏戰將', icon: '💀', attr: '屍' },
-            { name: '狂暴巨蜥', icon: '🦎', attr: '紅' },
-            { name: '極地白狼', icon: '🐺', attr: '無' },
-            { name: '虛空魔眼', icon: '👁️', attr: '星' },
-            { name: '天界執刑者', icon: '⚔️', attr: '聖' },
-            { name: '巫毒偶人', icon: '🎎', attr: '屍' },
-            { name: '烈焰巨龍', icon: '🐲', attr: '紅' },
-            { name: '雷霆夜鶯', icon: '🐦', attr: '飛' },
-            { name: '星際異形', icon: '👽', attr: '星' },
-            { name: '墮落大天使', icon: '🦇', attr: '聖' },
-            { name: '不朽屍王', icon: '👑', attr: '屍' },
-            { name: '深淵巨魔', icon: '👹', attr: '紅' },
-            { name: '極光巨鳥', icon: '🦅', attr: '飛' },
-            { name: '機械霸王龍', icon: '🦖', attr: '星' },
-            { name: '亡靈騎士', icon: '🏇', attr: '屍' },
-            { name: '聖殿巨神', icon: '🗿', attr: '聖' }
+        let w, h, score, coinCount, totalCoins = 0, bestScore = 0, gameActive, speed, saveTicker = 0;
+        const SAVE_KEY = 'raingod_runner_save';
+        const LEADERBOARD_URL = 'https://game-24b43-default-rtdb.firebaseio.com/raingod_runner_leaderboard';
+        const SKINS = [
+            { id: 'cyan', name: '霓虹青跑者', color: '#00f3ff', shape: 'rect', price: 0 },
+            { id: 'gold', name: '黃金跑者', color: '#ffd700', shape: 'rect', price: 500 },
+            { id: 'pink', name: '粉紅魅影', color: '#ff00aa', shape: 'circle', price: 500 },
+            { id: 'purple', name: '紫晶幽影', color: '#a855f7', shape: 'diamond', price: 1000 },
+            { id: 'lime', name: '酸橙閃電', color: '#a3e635', shape: 'triangle', price: 1000 },
+            { id: 'fire', name: '烈焰衝刺', color: '#ff5a36', shape: 'star', price: 1500 },
+            { id: 'ice', name: '極地冰晶', color: '#8be9ff', shape: 'diamond', price: 1500 },
+            { id: 'white', name: '月光白影', color: '#f8fafc', shape: 'circle', price: 2000 },
+            { id: 'orange', name: '熔岩橘子', color: '#fb923c', shape: 'triangle', price: 2500 },
+            { id: 'blue', name: '深海藍鯊', color: '#2563eb', shape: 'rect', price: 2500 },
+            { id: 'mint', name: '薄荷幻彩', color: '#34d399', shape: 'star', price: 3000 },
+            { id: 'red', name: '赤焰武士', color: '#ef4444', shape: 'diamond', price: 3500 },
+            { id: 'rainbow', name: '彩虹傳說', color: '#f472b6', shape: 'star', price: 5000 }
         ];
-
-        for (let i = 1; i <= 120; i++) {
-            const id = `enemy_${i}`;
-            const base = enemyTypes[(i - 1) % enemyTypes.length];
-            const mult = 1 + (i * 0.3);
-
-            ENEMIES[id] = {
-                id,
-                name: `${base.name} Lv.${i}`,
-                icon: base.icon,
-                attr: base.attr,
-                hp: Math.floor(220 * mult),
-                atk: Math.floor(30 * mult),
-                spd: parseFloat((0.8 + (i % 3) * 0.2).toFixed(1)),
-                range: 45 + (i % 3) * 15,
-                reward: 40 + i * 15
-            };
-        }
-    }
-
-    generateGods();
-    generateEnemies();
-
-    // 10 大篇章設計（共 100 個特色關卡）
-    const CHAPTERS = [
-        { id: 1, name: "序章：雨神降臨", startIdx: 0, endIdx: 9 },
-        { id: 2, name: "第一章：元素風暴", startIdx: 10, endIdx: 19 },
-        { id: 3, name: "第二章：深淵魔域", startIdx: 20, endIdx: 29 },
-        { id: 4, name: "第三章：虛空星穹", startIdx: 30, endIdx: 39 },
-        { id: 5, name: "第四章：聖光審判", startIdx: 40, endIdx: 49 },
-        { id: 6, name: "第五章：不死冥界", startIdx: 50, endIdx: 59 },
-        { id: 7, name: "第六章：機械革命", startIdx: 60, endIdx: 69 },
-        { id: 8, name: "第七章：混沌荒原", startIdx: 70, endIdx: 79 },
-        { id: 9, name: "第八章：神域禁地", startIdx: 80, endIdx: 89 },
-        { id: 10, name: "終章：諸神黃昏", startIdx: 90, endIdx: 99 }
-    ];
-
-    const STAGES = Array.from({ length: 100 }, (_, i) => {
-        const chapterIdx = Math.floor(i / 10);
-        const chapterName = CHAPTERS[chapterIdx].name;
-        const stageInChapter = (i % 10) + 1;
         
-        const poolStart = Math.max(1, Math.min(115, Math.floor(i * 1.2) + 1));
-        const ePool = [
-            `enemy_${poolStart}`,
-            `enemy_${Math.min(120, poolStart + 1)}`,
-            `enemy_${Math.min(120, poolStart + 3)}`
-        ];
+        // 攝影機：拉高 Y 軸、往前 Tilt，實現極佳的俯視俯瞰視角
+        let camera = { x: 0, y: 320, z: -220, fov: 320 };
+        let obstacles = [], items = [], particles = [];
+        let worldDistance = 0, nextObstacleDistance = 650;
+        const FRAME_DURATION = 1000 / 60;
+        let previousFrameTime = 0, frameAccumulator = 0;
 
-        return {
-            name: `${chapterName} - 第 ${stageInChapter} 關`,
-            chapterId: chapterIdx + 1,
-            eHP: Math.floor(2000 * Math.pow(1.25, i)),
-            ePool: ePool,
-            diff: i + 1,
-            reward: 500 * (i + 1)
+        // 玩家資料與商店道具
+        let playerData = {
+            skin: 'cyan',
+            ownedSkins: ['cyan'],
+            hasMagnet: false,
+            hasShield: false
         };
-    });
 
-    let currentChapterTab = 1;
+        let activeBuffs = {
+            magnetTimer: 0,
+            hasShield: false
+        };
 
-    let user = {
-        xp: 1000,
-        owned: ['god_1', 'god_2', 'god_3', 'god_4', 'god_5'],
-        deck: ['god_1', 'god_2', 'god_3', 'god_4', 'god_5'],
-        encounteredEnemies: ['enemy_1', 'enemy_2'],
-        lvs: {},
-        cleared: 0
-    };
+        let player = {
+            lane: 1, x: 0, targetX: 0,
+            y: 0, vY: 0, z: 150, // 人物放置在螢幕中下方 (z:150)
+            rollRotation: 0, duckTimer: 0,
+            isJumping: false, isDucking: false, onBridge: false,
+            width: 40, height: 75
+        };
 
-    Object.keys(CHARS).forEach(k => user.lvs[k] = 1);
+        const LANE_X = [-140, 0, 140];
+        let touchX = 0, touchY = 0;
 
-    function save() {
-        localStorage.setItem(SAVE_KEY, JSON.stringify(user));
-        document.getElementById('res-xp').innerText = Math.floor(user.xp);
-        document.getElementById('res-count').innerText = `${user.owned.length}/${Object.keys(CHARS).length}`;
-        document.getElementById('res-stage').innerText = `${user.cleared}/${STAGES.length}`;
-        document.getElementById('book-god-total').innerText = Object.keys(CHARS).length;
-        document.getElementById('book-enemy-total').innerText = Object.keys(ENEMIES).length;
-    }
+        function init() {
+            w = canvas.width = window.innerWidth;
+            h = canvas.height = window.innerHeight;
+            
+            player.lane = 1; player.x = LANE_X[1]; player.targetX = LANE_X[1];
+            player.y = 0; player.vY = 0; player.rollRotation = 0;
+            player.isJumping = false; player.isDucking = false;
+            player.onBridge = false;
 
-    function loadGame(savedData) {
-        const data = savedData === undefined ? localStorage.getItem(SAVE_KEY) : savedData;
-        if (data) {
-            try {
-                const d = typeof data === 'string' ? JSON.parse(data) : data;
-                if (!d || typeof d !== 'object' || Array.isArray(d)) throw new Error('存檔格式無效');
-                user = { ...user, ...d };
-                user.lvs = { ...user.lvs, ...(d.lvs || {}) };
-            } catch (error) {
-                console.error('載入雨神大戰爭存檔失敗：', error);
-            }
+            score = 0; coinCount = 0; speed = 16;
+            obstacles = []; items = []; particles = [];
+            worldDistance = 0;
+            nextObstacleDistance = 650;
+            
+            // 載入商店道具效果
+            activeBuffs.magnetTimer = playerData.hasMagnet ? 600 : 0; // 約10秒磁鐵
+            activeBuffs.hasShield = playerData.hasShield;
+            playerData.hasMagnet = false; // 消耗道具
+            playerData.hasShield = false;
+
+            updateBuffsUI();
+            gameActive = true; 
+            menu.style.display = 'none';
+            shopEl.style.display = 'none';
+            saveRunnerData();
         }
-        save();
-    }
 
-    async function openWarsLeaderboard() {
-        if (!await window.raingodRequireAuth('排行榜')) return;
-        document.getElementById('wars-leaderboard').style.display = 'flex';
-        await refreshWarsLeaderboard();
-    }
+        function saveRunnerData() {
+            localStorage.setItem(SAVE_KEY, JSON.stringify({
+                totalCoins,
+                bestScore,
+                playerData: {
+                    skin: playerData.skin,
+                    ownedSkins: playerData.ownedSkins,
+                    hasMagnet: playerData.hasMagnet,
+                    hasShield: playerData.hasShield
+                }
+            }));
+        }
 
-    function closeWarsLeaderboard() {
-        document.getElementById('wars-leaderboard').style.display = 'none';
-    }
+        function loadRunnerData(data) {
+            totalCoins = Math.max(0, Number(data?.totalCoins) || 0);
+            bestScore = Math.max(0, Number(data?.bestScore) || 0);
+            const savedPlayerData = data?.playerData;
+            if (savedPlayerData && typeof savedPlayerData === 'object') {
+                const owned = Array.isArray(savedPlayerData.ownedSkins)
+                    ? savedPlayerData.ownedSkins.filter(id => SKINS.some(skin => skin.id === id))
+                    : ['cyan'];
+                if (SKINS.some(skin => skin.id === savedPlayerData.skin) && !owned.includes(savedPlayerData.skin)) {
+                    owned.push(savedPlayerData.skin);
+                }
+                playerData = {
+                    skin: owned.includes(savedPlayerData.skin) ? savedPlayerData.skin : 'cyan',
+                    ownedSkins: Array.from(new Set(['cyan', ...owned])),
+                    hasMagnet: savedPlayerData.hasMagnet === true,
+                    hasShield: savedPlayerData.hasShield === true
+                };
+            }
+            coinsEl.innerText = '0';
+            shopCoinsEl.innerText = totalCoins;
+            renderSkinShop();
+        }
 
-    async function refreshWarsLeaderboard() {
-        const status = document.getElementById('wars-leaderboard-status');
-        const list = document.getElementById('wars-leaderboard-list');
-        if (!await window.raingodRequireAuth('排行榜')) return;
-        const uid = window.raingodCurrentUser.uid;
-        status.textContent = '排行榜載入中…';
-        try {
-            const response = await fetch(`${WARS_LEADERBOARD_URL}.json`);
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            if (window.raingodCurrentUser?.uid !== uid) return;
-            const rows = await response.json() || {};
-            const entries = Object.entries(rows)
-                .filter(([, row]) => row && Number.isFinite(Number(row.cleared)))
-                .sort((a, b) => Number(b[1].cleared) - Number(a[1].cleared) || Number(b[1].xp || 0) - Number(a[1].xp || 0))
-                .slice(0, 50);
+        function renderSkinShop() {
+            const list = document.getElementById('skin-shop-list');
             list.replaceChildren();
-            entries.forEach(([entryUid, row], index) => {
-                const item = document.createElement('div');
-                item.className = 'wars-leaderboard-row';
-                const name = document.createElement('span');
-                name.textContent = `${index + 1}. ${row.name || '玩家'}${entryUid === uid ? '（你）' : ''}`;
-                const value = document.createElement('strong');
-                value.textContent = `${Number(row.cleared)} 關 · ${Math.floor(Number(row.xp) || 0).toLocaleString()} XP`;
-                item.append(name, value);
-                list.appendChild(item);
-            });
-            status.textContent = entries.length ? `已載入 ${entries.length} 位玩家，依通關遠征數排序。` : '目前還沒有排行榜資料。';
-        } catch (error) {
-            console.error('載入雨神大戰爭排行榜失敗：', error);
-            status.textContent = '排行榜載入失敗，請稍後重試。';
-        }
-    }
+            SKINS.forEach(skin => {
+                const owned = playerData.ownedSkins.includes(skin.id);
+                const card = document.createElement('div');
+                card.className = 'skin-card';
+                const label = document.createElement('span');
+                const swatch = document.createElement('span');
+                swatch.className = 'skin-swatch';
+                swatch.style.background = skin.color;
+                swatch.style.color = skin.color;
+                label.append(swatch, document.createTextNode(skin.name));
 
-    async function uploadWarsLeaderboardScore() {
-        const currentUser = window.raingodCurrentUser;
-        if (!currentUser || user.cleared <= 0) return;
-        const uid = currentUser.uid;
-        const entryUrl = `${WARS_LEADERBOARD_URL}/${encodeURIComponent(uid)}.json`;
-        try {
-            const previousResponse = await fetch(entryUrl);
-            if (!previousResponse.ok) throw new Error(`HTTP ${previousResponse.status}`);
-            const previous = await previousResponse.json();
-            if (window.raingodCurrentUser?.uid !== uid) return;
-            if (previous && (Number(previous.cleared) > user.cleared ||
-                (Number(previous.cleared) === user.cleared && Number(previous.xp) >= user.xp))) return;
-            const response = await fetch(entryUrl, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    name: currentUser.email ? currentUser.email.split('@')[0] : '雨神玩家',
-                    cleared: Math.floor(user.cleared),
-                    xp: Math.floor(user.xp),
-                    updatedAt: Date.now()
-                })
+                const button = document.createElement('button');
+                button.className = 'shop-btn';
+                button.textContent = owned
+                    ? (playerData.skin === skin.id ? '使用中' : '選用')
+                    : `${skin.price} 金幣`;
+                button.disabled = owned && playerData.skin === skin.id;
+                button.onclick = () => buySkin(skin.id);
+                card.append(label, button);
+                list.appendChild(card);
             });
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        } catch (error) {
-            console.error('上傳雨神大戰爭排行榜失敗：', error);
         }
-    }
 
-    async function initializeWars() {
-        await window.raingodFirebaseReady;
-        await window.raingodAuthReady;
-        await window.raingodBindStorage('raingod-wars', [SAVE_KEY], { [SAVE_KEY]: null }, data => {
-            loadGame(data[SAVE_KEY]);
-            if (window.raingodCurrentUser) uploadWarsLeaderboardScore();
-        });
-        window.raingodOnAuthStateChanged(currentUser => {
-            const button = document.getElementById('wars-leaderboard-button');
-            if (button) button.textContent = currentUser ? '🏆 排行榜' : '🏆 登入後查看排行榜';
-            if (currentUser) uploadWarsLeaderboardScore();
-            else {
-                closeWarsLeaderboard();
-                const list = document.getElementById('wars-leaderboard-list');
-                const status = document.getElementById('wars-leaderboard-status');
-                if (list) list.replaceChildren();
-                if (status) status.textContent = '請登入帳號後查看。';
+        function buySkin(skinId) {
+            const skin = SKINS.find(item => item.id === skinId);
+            if (!skin) return;
+            if (playerData.ownedSkins.includes(skinId)) {
+                playerData.skin = skinId;
+                saveRunnerData();
+                renderSkinShop();
+                return;
             }
-        });
-    }
-
-    function showScreen(id) {
-        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-        document.getElementById(id).classList.add('active');
-        if(id === 'map-screen') renderMap();
-    }
-
-    function getFormIdx(lv) { return lv >= 10 ? 2 : (lv >= 5 ? 1 : 0); }
-
-    // --- 隊伍編隊 ---
-    function renderDeck() {
-        const list = document.getElementById('deck-list');
-        list.innerHTML = '';
-        user.owned.forEach(id => {
-            const c = CHARS[id];
-            const inDeck = user.deck.includes(id);
-            const lv = user.lvs[id] || 1;
-            const fIdx = getFormIdx(lv);
-            const item = document.createElement('div');
-            item.className = `card rarity-${c.rarity} ${inDeck ? 'selected' : ''}`;
-            item.innerHTML = `
-                <div style="font-size:26px;">${c.forms[fIdx]}</div>
-                <b>${c.formNames[fIdx]}</b><br>
-                <span class="tag tag-${c.targetAttr}">對${c.targetAttr}強效</span><br>
-                <small style="color:${inDeck?'#2ecc71':'#aaa'}">${inDeck?'[出戰中]':'[未裝備]'}</small>
-            `;
-            item.onclick = () => toggleDeck(id);
-            list.appendChild(item);
-        });
-    }
-
-    function toggleDeck(id) {
-        if (user.deck.includes(id)) {
-            if (user.deck.length <= 1) return alert("隊伍至少要有 1 隻神靈！");
-            user.deck = user.deck.filter(x => x !== id);
-        } else {
-            if (user.deck.length >= 10) return alert("出戰隊伍最多 10 隻！");
-            user.deck.push(id);
-        }
-        renderDeck();
-        save();
-    }
-
-    // --- 升級介面 ---
-    function renderUpgrade() {
-        const list = document.getElementById('upgrade-list');
-        list.innerHTML = '';
-        user.owned.forEach(id => {
-            const c = CHARS[id];
-            const lv = user.lvs[id] || 1;
-            const fIdx = getFormIdx(lv);
-            const cost = lv * 150;
-            const item = document.createElement('div');
-            item.className = `card rarity-${c.rarity}`;
-            item.innerHTML = `
-                <div style="font-size:28px;">${c.forms[fIdx]}</div>
-                <b>${c.formNames[fIdx]}</b><br>
-                <small style="color:var(--gold);">Lv.${lv}</small><br>
-                <button onclick="upLevel('${id}')" style="font-size:10px; margin-top:4px; background:var(--gold); border:none; border-radius:4px; padding:3px 8px; font-weight:bold; cursor:pointer;">升級(${cost}XP)</button>
-            `;
-            list.appendChild(item);
-        });
-    }
-
-    function upLevel(id) {
-        const cost = (user.lvs[id] || 1) * 150;
-        if (user.xp >= cost) {
-            user.xp -= cost;
-            user.lvs[id] = (user.lvs[id] || 1) + 1;
-            renderUpgrade();
-            save();
-        } else { alert("XP 不足！"); }
-    }
-
-    // --- 雙圖鑑頁籤 ---
-    function renderBook(type) {
-        document.getElementById('tab-gods').classList.toggle('active', type === 'gods');
-        document.getElementById('tab-enemies').classList.toggle('active', type === 'enemies');
-        
-        document.getElementById('book-god-count').innerText = user.owned.length;
-        document.getElementById('book-enemy-count').innerText = user.encounteredEnemies.length;
-        document.getElementById('book-god-total').innerText = Object.keys(CHARS).length;
-        document.getElementById('book-enemy-total').innerText = Object.keys(ENEMIES).length;
-
-        const list = document.getElementById('book-list');
-        list.innerHTML = '';
-
-        if (type === 'gods') {
-            Object.keys(CHARS).forEach(id => {
-                const has = user.owned.includes(id);
-                const c = CHARS[id];
-                const lv = user.lvs[id] || 1;
-                const fIdx = getFormIdx(lv);
-                const item = document.createElement('div');
-                item.className = `card ${has ? 'rarity-' + c.rarity : 'locked'}`;
-                item.innerHTML = `
-                    <div style="font-size:26px;">${has ? c.forms[fIdx] : '❓'}</div>
-                    <b>${has ? c.formNames[fIdx] : '???'}</b><br>
-                    ${has ? `<span class="tag tag-${c.targetAttr}">克制:${c.targetAttr}</span><br><small>${c.isArea?'[範圍]':'[單體]'}</small>` : '<small>未解鎖</small>'}
-                `;
-                list.appendChild(item);
-            });
-        } else {
-            Object.keys(ENEMIES).forEach(id => {
-                const has = user.encounteredEnemies.includes(id);
-                const e = ENEMIES[id];
-                const item = document.createElement('div');
-                item.className = `card ${has ? '' : 'locked'}`;
-                item.innerHTML = `
-                    <div style="font-size:26px;">${has ? e.icon : '❓'}</div>
-                    <b>${has ? e.name : '???'}</b><br>
-                    ${has ? `<span class="tag tag-${e.attr}">${e.attr}屬性</span><br><small>HP:${e.hp} ATK:${e.atk}</small>` : '<small>未遭遇</small>'}
-                `;
-                list.appendChild(item);
-            });
-        }
-    }
-
-    // --- 地圖與篇章分頁 ---
-    function renderMap() {
-        const mapScreen = document.getElementById('map-screen');
-        let navBar = document.getElementById('chapter-nav-bar');
-        
-        if (!navBar) {
-            navBar = document.createElement('div');
-            navBar.id = 'chapter-nav-bar';
-            navBar.style.cssText = 'display:flex; gap:8px; width:100%; min-width:0; overflow-x:auto; padding:10px 0; margin-bottom:10px; scrollbar-width:thin;';
-            const list = document.getElementById('map-list');
-            mapScreen.insertBefore(navBar, list);
+            if (totalCoins < skin.price) {
+                alert('金幣不足！');
+                return;
+            }
+            totalCoins -= skin.price;
+            playerData.ownedSkins.push(skinId);
+            playerData.skin = skinId;
+            shopCoinsEl.innerText = totalCoins;
+            saveRunnerData();
+            renderSkinShop();
         }
 
-        navBar.innerHTML = '';
-        CHAPTERS.forEach(ch => {
-            const btn = document.createElement('button');
-            btn.className = 'chapter-btn';
-            btn.style.cssText = `padding: 6px 12px; font-weight: bold; border-radius: 6px; border: 1px solid var(--p-color); cursor: pointer; white-space: nowrap; background: ${currentChapterTab === ch.id ? 'var(--p-color)' : 'transparent'}; color: ${currentChapterTab === ch.id ? '#fff' : 'var(--p-color)'};`;
-            btn.innerText = ch.name;
-            btn.onclick = () => {
-                currentChapterTab = ch.id;
-                renderMap();
+        // --- 俯視 3D 投影核心 ---
+        function project(x, y, z) {
+            let relativeZ = z - camera.z;
+            if (relativeZ <= 0) relativeZ = 0.1;
+            let scale = camera.fov / relativeZ;
+            return {
+                x: w / 2 + (x - camera.x) * scale,
+                y: h / 2 - (y - camera.y) * scale,
+                scale: scale
             };
-            navBar.appendChild(btn);
-        });
-
-        const list = document.getElementById('map-list');
-        list.innerHTML = '';
-        
-        const chInfo = CHAPTERS.find(c => c.id === currentChapterTab);
-        for (let idx = chInfo.startIdx; idx <= chInfo.endIdx; idx++) {
-            const s = STAGES[idx];
-            const locked = idx > user.cleared;
-            const item = document.createElement('div');
-            item.className = `card ${locked ? 'locked' : ''}`;
-            item.innerHTML = `
-                <b style="color:var(--p-color);">${s.name}</b><br>
-                <small>主堡HP:${Math.floor(s.eHP)}</small><br>
-                <small style="color:var(--gold);">通關 +${s.reward}XP</small>
-            `;
-            if (!locked) item.onclick = () => startBattle(idx);
-            list.appendChild(item);
         }
-    }
 
-    // --- 抽卡 ---
-    function drawGacha() {
-        if (user.xp < 300) return alert("XP 不足！(需要 300 XP)");
-        user.xp -= 300;
-        save();
-        
-        const anim = document.getElementById('gacha-anim');
-        const icon = document.getElementById('gacha-icon');
-        const txt = document.getElementById('gacha-result-text');
-        
-        anim.style.display = 'flex';
-        icon.innerText = '🔮';
-        txt.innerText = '祈願召喚中...';
-
-        setTimeout(() => {
-            const keys = Object.keys(CHARS);
-            const res = keys[Math.floor(Math.random() * keys.length)];
-            const isNew = !user.owned.includes(res);
-            
-            if (isNew) {
-                user.owned.push(res);
-                if (user.deck.length < 10) user.deck.push(res);
-            } else {
-                user.xp += 150;
+        // --- 控制邏輯 ---
+        const handleInput = (dir) => {
+            if (!gameActive) return;
+            if (dir === 'L' && player.lane > 0) player.lane--;
+            if (dir === 'R' && player.lane < 2) player.lane++;
+            if (dir === 'U' && !player.isJumping) { player.isJumping = true; player.vY = 22; }
+            if (dir === 'D') {
+                if (player.isJumping) player.vY = -30;
+                player.isDucking = true; player.duckTimer = 22;
             }
-
-            const c = CHARS[res];
-            icon.innerText = c.forms[0];
-            txt.innerText = isNew 
-                ? `🎉 獲得新神靈！\n${c.name} (${c.rarity})\n屬性克制: [${c.targetAttr}]`
-                : `重複獲得 ${c.name}！\n自動轉化為 150 XP`;
-
-            setTimeout(() => { anim.style.display = 'none'; save(); }, 1600);
-        }, 800);
-    }
-
-    // --- 戰鬥引擎 ---
-    let battle = { active: false, units: [], money: 0, maxMoney: 500, walletLv: 1, pHP: 1500, pMaxHP: 1500, eHP: 0, eMaxHP: 0, currentStage: null, width: 0, cooldowns: {}, cannonCharge: 0 };
-
-    function startBattle(idx) {
-        showScreen('game-screen');
-        const s = STAGES[idx];
-        const stageWidth = document.getElementById('stage').offsetWidth;
-        
-        battle = { 
-            active: true, units: [], money: 100, maxMoney: 500, walletLv: 1,
-            pHP: 2000, pMaxHP: 2000, eHP: s.eHP, eMaxHP: s.eHP, 
-            currentStage: idx, width: stageWidth, cooldowns: {}, cannonCharge: 0 
         };
-        
-        renderBattleUI();
-        requestAnimationFrame(battleLoop);
-    }
 
-    function renderBattleUI() {
-        const panel = document.getElementById('ui-panel');
-        panel.innerHTML = '';
-        
-        const walletBtn = document.createElement('button');
-        walletBtn.className = 'spawn-btn';
-        walletBtn.id = 'wallet-btn';
-        walletBtn.onclick = upgradeWallet;
-        panel.appendChild(walletBtn);
-
-        const cannonBtn = document.createElement('button');
-        cannonBtn.className = 'spawn-btn';
-        cannonBtn.id = 'cannon-btn';
-        cannonBtn.innerHTML = `<span>⚡</span><small>雨神砲</small>`;
-        cannonBtn.onclick = fireCannon;
-        panel.appendChild(cannonBtn);
-
-        user.deck.forEach(id => {
-            const c = CHARS[id];
-            const lv = user.lvs[id] || 1;
-            const fIdx = getFormIdx(lv);
-            const btn = document.createElement('button');
-            btn.className = 'spawn-btn';
-            btn.id = `btn-${id}`;
-            btn.innerHTML = `
-                <span style="font-size:20px;">${c.forms[fIdx]}</span>
-                <span class="tag tag-${c.targetAttr}" style="font-size:8px;">${c.targetAttr}</span>
-                <b>$${c.cost}</b>
-            `;
-            btn.onclick = () => spawn(id, 'player');
-            panel.appendChild(btn);
+        window.addEventListener('keydown', e => {
+            if (e.key === 'ArrowLeft' || e.key === 'a') handleInput('L');
+            if (e.key === 'ArrowRight' || e.key === 'd') handleInput('R');
+            if (e.key === 'ArrowUp' || e.key === 'w' || e.key === ' ') handleInput('U');
+            if (e.key === 'ArrowDown' || e.key === 's') handleInput('D');
         });
-    }
 
-    function upgradeWallet() {
-        const cost = battle.walletLv * 120;
-        if (battle.money >= cost && battle.walletLv < 8) {
-            battle.money -= cost;
-            battle.walletLv++;
-            battle.maxMoney += 300;
-        }
-    }
-
-    function fireCannon() {
-        if (battle.cannonCharge >= 100) {
-            battle.cannonCharge = 0;
-            battle.units.forEach(u => { if (u.side === 'enemy') u.hp -= 500; });
-            battle.eHP -= 800;
-        }
-    }
-
-    function spawn(id, side) {
-        if (side === 'player') {
-            const c = CHARS[id];
-            if (battle.money < c.cost || (battle.cooldowns[id] || 0) > 0) return;
-            battle.money -= c.cost;
-            battle.cooldowns[id] = c.cd;
-            
-            const lv = user.lvs[id] || 1;
-            const fIdx = getFormIdx(lv);
-            const mult = 1 + (lv - 1) * 0.15;
-
-            createUnitEntity({
-                side: 'player', icon: c.forms[fIdx],
-                targetAttr: c.targetAttr, isArea: c.isArea,
-                x: 70, hp: c.hp * mult, max: c.hp * mult,
-                atk: c.atk * mult, spd: c.spd, range: c.range
-            });
-        } else {
-            const stg = STAGES[battle.currentStage];
-            const enemyId = stg.ePool[Math.floor(Math.random() * stg.ePool.length)];
-            const e = ENEMIES[enemyId];
-
-            if (!user.encounteredEnemies.includes(enemyId)) {
-                user.encounteredEnemies.push(enemyId);
-                save();
+        window.addEventListener('touchstart', e => { touchX = e.touches[0].clientX; touchY = e.touches[0].clientY; });
+        window.addEventListener('touchend', e => {
+            let dx = e.changedTouches[0].clientX - touchX, dy = e.changedTouches[0].clientY - touchY;
+            if (Math.abs(dx) > Math.abs(dy)) {
+                if (dx > 30) handleInput('R'); else if (dx < -30) handleInput('L');
+            } else {
+                if (dy > 30) handleInput('D'); else if (dy < -30) handleInput('U');
             }
-
-            createUnitEntity({
-                side: 'enemy', icon: e.icon, attr: e.attr,
-                x: battle.width - 90,
-                hp: e.hp, max: e.hp,
-                atk: e.atk, spd: e.spd, range: e.range, reward: e.reward
-            });
-        }
-    }
-
-    function createUnitEntity(cfg) {
-        const el = document.createElement('div');
-        el.className = 'unit';
-        el.innerHTML = `<div class="hp-bar"><div class="hp-inner"></div></div><div class="unit-body">${cfg.icon}</div>`;
-        document.getElementById('stage').appendChild(el);
-        battle.units.push({ ...cfg, el, atkTimer: 0 });
-    }
-
-    function battleLoop() {
-        if (!battle.active) return;
-
-        // 錢包與雨神砲累積
-        battle.money = Math.min(battle.maxMoney, battle.money + 0.25 + (battle.walletLv * 0.12));
-        if (battle.cannonCharge < 100) battle.cannonCharge += 0.12;
-
-        // 冷卻時間計算
-        Object.keys(battle.cooldowns).forEach(k => {
-            if (battle.cooldowns[k] > 0) battle.cooldowns[k] -= 0.1;
         });
 
-        // 敵人生成邏輯
-        if (Math.random() < (0.015 + battle.currentStage * 0.0008)) spawn(null, 'enemy');
+        // --- 障礙物與金幣生成 ---
+        function spawn() {
+            const spawnZ = 2200;
+            worldDistance += speed;
+            if (worldDistance >= nextObstacleDistance) {
+                if (Math.random() < 0.24) {
+                    const bridgeZ = 2600;
+                    const course = createBridgeCourse(bridgeZ);
+                    obstacles.push(course);
+                    obstacles = obstacles.filter(obstacle =>
+                        obstacle.type === 'BRIDGE' ||
+                        !course.sections.some(section =>
+                            section.lane === obstacle.lane &&
+                            obstacle.z + 70 >= bridgeZ + section.near &&
+                            obstacle.z - 70 <= bridgeZ + section.far
+                        )
+                    );
 
-        // 單位移動與戰鬥邏輯
-        battle.units.forEach(u => {
-            const isP = u.side === 'player';
-            
-            // 搜尋攻擊範圍內的目標
-            let targets = battle.units.filter(en => 
-                en.side !== u.side && 
-                (isP ? (en.x - u.x <= u.range && en.x >= u.x) : (u.x - en.x <= u.range && u.x >= en.x))
-            );
-
-            const baseDist = isP ? (battle.width - 70 - u.x) : (u.x - 70);
-
-            if (targets.length > 0 || baseDist <= u.range) {
-                u.atkTimer++;
-                if (u.atkTimer > 30) {
-                    u.atkTimer = 0;
-                    
-                    // 執行攻擊
-                    if (targets.length > 0) {
-                        const hitTargets = u.isArea ? targets : [targets[0]];
-                        hitTargets.forEach(target => {
-                            let damage = u.atk;
-                            // 屬性克制加成：玩家對特攻屬性傷害 x1.8
-                            if (isP && u.targetAttr === target.attr) damage *= 1.8;
-                            target.hp -= damage;
+                    course.sections.forEach(section => {
+                        const coinSteps = section.kind === 'DECK'
+                            ? [0.2, 0.5, 0.8]
+                            : [0.5];
+                        coinSteps.forEach(step => {
+                            const zOffset = section.far + (section.near - section.far) * step;
+                            const y = section.yFar + (section.yNear - section.yFar) * step;
+                            items.push({
+                                x: LANE_X[section.lane],
+                                y: y + 28,
+                                z: bridgeZ + zOffset,
+                                lane: section.lane,
+                                rot: 0
+                            });
                         });
-                    } else {
-                        // 攻擊敵方城堡
-                        if (isP) battle.eHP -= u.atk; 
-                        else battle.pHP -= u.atk;
+                    });
+                    nextObstacleDistance = worldDistance + 9500;
+                } else {
+                    const lanes = [0, 1, 2].filter(lane => !isBridgeOverhead(lane, spawnZ, 70));
+                    if (!lanes.length) {
+                        nextObstacleDistance = worldDistance + 260;
+                        return;
+                    }
+                    const firstLane = lanes.splice(Math.floor(Math.random() * lanes.length), 1)[0];
+                    const typeRoll = Math.random();
+                    const type = typeRoll < 0.2 ? 'LOW' : typeRoll < 0.8 ? 'HIGH' : 'TALL';
+                    const wave = [{
+                        lane: firstLane,
+                        type
+                    }];
+                    if (lanes.length && Math.random() < 0.88) {
+                        const lane = lanes.splice(Math.floor(Math.random() * lanes.length), 1)[0];
+                        const laneTypeRoll = Math.random();
+                        wave.push({ lane, type: laneTypeRoll < 0.2 ? 'LOW' : laneTypeRoll < 0.8 ? 'HIGH' : 'TALL' });
+                    }
+                    wave.forEach(({ lane, type }) => {
+                        obstacles.push({
+                            x: LANE_X[lane], y: 0, z: spawnZ, lane, type,
+                            width: type === 'TALL' ? 105 : 90,
+                            height: type === 'LOW' ? 50 : type === 'TALL' ? 175 : 110
+                        });
+                    });
+                    items = items.filter(item => !isCoinBlockedByObstacle(item.lane, item.z));
+                    nextObstacleDistance = worldDistance + 380 + Math.random() * 140;
+                }
+            }
+            if (Math.random() < 0.045) {
+                let lane = Math.floor(Math.random() * 3);
+                for (let i = 0; i < 3; i++) {
+                    const z = spawnZ + (i * 180);
+                    if (!isCoinBlockedByObstacle(lane, z)) {
+                        items.push({ x: LANE_X[lane], y: 25, z, lane, rot: 0 });
                     }
                 }
+            }
+        }
+
+        function isCoinBlockedByObstacle(lane, z) {
+            return obstacles.some(obstacle =>
+                obstacle.type !== 'BRIDGE' &&
+                obstacle.lane === lane &&
+                Math.abs(obstacle.z - z) < (obstacle.type === 'TALL' ? 360 : 300)
+            );
+        }
+
+        const BRIDGE_HEIGHT = 125;
+        const BRIDGE_RAMP_LENGTH = 420;
+        const BRIDGE_DECK_LENGTH = 500;
+        const BRIDGE_GAP_LENGTH = 130;
+        const BRIDGE_DECK_COUNT = 8;
+        const BRIDGE_HALF_WIDTH = 58;
+
+        function createBridgeCourse(z) {
+            const startLane = Math.floor(Math.random() * 3);
+            const laneOrder = Array.from(
+                { length: BRIDGE_DECK_COUNT },
+                (_, index) => (startLane + Math.floor(index / 2)) % 3
+            );
+            const laneRuns = laneOrder.reduce((runs, lane) => {
+                const lastRun = runs[runs.length - 1];
+                if (lastRun && lastRun.lane === lane) {
+                    lastRun.length += BRIDGE_DECK_LENGTH;
+                } else {
+                    runs.push({ lane, length: BRIDGE_DECK_LENGTH });
+                }
+                return runs;
+            }, []);
+            const sections = [];
+            let far = 0;
+            sections.push({
+                lane: startLane,
+                kind: 'RAMP_UP',
+                near: far - BRIDGE_RAMP_LENGTH,
+                far,
+                yNear: 0,
+                yFar: BRIDGE_HEIGHT
+            });
+
+            laneRuns.forEach(({ lane, length }, index) => {
+                if (index > 0) far += BRIDGE_GAP_LENGTH;
+                sections.push({
+                    lane,
+                    kind: 'DECK',
+                    near: far,
+                    far: far + length,
+                    yNear: BRIDGE_HEIGHT,
+                    yFar: BRIDGE_HEIGHT
+                });
+                far += length;
+            });
+
+            const finalLane = laneRuns[laneRuns.length - 1].lane;
+            sections.push({
+                lane: finalLane,
+                kind: 'RAMP_DOWN',
+                near: far,
+                far: far + BRIDGE_RAMP_LENGTH,
+                yNear: BRIDGE_HEIGHT,
+                yFar: 0
+            });
+
+            return { type: 'BRIDGE', z, sections };
+        }
+
+        function getBridgeUndersideCollision() {
+            if (player.onBridge) return null;
+            const playerHeight = player.isDucking ? player.height * 0.5 : player.height;
+            for (const course of obstacles) {
+                if (course.type !== 'BRIDGE' || course.undersideShieldUsed) continue;
+                for (const section of course.sections) {
+                    if (section.kind !== 'DECK' || section.lane !== player.lane) continue;
+                    const sectionNear = course.z + section.near;
+                    const sectionFar = course.z + section.far;
+                    if (player.z + 40 < sectionNear || player.z - 40 > sectionFar) continue;
+                    const underside = BRIDGE_HEIGHT - 18;
+                    if (player.y < BRIDGE_HEIGHT && player.y + playerHeight > underside) return course;
+                }
+            }
+            return null;
+        }
+
+        function isBridgeOverhead(lane, z, margin = 0) {
+            return obstacles.some(course =>
+                course.type === 'BRIDGE' &&
+                course.sections.some(section =>
+                    section.lane === lane &&
+                    z + margin >= course.z + section.near &&
+                    z - margin <= course.z + section.far
+                )
+            );
+        }
+
+        // --- 狀態更新 ---
+        function update() {
+            if (!gameActive) return;
+
+            saveTicker++;
+            score += Math.floor(speed / 6);
+            speed = Math.min(speed + 0.001, 24);
+            scoreEl.innerText = score;
+            if (saveTicker >= 300) {
+                saveTicker = 0;
+                saveRunnerData();
+            }
+
+            // 換軌與傾斜
+            player.targetX = LANE_X[player.lane];
+            let dx = player.targetX - player.x;
+            player.x += dx * 0.25;
+            player.rollRotation = -dx * 0.004;
+
+            // 上坡會帶玩家升高；平台間的空隙則必須跳過。
+            const bridgeSurface = getBridgeSurface(player.lane);
+            if (player.isJumping) {
+                player.y += player.vY;
+                player.vY -= 1.3;
+                if (bridgeSurface && player.vY <= 0 && player.y <= bridgeSurface.height) {
+                    player.y = bridgeSurface.height;
+                    player.vY = 0;
+                    player.isJumping = false;
+                    player.onBridge = bridgeSurface.height > 0;
+                } else if (player.y <= 0) {
+                    player.y = 0;
+                    player.vY = 0;
+                    player.isJumping = false;
+                    player.onBridge = false;
+                }
+            } else if (bridgeSurface && (bridgeSurface.kind === 'RAMP_UP' || player.onBridge)) {
+                player.y = bridgeSurface.height;
+                player.vY = 0;
+                player.onBridge = bridgeSurface.height > 0;
             } else {
-                // 前進
-                u.x += isP ? u.spd : -u.spd;
-                u.el.style.left = u.x + 'px';
-            }
-
-            // 更新血條 UI
-            u.el.querySelector('.hp-inner').style.width = Math.max(0, (u.hp / u.max * 100)) + '%';
-        });
-
-        // 清除陣亡單位
-        battle.units = battle.units.filter(u => { 
-            if(u.hp <= 0) { 
-                u.el.remove(); 
-                if (u.side === 'enemy') battle.money = Math.min(battle.maxMoney, battle.money + (u.reward || 30));
-                return false; 
-            } 
-            return true; 
-        });
-
-        // 戰鬥資訊 UI 刷新
-        document.getElementById('battle-money').innerText = `$${Math.floor(battle.money)}`;
-        document.getElementById('battle-max-money').innerText = `$${battle.maxMoney}`;
-        document.getElementById('p-hp').innerText = `${Math.max(0, Math.floor(battle.pHP))}/${battle.pMaxHP}`;
-        document.getElementById('e-hp').innerText = `${Math.max(0, Math.floor(battle.eHP))}/${Math.floor(battle.eMaxHP)}`;
-
-        const wBtn = document.getElementById('wallet-btn');
-        if (wBtn) {
-            wBtn.innerHTML = `<span>💰</span><small>錢包Lv.${battle.walletLv}</small>`;
-            wBtn.disabled = battle.walletLv >= 8 || battle.money < (battle.walletLv * 120);
-        }
-
-        const cBtn = document.getElementById('cannon-btn');
-        const cStatus = document.getElementById('cannon-status');
-        if (cBtn && cStatus) {
-            cStatus.innerText = battle.cannonCharge >= 100 ? '可發射！' : `${Math.floor(battle.cannonCharge)}%`;
-            cBtn.disabled = battle.cannonCharge < 100;
-        }
-
-        // 冷卻與按鈕狀態更新
-        user.deck.forEach(id => {
-            const btn = document.getElementById(`btn-${id}`);
-            if (btn) {
-                const cdLeft = Math.max(0, Math.ceil(battle.cooldowns[id] || 0));
-                btn.disabled = (battle.money < CHARS[id].cost) || (cdLeft > 0);
-                
-                let cdMask = btn.querySelector('.cd-mask');
-                if (cdLeft > 0) {
-                    if (!cdMask) {
-                        cdMask = document.createElement('div');
-                        cdMask.className = 'cd-mask';
-                        btn.appendChild(cdMask);
-                    }
-                    cdMask.innerText = cdLeft;
-                } else if (cdMask) {
-                    cdMask.remove();
+                player.onBridge = false;
+                if (player.y > 0) {
+                    player.vY -= 1.3;
+                    player.y = Math.max(0, player.y + player.vY);
                 }
             }
-        });
+            if (player.isDucking) {
+                player.duckTimer--;
+                if (player.duckTimer <= 0) player.isDucking = false;
+            }
 
-        // 勝負判定
-        if (battle.pHP <= 0 || battle.eHP <= 0) {
-            battle.active = false;
-            document.querySelectorAll('.unit').forEach(u => u.remove());
+            const undersideCollision = getBridgeUndersideCollision();
+            if (undersideCollision) {
+                if (activeBuffs.hasShield) {
+                    activeBuffs.hasShield = false;
+                    undersideCollision.undersideShieldUsed = true;
+                    updateBuffsUI();
+                    createExplosion(player.x, player.y + 30, player.z, '#00f3ff');
+                } else {
+                    createExplosion(player.x, player.y + 30, player.z, '#ff0055');
+                    gameEnd();
+                    return;
+                }
+            }
+
+            // 磁鐵倒數
+            if (activeBuffs.magnetTimer > 0) {
+                activeBuffs.magnetTimer--;
+                updateBuffsUI();
+            }
+
+            // 障礙物碰撞
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                let o = obstacles[i];
+                o.z -= speed;
+
+                if (o.z < player.z + 40 && o.z > player.z - 40 && o.lane === player.lane) {
+                    let hit = false;
+                    const protectedByBridge = isBridgeOverhead(o.lane, o.z, 40);
+                    if (!protectedByBridge && o.type === 'LOW' && player.y < 40) hit = true;
+                    if (!protectedByBridge && o.type === 'HIGH' && !player.isDucking && player.y < 110) hit = true;
+                    if (!protectedByBridge && o.type === 'TALL' && (!player.isDucking || player.y > 20)) hit = true;
+
+                    if (hit) {
+                        if (activeBuffs.hasShield) {
+                            activeBuffs.hasShield = false; // 抵擋一次
+                            obstacles.splice(i, 1);
+                            updateBuffsUI();
+                            createExplosion(player.x, player.y + 30, player.z, '#00f3ff');
+                        } else {
+                            createExplosion(player.x, player.y + 30, player.z, '#ff0055');
+                            gameEnd();
+                        }
+                    }
+                }
+                const bridgeEnd = o.type === 'BRIDGE'
+                    ? Math.max(...o.sections.map(section => section.far))
+                    : 0;
+                const passedEnd = o.type === 'BRIDGE'
+                    ? o.z + bridgeEnd < -100
+                    : o.z < -100;
+                if (passedEnd) obstacles.splice(i, 1);
+            }
+
+            // 金幣吃取與磁鐵吸附
+            for (let i = items.length - 1; i >= 0; i--) {
+                let it = items[i];
+                it.z -= speed;
+                it.rot += 0.1;
+
+                // 磁鐵功能：自動將金幣吸向玩家
+                if (activeBuffs.magnetTimer > 0 && it.z < player.z + 600 && it.z > player.z - 100) {
+                    it.x += (player.x - it.x) * 0.2;
+                    it.y += (player.y + 20 - it.y) * 0.2;
+                    it.z += (player.z - it.z) * 0.2;
+                }
+
+                // 判定吃到金幣
+                if (Math.abs(it.z - player.z) < 50 && Math.abs(it.x - player.x) < 40 && Math.abs(player.y - it.y) < 50) {
+                    coinCount++;
+                    totalCoins++;
+                    coinsEl.innerText = coinCount;
+                    items.splice(i, 1);
+                } else if (it.z < -100) {
+                    items.splice(i, 1);
+                }
+            }
+
+            // 粒子更新
+            for (let i = particles.length - 1; i >= 0; i--) {
+                let p = particles[i];
+                p.x += p.vx; p.y += p.vy; p.z += p.vz; p.alpha -= 0.03;
+                if (p.alpha <= 0) particles.splice(i, 1);
+            }
+
+            spawn();
+        }
+
+        function getBridgeSurface(lane) {
+            for (const course of obstacles) {
+                if (course.type !== 'BRIDGE') continue;
+                const relativeZ = player.z - course.z;
+                for (const section of course.sections) {
+                    if (section.lane !== lane || relativeZ < section.near || relativeZ > section.far) continue;
+                    const progress = (relativeZ - section.near) / (section.far - section.near);
+                    return {
+                        height: section.yNear + (section.yFar - section.yNear) * progress,
+                        kind: section.kind
+                    };
+                }
+            }
+            return null;
+        }
+
+        // --- 繪製畫面 ---
+        function draw() {
+            ctx.fillStyle = '#060612';
+            ctx.fillRect(0, 0, w, h);
+
+            // 繪製跑道與網格 (從遠處向近處繪製，視野更寬廣)
+            ctx.strokeStyle = '#00f3ff';
             
-            if (battle.eHP <= 0) {
-                const reward = STAGES[battle.currentStage].reward;
-                user.xp += reward;
-                user.cleared = Math.max(user.cleared, battle.currentStage + 1);
-                alert(`🚩 遠征勝利！獲得 ${reward} XP！`);
-                uploadWarsLeaderboardScore();
-            } else {
-                alert("💥 主堡被摧毀，遠征失敗...");
+            // 3 條主跑道線
+            [-210, -70, 70, 210].forEach(xBound => {
+                let p1 = project(xBound, 0, 50);
+                let p2 = project(xBound, 0, 2400);
+                ctx.beginPath();
+                ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
+                ctx.strokeStyle = 'rgba(0, 243, 255, 0.3)';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            });
+
+            // 地面動態橫向線條
+            let zOffset = (Date.now() * (speed * 0.04)) % 120;
+            for (let z = 2400; z > 50; z -= 120) {
+                let cz = z - zOffset;
+                if (cz <= 50) continue;
+                let pL = project(-210, 0, cz), pR = project(210, 0, cz);
+                ctx.beginPath();
+                ctx.moveTo(pL.x, pL.y); ctx.lineTo(pR.x, pR.y);
+                ctx.strokeStyle = `rgba(0, 243, 255, ${0.05 + (1 - cz/2400)*0.25})`;
+                ctx.lineWidth = Math.max(1, (1 - cz/2400) * 3);
+                ctx.stroke();
             }
-            save();
-            showScreen('main-screen');
-            return;
+
+            // 繪製斜坡與高架路：路面以投影後的 3D 四邊形連成一體。
+            obstacles.filter(o => o.type === 'BRIDGE').forEach(drawBridgeCourse);
+
+            // 繪製金幣
+            items.forEach(it => {
+                let p = project(it.x, it.y, it.z);
+                if (p.scale <= 0) return;
+                ctx.save();
+                ctx.translate(p.x, p.y);
+                ctx.fillStyle = '#ffd700'; ctx.shadowColor = '#ffd700'; ctx.shadowBlur = 10;
+                ctx.beginPath();
+                ctx.ellipse(0, 0, Math.abs(Math.cos(it.rot)) * 14 * p.scale, 14 * p.scale, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            });
+
+            // 繪製障礙物
+            obstacles.filter(o => o.type !== 'BRIDGE' && !isBridgeOverhead(o.lane, o.z, 70)).forEach(o => {
+                let p = project(o.x, o.y, o.z);
+                if (p.scale <= 0) return;
+                let bw = o.width * p.scale, bh = o.height * p.scale;
+
+                ctx.save();
+                if (o.type === 'LOW') {
+                    ctx.fillStyle = '#ff0055'; ctx.shadowColor = '#ff0055'; ctx.shadowBlur = 15;
+                    ctx.fillRect(p.x - bw / 2, p.y - bh, bw, bh);
+                    ctx.fillStyle = '#fff'; ctx.fillRect(p.x - bw / 2, p.y - bh, bw, 4 * p.scale);
+                } else {
+                    ctx.fillStyle = '#00ffaa'; ctx.shadowColor = '#00ffaa'; ctx.shadowBlur = 15;
+                    ctx.fillRect(p.x - bw / 2 - 5*p.scale, p.y - bh, bw + 10*p.scale, 20 * p.scale);
+                    ctx.fillRect(p.x - bw / 2 - 5*p.scale, p.y - bh, 12 * p.scale, bh);
+                    ctx.fillRect(p.x + bw / 2 - 7*p.scale, p.y - bh, 12 * p.scale, bh);
+                }
+                ctx.restore();
+            });
+
+            // 繪製主角 (位於俯視焦點)
+            drawPlayer();
+
+            // 繪製粒子
+            particles.forEach(p => {
+                let proj = project(p.x, p.y, p.z);
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(proj.x, proj.y, p.size * proj.scale, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
         }
 
-        requestAnimationFrame(battleLoop);
-    }
+        function startGameLoop() {
+            previousFrameTime = 0;
+            frameAccumulator = 0;
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
 
-    initializeWars().catch(error => {
-        console.error('雨神大戰爭初始化失敗：', error);
-        const status = document.getElementById('wars-leaderboard-status');
-        if (status) status.textContent = '遊戲初始化失敗，請重新整理頁面。';
-    });
-</script>
+        function gameLoop(timestamp) {
+            if (!gameActive) return;
+            if (previousFrameTime === 0) previousFrameTime = timestamp;
+            frameAccumulator += Math.min(timestamp - previousFrameTime, 100);
+            previousFrameTime = timestamp;
+
+            let shouldDraw = false;
+            while (frameAccumulator >= FRAME_DURATION && gameActive) {
+                update();
+                frameAccumulator -= FRAME_DURATION;
+                shouldDraw = true;
+            }
+            if (!gameActive) return;
+
+            if (shouldDraw) draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function drawBridgeCourse(course) {
+            ctx.save();
+            [...course.sections].reverse().forEach(section => {
+                const nearZ = course.z + section.near;
+                const farZ = course.z + section.far;
+                if (farZ <= 50 || nearZ >= 3000) return;
+                const clippedNearZ = Math.max(50, nearZ);
+                const clippedFarZ = Math.min(3000, farZ);
+                const nearProgress = (clippedNearZ - nearZ) / (farZ - nearZ);
+                const farProgress = (clippedFarZ - nearZ) / (farZ - nearZ);
+                const clippedNearY = section.yNear + (section.yFar - section.yNear) * nearProgress;
+                const clippedFarY = section.yNear + (section.yFar - section.yNear) * farProgress;
+                const x = LANE_X[section.lane];
+                const leftNear = project(x - BRIDGE_HALF_WIDTH, clippedNearY, clippedNearZ);
+                const rightNear = project(x + BRIDGE_HALF_WIDTH, clippedNearY, clippedNearZ);
+                const rightFar = project(x + BRIDGE_HALF_WIDTH, clippedFarY, clippedFarZ);
+                const leftFar = project(x - BRIDGE_HALF_WIDTH, clippedFarY, clippedFarZ);
+                const corners = [leftNear, rightNear, rightFar, leftFar];
+                if (corners.some(point => point.scale <= 0)) return;
+
+                ctx.fillStyle = section.kind === 'DECK' ? '#087e91' : '#f59e0b';
+                ctx.strokeStyle = '#a5f3fc';
+                ctx.lineWidth = 2;
+                ctx.shadowColor = section.kind === 'DECK' ? '#22d3ee' : '#fb923c';
+                ctx.shadowBlur = 14;
+                ctx.beginPath();
+                ctx.moveTo(leftNear.x, leftNear.y);
+                corners.slice(1).forEach(point => ctx.lineTo(point.x, point.y));
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+
+                [-1, 1].forEach(side => {
+                    const railNear = project(x + side * BRIDGE_HALF_WIDTH, clippedNearY + 14, clippedNearZ);
+                    const railFar = project(x + side * BRIDGE_HALF_WIDTH, clippedFarY + 14, clippedFarZ);
+                    ctx.beginPath();
+                    ctx.moveTo(railNear.x, railNear.y);
+                    ctx.lineTo(railFar.x, railFar.y);
+                    ctx.strokeStyle = '#e0f2fe';
+                    ctx.lineWidth = Math.max(2, 5 * railFar.scale);
+                    ctx.stroke();
+                });
+
+                if (section.kind === 'DECK') {
+                    ctx.strokeStyle = 'rgba(224, 242, 254, 0.75)';
+                    ctx.lineWidth = 2;
+                    for (let z = Math.ceil(clippedNearZ / 110) * 110; z < clippedFarZ; z += 110) {
+                        const left = project(x - BRIDGE_HALF_WIDTH, BRIDGE_HEIGHT + 1, z);
+                        const right = project(x + BRIDGE_HALF_WIDTH, BRIDGE_HEIGHT + 1, z);
+                        ctx.beginPath();
+                        ctx.moveTo(left.x, left.y);
+                        ctx.lineTo(right.x, right.y);
+                        ctx.stroke();
+                    }
+
+                    ctx.strokeStyle = 'rgba(34, 211, 238, 0.8)';
+                    ctx.lineWidth = 2;
+                    for (let z = Math.ceil(clippedNearZ / 180) * 180; z < clippedFarZ; z += 180) {
+                        [-1, 1].forEach(side => {
+                            const top = project(x + side * (BRIDGE_HALF_WIDTH - 8), BRIDGE_HEIGHT, z);
+                            const bottom = project(x + side * (BRIDGE_HALF_WIDTH - 8), 0, z);
+                            ctx.beginPath();
+                            ctx.moveTo(top.x, top.y);
+                            ctx.lineTo(bottom.x, bottom.y);
+                            ctx.stroke();
+                        });
+                    }
+                }
+            });
+            ctx.restore();
+        }
+
+        // --- 繪製主角 (支援皮膚與護盾狀態) ---
+        function drawPlayer() {
+            let curHeight = player.isDucking ? player.height * 0.5 : player.height;
+            let p = project(player.x, player.y, player.z);
+
+            ctx.save();
+            ctx.translate(p.x, p.y);
+            ctx.rotate(player.rollRotation);
+
+            let pw = player.width * p.scale;
+            let ph = curHeight * p.scale;
+
+            const skin = SKINS.find(item => item.id === playerData.skin) || SKINS[0];
+            const skinColor = skin.id === 'rainbow'
+                ? `hsl(${(Date.now() / 8) % 360}, 100%, 65%)`
+                : skin.color;
+
+            // 護盾光圈
+            if (activeBuffs.hasShield) {
+                ctx.strokeStyle = '#00f3ff'; ctx.lineWidth = 3; ctx.shadowBlur = 15; ctx.shadowColor = '#00f3ff';
+                ctx.beginPath();
+                ctx.arc(0, -ph / 2, pw * 1.2, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+
+            ctx.shadowColor = skinColor; ctx.shadowBlur = 20;
+            ctx.fillStyle = skinColor;
+            ctx.beginPath();
+            if (skin.shape === 'circle') {
+                ctx.ellipse(0, -ph / 2, pw / 2, ph / 2, 0, 0, Math.PI * 2);
+            } else if (skin.shape === 'diamond') {
+                ctx.moveTo(0, -ph); ctx.lineTo(pw / 2, -ph / 2); ctx.lineTo(0, 0); ctx.lineTo(-pw / 2, -ph / 2); ctx.closePath();
+            } else if (skin.shape === 'triangle') {
+                ctx.moveTo(0, -ph); ctx.lineTo(pw / 2, 0); ctx.lineTo(-pw / 2, 0); ctx.closePath();
+            } else if (skin.shape === 'star') {
+                for (let i = 0; i < 10; i++) {
+                    const angle = -Math.PI / 2 + i * Math.PI / 5;
+                    const radius = i % 2 === 0 ? pw / 2 : pw / 4;
+                    const x = Math.cos(angle) * radius;
+                    const y = -ph / 2 + Math.sin(angle) * Math.min(radius, ph / 2);
+                    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                }
+                ctx.closePath();
+            } else {
+                ctx.rect(-pw / 2, -ph, pw, ph);
+            }
+            ctx.fill();
+
+            // 視覺眼睛細節
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(-pw / 4, -ph * 0.8, pw / 2, ph * 0.18);
+
+            ctx.restore();
+
+            // 影子
+            let shadowP = project(player.x, 0, player.z);
+            ctx.fillStyle = 'rgba(0,0,0,0.4)';
+            ctx.beginPath();
+            ctx.ellipse(shadowP.x, shadowP.y, pw * 0.5, 8 * shadowP.scale, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // 爆炸特效
+        function createExplosion(x, y, z, color) {
+            for (let i = 0; i < 30; i++) {
+                particles.push({
+                    x: x, y: y, z: z,
+                    vx: (Math.random() - 0.5) * 25, vy: (Math.random() - 0.5) * 25, vz: (Math.random() - 0.5) * 25,
+                    size: Math.random() * 6 + 3, alpha: 1.0, color: color
+                });
+            }
+        }
+
+        function updateBuffsUI() {
+            let text = '';
+            if (activeBuffs.magnetTimer > 0) text += `🧲 磁鐵: ${Math.ceil(activeBuffs.magnetTimer/60)}s `;
+            if (activeBuffs.hasShield) text += `🛡️ 護盾中 `;
+            buffsEl.innerText = text;
+        }
+
+        // --- 商店機制 ---
+        function openShop() {
+            menu.style.display = 'none';
+            shopEl.style.display = 'flex';
+            shopCoinsEl.innerText = totalCoins;
+            renderSkinShop();
+        }
+
+        function closeShop() {
+            shopEl.style.display = 'none';
+            menu.style.display = 'flex';
+        }
+
+        function buyItem(item, price) {
+            if (totalCoins >= price) {
+                totalCoins -= price;
+                shopCoinsEl.innerText = totalCoins;
+                
+                if (item === 'magnet') playerData.hasMagnet = true;
+                if (item === 'shield') playerData.hasShield = true;
+
+                saveRunnerData();
+                alert('購買成功！');
+            } else {
+                alert('金幣不足！');
+            }
+        }
+
+        function gameEnd() {
+            gameActive = false; 
+            const finalScore = score + (coinCount * 100);
+            bestScore = Math.max(bestScore, finalScore);
+            finalScoreEl.innerText = finalScore;
+            finalCoinsEl.innerText = coinCount;
+            menu.style.display = 'flex'; 
+            saveRunnerData();
+            uploadLeaderboardScore(finalScore);
+        }
+
+        function restart() { init(); startGameLoop(); }
+
+        window.openLeaderboard = async () => {
+            if (!await window.raingodRequireAuth('排行榜')) return;
+            document.getElementById('leaderboard').style.display = 'flex';
+            await window.refreshLeaderboard();
+        };
+
+        window.closeLeaderboard = () => {
+            document.getElementById('leaderboard').style.display = 'none';
+        };
+
+        window.refreshLeaderboard = async () => {
+            const status = document.getElementById('leaderboard-status');
+            const list = document.getElementById('leaderboard-list');
+            if (!await window.raingodRequireAuth('排行榜')) return;
+            const uid = window.raingodCurrentUser.uid;
+            status.textContent = '排行榜載入中…';
+            try {
+                const response = await fetch(`${LEADERBOARD_URL}.json`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                if (window.raingodCurrentUser?.uid !== uid) return;
+                const rows = await response.json() || {};
+                const entries = Object.entries(rows)
+                    .filter(([, row]) => row && Number.isFinite(Number(row.score)))
+                    .sort((a, b) => Number(b[1].score) - Number(a[1].score))
+                    .slice(0, 50);
+                list.replaceChildren();
+                entries.forEach(([entryUid, row], index) => {
+                    const line = document.createElement('div');
+                    line.className = 'leaderboard-row';
+                    const name = document.createElement('span');
+                    name.textContent = `${index + 1}. ${row.name || '玩家'}${entryUid === uid ? '（你）' : ''}`;
+                    const value = document.createElement('strong');
+                    value.textContent = `${Number(row.score).toLocaleString()} 分`;
+                    line.append(name, value);
+                    list.appendChild(line);
+                });
+                status.textContent = entries.length ? `已載入 ${entries.length} 位玩家，依最高分排序。` : '目前還沒有排行榜資料。';
+            } catch (error) {
+                console.error('載入雨神跑酷排行榜失敗：', error);
+                status.textContent = '排行榜載入失敗，請稍後重試。';
+            }
+        };
+
+        async function uploadLeaderboardScore(scoreToSubmit = bestScore) {
+            const user = window.raingodCurrentUser;
+            if (!user || !Number.isFinite(scoreToSubmit) || scoreToSubmit <= 0) return;
+            const uid = user.uid;
+            let previous;
+            try {
+                const previousResponse = await fetch(`${LEADERBOARD_URL}/${encodeURIComponent(uid)}.json`);
+                if (!previousResponse.ok) throw new Error(`HTTP ${previousResponse.status}`);
+                previous = await previousResponse.json();
+            } catch (error) {
+                console.error('讀取個人跑酷排行失敗：', error);
+                return;
+            }
+            if (window.raingodCurrentUser?.uid !== uid) return;
+            if (previous && Number(previous.score) >= scoreToSubmit) return;
+            const payload = {
+                name: user.email ? user.email.split('@')[0] : '雨神玩家',
+                score: Math.floor(scoreToSubmit),
+                coins: Math.max(0, Number(totalCoins) || 0),
+                updatedAt: Date.now()
+            };
+            try {
+                const response = await fetch(`${LEADERBOARD_URL}/${encodeURIComponent(uid)}.json`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            } catch (error) {
+                console.error('上傳雨神跑酷排行榜失敗：', error);
+            }
+        }
+
+        window.addEventListener('resize', () => {
+            w = canvas.width = window.innerWidth;
+            h = canvas.height = window.innerHeight;
+        });
+
+        async function startRunner() {
+            await window.raingodFirebaseReady;
+            await window.raingodAuthReady;
+            window.raingodBindStorage('raingod-runner', [SAVE_KEY], { [SAVE_KEY]: null }, data => {
+                loadRunnerData(data[SAVE_KEY]);
+                init();
+                startGameLoop();
+                if (window.raingodCurrentUser && bestScore > 0) uploadLeaderboardScore();
+            });
+            window.raingodOnAuthStateChanged(user => {
+                const button = document.getElementById('leaderboard-button');
+                button.textContent = user ? '🏆 排行榜' : '🏆 登入後查看排行榜';
+                if (user && bestScore > 0) uploadLeaderboardScore();
+                if (!user) {
+                    document.getElementById('leaderboard').style.display = 'none';
+                    document.getElementById('leaderboard-list').replaceChildren();
+                    document.getElementById('leaderboard-status').textContent = '請登入帳號後查看。';
+                }
+            });
+        }
+
+        startRunner().catch(error => {
+            console.error('雨神跑酷初始化失敗：', error);
+            document.getElementById('leaderboard-status').textContent = '遊戲初始化失敗，請重新整理頁面。';
+        });
+    </script>
 </body>
 </html>
