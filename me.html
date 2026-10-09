@@ -15,7 +15,7 @@
         }
 
         .profile-page {
-            width: min(100% - 32px, 560px);
+            width: min(calc(100% - 32px), 560px);
             margin: 48px auto;
         }
 
@@ -298,10 +298,18 @@
                         .put(blob, { contentType: 'image/jpeg' });
                     const snapshot = await upload;
                     const photoURL = await snapshot.ref.getDownloadURL();
+                    
+                    // 更新 Firebase Profile 上的頭像連結
                     await currentUser.updateProfile({ photoURL });
-                    avatar.src = photoURL;
+
+                    // 加上 timestamp 避免瀏覽器讀取舊快取（Cache Busting）
+                    const cacheBustURL = `${photoURL}&t=${Date.now()}`;
+
+                    // 即時更新頁面與導覽列上的頭像
+                    avatar.src = cacheBustURL;
                     const navAvatar = document.getElementById('user-avatar');
-                    if (navAvatar) navAvatar.src = photoURL;
+                    if (navAvatar) navAvatar.src = cacheBustURL;
+
                     avatarFile.value = '';
                     setStatus('avatar-status', '頭像已更新。');
                 } catch (error) {
@@ -354,44 +362,3 @@
                 try {
                     const credential = firebase.auth.EmailAuthProvider.credential(currentUser.email, currentPassword);
                     await currentUser.reauthenticateWithCredential(credential);
-                    await currentUser.updatePassword(newPassword);
-                    passwordForm.reset();
-                    setStatus('password-status', '密碼已成功變更。');
-                } catch (error) {
-                    setStatus('password-status', errorMessage(error), true);
-                } finally {
-                    setFormDisabled(passwordForm, false);
-                }
-            });
-
-            try {
-                await window.raingodFirebaseReady;
-                currentUser = await window.raingodAuthReady;
-                if (!currentUser) {
-                    loginRequired.hidden = false;
-                    return;
-                }
-                avatar.src = currentUser.photoURL || fallbackAvatar;
-                displayNameInput.value = currentUser.displayName || (currentUser.email ? currentUser.email.split('@')[0] : '');
-                signOutButton.hidden = false;
-                signOutButton.addEventListener('click', async () => {
-                    signOutButton.disabled = true;
-                    try {
-                        await firebase.auth().signOut();
-                        window.raingodClearLocalAccountData();
-                        window.location.href = 'index.html';
-                    } catch (error) {
-                        signOutButton.disabled = false;
-                        alert(`登出失敗：${error.message}`);
-                    }
-                });
-                content.hidden = false;
-            } catch (error) {
-                loginRequired.hidden = false;
-                loginRequired.textContent = `載入個人檔案失敗：${errorMessage(error)}`;
-                loginRequired.classList.add('error');
-            }
-        })();
-    </script>
-</body>
-</html>
