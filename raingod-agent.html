@@ -955,7 +955,7 @@ const Leaderboard = {
 const OnlineSession = {
     id: '', mode: '', roomId: '', partnerId: '', busy: false, active: false,
     queueTimer: null, heartbeat: null, syncTimer: null, pollTimer: null,
-    pendingDamage: 0, pendingWorldDamage: new Map(), worldSeq: 0, seenEvents: new Set(), matchStartedAt: 0,
+    pendingDamage: 0, pendingWorldDamage: new Map(), worldSeq: 0, seenEvents: new Set(), matchStartedAt: 0, duelEnded: false,
     status(message) {
         const el = document.getElementById('match-status');
         if (el) el.textContent = message;
@@ -1051,6 +1051,7 @@ const OnlineSession = {
         this.roomId = roomId;
         this.mode = room.mode;
         this.matchStartedAt = Number(room.matchStartedAt || room.createdAt) || Date.now();
+        this.duelEnded = false;
         this.partnerId = Object.keys(room.players || {}).find(id => id !== this.id) || '';
         clearInterval(this.queueTimer);
         clearInterval(this.heartbeat);
@@ -1067,7 +1068,7 @@ const OnlineSession = {
         this.pollTimer = setInterval(() => this.pollRoom(), 350);
     },
     async syncState() {
-        if (!this.active || GameEngine.state !== 'BATTLE' || !GameEngine.player) return;
+        if (!this.active || !['BATTLE', 'GAMEOVER'].includes(GameEngine.state) || !GameEngine.player) return;
         const player = GameEngine.player;
         try {
             await this.request('matchmaking/rooms/' + this.roomId + '/players/' + encodeURIComponent(this.id) + '/state', 'PUT', {
@@ -1121,6 +1122,9 @@ const OnlineSession = {
                 GameEngine.remotePlayer = Object.assign({ isRemotePlayer:true, isDead:false, r:20 }, remote);
                 GameEngine.remoteProjectiles = Array.isArray(remote.projectiles) ? remote.projectiles : [];
                 GameEngine.remoteActiveSkills = Array.isArray(remote.activeSkills) ? remote.activeSkills : [];
+                if (this.mode === 'versus' && !this.duelEnded && (remote.isDead || Number(remote.hp) <= 0)) {
+                    if (GameEngine.player && GameEngine.player.hp > 0 && GameEngine.state === 'BATTLE') GameEngine.finishDuel('win');
+                }
             }
             if (this.mode === 'coop') {
                 const worldEvents = room && room.worldEvents && room.worldEvents[this.id];
@@ -1184,6 +1188,7 @@ const OnlineSession = {
         GameEngine.remoteProjectiles = [];
         GameEngine.remoteActiveSkills = [];
         this.matchStartedAt = 0;
+        this.duelEnded = false;
         GameEngine.onlineMode = '';
         const matchButton = document.getElementById('match-button');
         const leaveButton = document.getElementById('leave-match-button');
@@ -4045,7 +4050,26 @@ window.GameEngine = {
         
         this.ctx.restore();
     },
+    finishDuel(result) {
+        if (OnlineSession.duelEnded) return;
+        OnlineSession.duelEnded = true;
+        this.state = 'GAMEOVER';
+        this.pendingLevelUp = false;
+        this.pendingEvo = null;
+        this.levelUpQueue = 0;
+        const lvModal = document.getElementById('levelup-modal');
+        const evoModal = document.getElementById('evo-modal');
+        if (lvModal) lvModal.classList.remove('show');
+        if (evoModal) evoModal.classList.remove('show');
+        document.getElementById('gameover-title').textContent = result === 'win' ? '🎉 你贏了！' : '💥 你輸了！';
+        document.getElementById('gameover-reward').textContent = result === 'win' ? '對手已被擊敗，單挑勝利！' : '你的血量歸零，單挑失敗。';
+        const btn = document.getElementById('gameover-btn');
+        btn.textContent = '返回大廳';
+        btn.onclick = () => location.reload();
+        document.getElementById('gameover-panel').classList.add('show');
+    },
     gameOver() {
+        if (this.onlineMode === 'versus') { this.finishDuel('lose'); return; }
         this.state = 'GAMEOVER';
         const gold = this.calcRunGold(this.kills, this.timer, 0);
         if (gold > 0) SaveSystem.currentData.resources.gold += gold;
