@@ -31,8 +31,6 @@
         .hud-item { font-size: 13px; font-weight: bold; color: #f8fafc; }
         .money { color: #4ade80; font-size: 16px; font-weight: 900; }
         .dark-matter { color: #c084fc; font-size: 13px; }
-        .hp-box { width: 100px; height: 8px; background: #334155; border-radius: 4px; overflow: hidden; display: inline-block; vertical-align: middle; }
-        .hp-fill { height: 100%; background: #ef4444; width: 100%; transition: width 0.3s; }
 
         .skill-bar {
             position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%);
@@ -77,14 +75,6 @@
             border-radius: 6px; font-size: 10px; color: #e2e8f0; margin-bottom: 2px;
         }
         
-        .artifacts-bar {
-            position: absolute; top: 60px; left: 15px; display: flex; flex-direction: column; gap: 6px;
-            pointer-events: auto;
-        }
-        .art-item {
-            background: rgba(15, 23, 42, 0.85); border: 1px solid #eab308; padding: 6px 10px;
-            border-radius: 6px; color: #fef08a; font-size: 10px; font-weight: bold; backdrop-filter: blur(4px);
-        }
         #tycoon-leaderboard-button { position: absolute; top: 160px; right: 15px; z-index: 20; pointer-events: auto; padding: 9px 14px; border: 1px solid #38bdf8; border-radius: 20px; color: #fff; background: rgba(15,23,42,0.9); font-weight: bold; cursor: pointer; }
         #tycoon-leaderboard { position: fixed; inset: 0; z-index: 2000; display: none; align-items: center; justify-content: center; padding: 16px; background: rgba(2,6,23,0.94); color: #fff; }
         .tycoon-leaderboard-card { width: min(520px, 100%); max-height: 80vh; overflow-y: auto; padding: 20px; border: 1px solid #38bdf8; border-radius: 16px; background: #0b1020; }
@@ -123,19 +113,7 @@
             .hud-item { font-size: 11px; }
             .money { font-size: 14px; }
             .dark-matter { font-size: 11px; }
-            .hp-box { width: min(80px, 26vw); }
 
-            .artifacts-bar {
-                top: 132px;
-                left: 8px;
-                right: 48%;
-                max-height: 22dvh;
-                overflow-y: auto;
-                gap: 4px;
-                touch-action: pan-y;
-                -webkit-overflow-scrolling: touch;
-            }
-            .art-item { padding: 5px 7px; font-size: 9px; }
             #tycoon-leaderboard-button {
                 top: 132px;
                 right: 8px;
@@ -227,13 +205,7 @@
         <div class="hud-item">$<span id="m" class="money">0</span></div>
         <div class="hud-item dark-matter">🌌 暗物質: <span id="dm">0</span></div>
         <div class="hud-item" style="color: #ef4444;">⚔️ 第 <span id="waveNum">1</span> 波 (剩餘 <span id="enemyCount">0</span>)</div>
-        <div class="hud-item">
-            🛡️ <div class="hp-box"><div id="hpFill" class="hp-fill"></div></div>
-        </div>
-    </div>
-
-    <div class="artifacts-bar" id="artList">
-        <!-- 寶物顯示區 -->
+        <div class="hud-item" style="color:#4ade80;">🛡️ ♾️ 永不死亡</div>
     </div>
 
     <div class="skill-bar">
@@ -242,9 +214,6 @@
         </button>
         <button class="skill-btn" onclick="useSkill(2)">
             <span>💥 軌道砲轟炸</span><span id="cd2" style="font-size:9px; color:#f59e0b;">就緒</span>
-        </button>
-        <button class="skill-btn" onclick="useSkill(3)">
-            <span>🛡️ 緊急修復</span><span id="cd3" style="font-size:9px; color:#f59e0b;">就緒</span>
         </button>
     </div>
 
@@ -307,6 +276,12 @@
             <button class="btn" onclick="upgrade('capacity')">
                 <span>🎒 機兵容量 Lv.<span id="capLv">4</span></span><span style="color:#4ade80" id="cCost">$1,500</span>
             </button>
+            <button class="btn" onclick="upgrade('playerDamage')">
+                <span>⚔️ 玩家傷害 Lv.<span id="playerDamageLv">0</span>（+25%）</span><span style="color:#4ade80" id="playerDamageCost">$1,000</span>
+            </button>
+            <button class="btn" onclick="upgrade('turretDamage')">
+                <span>🛡️ 防衛塔傷害 Lv.<span id="turretDamageLv">0</span>（+20%）</span><span style="color:#4ade80" id="turretDamageCost">$1,500</span>
+            </button>
         </div>
 
         <div id="tab-tech" style="display:none;">
@@ -315,9 +290,6 @@
             </button>
             <button class="btn rebirth-btn" onclick="buyTalent('speed')">
                 <span>🤖 自動化機兵速度 +15%</span><span style="color:#c084fc" id="tSpdCost">5 DM</span>
-            </button>
-            <button class="btn rebirth-btn" onclick="buyTalent('repair')">
-                <span>🛡️ 基地每秒修復 +2 HP</span><span style="color:#c084fc" id="tRepCost">10 DM</span>
             </button>
             <button class="btn rebirth-btn" style="margin-top:8px;" onclick="triggerRebirth()">
                 <span>🌌 暗物質量子轉生</span><span style="color:#c084fc" id="rebirthGain">+0 DM</span>
@@ -347,17 +319,16 @@
 
     let money = 2000, darkMatter = 0, frame = 0;
     let bestWave = 0;
-    let baseHp = 100, maxHp = 100;
     let minerLevel = 0, capacity = 4, techTier = 1;
+    let playerDamageLevel = 0, turretDamageLevel = 0;
     let p = { x: 350, y: 350, r: 18, tx: 350, ty: 350, bag: [], atkRange: 220, cooldown: 0 };
     
-    let bots = [], items = [], floatTexts = [], particles = [], bullets = [], chests = [];
+    let bots = [], items = [], floatTexts = [], particles = [], bullets = [];
     let turrets = [], enemies = [];
     let shakeTime = 0;
 
     // 天賦系統
-    let talents = { dmgLv: 0, spdLv: 0, repLv: 0 };
-    let artifacts = [];
+    let talents = { dmgLv: 0, spdLv: 0 };
 
     // 波次
     let wave = 1;
@@ -365,7 +336,7 @@
     let isWaveActive = false;
 
     // 技能
-    let skillCd = [0, 0, 0];
+    let skillCd = [0, 0];
     let isOverclocked = false, overclockTimer = 0;
 
     // 任務
@@ -375,9 +346,9 @@
     function saveGame() {
         if (!storageReady) return;
         localStorage.setItem(SAVE_KEY, JSON.stringify({
-            money, darkMatter, baseHp, maxHp, minerLevel, capacity, techTier,
-            player: p, bots, turrets, artifacts, talents, wave, bestWave, waveTimer,
-            isWaveActive, items, enemies, chests, skillCd, isOverclocked, overclockTimer, quest
+            money, darkMatter, minerLevel, capacity, techTier, playerDamageLevel, turretDamageLevel,
+            player: p, bots, turrets, talents, wave, bestWave, waveTimer,
+            isWaveActive, items, enemies, skillCd, isOverclocked, overclockTimer, quest
         }));
     }
 
@@ -387,15 +358,14 @@
         const objectArray = value => Array.isArray(value) ? value.filter(item => item && typeof item === 'object').slice(0, 1000) : [];
         money = Math.max(0, finiteOr(data.money, money));
         darkMatter = Math.max(0, finiteOr(data.darkMatter, darkMatter));
-        baseHp = finiteOr(data.baseHp, baseHp);
-        maxHp = Math.max(1, finiteOr(data.maxHp, maxHp));
         minerLevel = Math.max(0, Math.floor(finiteOr(data.minerLevel, minerLevel)));
         capacity = Math.max(1, Math.floor(finiteOr(data.capacity, capacity)));
         techTier = Math.min(5, Math.max(1, Math.floor(finiteOr(data.techTier, techTier))));
+        playerDamageLevel = Math.max(0, Math.floor(finiteOr(data.playerDamageLevel, playerDamageLevel)));
+        turretDamageLevel = Math.max(0, Math.floor(finiteOr(data.turretDamageLevel, turretDamageLevel)));
         if (data.player && typeof data.player === 'object') Object.assign(p, data.player);
         bots = objectArray(data.bots);
         turrets = objectArray(data.turrets);
-        artifacts = Array.isArray(data.artifacts) ? data.artifacts.filter(item => typeof item === 'string') : [];
         if (data.talents && typeof data.talents === 'object') talents = { ...talents, ...data.talents };
         wave = Math.max(1, Math.floor(finiteOr(data.wave, wave)));
         bestWave = Math.max(0, Math.floor(finiteOr(data.bestWave, bestWave)));
@@ -405,8 +375,7 @@
         items = objectArray(data.items);
         enemies = wasWaveActive ? [] : objectArray(data.enemies);
         if (wasWaveActive) waveTimer = 0;
-        chests = objectArray(data.chests);
-        if (Array.isArray(data.skillCd) && data.skillCd.length === 3) skillCd = data.skillCd.map(value => Math.max(0, finiteOr(value, 0)));
+        if (Array.isArray(data.skillCd) && data.skillCd.length >= 2) skillCd = data.skillCd.slice(0, 2).map(value => Math.max(0, finiteOr(value, 0)));
         isOverclocked = data.isOverclocked === true;
         overclockTimer = Math.max(0, Math.floor(finiteOr(data.overclockTimer, overclockTimer)));
         if (data.quest && typeof data.quest === 'object') quest = { ...quest, ...data.quest };
@@ -491,7 +460,6 @@
         await window.raingodBindStorage('raingod-tycoon', [SAVE_KEY], { [SAVE_KEY]: null }, data => {
             loadGame(data[SAVE_KEY]);
             storageReady = true;
-            updateArtifactUI();
             saveGame();
             if (window.raingodCurrentUser) uploadTycoonLeaderboardScore();
         });
@@ -560,27 +528,6 @@
         if (e.pointerType === 'touch') { p.tx = e.clientX; p.ty = e.clientY; }
     });
 
-    // 點擊拾取星際寶箱
-    window.addEventListener('pointerdown', e => {
-        for (let i = chests.length - 1; i >= 0; i--) {
-            let c = chests[i];
-            if (Math.hypot(e.clientX - c.x, e.clientY - c.y) < 30) {
-                let artListNames = ['⚡ 疾風核心', '💥 暴擊晶片', '🛡️ 奈米甲殼', '🌌 磁場擴幅器'];
-                let name = artListNames[Math.floor(Math.random() * artListNames.length)];
-                artifacts.push(name);
-                spawnFloatText(c.x, c.y, `獲得裝備: ${name}!`, '#eab308');
-                chests.splice(i, 1);
-                updateArtifactUI();
-                break;
-            }
-        }
-    });
-
-    function updateArtifactUI() {
-        const el = document.getElementById('artList');
-        el.innerHTML = artifacts.map(a => `<div class="art-item">👑 ${a}</div>`).join('');
-    }
-
     function triggerShake(duration = 10) { shakeTime = duration; }
     function spawnFloatText(x, y, text, color='#4ade80') { floatTexts.push({ x, y, text, color, alpha: 1 }); }
     function spawnParticles(x, y, color, count=6) {
@@ -598,9 +545,6 @@
             enemies.forEach(e => { e.hp -= 300 + wave * 60; spawnParticles(e.x, e.y, '#e11d48', 12); });
             triggerShake(25); skillCd[1] = 2400;
             spawnFloatText(cvs.width/2, cvs.height/2, "💥 軌道離子砲全螢幕打擊！", "#e11d48");
-        } else if (num === 3) {
-            baseHp = Math.min(maxHp, baseHp + 50); skillCd[2] = 1500;
-            spawnFloatText(100, cvs.height - 150, "🛡️ 基地耐久度修復 +50", "#22c55e");
         }
     }
 
@@ -669,6 +613,12 @@
         } else if (type === 'capacity') {
             let cost = Math.floor(1500 * (capacity / 2));
             if (money >= cost) { money -= cost; capacity += 2; saveGame(); }
+        } else if (type === 'playerDamage') {
+            let cost = Math.floor(1000 * Math.pow(1.6, playerDamageLevel));
+            if (money >= cost) { money -= cost; playerDamageLevel++; saveGame(); }
+        } else if (type === 'turretDamage') {
+            let cost = Math.floor(1500 * Math.pow(1.6, turretDamageLevel));
+            if (money >= cost) { money -= cost; turretDamageLevel++; saveGame(); }
         }
     }
 
@@ -677,8 +627,6 @@
             darkMatter -= (talents.dmgLv + 1) * 5; talents.dmgLv++;
         } else if (type === 'speed' && darkMatter >= (talents.spdLv + 1) * 5) {
             darkMatter -= (talents.spdLv + 1) * 5; talents.spdLv++;
-        } else if (type === 'repair' && darkMatter >= (talents.repLv + 1) * 10) {
-            darkMatter -= (talents.repLv + 1) * 10; talents.repLv++;
         }
         saveGame();
     }
@@ -696,6 +644,7 @@
         if (earnedDM > 0 || money >= 100000) {
             darkMatter += Math.max(1, earnedDM);
             money = 2000; minerLevel = 0; capacity = 4; techTier = 1;
+            playerDamageLevel = 0; turretDamageLevel = 0;
             p.bag = []; bots = []; items = []; turrets = []; enemies = []; wave = 1;
             spawnFloatText(cvs.width/2, cvs.height/2, `🌌 暗物質量子轉生成功！`, '#c084fc');
             triggerShake(30);
@@ -722,12 +671,7 @@
 
         p.x += (p.tx - p.x) * 0.18; p.y += (p.ty - p.y) * 0.18;
 
-        // 基地自動修復天賦
-        if (frame % 60 === 0 && talents.repLv > 0) {
-            baseHp = Math.min(maxHp, baseHp + talents.repLv * 2);
-        }
-
-        for (let i = 0; i < 3; i++) { if (skillCd[i] > 0) skillCd[i]--; }
+        for (let i = 0; i < skillCd.length; i++) { if (skillCd[i] > 0) skillCd[i]--; }
         if (overclockTimer > 0) { overclockTimer--; if (overclockTimer === 0) isOverclocked = false; }
 
         if (!isWaveActive) {
@@ -779,7 +723,7 @@
         if (p.cooldown <= 0 && enemies.length > 0) {
             let target = enemies.find(e => Math.hypot(p.x - e.x, p.y - e.y) < p.atkRange);
             if (target) {
-                bullets.push({ x: p.x, y: p.y, tx: target.x, ty: target.y, dmg: 30 * totalDmgMult, speed: 15, color: '#38bdf8' });
+                bullets.push({ x: p.x, y: p.y, tx: target.x, ty: target.y, dmg: 30 * totalDmgMult * (1 + playerDamageLevel * 0.25), speed: 15, color: '#38bdf8' });
                 p.cooldown = isOverclocked ? 4 : 9;
             }
         }
@@ -791,13 +735,13 @@
                 let target = enemies.find(e => Math.hypot(t.x - e.x, t.y - e.y) < t.range);
                 if (target) {
                     if (t.type === 'gatling') {
-                        bullets.push({ x: t.x, y: t.y, tx: target.x, ty: target.y, dmg: 18 * totalDmgMult, speed: 16, color: '#f59e0b' });
+                        bullets.push({ x: t.x, y: t.y, tx: target.x, ty: target.y, dmg: 18 * totalDmgMult * (1 + turretDamageLevel * 0.2), speed: 16, color: '#f59e0b' });
                         t.cd = isOverclocked ? 3 : 8;
                     } else if (t.type === 'laser') {
-                        bullets.push({ x: t.x, y: t.y, tx: target.x, ty: target.y, dmg: 60 * totalDmgMult, speed: 22, color: '#3b82f6' });
+                        bullets.push({ x: t.x, y: t.y, tx: target.x, ty: target.y, dmg: 60 * totalDmgMult * (1 + turretDamageLevel * 0.2), speed: 22, color: '#3b82f6' });
                         t.cd = 24;
                     } else if (t.type === 'mortar') {
-                        bullets.push({ x: t.x, y: t.y, tx: target.x, ty: target.y, dmg: 140 * totalDmgMult, speed: 11, color: '#a855f7', splash: 90 });
+                        bullets.push({ x: t.x, y: t.y, tx: target.x, ty: target.y, dmg: 140 * totalDmgMult * (1 + turretDamageLevel * 0.2), speed: 11, color: '#a855f7', splash: 90 });
                         t.cd = 48;
                     } else if (t.type === 'frost') {
                         target.speed = Math.max(0.4, target.speed * 0.5);
@@ -806,7 +750,7 @@
                     } else if (t.type === 'blackhole') {
                         enemies.forEach(e => {
                             if (Math.hypot(t.x - e.x, t.y - e.y) < t.range) {
-                                e.hp -= 8 * totalDmgMult;
+                                e.hp -= 8 * totalDmgMult * (1 + turretDamageLevel * 0.2);
                                 e.x += (t.x - e.x) * 0.05; // 牽引吸引效果
                             }
                         });
@@ -847,32 +791,16 @@
             let e = enemies[i];
             e.x -= e.speed;
 
-            if (e.x < 220) {
-                let dmg = e.type === 'bomber' ? 25 : (e.type === 'boss' ? 50 : 6);
-                baseHp -= dmg;
-                spawnParticles(e.x, e.y, '#ef4444', 12);
-                triggerShake(15);
-                enemies.splice(i, 1);
-                if (baseHp <= 0) {
-                    alert("⚠️ 基地遭到摧毀！發動量子轉生！");
-                    triggerRebirth();
-                }
-                continue;
-            }
-
             if (e.hp <= 0) {
                 money += e.reward;
                 updateQuests('kill', 1);
-
-                // 掉落寶箱機率
-                if (Math.random() < 0.15 || e.type === 'boss') {
-                    chests.push({ x: e.x, y: e.y });
-                }
-
                 spawnFloatText(e.x, e.y, `+$${Math.floor(e.reward)}`, '#4ade80');
                 spawnParticles(e.x, e.y, '#22c55e', 8);
                 enemies.splice(i, 1);
+                continue;
             }
+
+            if (e.x < -40) e.x = cvs.width + 40;
         }
 
         if (shakeTime > 0) shakeTime--;
@@ -882,21 +810,17 @@
         // UI 數據同步
         document.getElementById('m').innerText = Math.floor(money).toLocaleString();
         document.getElementById('dm').innerText = darkMatter;
-        document.getElementById('hpFill').style.width = `${Math.max(0, (baseHp/maxHp)*100)}%`;
         document.getElementById('waveNum').innerText = wave;
         document.getElementById('enemyCount').innerText = enemies.length;
 
         document.getElementById('cd1').innerText = skillCd[0] > 0 ? `${Math.ceil(skillCd[0]/60)}s` : '就緒';
         document.getElementById('cd2').innerText = skillCd[1] > 0 ? `${Math.ceil(skillCd[1]/60)}s` : '就緒';
-        document.getElementById('cd3').innerText = skillCd[2] > 0 ? `${Math.ceil(skillCd[2]/60)}s` : '就緒';
 
         document.getElementById('questText').innerText = quest.desc;
         document.getElementById('questProg').innerText = `${quest.current}/${quest.target}`;
 
         document.getElementById('tDmgCost').innerText = `${(talents.dmgLv + 1) * 5} DM`;
         document.getElementById('tSpdCost').innerText = `${(talents.spdLv + 1) * 5} DM`;
-        document.getElementById('tRepCost').innerText = `${(talents.repLv + 1) * 10} DM`;
-
         const getTurretCost = (type, base) => Math.floor(base * Math.pow(1.3, turrets.filter(t=>t.type===type).length));
         document.getElementById('costGatling').innerText = `$${getTurretCost('gatling', 1000).toLocaleString()}`;
         document.getElementById('costLaser').innerText = `$${getTurretCost('laser', 5000).toLocaleString()}`;
@@ -909,6 +833,10 @@
         document.getElementById('bCost').innerText = `$${Math.floor(500 * Math.pow(1.3, bots.length)).toLocaleString()}`;
         document.getElementById('mCost').innerText = `$${Math.floor(1000 * Math.pow(1.5, minerLevel)).toLocaleString()}`;
         document.getElementById('cCost').innerText = `$${Math.floor(1500 * (capacity / 2)).toLocaleString()}`;
+        document.getElementById('playerDamageLv').innerText = playerDamageLevel;
+        document.getElementById('playerDamageCost').innerText = `$${Math.floor(1000 * Math.pow(1.6, playerDamageLevel)).toLocaleString()}`;
+        document.getElementById('turretDamageLv').innerText = turretDamageLevel;
+        document.getElementById('turretDamageCost').innerText = `$${Math.floor(1500 * Math.pow(1.6, turretDamageLevel)).toLocaleString()}`;
 
         document.getElementById('rebirthGain').innerText = `+${Math.floor(money / 100000)} DM`;
         if (frame % 180 === 0) saveGame();
@@ -976,13 +904,6 @@
             ctx.fillStyle = colorMap[t.type];
             ctx.beginPath(); ctx.arc(t.x, t.y, 16, 0, Math.PI * 2); ctx.fill();
             ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
-        });
-
-        // 星際寶箱
-        chests.forEach(c => {
-            ctx.fillStyle = '#eab308'; ctx.shadowColor = '#eab308'; ctx.shadowBlur = 12;
-            ctx.beginPath(); ctx.roundRect(c.x - 10, c.y - 10, 20, 20, 4); ctx.fill();
-            ctx.shadowBlur = 0;
         });
 
         // 子彈
