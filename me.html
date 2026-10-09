@@ -231,6 +231,9 @@
                 if (error.code === 'auth/requires-recent-login') {
                     return '登入時間過久，請重新登入後再變更密碼。';
                 }
+                if (error.code === 'storage/unauthorized') {
+                    return '存取被拒：請檢查 Firebase Storage 安全規則 (Rules) 是否開啟寫入權限。';
+                }
                 return error.message || '操作失敗，請稍後再試。';
             }
 
@@ -280,8 +283,12 @@
             avatarForm.addEventListener('submit', async event => {
                 event.preventDefault();
                 const file = avatarFile.files[0];
-                const activeUser = firebase.auth().currentUser || currentUser;
-                if (!activeUser || !file) return;
+                const activeUser = (typeof firebase !== 'undefined' && firebase.auth) ? firebase.auth().currentUser : currentUser;
+                
+                if (!activeUser || !file) {
+                    setStatus('avatar-status', '請先登入或選擇檔案。', true);
+                    return;
+                }
 
                 if (!file.type.startsWith('image/')) {
                     setStatus('avatar-status', '請選擇圖片檔案。', true);
@@ -293,38 +300,63 @@
                 }
 
                 setFormDisabled(avatarForm, true);
-                setStatus('avatar-status', '正在上傳頭像…');
+                setStatus('avatar-status', '正在處理圖片…');
+
                 try {
                     const blob = await makeSquareAvatar(file);
                     await loadFirebaseStorage();
-                    
-                    // 加 timestamp 避免 Storage Cache 問題
-                    const avatarRef = firebase.storage().ref(`profile-avatars/${activeUser.uid}/avatar.jpg`);
-                    const snapshot = await avatarRef.put(blob, { contentType: 'image/jpeg' });
-                    let photoURL = await snapshot.ref.getDownloadURL();
 
-                    await activeUser.updateProfile({ photoURL });
-                    await activeUser.reload(); // 強制刷新使用者 Profile 狀態
-                    
-                    // 加上隨機參數避免瀏覽器圖片快取
-                    const cacheBustURL = photoURL + '?t=' + Date.now();
-                    avatar.src = cacheBustURL;
-                    
-                    const navAvatar = document.getElementById('user-avatar');
-                    if (navAvatar) navAvatar.src = cacheBustURL;
+                    setStatus('avatar-status', '準備上傳…');
 
-                    avatarFile.value = '';
-                    setStatus('avatar-status', '頭像已更新。');
+                    const storageRef = firebase.storage().ref(`profile-avatars/${activeUser.uid}/avatar.jpg`);
+                    const uploadTask = storageRef.put(blob, { contentType: 'image/jpeg' });
+
+                    // 使用 uploadTask 監聽進度與錯誤
+                    uploadTask.on(
+                        'state_changed',
+                        snapshot => {
+                            const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+                            setStatus('avatar-status', `正在上傳頭像 (${progress}%)…`);
+                        },
+                        error => {
+                            console.error('Storage error:', error);
+                            setFormDisabled(avatarForm, false);
+                            setStatus('avatar-status', errorMessage(error), true);
+                        },
+                        async () => {
+                            try {
+                                const photoURL = await uploadTask.snapshot.ref.getDownloadURL();
+                                await activeUser.updateProfile({ photoURL });
+                                if (typeof activeUser.reload === 'function') {
+                                    await activeUser.reload();
+                                }
+
+                                const cacheBustURL = `${photoURL}?t=${Date.now()}`;
+                                avatar.src = cacheBustURL;
+
+                                const navAvatar = document.getElementById('user-avatar');
+                                if (navAvatar) navAvatar.src = cacheBustURL;
+
+                                avatarFile.value = '';
+                                setStatus('avatar-status', '頭像已更新！');
+                            } catch (err) {
+                                console.error('Profile update error:', err);
+                                setStatus('avatar-status', errorMessage(err), true);
+                            } finally {
+                                setFormDisabled(avatarForm, false);
+                            }
+                        }
+                    );
                 } catch (error) {
+                    console.error('Avatar process error:', error);
                     setStatus('avatar-status', errorMessage(error), true);
-                } finally {
                     setFormDisabled(avatarForm, false);
                 }
             });
 
             nameForm.addEventListener('submit', async event => {
                 event.preventDefault();
-                const activeUser = firebase.auth().currentUser || currentUser;
+                const activeUser = (typeof firebase !== 'undefined' && firebase.auth) ? firebase.auth().currentUser : currentUser;
                 if (!activeUser) return;
 
                 const displayName = displayNameInput.value.trim();
@@ -337,7 +369,9 @@
                 setStatus('name-status', '正在儲存…');
                 try {
                     await activeUser.updateProfile({ displayName });
-                    await activeUser.reload();
+                    if (typeof activeUser.reload === 'function') {
+                        await activeUser.reload();
+                    }
                     const navAvatar = document.getElementById('user-avatar');
                     if (navAvatar) navAvatar.title = `個人檔案：${displayName}`;
                     setStatus('name-status', '顯示名稱已更新。');
@@ -350,7 +384,7 @@
 
             passwordForm.addEventListener('submit', async event => {
                 event.preventDefault();
-                const activeUser = firebase.auth().currentUser || currentUser;
+                const activeUser = (typeof firebase !== 'undefined' && firebase.auth) ? firebase.auth().currentUser : currentUser;
                 if (!activeUser || !activeUser.email) return;
 
                 const currentPassword = document.getElementById('current-password').value;
@@ -382,8 +416,12 @@
             });
 
             try {
-                await window.raingodFirebaseReady;
-                currentUser = await window.raingodAuthReady;
+                if (window.raingodFirebaseReady) {
+                    await window.raingodFirebaseReady;
+                }
+                if (window.raingodAuthReady) {
+                    currentUser = await window.raingodAuthReady;
+                }
 
                 if (!currentUser && typeof firebase !== 'undefined' && firebase.auth) {
                     currentUser = firebase.auth().currentUser;
