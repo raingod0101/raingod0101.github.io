@@ -15,7 +15,7 @@
         }
 
         .profile-page {
-            width: min(calc(100% - 32px), 560px);
+            width: min(100% - 32px, 560px);
             margin: 48px auto;
         }
 
@@ -212,8 +212,10 @@
 
             function setStatus(id, message, isError = false) {
                 const status = document.getElementById(id);
-                status.textContent = message;
-                status.classList.toggle('error', isError);
+                if (status) {
+                    status.textContent = message;
+                    status.classList.toggle('error', isError);
+                }
             }
 
             function setFormDisabled(form, disabled) {
@@ -233,7 +235,7 @@
             }
 
             async function loadFirebaseStorage() {
-                if (typeof firebase.storage === 'function') return;
+                if (typeof firebase !== 'undefined' && typeof firebase.storage === 'function') return;
                 await new Promise((resolve, reject) => {
                     const script = document.createElement('script');
                     script.src = 'https://www.gstatic.com/firebasejs/9.1.3/firebase-storage-compat.js';
@@ -278,7 +280,9 @@
             avatarForm.addEventListener('submit', async event => {
                 event.preventDefault();
                 const file = avatarFile.files[0];
-                if (!currentUser || !file) return;
+                const activeUser = firebase.auth().currentUser || currentUser;
+                if (!activeUser || !file) return;
+
                 if (!file.type.startsWith('image/')) {
                     setStatus('avatar-status', '請選擇圖片檔案。', true);
                     return;
@@ -293,20 +297,19 @@
                 try {
                     const blob = await makeSquareAvatar(file);
                     await loadFirebaseStorage();
-                    const upload = firebase.storage()
-                        .ref(`profile-avatars/${currentUser.uid}/avatar.jpg`)
-                        .put(blob, { contentType: 'image/jpeg' });
-                    const snapshot = await upload;
-                    const photoURL = await snapshot.ref.getDownloadURL();
                     
-                    // 更新 Firebase Profile 上的頭像連結
-                    await currentUser.updateProfile({ photoURL });
+                    // 加 timestamp 避免 Storage Cache 問題
+                    const avatarRef = firebase.storage().ref(`profile-avatars/${activeUser.uid}/avatar.jpg`);
+                    const snapshot = await avatarRef.put(blob, { contentType: 'image/jpeg' });
+                    let photoURL = await snapshot.ref.getDownloadURL();
 
-                    // 加上 timestamp 避免瀏覽器讀取舊快取（Cache Busting）
-                    const cacheBustURL = `${photoURL}&t=${Date.now()}`;
-
-                    // 即時更新頁面與導覽列上的頭像
+                    await activeUser.updateProfile({ photoURL });
+                    await activeUser.reload(); // 強制刷新使用者 Profile 狀態
+                    
+                    // 加上隨機參數避免瀏覽器圖片快取
+                    const cacheBustURL = photoURL + '?t=' + Date.now();
                     avatar.src = cacheBustURL;
+                    
                     const navAvatar = document.getElementById('user-avatar');
                     if (navAvatar) navAvatar.src = cacheBustURL;
 
@@ -321,7 +324,9 @@
 
             nameForm.addEventListener('submit', async event => {
                 event.preventDefault();
-                if (!currentUser) return;
+                const activeUser = firebase.auth().currentUser || currentUser;
+                if (!activeUser) return;
+
                 const displayName = displayNameInput.value.trim();
                 if (!displayName) {
                     setStatus('name-status', '請輸入顯示名稱。', true);
@@ -331,7 +336,8 @@
                 setFormDisabled(nameForm, true);
                 setStatus('name-status', '正在儲存…');
                 try {
-                    await currentUser.updateProfile({ displayName });
+                    await activeUser.updateProfile({ displayName });
+                    await activeUser.reload();
                     const navAvatar = document.getElementById('user-avatar');
                     if (navAvatar) navAvatar.title = `個人檔案：${displayName}`;
                     setStatus('name-status', '顯示名稱已更新。');
@@ -344,10 +350,13 @@
 
             passwordForm.addEventListener('submit', async event => {
                 event.preventDefault();
-                if (!currentUser || !currentUser.email) return;
+                const activeUser = firebase.auth().currentUser || currentUser;
+                if (!activeUser || !activeUser.email) return;
+
                 const currentPassword = document.getElementById('current-password').value;
                 const newPassword = document.getElementById('new-password').value;
                 const confirmPassword = document.getElementById('confirm-password').value;
+
                 if (newPassword.length < 6) {
                     setStatus('password-status', '新密碼至少需要 6 個字元。', true);
                     return;
@@ -360,5 +369,56 @@
                 setFormDisabled(passwordForm, true);
                 setStatus('password-status', '正在變更密碼…');
                 try {
-                    const credential = firebase.auth.EmailAuthProvider.credential(currentUser.email, currentPassword);
-                    await currentUser.reauthenticateWithCredential(credential);
+                    const credential = firebase.auth.EmailAuthProvider.credential(activeUser.email, currentPassword);
+                    await activeUser.reauthenticateWithCredential(credential);
+                    await activeUser.updatePassword(newPassword);
+                    passwordForm.reset();
+                    setStatus('password-status', '密碼已成功變更。');
+                } catch (error) {
+                    setStatus('password-status', errorMessage(error), true);
+                } finally {
+                    setFormDisabled(passwordForm, false);
+                }
+            });
+
+            try {
+                await window.raingodFirebaseReady;
+                currentUser = await window.raingodAuthReady;
+
+                if (!currentUser && typeof firebase !== 'undefined' && firebase.auth) {
+                    currentUser = firebase.auth().currentUser;
+                }
+
+                if (!currentUser) {
+                    loginRequired.hidden = false;
+                    return;
+                }
+
+                avatar.src = currentUser.photoURL || fallbackAvatar;
+                displayNameInput.value = currentUser.displayName || (currentUser.email ? currentUser.email.split('@')[0] : '');
+                signOutButton.hidden = false;
+
+                signOutButton.addEventListener('click', async () => {
+                    signOutButton.disabled = true;
+                    try {
+                        await firebase.auth().signOut();
+                        if (typeof window.raingodClearLocalAccountData === 'function') {
+                            window.raingodClearLocalAccountData();
+                        }
+                        window.location.href = 'index.html';
+                    } catch (error) {
+                        signOutButton.disabled = false;
+                        alert(`登出失敗：${error.message}`);
+                    }
+                });
+
+                content.hidden = false;
+            } catch (error) {
+                loginRequired.hidden = false;
+                loginRequired.textContent = `載入個人檔案失敗：${errorMessage(error)}`;
+                loginRequired.classList.add('error');
+            }
+        })();
+    </script>
+</body>
+</html>
