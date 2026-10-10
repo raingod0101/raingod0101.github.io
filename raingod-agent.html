@@ -326,6 +326,16 @@
 
 // ─── 常數 ─────────────────────────────────────────────────────────────────────
 const MAP_RADIUS = 3200;
+// 單挑縮圈：雙方都依照同一個配對開始時間計算，確保縮圈同步。
+function getDuelArenaRadius() {
+    if (!OnlineSession || !OnlineSession.matchStartedAt) return MAP_RADIUS;
+    const elapsed = Math.max(0, (Date.now() - OnlineSession.matchStartedAt) / 1000);
+    const delay = 15;       // 開場先給玩家時間移動
+    const shrinkDuration = 180;
+    const endRadius = 480;
+    const progress = Math.max(0, Math.min(1, (elapsed - delay) / shrinkDuration));
+    return MAP_RADIUS - (MAP_RADIUS - endRadius) * progress;
+}
 const MAX_ENEMIES = 35;
 const MAX_STAGES = 100;
 const STAGES = (function buildStages(n) {
@@ -2518,9 +2528,12 @@ class Player {
             this.walkCycle += dt * 0.035;
         }
         const dist = Math.hypot(this.x, this.y);
-        if (dist > MAP_RADIUS) {
-            this.x *= MAP_RADIUS / dist;
-            this.y *= MAP_RADIUS / dist;
+        const allowedRadius = GameEngine.onlineMode === 'versus' ? getDuelArenaRadius() : MAP_RADIUS;
+        if (dist > allowedRadius) {
+            // 縮圈追上玩家時，把玩家推回安全區內，而不是讓他留在圈外。
+            const safeRadius = Math.max(80, allowedRadius - 12);
+            this.x *= safeRadius / Math.max(1, dist);
+            this.y *= safeRadius / Math.max(1, dist);
         }
         if (!(GameEngine.onlineMode === 'versus')) {
             if (this.regenPerSec) this.hp = Math.min(this.maxHp, this.hp + this.regenPerSec * dt / 60);
@@ -3446,6 +3459,11 @@ window.GameEngine = {
             this.player.skin = 'default';
         }
         this.player.x = 0; this.player.y = 0;
+        if (this.onlineMode === 'versus') {
+            // 依玩家 ID 固定分配地圖兩端，雙方使用相反的生成座標。
+            this.player.x = OnlineSession.id < OnlineSession.partnerId ? -2600 : 2600;
+            this.player.y = 0;
+        }
         this.enemies = []; this.projectiles = []; this.expOrbs = []; this.bosses = [];
         this.kills = 0; this.timer = 0; this.spawnTimer = 0; this.shootTimers = {};
         this.state = 'BATTLE'; this.pendingLevelUp = false; this.levelUpQueue = 0; this.pendingEvo = null; this.paused = false;
@@ -4022,8 +4040,85 @@ window.GameEngine = {
             }
             this.ctx.restore();
         }
+        // 單挑縮圈的世界座標邊界，讓玩家在戰場內也能看見安全區。
+        if (this.onlineMode === 'versus') {
+            const arenaRadius = getDuelArenaRadius();
+            const elapsed = Math.max(0, (Date.now() - (OnlineSession.matchStartedAt || Date.now())) / 1000);
+            this.ctx.save();
+            this.ctx.beginPath();
+            this.ctx.arc(0, 0, arenaRadius, 0, Math.PI * 2);
+            this.ctx.strokeStyle = elapsed > 15 ? 'rgba(255,75,105,0.95)' : 'rgba(70,220,255,0.9)';
+            this.ctx.lineWidth = 8;
+            this.ctx.setLineDash([24, 14]);
+            this.ctx.shadowColor = this.ctx.strokeStyle;
+            this.ctx.shadowBlur = 18;
+            this.ctx.stroke();
+            this.ctx.restore();
+        }
         this.ctx.restore();
+        if (this.onlineMode === 'versus') this.drawDuelHUD();
         this.drawJoystick();
+    },
+    drawDuelHUD() {
+        const ctx = this.ctx;
+        const w = this.canvas.width, h = this.canvas.height;
+        const me = this.player, opp = this.remotePlayer;
+        if (!me) return;
+        // 右上角小地圖
+        const size = Math.max(112, Math.min(164, Math.min(w, h) * 0.24));
+        const pad = 16, x = w - size - pad, y = pad + 18;
+        const cx = x + size / 2, cy = y + size / 2, r = size * 0.40;
+        const arenaRadius = getDuelArenaRadius();
+        ctx.save();
+        ctx.fillStyle = 'rgba(5,12,28,0.82)';
+        ctx.strokeStyle = 'rgba(125,220,255,0.8)';
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.roundRect(x, y, size, size, 12); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#eaf7ff'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center';
+        ctx.fillText('小地圖', cx, y - 5);
+        ctx.save();
+        ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.clip();
+        ctx.fillStyle = 'rgba(65,100,140,0.18)'; ctx.fillRect(cx-r, cy-r, r*2, r*2);
+        ctx.strokeStyle = 'rgba(150,190,220,0.35)'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(cx-r, cy); ctx.lineTo(cx+r, cy); ctx.moveTo(cx, cy-r); ctx.lineTo(cx, cy+r); ctx.stroke();
+        // 外圈代表整張地圖，內圈代表正在縮小的安全區。
+        ctx.strokeStyle = 'rgba(170,190,220,0.55)'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2); ctx.stroke();
+        ctx.strokeStyle = 'rgba(255,80,110,0.95)'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(cx, cy, r * arenaRadius / MAP_RADIUS, 0, Math.PI*2); ctx.stroke();
+        const dot = (p, color, radius) => {
+            if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return;
+            const scale = r / MAP_RADIUS;
+            const px = cx + p.x * scale, py = cy + p.y * scale;
+            ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 8;
+            ctx.beginPath(); ctx.arc(px, py, radius, 0, Math.PI*2); ctx.fill(); ctx.shadowBlur = 0;
+        };
+        dot(me, '#55e8ff', 4.5);
+        if (opp && !opp.isDead && Number(opp.hp) > 0) dot(opp, '#ff4f75', 4.5);
+        ctx.restore();
+        // 對手在視野外時，於螢幕邊緣畫出方向箭頭。
+        if (opp && !opp.isDead && Number(opp.hp) > 0) {
+            const dx = opp.x - me.x, dy = opp.y - me.y;
+            const sx = w / 2 + dx, sy = h / 2 + dy;
+            const margin = 42;
+            const offscreen = sx < margin || sx > w-margin || sy < margin || sy > h-margin;
+            if (offscreen) {
+                const angle = Math.atan2(dy, dx);
+                const maxX = w/2 - margin, maxY = h/2 - margin;
+                const factor = Math.min(maxX / Math.max(1, Math.abs(dx)), maxY / Math.max(1, Math.abs(dy)));
+                const ax = w/2 + dx * factor, ay = h/2 + dy * factor;
+                ctx.save(); ctx.translate(Math.max(margin, Math.min(w-margin, ax)), Math.max(margin, Math.min(h-margin, ay))); ctx.rotate(angle);
+                ctx.fillStyle = '#ff4f75'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.moveTo(18,0); ctx.lineTo(-10,-11); ctx.lineTo(-5,0); ctx.lineTo(-10,11); ctx.closePath(); ctx.fill(); ctx.stroke();
+                ctx.rotate(-angle); ctx.fillStyle = '#fff'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('對手', 0, 25);
+                ctx.restore();
+            }
+        }
+        const elapsed = Math.max(0, (Date.now() - (OnlineSession.matchStartedAt || Date.now())) / 1000);
+        ctx.fillStyle = elapsed < 15 ? '#9deaff' : '#ff879e';
+        ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'right';
+        ctx.fillText(elapsed < 15 ? '安全區即將縮小' : '安全區正在縮小', w - 16, y + size + 18);
+        ctx.restore();
     },
     drawJoystick() {
         const j = Input.joystick;
