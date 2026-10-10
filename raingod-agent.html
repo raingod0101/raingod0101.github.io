@@ -212,7 +212,7 @@
         <div id="section-pets" class="lobby-section" style="display:none;">
             <h3>寵物召喚與裝備</h3>
             <div class="glass-panel" style="padding:12px;">
-                <div>每抽 100 金幣，必得一隻寵物；普通寵物效果約 5%，神寵機率 0.1%，傷害加倍但不會碾壓關卡。一次最多抽 100 隻，只能裝備一隻。</div>
+                <div>每抽 100 金幣，必得一隻寵物；寵物會以可見的動物造型跟隨你並衝向敵人攻擊。每隻有 0.50–5.00 kg 隨機重量，越重攻擊越強、出售價格越高。一次最多抽 100 隻，只能裝備一隻。</div>
                 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px;">
                     <label for="pet-draw-count">抽數</label>
                     <input id="pet-draw-count" type="number" min="1" max="100" value="1" style="width:84px;padding:7px;border-radius:8px;background:#07131b;color:#fff;border:1px solid #467;">
@@ -421,7 +421,7 @@ function rollPet() {
     else if (roll < 0.55) id = 'mist';
     else if (roll < 0.78) id = 'pebble';
     else if (roll < 0.92) id = 'spark';
-    return { id, uid: Date.now().toString(36) + Math.random().toString(36).slice(2, 8) };
+    return { id, uid: Date.now().toString(36) + Math.random().toString(36).slice(2, 8), weight: +(0.5 + Math.random() * 4.5).toFixed(2) };
 }
 
 // ─── 主動技能 (id, 名稱, 超武名) ───────────────────────────────────────────────
@@ -600,7 +600,7 @@ const SaveSystem = {
             z: Math.max(10, (j.maxRadius != null ? j.maxRadius : 90) | 0),
             p: Math.max(0, ((d.skinLottery && d.skinLottery.drawsSinceLastFragment) | 0)),
             pc: Math.max(0, Math.floor((d.resources && d.resources.plantCoins) || 0)),
-            pt: (d.pets || []).slice(-500).filter(p => PET_DEFS[p.id]).map(p => ({ id:p.id, uid:String(p.uid || '') })),
+            pt: (d.pets || []).slice(-500).filter(p => PET_DEFS[p.id]).map(p => ({ id:p.id, uid:String(p.uid || ''), weight:Math.max(0.5, Math.min(5, Number(p.weight) || 0.5)) })),
             pe: String(d.equippedPet || ''),
             farm: d.farm,
             et: d._extrasUpdatedAt || 0,
@@ -644,7 +644,7 @@ const SaveSystem = {
         };
         d.skinLottery = { drawsSinceLastFragment: Math.max(0, pack.p | 0) };
         d.resources.plantCoins = Math.max(0, pack.pc == null ? 0 : pack.pc | 0);
-        d.pets = Array.isArray(pack.pt) ? pack.pt.filter(p => p && PET_DEFS[p.id]).map(p => ({ id:p.id, uid:String(p.uid || '') })) : [];
+        d.pets = Array.isArray(pack.pt) ? pack.pt.filter(p => p && PET_DEFS[p.id]).map(p => ({ id:p.id, uid:String(p.uid || ''), weight:Math.max(0.5, Math.min(5, Number(p.weight) || 0.5)) })) : [];
         d.equippedPet = typeof pack.pe === 'string' ? pack.pe : '';
         d.farm = pack.farm && typeof pack.farm === 'object' ? pack.farm : d.farm;
         d._extrasUpdatedAt = Math.max(0, pack.et | 0);
@@ -683,6 +683,7 @@ const SaveSystem = {
         if (!d.joystickSettings) d.joystickSettings = { baseX: 90, baseYOffset: 100, maxRadius: 90 };
         if (!d.skinLottery) d.skinLottery = { drawsSinceLastFragment: 0 };
         if (!Array.isArray(d.pets)) d.pets = [];
+        d.pets = d.pets.filter(p => p && PET_DEFS[p.id]).map(p => ({...p, uid:String(p.uid || (Date.now().toString(36) + Math.random().toString(36).slice(2,7))), weight:Math.max(0.5, Math.min(5, Number(p.weight) || 0.5))}));
         if (typeof d.equippedPet !== 'string') d.equippedPet = '';
         if (!d.farm || typeof d.farm !== 'object') d.farm = { plots: [], inventory: [], machine: { level:1, startedAt:0 } };
         if (typeof d.farm.sprinkler !== 'boolean') d.farm.sprinkler = false;
@@ -2141,6 +2142,9 @@ class Boss {
         this.warningTimer = 0;
         this.pendingSkillRoll = null;
         this.lockedAimAng = 0;
+        this.dashTimer = 0;
+        this.dashAngle = 0;
+        this.dashSpeed = 0;
     }
     update(dt, player, projectiles) {
         if (this.frozenTime > 0) {
@@ -2170,6 +2174,16 @@ class Boss {
             GameEngine.shake(10, 0.35);
         }
 
+        // 衝刺技能：紅色預警結束後沿鎖定方向高速衝過，玩家可橫向閃避
+        if (this.dashTimer > 0) {
+            const dashStep = Math.min(dt, this.dashTimer);
+            this.x += Math.cos(this.dashAngle) * this.dashSpeed * dashStep;
+            this.y += Math.sin(this.dashAngle) * this.dashSpeed * dashStep;
+            this.dashTimer -= dashStep;
+            if (Math.hypot(player.x-this.x, player.y-this.y) < player.r + this.r + 8) player.takeDamage((this.baseDmg * 3.5) * dashStep);
+            if (this.dashTimer <= 0) { this.skillName='衝刺完成！'; this.skillColor='#ff5252'; this.skillTextTimer=45; }
+            return;
+        }
         // 預警紅條期間：鎖定攻擊方向，停止移動
         if (this.warningTimer > 0) {
             this.warningTimer -= dt;
@@ -2230,7 +2244,16 @@ class Boss {
         const bossProj = (vx, vy, dmg, color, extra) => new Projectile(this.x, this.y, vx, vy, dmg, color, Object.assign({
             hostile: true, life: 420, skillId: 'boss_atk'
         }, extra));
-        if (roll < 0.34) {
+        if (roll < 0.24) {
+            // 衝刺：前面已顯示紅色直線預警，結束後高速衝刺
+            this.dashAngle = aimAng;
+            this.dashSpeed = 19 + this.index * 0.65 + (this.enraged ? 5 : 0);
+            this.dashTimer = this.enraged ? 28 : 22;
+            this.skillName = '紅線衝刺！'; this.skillColor = '#ff1744'; this.skillTextTimer = 70;
+            GameEngine.showAlert('BOSS：紅線衝刺！快往旁邊躲！');
+            GameEngine.shake(9, 0.3);
+            GameEngine.spawnParticles(this.x, this.y, '#ff1744', 18, 4);
+        } else if (roll < 0.48) {
             // 放射彈幕：覆蓋廣、難完全躲开 → 低傷
             const count = this.enraged ? 20 : 16;
             for (let i = 0; i < count; i++) {
@@ -2250,7 +2273,7 @@ class Boss {
             GameEngine.showAlert('BOSS：放射彈幕！');
             GameEngine.shake(6, 0.22);
             GameEngine.spawnParticles(this.x, this.y, '#ff8a65', 18, 3);
-        } else if (roll < 0.67) {
+        } else if (roll < 0.70) {
             // 能量狙擊：紅條指向、可側移躲避 → 傷害調高
             const sp = 17 + this.index * 0.5;
             const beams = this.enraged ? 5 : 4;
@@ -2264,7 +2287,7 @@ class Boss {
             GameEngine.showAlert('BOSS：能量狙擊！');
             GameEngine.shake(6, 0.22);
             GameEngine.spawnParticles(this.x, this.y, '#ffeb3b', 14, 3);
-        } else if (roll < 0.85) {
+        } else if (roll < 0.87) {
             // 火雨沿預警方向直線飛行，可側移躲避。
             const rainCount = this.enraged ? 10 : 7;
             for (let i = 0; i < rainCount; i++) {
@@ -2454,7 +2477,7 @@ class Player {
         const pet = getEquippedPet();
         const petDef = pet ? PET_DEFS[pet.id] : null;
         this.petDmg = petDef ? (petDef.assist || 0) : 0;
-        this.petDamageMult = petDef ? 1 + (petDef.damage || 0) : 1;
+        this.petDamageMult = 1; // 傷害加成改由寵物本體出擊造成，不再直接放大玩家武器傷害
         this.petDefense = petDef ? (petDef.defense || 0) + (petDef.shield || 0) : 0;
         this.applyTalents();
         this.skin = SaveSystem.currentData.skin || 'default';
@@ -2735,22 +2758,7 @@ class Player {
             ctx.arc(0, 0, r, 0, Math.PI * 2);
             ctx.fill();
         }
-        const pet = getEquippedPet();
-        if (pet && PET_DEFS[pet.id]) {
-            const petDef = PET_DEFS[pet.id];
-            const orbit = Date.now() / 220;
-            ctx.fillStyle = petDef.color;
-            ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.arc(30 + Math.sin(orbit) * 4, 12 + Math.cos(orbit) * 4, 10, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.stroke();
-            ctx.fillStyle = '#101820';
-            ctx.font = 'bold 10px sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText(petDef.name.slice(0, 1), 30 + Math.sin(orbit) * 4, 15 + Math.cos(orbit) * 4);
-        }
+        // 寵物由世界座標中的實體繪製，會跟隨玩家並衝向目標攻擊。
         const skinCfg = PLAYER_SKINS[this.skin];
         const skinImg = SkinImages[this.skin];
         if (this.skin === 'stickman') {
@@ -3375,19 +3383,80 @@ function fireWeapon(skillId, player, projectiles, enemies, stats) {
     projectiles.push(new Projectile(player.x, player.y, Math.cos(ang)*spd, Math.sin(ang)*spd, finalDmg, '#00d2ff', { shape: 'diamond', skillId }));
 }
 
-// ─── 寵物攻擊 (每 N 幀對最近敵人造成傷害) ─────────────────────────────────────
-function updatePetDamage(player, enemies, dt) {
-    if (!player.petDmg || !enemies.length) return;
-    GameEngine._petTimer = (GameEngine._petTimer || 0) + dt;
-    if (GameEngine._petTimer < 45) return;
-    GameEngine._petTimer = 0;
-    let t = null, bestD = 1e9;
-    for (const e of enemies) {
-        if (e.isDead) continue;
-        const d = Math.hypot(e.x - player.x, e.y - player.y);
-        if (d < bestD) { bestD = d; t = e; }
+// ─── 寵物實體：跟隨玩家、衝向目標並造成可見傷害 ──────────────────────────────
+function drawPetCreature(ctx, x, y, pet, facing = 1, attacking = false) {
+    const cfg = PET_DEFS[pet.id] || PET_DEFS.sprout;
+    const bob = Math.sin(Date.now() / 120 + (pet.uid || '').length) * 2;
+    ctx.save(); ctx.translate(x, y + bob); ctx.scale(facing < 0 ? -1 : 1, 1);
+    ctx.shadowColor = cfg.color; ctx.shadowBlur = attacking ? 16 : 8;
+    // 身體、頭部、耳朵、眼睛、尾巴：依種類有不同輪廓，不再是字母圓點
+    const body = cfg.color;
+    ctx.fillStyle = body; ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineWidth = 2;
+    if (pet.id === 'pebble' || pet.id === 'bulwark') {
+        ctx.beginPath(); ctx.ellipse(0, 2, 15, 12, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-12,-4); ctx.lineTo(-8,-17); ctx.lineTo(0,-8); ctx.lineTo(8,-17); ctx.lineTo(13,-3); ctx.closePath(); ctx.fill(); ctx.stroke();
+        for (let i=-1;i<=1;i++) { ctx.beginPath(); ctx.moveTo(i*7,-3); ctx.lineTo(i*7+4,5); ctx.stroke(); }
+    } else if (pet.id === 'spark') {
+        ctx.beginPath(); ctx.ellipse(0,2,12,10,0,0,Math.PI*2); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-8,-4); ctx.lineTo(-15,-15); ctx.lineTo(-2,-10); ctx.lineTo(5,-19); ctx.lineTo(7,-5); ctx.fill(); ctx.stroke();
+        ctx.strokeStyle='#fff176'; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(10,3); ctx.lineTo(19,-2); ctx.lineTo(13,8); ctx.stroke();
+    } else if (pet.id === 'comet') {
+        ctx.beginPath(); ctx.ellipse(-1,2,12,9,0,0,Math.PI*2); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-8,-2); ctx.lineTo(-23,-10); ctx.lineTo(-14,1); ctx.lineTo(-24,7); ctx.lineTo(-7,7); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(7,-5); ctx.lineTo(12,-17); ctx.lineTo(16,-5); ctx.fill(); ctx.stroke();
+    } else if (pet.id === 'blade') {
+        ctx.beginPath(); ctx.ellipse(0,1,13,8,0,0,Math.PI*2); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-3,-3); ctx.lineTo(-16,-15); ctx.lineTo(-10,0); ctx.lineTo(-16,12); ctx.lineTo(-2,5); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(5,-4); ctx.lineTo(18,-16); ctx.lineTo(13,0); ctx.lineTo(18,10); ctx.lineTo(4,5); ctx.closePath(); ctx.fill(); ctx.stroke();
+    } else if (pet.id === 'oracle') {
+        ctx.beginPath(); ctx.ellipse(0,2,14,12,0,0,Math.PI*2); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-11,-5); ctx.lineTo(-8,-19); ctx.lineTo(0,-9); ctx.lineTo(8,-19); ctx.lineTo(12,-5); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.strokeStyle='#fff176'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(0,0,21,0,Math.PI*2); ctx.stroke();
+    } else { // 貓、狐狸等四足小動物
+        ctx.beginPath(); ctx.ellipse(-1,3,14,9,0,0,Math.PI*2); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.arc(9,-5,9,0,Math.PI*2); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(3,-10); ctx.lineTo(3,-20); ctx.lineTo(10,-13); ctx.moveTo(12,-13); ctx.lineTo(19,-20); ctx.lineTo(18,-8); ctx.fill(); ctx.stroke();
+        ctx.strokeStyle=body; ctx.lineWidth=5; ctx.beginPath(); ctx.moveTo(-12,2); ctx.quadraticCurveTo(-23,-5,-19,-12); ctx.stroke();
+        ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(12,-7,2.2,0,Math.PI*2); ctx.fill();
     }
-    if (t) t.hp -= player.petDmg;
+    // 所有寵物共用可辨識的眼睛與小腳
+    ctx.shadowBlur=0; ctx.fillStyle='#101820'; ctx.beginPath(); ctx.arc(12,-6,2,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle='#101820'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(-7,8); ctx.lineTo(-7,13); ctx.moveTo(5,8); ctx.lineTo(5,13); ctx.stroke();
+    if (attacking) { ctx.strokeStyle='#fff'; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(16,-1); ctx.lineTo(25,-7); ctx.moveTo(18,3); ctx.lineTo(28,3); ctx.stroke(); }
+    ctx.restore();
+}
+function updatePetDamage(player, enemies, dt) {
+    const pet = getEquippedPet();
+    if (!pet || !PET_DEFS[pet.id]) { GameEngine.petActor = null; return; }
+    let actor = GameEngine.petActor;
+    if (!actor || actor.uid !== pet.uid) actor = GameEngine.petActor = { uid:pet.uid, x:player.x+34, y:player.y+25, attackTimer:0, target:null, attacking:false, facing:1 };
+    let target = null, bestD = Infinity;
+    for (const e of enemies) {
+        if (!e || e.isDead || e.hp <= 0) continue;
+        const d = Math.hypot(e.x-player.x, e.y-player.y);
+        if (d < bestD && d < 650) { bestD=d; target=e; }
+    }
+    actor.target = target;
+    const targetX = target ? target.x : player.x + Math.cos(Date.now()/500)*34;
+    const targetY = target ? target.y : player.y + 26 + Math.sin(Date.now()/400)*22;
+    const dist = Math.hypot(targetX-actor.x, targetY-actor.y);
+    const speed = target ? 7.5 : 5.5;
+    if (dist > 1) { actor.x += (targetX-actor.x)/dist*Math.min(dist,speed*dt); actor.y += (targetY-actor.y)/dist*Math.min(dist,speed*dt); }
+    actor.facing = targetX >= actor.x ? 1 : -1;
+    actor.attacking = !!target && Math.hypot(target.x-actor.x,target.y-actor.y) < 58;
+    actor.attackTimer += dt;
+    const cfg = PET_DEFS[pet.id];
+    if (target && actor.attacking && actor.attackTimer >= 42) {
+        actor.attackTimer = 0;
+        // 寵物自身造成攻擊傷害；重量和稀有度讓較重寵物更強、出售價更高
+        const weight = Math.max(0.5, Number(pet.weight) || 0.5);
+        const rarityMult = cfg.rarity === '神寵' ? 3.4 : cfg.rarity === '史詩' ? 1.9 : cfg.rarity === '稀有' ? 1.35 : 1;
+        const dmg = (8 + (cfg.assist || 0) * 5 + weight * 2.2) * rarityMult;
+        if (target.isRemotePlayer) OnlineSession.queueDamage(dmg);
+        else { target.hp = Math.max(0, target.hp - dmg); if (target.netId) OnlineSession.queueWorldDamage(target.netId, dmg); }
+        GameEngine.hitFx.push({x:target.x,y:target.y,r:13,life:15,maxLife:15,color:cfg.color});
+        GameEngine.spawnParticles(target.x,target.y,cfg.color,5,2);
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -3945,6 +4014,8 @@ window.GameEngine = {
         this.expOrbs.forEach(o => o.draw(this.ctx, cam));
         this.enemies.forEach(e => e.draw(this.ctx, cam));
         this.bosses.forEach(b => b.draw(this.ctx, cam));
+        const equippedPet = getEquippedPet();
+        if (this.petActor && equippedPet) drawPetCreature(this.ctx, this.petActor.x, this.petActor.y, equippedPet, this.petActor.facing, this.petActor.attacking);
         this.projectiles.forEach(p => p.draw(this.ctx, cam));
         // 擊殺爆炸特效
         for (const h of this.hitFx) {
@@ -4306,6 +4377,22 @@ window.GameEngine = {
         this.renderLobby();
         this.showAlert('已裝備 ' + PET_DEFS[pet.id].name);
     },
+    sellPet(uid) {
+        const d = SaveSystem.currentData;
+        const index = d.pets.findIndex(item => item.uid === uid);
+        if (index < 0) return;
+        const pet = d.pets[index];
+        if (d.equippedPet === uid) { d.equippedPet = ''; this.petActor = null; }
+        const cfg = PET_DEFS[pet.id];
+        const weight = Math.max(0.5, Number(pet.weight) || 0.5);
+        const rarityMult = cfg.rarity === '神寵' ? 8 : cfg.rarity === '史詩' ? 3.2 : cfg.rarity === '稀有' ? 1.8 : 1;
+        const price = Math.max(10, Math.round(30 * (0.6 + weight * 0.4) * rarityMult));
+        d.pets.splice(index, 1);
+        d.resources.gold = (Number(d.resources.gold) || 0) + price;
+        SaveSystem.save();
+        this.renderLobby();
+        this.showAlert('已出售 ' + cfg.name + '（' + weight.toFixed(2) + ' kg），獲得 ' + price + ' 金幣！');
+    },
     renderPets() {
         const box = document.getElementById('pet-collection');
         if (!box) return;
@@ -4330,6 +4417,11 @@ window.GameEngine = {
             if (config.defense) effects.push('減傷 +' + Math.round(config.defense * 100) + '%');
             if (config.shield) effects.push('護盾 +' + Math.round(config.shield * 100) + '%');
             effects.push('協助攻擊 ' + config.assist + '/秒');
+            const weight = Math.max(0.5, Number(pet.weight) || 0.5);
+            const rarityMult = config.rarity === '神寵' ? 8 : config.rarity === '史詩' ? 3.2 : config.rarity === '稀有' ? 1.8 : 1;
+            const sellPrice = Math.max(10, Math.round(30 * (0.6 + weight * 0.4) * rarityMult));
+            effects.push('重量 ' + weight.toFixed(2) + ' kg');
+            effects.push('出售價 ' + sellPrice + ' 金幣');
             effect.textContent = effects.join('、');
             card.appendChild(effect);
             const button = document.createElement('button');
@@ -4338,6 +4430,15 @@ window.GameEngine = {
             button.disabled = equipped;
             button.onclick = () => this.equipPet(pet.uid);
             card.appendChild(button);
+            const sellButton = document.createElement('button');
+            sellButton.className = 'main-btn small';
+            sellButton.style.marginLeft = '6px';
+            sellButton.style.background = '#9b3d45';
+            sellButton.textContent = '出售 +' + sellPrice + ' 金幣';
+            sellButton.disabled = false;
+            sellButton.title = equipped ? '出售後會自動解除裝備' : '出售這隻寵物';
+            sellButton.onclick = () => this.sellPet(pet.uid);
+            card.appendChild(sellButton);
             box.appendChild(card);
         });
     },
