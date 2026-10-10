@@ -297,6 +297,7 @@ let db = null;
 let rootRef = null;
 let rootListener = null;
 let currentRoomId = null;
+let currentMatchToken = "";
 let matchmaking = false;
 let playerId = "";
 let playerName = "玩家";
@@ -619,83 +620,139 @@ function initializeFirebase() {
 }
 
 // ================================================
-// 8. 線上配對
+// 8. 線上配對（修正版）
 // ================================================
 
 async function startDuel() {
+  // 一開始就解除上一場的 Firebase 監聽。
+  stopListening();
+
   busy = true;
   matchmaking = true;
   finished = false;
+
   currentRoomId = null;
   latestRoom = null;
   lastRoomIndex = -1;
   currentIndex = 0;
+
+  // 每次配對都產生新的識別碼。
+  // 舊房間即使還存在，也不會被當成這一場。
+  currentMatchToken = randomId();
+
   playerId = getPlayerId();
 
   setStartButton(false, "連線中……");
   showScreen("game");
+
   duelInfo.classList.remove("hidden");
-  duelStatus.textContent = "正在連線並尋找對手……";
+  duelStatus.textContent = "正在尋找新的對手……";
   duelScore.textContent = "你 0 : 0 對手";
+
   wordDisplay.innerHTML = "";
   inputWrapper.innerHTML = "";
   progressInfo.textContent = "正在配對……";
 
   try {
     initializeFirebase();
+
     await findOpponent();
   } catch (error) {
     console.error(error);
+
+    stopListening();
+
     duelStatus.textContent = "配對失敗";
-    progressInfo.textContent = error.message ||
-      "請檢查 Firebase 設定與網路。";
+    progressInfo.textContent =
+      error.message || "請檢查 Firebase 設定與網路。";
+
     busy = false;
     matchmaking = false;
+
     setStartButton(true, "開始遊戲");
   }
 }
 
+
 async function findOpponent() {
-  const now = Date.now();
   const newRoomId = randomId();
 
-  // 每次交易都會重新讀取最新狀態，避免兩位玩家
-  // 同時配對時覆蓋彼此的資料。
-  const waitingWords = randomWords(currentMode, totalTargetCount);
+  // 每次嘗試配對都使用自己的識別碼。
+  const myMatchToken = currentMatchToken;
 
   const transaction = await rootRef.transaction(state => {
     state = state || {};
     state.rooms = state.rooms || {};
 
-    // 清理太舊的房間。
+    const now = Date.now();
+
+    // 清理超過一小時的舊房間。
     for (const [id, room] of Object.entries(state.rooms)) {
       if (now - (room.createdAt || 0) > 3600000) {
         delete state.rooms[id];
       }
     }
 
-    const waiting = state.waiting;
+    let waiting = state.waiting;
 
+    // 過期的等待玩家不能再被配對。
     if (
       waiting &&
-      waiting.playerId !== playerId &&
-      now - (waiting.createdAt || 0) < 60000
+      now - (waiting.createdAt || 0) > 60000
     ) {
-      const mode = waiting.mode === "en" ? "en" : "zh";
-      const words = randomWords(mode, totalTargetCount);
+      state.waiting = null;
+      waiting = null;
+    }
+
+    // 如果等待資料是自己上一次留下的，
+    // 就不可以拿它當成新的對手。
+    if (waiting && waiting.playerId === playerId) {
+      state.waiting = null;
+      waiting = null;
+    }
+
+    // 找到另一位仍在等待的玩家。
+    if (waiting && waiting.playerId !== playerId) {
+      const roomMode = waiting.mode === "en" ? "en" : "zh";
+
+      // 以先等待的玩家設定為準，確保兩人題目一致。
+      const roomCount = Math.max(
+        1,
+        Math.min(1000, Math.floor(Number(waiting.count) || 20))
+      );
+
+      const source = roomMode === "zh"
+        ? ZH_CHAR_POOL
+        : "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+      const words = [];
+
+      for (let i = 0; i < roomCount; i++) {
+        words.push(
+          source[Math.floor(Math.random() * source.length)]
+        );
+      }
 
       state.rooms[newRoomId] = {
         id: newRoomId,
         status: "playing",
-        mode: mode,
+        mode: roomMode,
         words: words,
         index: 0,
         createdAt: now,
+
+        // 這場對戰專屬的識別碼。
+        matchTokens: {
+          [waiting.playerId]: waiting.matchToken,
+          [playerId]: myMatchToken
+        },
+
         players: {
           [waiting.playerId]: {
             name: waiting.name || "玩家",
             score: 0
           },
+
           [playerId]: {
             name: playerName,
             score: 0
@@ -705,8 +762,10 @@ async function findOpponent() {
 
       state.waiting = null;
     } else {
+      // 沒有對手就建立新的等待資料。
       state.waiting = {
         playerId: playerId,
+        matchToken: myMatchToken,
         name: playerName,
         mode: currentMode,
         count: totalTargetCount,
@@ -721,31 +780,56 @@ async function findOpponent() {
     throw new Error("配對資料寫入失敗，請重新開始。");
   }
 
-  // 監聽共用資料，等候對手加入或讀取對戰房間。
+  // 避免等待期間已經開始下一次配對。
+  if (currentMatchToken !== myMatchToken) {
+    return;
+  }
+
   listenForUpdates();
 }
+
 
 function listenForUpdates() {
   stopListening();
 
+  const myMatchToken = currentMatchToken;
+
   rootListener = snapshot => {
-    if (!matchmaking && !currentRoomId) return;
+    // 舊的配對監聽器不能影響新的對戰。
+    if (currentMatchToken !== myMatchToken) {
+      return;
+    }
+
+    if (!matchmaking && !currentRoomId) {
+      return;
+    }
 
     const state = snapshot.val() || {};
     const rooms = state.rooms || {};
 
     let foundRoom = null;
 
+    // 只接受屬於這一次配對的房間。
     for (const room of Object.values(rooms)) {
-      if (room.players && room.players[playerId]) {
-        foundRoom = room;
-        break;
+      if (!room.players || !room.players[playerId]) {
+        continue;
       }
+
+      const token = room.matchTokens &&
+        room.matchTokens[playerId];
+
+      if (token !== myMatchToken) {
+        continue;
+      }
+
+      foundRoom = room;
+      break;
     }
 
     if (foundRoom) {
       currentRoomId = foundRoom.id;
       latestRoom = foundRoom;
+
       matchmaking = false;
       busy = false;
 
@@ -754,15 +838,24 @@ function listenForUpdates() {
       totalTargetCount = wordQueue.length;
 
       setStartButton(true, "開始遊戲");
+
       renderDuel(foundRoom);
       return;
     }
 
     const waiting = state.waiting;
 
-    if (waiting && waiting.playerId === playerId) {
-      duelStatus.textContent = "配對中……請等待另一位玩家。";
-      progressInfo.textContent = "配對成功後會自動開始。";
+    // 必須同時符合玩家 ID 和本次配對識別碼。
+    if (
+      waiting &&
+      waiting.playerId === playerId &&
+      waiting.matchToken === myMatchToken
+    ) {
+      duelStatus.textContent =
+        "配對中……請等待另一位玩家。";
+
+      progressInfo.textContent =
+        "配對成功後會自動開始。";
     }
   };
 
@@ -770,17 +863,26 @@ function listenForUpdates() {
     "value",
     rootListener,
     error => {
+      // 舊監聽器的錯誤不應影響新遊戲。
+      if (currentMatchToken !== myMatchToken) {
+        return;
+      }
+
       console.error(error);
+
       duelStatus.textContent = "Firebase 讀取失敗";
       progressInfo.textContent =
         error.message || "請檢查資料庫 Rules。";
+
       busy = false;
       matchmaking = false;
+
+      stopListening();
+
       setStartButton(true, "開始遊戲");
     }
   );
 }
-
 // ================================================
 // 9. 對戰畫面與搶答
 // ================================================
@@ -934,7 +1036,7 @@ function endDuel(room) {
 }
 
 // ================================================
-// 10. 離開、重新開始
+// 10. 離開、重新開始（修正版）
 // ================================================
 
 function stopListening() {
@@ -945,28 +1047,74 @@ function stopListening() {
   rootListener = null;
 }
 
-function resetToSetup() {
+
+async function resetToSetup() {
+  // 先記住這次配對的資料，再解除監聽。
+  const oldPlayerId = playerId;
+  const oldMatchToken = currentMatchToken;
+  const oldRoomId = currentRoomId;
+
   stopListening();
+
+  // 立刻讓舊的非同步操作失效。
+  currentMatchToken = randomId();
 
   finished = true;
   busy = false;
   matchmaking = false;
+
   currentRoomId = null;
   latestRoom = null;
   activeInput = null;
   lastRoomIndex = -1;
 
+  wordQueue = [];
+  currentIndex = 0;
+
+  wordDisplay.innerHTML = "";
+  inputWrapper.innerHTML = "";
+  progressInfo.textContent = "";
+
   showScreen("setup");
   duelInfo.classList.add("hidden");
+
   setNotice("");
-
   setStartButton(true, "開始遊戲");
-  document.getElementById("result-title").textContent = "成績統計";
-}
 
-// 避免初始化時的錯誤讓整個畫面無法使用。
-setStartButton(true, "開始遊戲");
-showScreen("setup");
+  document.getElementById("result-title").textContent =
+    "成績統計";
+
+  // 從 Firebase 移除自己留下的等待資料。
+  // 不能直接清空整個 typingDuel，否則會影響其他玩家。
+  if (
+    rootRef &&
+    oldPlayerId &&
+    oldMatchToken
+  ) {
+    try {
+      await rootRef.transaction(state => {
+        if (!state) return state;
+
+        const waiting = state.waiting;
+
+        if (
+          waiting &&
+          waiting.playerId === oldPlayerId &&
+          waiting.matchToken === oldMatchToken
+        ) {
+          state.waiting = null;
+        }
+
+        // 不刪除整個房間或其他玩家的資料。
+        // 每次新配對都會使用新的 matchToken，
+        // 所以舊房間不會被誤認為新的一場。
+        return state;
+      }, undefined, false);
+    } catch (error) {
+      console.error("清理等待資料失敗：", error);
+    }
+  }
+};
 </script>
 </body>
 </html>
