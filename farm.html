@@ -255,7 +255,7 @@
             };
             const DEFAULT_DATA = {
                 resources:{ gold:0, plantCoins:20 },
-                farm:{ plots:[{seed:"",plantedAt:0}], inventory:[], seedInventory:[], machine:{level:0,startedAt:0,owned:false}, sprinkler:false, sprinklerBoostUntil:0, sprinklerBoostLastTick:0, dailyRewardDate:"" },
+                farm:{ plots:[{seed:"",plantedAt:0}], inventory:[], seedInventory:[], seedStockBucket:0, seedStockRemaining:{}, machine:{level:0,startedAt:0,owned:false}, sprinkler:false, sprinklerBoostUntil:0, sprinklerBoostLastTick:0, dailyRewardDate:"" },
                 _plantCoinStarterGranted:2,
                 _extrasUpdatedAt:0
             };
@@ -349,14 +349,30 @@
                 h += h << 13; h ^= h >>> 7; h += h << 3; h ^= h >>> 17; h += h << 5;
                 return ((h >>> 0) % 1000000) / 1000000;
             }
-            // 依照時間區段產生固定庫存：不同玩家看到同一份輪替表，但購買不會扣掉其他玩家的庫存。
-            function seedStock(seed) {
-                const index = SEEDS.slice().sort((a,b)=>a.cost-b.cost).findIndex(item=>item.id===seed.id);
+            // 每輪的「初始庫存表」由時間固定產生，因此所有玩家初始看到相同數量；
+            // 購買後只扣目前這份本機存檔的庫存，不會影響其他玩家。
+            function initialSeedStock(seed, bucket=stockBucket()) {
+                const sorted = SEEDS.slice().sort((a,b)=>a.cost-b.cost);
+                const index = sorted.findIndex(item=>item.id===seed.id);
                 if (index === 0) return 5; // 最便宜的種子永遠有貨
-                const chance = .92 - (index / Math.max(1, SEEDS.length - 1)) * .84;
-                const roll = seededRandom(stockBucket() + ":" + seed.id + ":availability");
+                const chance = .92 - (index / Math.max(1, sorted.length - 1)) * .84;
+                const roll = seededRandom(bucket + ":" + seed.id + ":availability");
                 if (roll >= chance) return 0;
-                return 1 + Math.floor(seededRandom(stockBucket() + ":" + seed.id + ":quantity") * (index < 5 ? 5 : index < 12 ? 3 : 2));
+                return 1 + Math.floor(seededRandom(bucket + ":" + seed.id + ":quantity") * (index < 5 ? 5 : index < 12 ? 3 : 2));
+            }
+            function ensureSeedStockState() {
+                const bucket = stockBucket();
+                const farm = data.farm;
+                if (Number(farm.seedStockBucket) !== bucket || !farm.seedStockRemaining || typeof farm.seedStockRemaining !== "object") {
+                    farm.seedStockBucket = bucket;
+                    farm.seedStockRemaining = {};
+                    SEEDS.forEach(seed => { farm.seedStockRemaining[seed.id] = initialSeedStock(seed, bucket); });
+                }
+            }
+            function seedStock(seed) {
+                ensureSeedStockState();
+                const remaining = Number(data.farm.seedStockRemaining[seed.id]);
+                return Number.isFinite(remaining) ? Math.max(0, remaining) : 0;
             }
             function applySprinklerBoost(now=Date.now()) {
                 const farm=data.farm, until=Number(farm.sprinklerBoostUntil)||0;
@@ -408,10 +424,12 @@
             function buySeed(seedId) {
                 const seed=SEEDS.find(item=>item.id===seedId);
                 if(!seed) return;
+                ensureSeedStockState();
                 const stock=seedStock(seed);
-                if(stock<=0) { setMessage(seed.name+"目前缺貨，等待下一次商店輪替。"); return; }
+                if(stock<=0) { setMessage(seed.name+"目前缺貨，等待下一次商店輪替。"); renderSeeds(); return; }
                 if(data.resources.plantCoins<seed.cost) { setMessage("植物幣不足，無法購買這款種子。"); return; }
                 data.resources.plantCoins-=seed.cost;
+                data.farm.seedStockRemaining[seed.id]=Math.max(0, stock-1);
                 data.farm.seedInventory.push(seed.id);
                 saveData();
                 render();
@@ -977,7 +995,7 @@
                 const timer=$("seed-stock-timer");
                 if(timer) {
                     const remain=STOCK_CYCLE_MS-(Date.now()%STOCK_CYCLE_MS);
-                    timer.textContent="🌐 所有人看到相同的公開庫存（不連線、不互相扣庫存）· "+Math.ceil(remain/1000)+" 秒後輪替；最便宜種子永遠有貨。";
+                    timer.textContent="📦 每位玩家初始庫存相同；購買只扣自己的帳號庫存，不影響其他玩家 · "+Math.ceil(remain/1000)+" 秒後輪替；最便宜種子永遠有貨。";
                 }
             }
             function drawCropPreviewOnCanvas(target,seed,progress) {
@@ -1088,7 +1106,7 @@
                 const stockTimer=$("seed-stock-timer");
                 if(stockTimer) {
                     const stockRemain=Math.ceil((STOCK_CYCLE_MS-(Date.now()%STOCK_CYCLE_MS))/1000);
-                    stockTimer.textContent="🌐 所有人看到相同的公開庫存（不連線、不互相扣庫存）· "+stockRemain+" 秒後輪替；最便宜種子永遠有貨。";
+                    stockTimer.textContent="📦 每位玩家初始庫存相同；購買只扣自己的帳號庫存，不影響其他玩家 · "+stockRemain+" 秒後輪替；最便宜種子永遠有貨。";
                 }
                 const picker=$("plot-picker").children;
                 for(let index=0;index<picker.length;index++) {
