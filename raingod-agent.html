@@ -93,6 +93,9 @@
         .progress-track { height:7px; margin:8px 0; background:rgba(255,255,255,0.12); border-radius:4px; overflow:hidden; }
         .progress-track span { display:block; height:100%; background:#62d6a5; }
         .farm-plot-card { min-width:0; overflow:hidden; }
+        .farm-stock-badge { display:inline-block; padding:3px 7px; border-radius:8px; background:rgba(98,214,165,.16); color:#8ff0b7; font-size:.82rem; }
+        .farm-stock-badge.out { background:rgba(255,90,90,.15); color:#ff9b9b; }
+        .farm-seed-actions { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
         .farm-plot-scene { position:relative; height:142px; margin:8px 0; overflow:hidden; display:flex; align-items:flex-end; justify-content:center; border:1px solid rgba(153,245,176,0.45); border-radius:10px; background:radial-gradient(circle at 78% 22%,rgba(255,255,196,.55) 0 22px,transparent 23px),linear-gradient(180deg,#8dd6ce 0%,#d2f0c3 53%,#80bd62 54%,#3f7d43 100%); box-shadow:inset 0 0 22px rgba(255,255,255,.2),0 4px 12px rgba(0,0,0,.2); }
         .farm-plot-scene.empty { background:linear-gradient(180deg,#c5e5d0 0%,#e5edce 58%,#8d6945 59%,#62442f 100%); }
         .farm-sun { position:absolute; top:10px; right:16px; font-size:22px; }
@@ -241,6 +244,12 @@
                 <span class="farm-mutation-chip">⚖️ 果實重量隨機 0.50–5.00 kg</span>
             </div>
             <div id="farm-sprinkler" class="glass-panel" style="padding:12px;margin-bottom:8px;"></div>
+            <div id="farm-seed-shop" class="glass-panel" style="padding:12px;margin-bottom:8px;">
+                <h3>🌱 種子商店</h3>
+                <p style="color:#b8c9d2;">先購買種子放進背包，再到空田地播種。公開庫存每 5 分鐘輪換；所有玩家看到相同數量，但不會互相扣庫存。</p>
+                <div id="farm-seed-stock-countdown" style="color:#ffea00;margin-bottom:8px;"></div>
+                <div id="farm-seed-shop-list" class="feature-grid" style="padding:0;"></div>
+            </div>
             <div id="farm-plots" class="glass-panel feature-grid"></div>
             <div class="glass-panel" style="padding:12px;margin-top:8px;">
                 <h3>果實商店</h3>
@@ -419,7 +428,9 @@ function getFarmLandCost(plotCount) {
     return Math.ceil(800 * Math.pow(1.25, plotCount - 2) / 50) * 50;
 }
 const FARM_SPRINKLER_COST = 100;
-const FARM_SPRINKLER_SPEED = 0.1;
+const FARM_SPRINKLER_SPEED = 0.5;
+const FARM_SPRINKLER_BOOST_MS = 60 * 1000;
+const FARM_STOCK_CYCLE_MS = 5 * 60 * 1000;
 const FARM_DAILY_PLANT_COINS = 10;
 const SKIN_FRAGMENT_COST = 5;
 const FARM_MUTATIONS = {
@@ -586,7 +597,7 @@ const SaveSystem = {
         skinLottery: { drawsSinceLastFragment: 0 },
         pets: [],
         equippedPet: '',
-        farm: { plots: [{ seed: '', plantedAt: 0 }], inventory: [], machine: { level: 0, startedAt: 0, owned: false }, sprinkler: false, dailyRewardDate: '' },
+        farm: { plots: [{ seed: '', plantedAt: 0 }], inventory: [], seedInventory: [], machine: { level: 0, startedAt: 0, owned: false }, sprinkler: false, sprinklerBoostUntil: 0, sprinklerBoostLastTick: 0, dailyRewardDate: '' },
         _plantCoinStarterGranted: 2,
         _extrasUpdatedAt: 0,
         version: '8.0.0'
@@ -714,6 +725,10 @@ const SaveSystem = {
         if (typeof d.equippedPet !== 'string') d.equippedPet = '';
         if (!d.farm || typeof d.farm !== 'object') d.farm = { plots: [], inventory: [], machine: { level:1, startedAt:0 } };
         if (typeof d.farm.sprinkler !== 'boolean') d.farm.sprinkler = false;
+        if (!Array.isArray(d.farm.seedInventory)) d.farm.seedInventory = [];
+        d.farm.seedInventory = d.farm.seedInventory.filter(id => FARM_SEEDS.some(seed => seed.id === id));
+        d.farm.sprinklerBoostUntil = Math.max(0, Number(d.farm.sprinklerBoostUntil) || 0);
+        d.farm.sprinklerBoostLastTick = Math.max(0, Number(d.farm.sprinklerBoostLastTick) || 0);
         if (typeof d.farm.dailyRewardDate !== 'string') d.farm.dailyRewardDate = '';
         if (!Array.isArray(d.farm.plots)) d.farm.plots = [];
         if (!d.farm.plots.length) d.farm.plots.push({ seed:'', plantedAt:0 });
@@ -4532,7 +4547,92 @@ window.GameEngine = {
         return Math.floor((seed ? seed.yield : 0) * fruit.weight * (mutation ? mutation.multiplier : 1));
     },
     farmGrowDuration(seed) {
-        return Math.floor(seed.growMs * (SaveSystem.currentData.farm.sprinkler ? 1 - FARM_SPRINKLER_SPEED : 1));
+        return seed.growMs;
+    },
+    updateSprinklerBoostClock() {
+        const farm = SaveSystem.currentData.farm;
+        const now = Date.now();
+        const last = Number(farm.sprinklerBoostLastTick) || now;
+        if (!farm.sprinklerBoostLastTick) {
+            farm.sprinklerBoostLastTick = now;
+            return;
+        }
+        const boostedStart = Math.max(last, 0);
+        const boostedEnd = Math.min(now, Number(farm.sprinklerBoostUntil) || 0);
+        const boostedMs = Math.max(0, boostedEnd - boostedStart);
+        if (boostedMs > 0) {
+            // 加速 50%：每經過 1 秒加速時間，作物額外前進 0.5 秒。
+            const extraMs = boostedMs * FARM_SPRINKLER_SPEED;
+            (farm.plots || []).forEach(plot => {
+                if (plot && plot.seed && plot.plantedAt) plot.plantedAt -= extraMs;
+            });
+        }
+        farm.sprinklerBoostLastTick = now;
+    },
+    getSeedOwnedCount(seedId) {
+        return (SaveSystem.currentData.farm.seedInventory || []).filter(id => id === seedId).length;
+    },
+    getFarmStockBucket() {
+        return Math.floor(Date.now() / FARM_STOCK_CYCLE_MS);
+    },
+    seededFarmRandom(text) {
+        let h = 2166136261;
+        for (let i = 0; i < text.length; i++) {
+            h ^= text.charCodeAt(i);
+            h = Math.imul(h, 16777619);
+        }
+        h += h << 13;
+        h ^= h >>> 7;
+        h += h << 3;
+        h ^= h >>> 17;
+        h += h << 5;
+        return ((h >>> 0) % 1000000) / 1000000;
+    },
+    getFarmSeedStock(seed) {
+        const bucket = Math.floor(Date.now() / FARM_STOCK_CYCLE_MS);
+        const ordered = FARM_SEEDS.slice().sort((a, b) => a.cost - b.cost);
+        const index = ordered.findIndex(item => item.id === seed.id);
+        if (index === 0) return 5; // 與雨神農莊相同：最便宜的種子永遠有貨
+        const chance = 0.92 - (index / Math.max(1, ordered.length - 1)) * 0.84;
+        const roll = this.seededFarmRandom(bucket + ':' + seed.id + ':availability');
+        if (roll >= chance) return 0;
+        return 1 + Math.floor(this.seededFarmRandom(bucket + ':' + seed.id + ':quantity') * (index < 5 ? 5 : index < 12 ? 3 : 2));
+    },
+    renderFarmSeedShop() {
+        const d = SaveSystem.currentData;
+        const list = document.getElementById('farm-seed-shop-list');
+        const countdown = document.getElementById('farm-seed-stock-countdown');
+        if (!list) return;
+        if (countdown) {
+            const remain = FARM_STOCK_CYCLE_MS - (Date.now() % FARM_STOCK_CYCLE_MS);
+            countdown.textContent = '公開庫存下次輪換：' + this.formatDuration(remain) + ' · 最便宜的種子固定有貨';
+        }
+        list.replaceChildren();
+        FARM_SEEDS.slice().sort((a, b) => a.cost - b.cost).forEach(seed => {
+            const stock = this.getFarmSeedStock(seed);
+            const owned = this.getSeedOwnedCount(seed.id);
+            const card = document.createElement('div');
+            card.className = 'feature-item';
+            const title = document.createElement('strong');
+            title.textContent = seed.plant + ' ' + seed.name;
+            const detail = document.createElement('p');
+            detail.textContent = '價格：' + seed.cost + ' 植物幣 · 成長時間：' + this.formatDuration(seed.growMs) + ' · 收成基礎價：' + seed.yield;
+            const stockBadge = document.createElement('span');
+            stockBadge.className = 'farm-stock-badge' + (stock <= 0 ? ' out' : '');
+            stockBadge.textContent = stock > 0 ? '公開庫存 × ' + stock : '目前缺貨';
+            const ownedText = document.createElement('p');
+            ownedText.textContent = '背包持有：' + owned + ' 顆';
+            const actions = document.createElement('div');
+            actions.className = 'farm-seed-actions';
+            const buy = document.createElement('button');
+            buy.className = 'main-btn small';
+            buy.textContent = '購買種子';
+            buy.disabled = stock <= 0 || d.resources.plantCoins < seed.cost;
+            buy.onclick = () => this.buyFarmSeed(seed.id);
+            actions.appendChild(buy);
+            card.append(title, detail, stockBadge, ownedText, actions);
+            list.appendChild(card);
+        });
     },
     renderFarmPlant(scene, seed, progress) {
         scene.className = 'farm-plot-scene';
@@ -4657,6 +4757,7 @@ window.GameEngine = {
         });
     },
     renderFarm() {
+        this.updateSprinklerBoostClock();
         const d = SaveSystem.currentData;
         const coins = document.getElementById('plant-coins');
         const plotsBox = document.getElementById('farm-plots');
@@ -4671,20 +4772,21 @@ window.GameEngine = {
             : '每日登入自動領取 +' + FARM_DAILY_PLANT_COINS + ' 植物幣';
         if (sprinklerBox) {
             sprinklerBox.replaceChildren();
+            const active = Date.now() < (Number(d.farm.sprinklerBoostUntil) || 0);
             const sprinklerTitle = document.createElement('strong');
-            sprinklerTitle.textContent = d.farm.sprinkler ? '💧 灑水器已安裝' : '💧 自動灑水器';
+            sprinklerTitle.textContent = '💧 限時灑水加速';
             sprinklerBox.appendChild(sprinklerTitle);
             const sprinklerDescription = document.createElement('p');
-            sprinklerDescription.textContent = d.farm.sprinkler ? '所有作物生長時間縮短 10%，已種下的作物也會加快。' : '安裝後所有作物生長時間縮短 10%，已種下的作物也會加快。';
+            sprinklerDescription.textContent = active
+                ? '加速中！所有作物成長速度 +50%，剩餘 ' + this.formatDuration(d.farm.sprinklerBoostUntil - Date.now()) + '。再次購買可延長時間。'
+                : '每次花費 ' + FARM_SPRINKLER_COST + ' 植物幣，讓所有作物成長速度 +50%，持續 60 秒。可一直購買並累加時間。';
             sprinklerBox.appendChild(sprinklerDescription);
-            if (!d.farm.sprinkler) {
-                const buySprinkler = document.createElement('button');
-                buySprinkler.className = 'main-btn small';
-                buySprinkler.textContent = '購買灑水器 ' + FARM_SPRINKLER_COST + ' 植物幣';
-                buySprinkler.disabled = d.resources.plantCoins < FARM_SPRINKLER_COST;
-                buySprinkler.onclick = () => this.buyFarmSprinkler();
-                sprinklerBox.appendChild(buySprinkler);
-            }
+            const buySprinkler = document.createElement('button');
+            buySprinkler.className = 'main-btn small';
+            buySprinkler.textContent = '購買灑水加速 ' + FARM_SPRINKLER_COST + ' 植物幣（+60 秒）';
+            buySprinkler.disabled = d.resources.plantCoins < FARM_SPRINKLER_COST;
+            buySprinkler.onclick = () => this.buyFarmSprinkler();
+            sprinklerBox.appendChild(buySprinkler);
         }
         if (plotsBox) {
             plotsBox.innerHTML = '';
@@ -4732,12 +4834,13 @@ window.GameEngine = {
                     const seedSelect = document.createElement('select');
                     seedSelect.setAttribute('aria-label', '選擇田地 ' + (index + 1) + ' 的種子');
                     seedSelect.style.cssText = 'max-width:100%;margin:3px;padding:7px;border-radius:8px;background:#07131b;color:#fff;border:1px solid #467;';
-                    seedSelect.innerHTML = '<option value="">選擇種子</option>';
+                    seedSelect.innerHTML = '<option value="">選擇背包種子</option>';
                     FARM_SEEDS.slice().sort((a, b) => a.cost - b.cost).forEach(item => {
+                        const owned = this.getSeedOwnedCount(item.id);
+                        if (owned <= 0) return;
                         const option = document.createElement('option');
                         option.value = item.id;
-                        option.textContent = item.name + ' · ' + item.cost + ' 幣 · ' + this.formatDuration(this.farmGrowDuration(item));
-                        option.disabled = d.resources.plantCoins < item.cost;
+                        option.textContent = item.name + ' · 持有 ' + owned + ' 顆 · ' + this.formatDuration(this.farmGrowDuration(item));
                         seedSelect.appendChild(option);
                     });
                     const plantButton = document.createElement('button');
@@ -4767,6 +4870,7 @@ window.GameEngine = {
             }
         }
         this.renderFarmInventory();
+        this.renderFarmSeedShop();
         if (machineBox) {
             const machine = d.farm.machine;
             if (!machine.owned) {
@@ -4815,12 +4919,35 @@ window.GameEngine = {
         SaveSystem.save();
         this.renderFarm();
     },
+    buyFarmSeed(seedId) {
+        const d = SaveSystem.currentData;
+        const seed = FARM_SEEDS.find(item => item.id === seedId);
+        if (!seed) return;
+        const stock = this.getFarmSeedStock(seed);
+        if (stock <= 0) {
+            this.showAlert('這顆種子目前缺貨，等公開庫存輪換吧！');
+            return;
+        }
+        if (d.resources.plantCoins < seed.cost) {
+            this.showAlert('植物幣不足');
+            return;
+        }
+        d.resources.plantCoins -= seed.cost;
+        d.farm.seedInventory.push(seed.id);
+        SaveSystem.save();
+        this.renderLobby();
+        this.showAlert('已購買 ' + seed.name + '，已放進種子背包（公開庫存不會因個人購買而扣除）');
+    },
     plantSeed(plotIndex, seedId) {
         const d = SaveSystem.currentData;
         const seed = FARM_SEEDS.find(item => item.id === seedId);
         const plot = d.farm.plots[plotIndex];
-        if (!seed || !plot || plot.seed || d.resources.plantCoins < seed.cost) return;
-        d.resources.plantCoins -= seed.cost;
+        const ownedIndex = d.farm.seedInventory.indexOf(seedId);
+        if (!seed || !plot || plot.seed || ownedIndex < 0) {
+            this.showAlert('請先到種子商店購買種子');
+            return;
+        }
+        d.farm.seedInventory.splice(ownedIndex, 1);
         plot.seed = seed.id;
         plot.plantedAt = Date.now();
         SaveSystem.save();
@@ -4828,12 +4955,19 @@ window.GameEngine = {
     },
     buyFarmSprinkler() {
         const d = SaveSystem.currentData;
-        if (d.farm.sprinkler || d.resources.plantCoins < FARM_SPRINKLER_COST) return;
+        if (d.resources.plantCoins < FARM_SPRINKLER_COST) {
+            this.showAlert('植物幣不足');
+            return;
+        }
+        // 先結算上一段加速時間，再延長加速期限，避免把已過期的時間算進去。
+        this.updateSprinklerBoostClock();
+        const now = Date.now();
         d.resources.plantCoins -= FARM_SPRINKLER_COST;
-        d.farm.sprinkler = true;
+        d.farm.sprinklerBoostUntil = Math.max(now, Number(d.farm.sprinklerBoostUntil) || 0) + FARM_SPRINKLER_BOOST_MS;
+        d.farm.sprinklerBoostLastTick = now;
         SaveSystem.save();
         this.renderLobby();
-        this.showAlert('已安裝灑水器，作物生長加快 10%');
+        this.showAlert('灑水加速已延長 60 秒！所有作物成長速度 +50%');
     },
     harvestCrop(plotIndex) {
         const d = SaveSystem.currentData;
