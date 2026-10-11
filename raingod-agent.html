@@ -597,7 +597,7 @@ const SaveSystem = {
         skinLottery: { drawsSinceLastFragment: 0 },
         pets: [],
         equippedPet: '',
-        farm: { plots: [{ seed: '', plantedAt: 0 }], inventory: [], seedInventory: [], machine: { level: 0, startedAt: 0, owned: false }, sprinkler: false, sprinklerBoostUntil: 0, sprinklerBoostLastTick: 0, dailyRewardDate: '' },
+        farm: { plots: [{ seed: '', plantedAt: 0 }], inventory: [], seedInventory: [], seedShopPurchases: {}, machine: { level: 0, startedAt: 0, owned: false }, sprinkler: false, sprinklerBoostUntil: 0, sprinklerBoostLastTick: 0, dailyRewardDate: '' },
         _plantCoinStarterGranted: 2,
         _extrasUpdatedAt: 0,
         version: '8.0.0'
@@ -727,6 +727,12 @@ const SaveSystem = {
         if (typeof d.farm.sprinkler !== 'boolean') d.farm.sprinkler = false;
         if (!Array.isArray(d.farm.seedInventory)) d.farm.seedInventory = [];
         d.farm.seedInventory = d.farm.seedInventory.filter(id => FARM_SEEDS.some(seed => seed.id === id));
+        if (!d.farm.seedShopPurchases || typeof d.farm.seedShopPurchases !== 'object' || Array.isArray(d.farm.seedShopPurchases)) d.farm.seedShopPurchases = {};
+        // 每個帳號各自記錄本輪買掉的數量；公開初始庫存仍由時間種子決定，所有帳號一致。
+        const currentStockBucket = Math.floor(Date.now() / FARM_STOCK_CYCLE_MS);
+        const currentPurchases = d.farm.seedShopPurchases[String(currentStockBucket)] || {};
+        d.farm.seedShopPurchases = { [String(currentStockBucket)]: currentPurchases };
+        FARM_SEEDS.forEach(seed => { currentPurchases[seed.id] = Math.max(0, Math.floor(Number(currentPurchases[seed.id]) || 0)); });
         d.farm.sprinklerBoostUntil = Math.max(0, Number(d.farm.sprinklerBoostUntil) || 0);
         d.farm.sprinklerBoostLastTick = Math.max(0, Number(d.farm.sprinklerBoostLastTick) || 0);
         if (typeof d.farm.dailyRewardDate !== 'string') d.farm.dailyRewardDate = '';
@@ -4592,11 +4598,20 @@ window.GameEngine = {
         const bucket = Math.floor(Date.now() / FARM_STOCK_CYCLE_MS);
         const ordered = FARM_SEEDS.slice().sort((a, b) => a.cost - b.cost);
         const index = ordered.findIndex(item => item.id === seed.id);
-        if (index === 0) return 5; // 與雨神農莊相同：最便宜的種子永遠有貨
-        const chance = 0.92 - (index / Math.max(1, ordered.length - 1)) * 0.84;
-        const roll = this.seededFarmRandom(bucket + ':' + seed.id + ':availability');
-        if (roll >= chance) return 0;
-        return 1 + Math.floor(this.seededFarmRandom(bucket + ':' + seed.id + ':quantity') * (index < 5 ? 5 : index < 12 ? 3 : 2));
+        let publicStock;
+        if (index === 0) {
+            publicStock = 5; // 最便宜的種子每輪固定有 5 顆初始庫存
+        } else {
+            const chance = 0.92 - (index / Math.max(1, ordered.length - 1)) * 0.84;
+            const roll = this.seededFarmRandom(bucket + ':' + seed.id + ':availability');
+            if (roll >= chance) publicStock = 0;
+            else publicStock = 1 + Math.floor(this.seededFarmRandom(bucket + ':' + seed.id + ':quantity') * (index < 5 ? 5 : index < 12 ? 3 : 2));
+        }
+        // 每個帳號有自己的剩餘庫存；買一顆只扣自己帳號，不影響其他玩家。
+        const purchases = SaveSystem.currentData.farm.seedShopPurchases || {};
+        const bucketPurchases = purchases[String(bucket)] || {};
+        const bought = Math.max(0, Number(bucketPurchases[seed.id]) || 0);
+        return Math.max(0, publicStock - bought);
     },
     renderFarmSeedShop() {
         const d = SaveSystem.currentData;
@@ -4934,9 +4949,13 @@ window.GameEngine = {
         }
         d.resources.plantCoins -= seed.cost;
         d.farm.seedInventory.push(seed.id);
+        if (!d.farm.seedShopPurchases || typeof d.farm.seedShopPurchases !== 'object') d.farm.seedShopPurchases = {};
+        const bucketKey = String(this.getFarmStockBucket());
+        if (!d.farm.seedShopPurchases[bucketKey]) d.farm.seedShopPurchases[bucketKey] = {};
+        d.farm.seedShopPurchases[bucketKey][seed.id] = (Number(d.farm.seedShopPurchases[bucketKey][seed.id]) || 0) + 1;
         SaveSystem.save();
         this.renderLobby();
-        this.showAlert('已購買 ' + seed.name + '，已放進種子背包（公開庫存不會因個人購買而扣除）');
+        this.showAlert('已購買 ' + seed.name + '，已放進種子背包；你帳號的商店庫存已扣除 1 顆。其他玩家的庫存不受影響。');
     },
     plantSeed(plotIndex, seedId) {
         const d = SaveSystem.currentData;
