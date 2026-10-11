@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
@@ -117,11 +118,13 @@
     </style>
 </head>
 <body>
-        <link rel="stylesheet" href="menu.css">
+        <link rel="stylesheet" href="https://raingod0101.github.io/menu.css">
+
 
 <div id="nav_bar"></div>
 
-<script src="menu.js"></script>
+
+<script src="https://raingod0101.github.io/menu.js"></script>
     <main class="page-shell">
         <header class="topbar">
             <div class="brand">
@@ -130,9 +133,10 @@
             </div>
             <div class="top-actions">
                 <span class="pill">🌿 植物幣 <span id="plant-coins">0</span></span>
-                <a class="button secondary" href="raingod-agent.html" style="text-decoration:none;">← 返回雨神特工</a>
+                <a class="button secondary" href="https://raingod0101.github.io/raingod-agent.html" style="text-decoration:none;">← 返回雨神特工</a>
             </div>
         </header>
+
 
         <section class="hero">
             <h2>今天也來打造一座豐收莊園吧！</h2>
@@ -145,6 +149,7 @@
             </div>
         </section>
 
+
         <div class="farm-layout">
             <section class="panel" aria-label="農場地圖">
                 <div class="panel-head">
@@ -154,6 +159,7 @@
                 <div class="map-wrap"><canvas id="farm-map" width="1200" height="720" aria-label="可互動的農場地圖，點選田地進行管理"></canvas></div>
                 <p class="map-hint">地圖可以左右捲動。已成熟的作物會發光；灰鎖田地代表尚未開墾。</p>
             </section>
+
 
             <div class="side-stack">
                 <section class="panel">
@@ -169,19 +175,23 @@
                     </div>
                 </section>
 
+
                 <section class="panel wide-panel">
                     <div class="panel-head"><div><h3>🧺 種子圖鑑・莊園商店</h3><p>27 款蔬菜、水果、花卉與奇幻作物；每種植物都有專屬造型與生長節奏。</p></div><span id="catalog-count" class="catalog-count"></span></div>
                     <div class="catalog-tools">
                         <input id="seed-search" class="catalog-search" type="search" placeholder="搜尋種子，例如：蘑菇、星、花…" aria-label="搜尋種子">
                         <div id="seed-filters" class="catalog-filters" aria-label="種子分類"></div>
+                        <p id="seed-stock-timer" class="catalog-count" aria-live="polite">商店庫存每 5 分鐘輪替；每位玩家看到相同的庫存表。</p>
                     </div>
                     <div id="seed-list" class="seed-list"></div>
                 </section>
+
 
                 <section class="panel">
                     <div class="panel-head"><div><h3>💧 莊園設施</h3><p>提升效率，讓整片農地更快豐收。</p></div></div>
                     <div id="farm-upgrades" class="upgrade-content"></div>
                 </section>
+
 
                 <section class="panel wide-panel">
                     <div class="panel-head">
@@ -195,12 +205,16 @@
         <p class="footer-note">農場進度與雨神特工共用此瀏覽器的遊戲存檔。登出或清除瀏覽器資料可能會移除未同步的本機進度。</p>
     </main>
 
+
     <script>
         (() => {
             "use strict";
             const MAX_PLOTS = 36;
             const LAND_COSTS = [100, 300, 800];
             const SPRINKLER_COST = 100;
+            const SPRINKLER_BOOST_MS = 60 * 1000;
+            const SPRINKLER_GROWTH_BONUS = 0.5;
+            const STOCK_CYCLE_MS = 5 * 60 * 1000;
             const MACHINE_COST = 100;
             const MACHINE_UPGRADE_COST = 50;
             const MACHINE_CYCLE = 12 * 60 * 60 * 1000;
@@ -241,7 +255,7 @@
             };
             const DEFAULT_DATA = {
                 resources:{ gold:0, plantCoins:20 },
-                farm:{ plots:[{seed:"",plantedAt:0}], inventory:[], machine:{level:0,startedAt:0,owned:false}, sprinkler:false, dailyRewardDate:"" },
+                farm:{ plots:[{seed:"",plantedAt:0}], inventory:[], seedInventory:[], machine:{level:0,startedAt:0,owned:false}, sprinkler:false, sprinklerBoostUntil:0, sprinklerBoostLastTick:0, dailyRewardDate:"" },
                 _plantCoinStarterGranted:2,
                 _extrasUpdatedAt:0
             };
@@ -255,6 +269,7 @@
             let messageTimer = 0;
             let activeCategory = "全部";
             let searchTerm = "";
+
 
             function parseSave(key) {
                 const raw = localStorage.getItem(key);
@@ -289,6 +304,9 @@
                     plantedAt:Math.max(0, Number(plot && plot.plantedAt) || 0)
                 })) : [];
                 if (!result.farm.plots.length) result.farm.plots.push({seed:"",plantedAt:0});
+                result.farm.seedInventory = Array.isArray(result.farm.seedInventory) ? result.farm.seedInventory.filter(id => SEEDS.some(seed => seed.id === id)) : [];
+                result.farm.sprinklerBoostUntil = Math.max(0, Number(result.farm.sprinklerBoostUntil) || 0);
+                result.farm.sprinklerBoostLastTick = Math.max(0, Number(result.farm.sprinklerBoostLastTick) || 0);
                 result.farm.inventory = Array.isArray(result.farm.inventory) ? result.farm.inventory.filter(fruit =>
                     fruit && SEEDS.some(seed => seed.id === fruit.seedId)
                 ).map(fruit => Object.assign({}, fruit, {
@@ -322,7 +340,33 @@
                 return Math.ceil(800 * Math.pow(1.25, plotCount - 2) / 50) * 50;
             }
             function growthMs(seed) {
-                return Math.floor(seed.growMs * (data.farm.sprinkler ? .9 : 1));
+                return seed.growMs;
+            }
+            function stockBucket(now=Date.now()) { return Math.floor(now / STOCK_CYCLE_MS); }
+            function seededRandom(text) {
+                let h = 2166136261;
+                for (let i=0; i<text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 16777619); }
+                h += h << 13; h ^= h >>> 7; h += h << 3; h ^= h >>> 17; h += h << 5;
+                return ((h >>> 0) % 1000000) / 1000000;
+            }
+            // 依照時間區段產生固定庫存：不同玩家看到同一份輪替表，但購買不會扣掉其他玩家的庫存。
+            function seedStock(seed) {
+                const index = SEEDS.slice().sort((a,b)=>a.cost-b.cost).findIndex(item=>item.id===seed.id);
+                if (index === 0) return 5; // 最便宜的種子永遠有貨
+                const chance = .92 - (index / Math.max(1, SEEDS.length - 1)) * .84;
+                const roll = seededRandom(stockBucket() + ":" + seed.id + ":availability");
+                if (roll >= chance) return 0;
+                return 1 + Math.floor(seededRandom(stockBucket() + ":" + seed.id + ":quantity") * (index < 5 ? 5 : index < 12 ? 3 : 2));
+            }
+            function applySprinklerBoost(now=Date.now()) {
+                const farm=data.farm, until=Number(farm.sprinklerBoostUntil)||0;
+                const last=Number(farm.sprinklerBoostLastTick)||now;
+                const activeEnd=Math.min(now,until);
+                if (until > 0 && activeEnd > last) {
+                    const extraGrowth=(activeEnd-last)*SPRINKLER_GROWTH_BONUS;
+                    farm.plots.forEach(plot=>{ if(plot.seed) plot.plantedAt=Math.max(0, plot.plantedAt-extraGrowth); });
+                }
+                farm.sprinklerBoostLastTick=now;
             }
             function formatTime(ms) {
                 const seconds = Math.max(0, Math.ceil(ms / 1000));
@@ -361,19 +405,26 @@
                 setMessage("新田地開墾完成！再選種子開始種植。");
                 render();
             }
+            function buySeed(seedId) {
+                const seed=SEEDS.find(item=>item.id===seedId);
+                if(!seed) return;
+                const stock=seedStock(seed);
+                if(stock<=0) { setMessage(seed.name+"目前缺貨，等待下一次商店輪替。"); return; }
+                if(data.resources.plantCoins<seed.cost) { setMessage("植物幣不足，無法購買這款種子。"); return; }
+                data.resources.plantCoins-=seed.cost;
+                data.farm.seedInventory.push(seed.id);
+                saveData();
+                render();
+                setMessage("已購買「"+seed.name+"」，先放進種子背包，需要時再種下！");
+            }
             function plantSeed(seedId) {
                 const seed = SEEDS.find(item => item.id === seedId);
                 const plot = data.farm.plots[selectedPlot];
-                if (selectedPlot >= data.farm.plots.length) {
-                    unlockPlot(selectedPlot);
-                    return;
-                }
+                if (selectedPlot >= data.farm.plots.length) { unlockPlot(selectedPlot); return; }
                 if (!seed || !plot || plot.seed) return;
-                if (data.resources.plantCoins < seed.cost) {
-                    setMessage("植物幣不足，無法購買這款種子。");
-                    return;
-                }
-                data.resources.plantCoins -= seed.cost;
+                const seedIndex=data.farm.seedInventory.indexOf(seed.id);
+                if(seedIndex<0) { setMessage("你還沒有這款種子，先到種子商店購買。"); return; }
+                data.farm.seedInventory.splice(seedIndex,1);
                 plot.seed = seed.id;
                 plot.plantedAt = Date.now();
                 saveData();
@@ -410,12 +461,18 @@
                 render();
             }
             function buySprinkler() {
-                if (data.farm.sprinkler || data.resources.plantCoins < SPRINKLER_COST) return;
-                data.resources.plantCoins -= SPRINKLER_COST;
-                data.farm.sprinkler = true;
+                if(data.resources.plantCoins<SPRINKLER_COST) {
+                    setMessage("植物幣不足，購買灑水器需要 "+SPRINKLER_COST+" 植物幣。");
+                    return;
+                }
+                const now=Date.now();
+                applySprinklerBoost(now);
+                data.resources.plantCoins-=SPRINKLER_COST;
+                data.farm.sprinklerBoostUntil=Math.max(now, Number(data.farm.sprinklerBoostUntil)||0)+SPRINKLER_BOOST_MS;
+                data.farm.sprinklerBoostLastTick=now;
                 saveData();
                 render();
-                setMessage("灑水系統已啟動，全莊園生長速度提升 10%！");
+                setMessage("灑水器啟動！接下來 60 秒作物生長速度提升 50%，可以再次購買延長時間。");
             }
             function dailyReward() {
                 const now = new Date();
@@ -706,6 +763,7 @@
                 drawDecorations();
                 return plots;
 
+
                 function drawRiver() {
                     ctx.fillStyle="#429db0";
                     ctx.beginPath(); ctx.moveTo(0,440); ctx.bezierCurveTo(220,380,290,530,475,500); ctx.bezierCurveTo(695,462,785,555,1200,466); ctx.lineTo(1200,540); ctx.bezierCurveTo(770,620,675,520,485,562); ctx.bezierCurveTo(275,600,195,455,0,515); ctx.closePath(); ctx.fill();
@@ -898,12 +956,29 @@
                     const name=document.createElement("strong"); name.textContent=seed.name;
                     const details=document.createElement("small"); details.textContent=seed.category+" · ⏱ "+formatTime(growthMs(seed));
                     const price=document.createElement("span"); price.className="seed-price"; price.textContent="🪙 "+seed.cost+" 植物幣";
-                    info.append(name,details,price);
-                    const button=document.createElement("button"); button.type="button"; button.className="button tiny"; button.textContent="播種";
-                    button.disabled=!data.farm.plots[selectedPlot]||!!data.farm.plots[selectedPlot].seed||data.resources.plantCoins<seed.cost;
-                    button.onclick=()=>plantSeed(seed.id);
-                    card.append(art,info,button); list.appendChild(card);
+                    const owned=data.farm.seedInventory.filter(id=>id===seed.id).length;
+                    const stock=seedStock(seed);
+                    const stockLabel=document.createElement("small");
+                    stockLabel.textContent=stock>0?"📦 公開庫存：有貨 × "+stock+" · 背包："+owned:"📦 公開庫存：缺貨 · 背包："+owned;
+                    stockLabel.style.color=stock>0?"#23764c":"#b54747";
+                    info.append(name,details,price,stockLabel);
+                    const actions=document.createElement("div"); actions.className="seed-actions"; actions.style.display="flex"; actions.style.gap="6px"; actions.style.flexWrap="wrap";
+                    const buy=document.createElement("button"); buy.type="button"; buy.className="button tiny"; buy.textContent=stock>0?"購買種子":"缺貨";
+                    buy.disabled=stock<=0||data.resources.plantCoins<seed.cost;
+                    buy.onclick=()=>buySeed(seed.id);
+                    const plant=document.createElement("button"); plant.type="button"; plant.className="button tiny secondary"; plant.textContent="種下";
+                    const plot=data.farm.plots[selectedPlot];
+                    plant.disabled=owned<=0||!plot||!!plot.seed;
+                    plant.title=!plot?"先開墾並選取田地":plot.seed?"目前田地已有作物":"使用背包裡的一顆種子";
+                    plant.onclick=()=>plantSeed(seed.id);
+                    actions.append(buy,plant);
+                    card.append(art,info,actions); list.appendChild(card);
                 });
+                const timer=$("seed-stock-timer");
+                if(timer) {
+                    const remain=STOCK_CYCLE_MS-(Date.now()%STOCK_CYCLE_MS);
+                    timer.textContent="🌐 所有人看到相同的公開庫存（不連線、不互相扣庫存）· "+Math.ceil(remain/1000)+" 秒後輪替；最便宜種子永遠有貨。";
+                }
             }
             function drawCropPreviewOnCanvas(target,seed,progress) {
                 const context=target.getContext("2d");
@@ -920,7 +995,9 @@
                 const box=$("farm-upgrades"); box.replaceChildren();
                 const stack=document.createElement("div");
                 const sprinkler=document.createElement("p");
-                sprinkler.textContent=data.farm.sprinkler?"💧 灑水系統已啟用 · 生長加速 10%":"💧 自動灑水系統 · 全作物生長加速 10%";
+                const boostRemain=Math.max(0,(Number(data.farm.sprinklerBoostUntil)||0)-Date.now());
+                sprinkler.id="sprinkler-status";
+                sprinkler.textContent=boostRemain>0?"💧 灑水加速中 · 生長速度 +50% · 剩餘 "+formatTime(boostRemain):"💧 灑水器每次 100 植物幣 · 加速 60 秒（可重複購買延長）";
                 stack.appendChild(sprinkler);
                 const today=new Date();
                 const dayKey=today.getFullYear()+"-"+String(today.getMonth()+1).padStart(2,"0")+"-"+String(today.getDate()).padStart(2,"0");
@@ -937,10 +1014,9 @@
                 else upgrade.textContent="🏭 金幣工坊生產中 · 剩餘 "+formatTime(MACHINE_CYCLE-(Date.now()-machine.startedAt));
                 stack.appendChild(upgrade);
                 const controls=document.createElement("div"); controls.style.display="flex"; controls.style.flexWrap="wrap"; controls.style.gap="6px";
-                if(!data.farm.sprinkler) {
-                    const btn=document.createElement("button"); btn.type="button"; btn.className="button tiny"; btn.textContent="購買灑水器 · "+SPRINKLER_COST;
-                    btn.disabled=data.resources.plantCoins<SPRINKLER_COST; btn.onclick=buySprinkler; controls.appendChild(btn);
-                }
+                const sprinklerBtn=document.createElement("button"); sprinklerBtn.type="button"; sprinklerBtn.className="button tiny";
+                sprinklerBtn.textContent="再買灑水器（+60 秒）· "+SPRINKLER_COST;
+                sprinklerBtn.disabled=data.resources.plantCoins<SPRINKLER_COST; sprinklerBtn.onclick=buySprinkler; controls.appendChild(sprinklerBtn);
                 const machineBtn=document.createElement("button"); machineBtn.type="button"; machineBtn.className="button tiny secondary";
                 const elapsed=machine.startedAt?Date.now()-machine.startedAt:0;
                 const isMachineReady=machine.owned&&machine.startedAt&&elapsed>=MACHINE_CYCLE;
@@ -998,9 +1074,22 @@
                 renderUpgrades();
                 renderInventory();
             }
+            let lastRenderedStockBucket=stockBucket();
             function refreshDynamic() {
+                applySprinklerBoost(Date.now());
                 updateHeader();
                 drawMap();
+                const sprinklerStatus=$("sprinkler-status");
+                if(sprinklerStatus) {
+                    const remain=Math.max(0,(Number(data.farm.sprinklerBoostUntil)||0)-Date.now());
+                    sprinklerStatus.textContent=remain>0?"💧 灑水加速中 · 生長速度 +50% · 剩餘 "+formatTime(remain):"💧 灑水器每次 100 植物幣 · 加速 60 秒（可重複購買延長）";
+                }
+                if(stockBucket()!==lastRenderedStockBucket) { lastRenderedStockBucket=stockBucket(); renderSeeds(); }
+                const stockTimer=$("seed-stock-timer");
+                if(stockTimer) {
+                    const stockRemain=Math.ceil((STOCK_CYCLE_MS-(Date.now()%STOCK_CYCLE_MS))/1000);
+                    stockTimer.textContent="🌐 所有人看到相同的公開庫存（不連線、不互相扣庫存）· "+stockRemain+" 秒後輪替；最便宜種子永遠有貨。";
+                }
                 const picker=$("plot-picker").children;
                 for(let index=0;index<picker.length;index++) {
                     const open=index<data.farm.plots.length;
@@ -1044,6 +1133,7 @@
                 searchTerm=event.target.value.trim().toLocaleLowerCase();
                 renderSeeds();
             });
+            window.addEventListener("beforeunload",()=>{ try { saveData(); } catch(_) {} });
             window.addEventListener("storage",event=>{
                 if(event.key==="raingod_save_game4"||event.key==="RAINGOD_ECONOMY") {
                     data=loadData();
