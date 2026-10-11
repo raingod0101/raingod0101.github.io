@@ -217,6 +217,12 @@
                     <label for="pet-draw-count">抽數</label>
                     <input id="pet-draw-count" type="number" min="1" max="100" value="1" style="width:84px;padding:7px;border-radius:8px;background:#07131b;color:#fff;border:1px solid #467;">
                     <button class="main-btn small" onclick="GameEngine.drawPets()">開始抽寵物</button>
+                    <label for="pet-auto-sell-rarity">自動出售：</label>
+                    <select id="pet-auto-sell-rarity" onchange="try{localStorage.setItem('petAutoSellRarity',this.value)}catch(e){}" style="padding:7px;border-radius:8px;background:#07131b;color:#fff;border:1px solid #467;">
+                        <option value="off">關閉</option><option value="普通">普通及以下</option><option value="稀有">稀有及以下</option><option value="史詩">史詩及以下</option><option value="神寵">全部稀有度</option>
+                    </select>
+                    <label style="display:flex;align-items:center;gap:5px;"><input id="pet-auto-sell-enabled" type="checkbox" onchange="try{localStorage.setItem('petAutoSellEnabled',this.checked?'1':'0')}catch(e){}"> 抽到時自動出售</label>
+                    <button class="main-btn small" onclick="GameEngine.sellPetsByRarity()" style="background:#9b3d45;">立即出售符合稀有度</button>
                     <span id="pet-lottery-msg" class="feature-status"></span>
                 </div>
             </div>
@@ -354,10 +360,28 @@ const PET_DEFS = {
     pebble: { name:'石甲龜', rarity:'普通', color:'#9e9e9e', defense:0.05, assist:0.5 },
     spark: { name:'電光鼠', rarity:'普通', color:'#fdd835', assist:1.2 },
     mist: { name:'薄霧狐', rarity:'普通', color:'#64b5f6', shield:0.05, assist:0.5 },
+    puddle: { name:'水滴蛙', rarity:'普通', color:'#4dd0e1', assist:0.65 },
+    ember: { name:'炭火蜥', rarity:'普通', color:'#ff8a65', damage:0.02, assist:0.7 },
+    cloud: { name:'棉雲羊', rarity:'普通', color:'#eceff1', defense:0.02, assist:0.55 },
+    acorn: { name:'橡果松鼠', rarity:'普通', color:'#bc8b52', assist:0.8 },
+    shell: { name:'潮汐寄居蟹', rarity:'普通', color:'#ef9a9a', defense:0.03, assist:0.6 },
     blade: { name:'小刀蜂', rarity:'稀有', color:'#ff7043', damage:0.05, assist:1.5 },
     bulwark: { name:'守護熊', rarity:'稀有', color:'#8d6e63', defense:0.05, shield:0.05, assist:0.8 },
+    frost: { name:'霜角兔', rarity:'稀有', color:'#80deea', damage:0.04, assist:1.6 },
+    bloom: { name:'花冠鹿', rarity:'稀有', color:'#f48fb1', shield:0.06, assist:1.3 },
+    volt: { name:'雷鳴狼', rarity:'稀有', color:'#7986cb', damage:0.07, assist:1.8 },
+    shellion: { name:'鐵甲獅', rarity:'稀有', color:'#d4a373', defense:0.08, assist:1.4 },
     comet: { name:'彗星鳥', rarity:'史詩', color:'#ab47bc', damage:0.05, assist:2.2 },
-    oracle: { name:'微光神寵', rarity:'神寵', color:'#fff176', damage:1, assist:3 }
+    crystal: { name:'晶角鹿', rarity:'史詩', color:'#4dd0e1', damage:0.08, assist:2.5 },
+    phantom: { name:'幻影貂', rarity:'史詩', color:'#9575cd', shield:0.1, assist:2.4 },
+    magma: { name:'熔岩龍蜥', rarity:'史詩', color:'#ff5252', damage:0.12, assist:2.8 },
+    nebula: { name:'星雲水母', rarity:'史詩', color:'#7e57c2', defense:0.06, shield:0.08, assist:2.6 },
+    thunderbird: { name:'雷翼鷹', rarity:'史詩', color:'#ffd54f', damage:0.1, assist:2.7 },
+    oracle: { name:'微光神寵', rarity:'神寵', color:'#fff176', damage:1, assist:3 },
+    sunlion: { name:'日耀聖獅', rarity:'神寵', color:'#ffca28', damage:0.18, assist:4.2 },
+    abyss: { name:'深淵海龍', rarity:'神寵', color:'#26c6da', damage:0.15, defense:0.12, assist:4.5 },
+    stardragon: { name:'星辰古龍', rarity:'神寵', color:'#ce93d8', damage:0.22, assist:5 },
+    timefox: { name:'時空靈狐', rarity:'神寵', color:'#90caf9', shield:0.15, damage:0.12, assist:4.8 }
 };
 const FARM_SEEDS = [
     { id:'sprout', name:'芽芽種子', cost:10, growMs:60 * 1000, yield:18, plant:'🌱', fruit:'🍓', form:'leaf', color:'#64b85e', fruitColor:'#ed6875', category:'蔬菜' },
@@ -413,15 +437,18 @@ function getEquippedPet() {
 }
 
 function rollPet() {
-    const roll = Math.random();
-    let id = 'sprout';
-    if (roll < 0.001) id = 'oracle';
-    else if (roll < 0.07) id = 'comet';
-    else if (roll < 0.25) id = 'blade';
-    else if (roll < 0.55) id = 'mist';
-    else if (roll < 0.78) id = 'pebble';
-    else if (roll < 0.92) id = 'spark';
-    return { id, uid: Date.now().toString(36) + Math.random().toString(36).slice(2, 8), weight: +(0.5 + Math.random() * 4.5).toFixed(2) };
+    const r = Math.random();
+    let pool;
+    if (r < 0.005) pool = ['oracle','sunlion','abyss','stardragon','timefox'];
+    else if (r < 0.10) pool = ['comet','crystal','phantom','magma','nebula','thunderbird'];
+    else if (r < 0.38) pool = ['blade','bulwark','frost','bloom','volt','shellion'];
+    else pool = ['sprout','pebble','spark','mist','puddle','ember','cloud','acorn','shell'];
+    const id = pool[Math.floor(Math.random() * pool.length)];
+    // 高稀有度寵物平均更重，重量會影響寵物本體攻擊力及出售價。
+    const rarity = PET_DEFS[id].rarity;
+    const minWeight = rarity === '神寵' ? 2.5 : rarity === '史詩' ? 1.8 : rarity === '稀有' ? 1.0 : 0.5;
+    const maxWeight = 5;
+    return { id, uid: Date.now().toString(36) + Math.random().toString(36).slice(2, 8), weight: +(minWeight + Math.random() * (maxWeight - minWeight)).toFixed(2) };
 }
 
 // ─── 主動技能 (id, 名稱, 超武名) ───────────────────────────────────────────────
@@ -4346,6 +4373,20 @@ window.GameEngine = {
         this.renderPets();
         this.renderFarm();
     },
+    petRarityRank(rarity) {
+        return ({ '普通':0, '稀有':1, '史詩':2, '神寵':3 })[rarity] ?? 0;
+    },
+    petSellPrice(pet) {
+        const cfg = PET_DEFS[pet.id];
+        if (!cfg) return 0;
+        const weight = Math.max(0.5, Number(pet.weight) || 0.5);
+        const rarityMult = cfg.rarity === '神寵' ? 8 : cfg.rarity === '史詩' ? 3.2 : cfg.rarity === '稀有' ? 1.8 : 1;
+        return Math.max(10, Math.round(30 * (0.6 + weight * 0.4) * rarityMult));
+    },
+    autoSellSetting() {
+        const select = document.getElementById('pet-auto-sell-rarity');
+        return select ? select.value : 'off';
+    },
     drawPets() {
         const d = SaveSystem.currentData;
         const input = document.getElementById('pet-draw-count');
@@ -4357,17 +4398,49 @@ window.GameEngine = {
             return;
         }
         d.resources.gold -= count * 100;
-        let gods = 0;
+        let gods = 0, soldCount = 0, soldGold = 0;
         const prizes = [];
+        const enabled = !!(document.getElementById('pet-auto-sell-enabled') || {}).checked;
+        const threshold = this.autoSellSetting();
         for (let i = 0; i < count; i++) {
             const pet = rollPet();
-            d.pets.push(pet);
-            prizes.push(PET_DEFS[pet.id].name);
-            if (pet.id === 'oracle') gods++;
+            const cfg = PET_DEFS[pet.id];
+            prizes.push(cfg.name);
+            if (cfg.rarity === '神寵') gods++;
+            const shouldAutoSell = enabled && threshold !== 'off' && this.petRarityRank(cfg.rarity) <= this.petRarityRank(threshold);
+            if (shouldAutoSell) {
+                soldCount++;
+                soldGold += this.petSellPrice(pet);
+            } else {
+                d.pets.push(pet);
+            }
         }
+        if (soldCount) d.resources.gold += soldGold;
         SaveSystem.save();
-        if (message) message.textContent = '抽取 ' + count + ' 隻，必得成功' + (gods ? '，神寵 ' + gods + ' 隻！' : '。') + ' ' + prizes.slice(0, 5).join('、') + (count > 5 ? '…' : '');
+        if (message) message.textContent = '抽取 ' + count + ' 隻' + (gods ? '，神寵 ' + gods + ' 隻' : '') + (soldCount ? '；自動出售 ' + soldCount + ' 隻，獲得 ' + soldGold + ' 金幣' : '') + '。' + prizes.slice(0, 5).join('、') + (count > 5 ? '…' : '');
         this.renderLobby();
+    },
+    sellPetsByRarity() {
+        const d = SaveSystem.currentData;
+        const threshold = this.autoSellSetting();
+        if (threshold === 'off') { this.showAlert('請先選擇要出售的稀有度。'); return; }
+        const rank = this.petRarityRank(threshold);
+        const kept = [];
+        let count = 0, total = 0;
+        for (const pet of d.pets) {
+            const cfg = PET_DEFS[pet.id];
+            // 裝備中的寵物不會被批次出售，避免意外失去戰鬥夥伴。
+            if (cfg && pet.uid !== d.equippedPet && this.petRarityRank(cfg.rarity) <= rank) {
+                count++;
+                total += this.petSellPrice(pet);
+            } else kept.push(pet);
+        }
+        if (!count) { this.showAlert('沒有符合條件且未裝備的寵物可以出售。'); return; }
+        d.pets = kept;
+        d.resources.gold = (Number(d.resources.gold) || 0) + total;
+        SaveSystem.save();
+        this.renderLobby();
+        this.showAlert('已出售 ' + count + ' 隻寵物，獲得 ' + total + ' 金幣！裝備中的寵物會保留。');
     },
     equipPet(uid) {
         const pet = SaveSystem.currentData.pets.find(item => item.uid === uid);
@@ -4385,8 +4458,7 @@ window.GameEngine = {
         if (d.equippedPet === uid) { d.equippedPet = ''; this.petActor = null; }
         const cfg = PET_DEFS[pet.id];
         const weight = Math.max(0.5, Number(pet.weight) || 0.5);
-        const rarityMult = cfg.rarity === '神寵' ? 8 : cfg.rarity === '史詩' ? 3.2 : cfg.rarity === '稀有' ? 1.8 : 1;
-        const price = Math.max(10, Math.round(30 * (0.6 + weight * 0.4) * rarityMult));
+        const price = this.petSellPrice(pet);
         d.pets.splice(index, 1);
         d.resources.gold = (Number(d.resources.gold) || 0) + price;
         SaveSystem.save();
@@ -4394,6 +4466,12 @@ window.GameEngine = {
         this.showAlert('已出售 ' + cfg.name + '（' + weight.toFixed(2) + ' kg），獲得 ' + price + ' 金幣！');
     },
     renderPets() {
+        const raritySelect = document.getElementById('pet-auto-sell-rarity');
+        const autoSellCheck = document.getElementById('pet-auto-sell-enabled');
+        try {
+            if (raritySelect && localStorage.getItem('petAutoSellRarity')) raritySelect.value = localStorage.getItem('petAutoSellRarity');
+            if (autoSellCheck) autoSellCheck.checked = localStorage.getItem('petAutoSellEnabled') === '1';
+        } catch (e) {}
         const box = document.getElementById('pet-collection');
         if (!box) return;
         const d = SaveSystem.currentData;
@@ -4418,8 +4496,7 @@ window.GameEngine = {
             if (config.shield) effects.push('護盾 +' + Math.round(config.shield * 100) + '%');
             effects.push('協助攻擊 ' + config.assist + '/秒');
             const weight = Math.max(0.5, Number(pet.weight) || 0.5);
-            const rarityMult = config.rarity === '神寵' ? 8 : config.rarity === '史詩' ? 3.2 : config.rarity === '稀有' ? 1.8 : 1;
-            const sellPrice = Math.max(10, Math.round(30 * (0.6 + weight * 0.4) * rarityMult));
+            const sellPrice = this.petSellPrice(pet);
             effects.push('重量 ' + weight.toFixed(2) + ' kg');
             effects.push('出售價 ' + sellPrice + ' 金幣');
             effect.textContent = effects.join('、');
