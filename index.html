@@ -911,7 +911,7 @@ body.weather-hailstorm #lightning {
     <option value="strong-sandstorm">🌪️ 強沙塵暴</option>
 </select>
             </div>
-            <p id="introCaption" aria-live="polite">嗨！我是雨神!</p>
+            <p id="introCaption" aria-live="polite">嗨！我是雨神的小怪獸，按「介紹一下」看看我的導覽吧！</p>
 
             <!-- 連結按鈕區域 -->
             <div class="promo-links">
@@ -1653,7 +1653,7 @@ function flyPetTo(x, y) {
 async function runIntroduction() {
     if (introRunning) return;
     introRunning = true; introBtn.disabled = true;
-    const intro = "你好！我是雨神！我來介紹一下雨神網站！";
+    const intro = "你好！我是雨神的小怪獸。今天由我帶你認識雨神網站！";
     await speak(intro);
     // 先飛到導覽列下方，再依序拜訪各分類
     await flyPetTo(game.clientWidth * .5, 78);
@@ -1664,7 +1664,7 @@ async function runIntroduction() {
         await flyPetTo(x, 78);
         await speak(item.speech);
     }
-    await speak("介紹完畢！我回去囉！");
+    await speak("介紹完畢！我回去繼續玩囉！");
     await flyPetTo(Math.min(100, game.clientWidth * .12), game.clientHeight - 130);
     player.flying = false; player.onGround = true; player.y = 0; player.vy = 0;
     monster.classList.remove("riding", "intro-flying"); cloud.classList.remove("flying"); cloud.style.display = "none";
@@ -1677,25 +1677,67 @@ const weatherSelect = document.getElementById("weatherBtn");
 const weatherCanvas = document.getElementById("weatherParticles");
 const weatherCtx = weatherCanvas.getContext("2d");
 
+
 const weatherTypes = [
-    "sunny", "cloudy", "overcast",
-    "shower", "thunderstorm", "hailstorm",
-    "sleet", "light-rain", "moderate-rain",
-    "heavy-rain", "rainstorm", "severe-rainstorm",
-    "extreme-rainstorm", "snow-shower", "light-snow",
-    "moderate-snow", "heavy-snow", "blizzard",
-    "fog", "freezing-rain", "sandstorm",
-    "light-moderate-rain", "moderate-heavy-rain",
-    "heavy-rainstorm", "rainstorm-severe",
-    "severe-extreme-rain", "light-moderate-snow",
-    "moderate-heavy-snow", "heavy-blizzard",
-    "floating-dust", "blowing-sand", "strong-sandstorm"
+    "sunny", "cloudy", "overcast", "shower",
+    "thunderstorm", "hailstorm", "sleet",
+    "light-rain", "moderate-rain", "heavy-rain",
+    "rainstorm", "severe-rainstorm", "extreme-rainstorm",
+    "snow-shower", "light-snow", "moderate-snow",
+    "heavy-snow", "blizzard", "fog", "freezing-rain",
+    "sandstorm", "light-moderate-rain", "moderate-heavy-rain",
+    "heavy-rainstorm", "rainstorm-severe", "severe-extreme-rain",
+    "light-moderate-snow", "moderate-heavy-snow",
+    "heavy-blizzard", "floating-dust", "blowing-sand",
+    "strong-sandstorm"
 ];
 
 let weatherParticles = [];
 let weatherWidth = 0;
 let weatherHeight = 0;
 let weatherLastTime = 0;
+let lightningTimer = 0;
+let lightningPower = 0;
+let windTime = 0;
+
+const weatherConfig = {
+    sunny:              { kind:"sun", count:35, speed:1, wind:0.2 },
+    cloudy:             { kind:"cloud", count:45, speed:1, wind:0.7 },
+    overcast:           { kind:"cloud", count:75, speed:1.2, wind:1 },
+    shower:             { kind:"rain", count:180, speed:1.6, wind:2 },
+    "light-rain":       { kind:"rain", count:90, speed:1, wind:0.7 },
+    "moderate-rain":    { kind:"rain", count:260, speed:1.5, wind:1.5 },
+    "heavy-rain":       { kind:"rain", count:520, speed:2.2, wind:3 },
+    rainstorm:          { kind:"rain", count:850, speed:2.8, wind:5 },
+    "severe-rainstorm": { kind:"rain", count:1250, speed:3.5, wind:7 },
+    "extreme-rainstorm":{ kind:"rain", count:1800, speed:4.2, wind:10 },
+
+    "light-moderate-rain": { kind:"rain", count:175, speed:1.3, wind:1 },
+    "moderate-heavy-rain": { kind:"rain", count:390, speed:2, wind:2.5 },
+    "heavy-rainstorm":     { kind:"rain", count:680, speed:2.5, wind:4 },
+    "rainstorm-severe":    { kind:"rain", count:1050, speed:3.2, wind:6 },
+    "severe-extreme-rain": { kind:"rain", count:1500, speed:3.9, wind:8 },
+
+    thunderstorm: { kind:"storm", count:650, speed:3, wind:7 },
+    hailstorm:    { kind:"hail", count:180, speed:4, wind:7 },
+    sleet:        { kind:"sleet", count:300, speed:2.2, wind:4 },
+    "freezing-rain": { kind:"ice", count:360, speed:2.5, wind:3 },
+
+    "snow-shower": { kind:"snow", count:65, speed:0.8, wind:1 },
+    "light-snow":  { kind:"snow", count:45, speed:0.55, wind:0.5 },
+    "moderate-snow": { kind:"snow", count:130, speed:0.9, wind:1.5 },
+    "heavy-snow":  { kind:"snow", count:280, speed:1.4, wind:2.5 },
+    blizzard:      { kind:"snowstorm", count:550, speed:3, wind:10 },
+    "light-moderate-snow": { kind:"snow", count:90, speed:0.75, wind:1 },
+    "moderate-heavy-snow": { kind:"snow", count:210, speed:1.2, wind:2 },
+    "heavy-blizzard": { kind:"snowstorm", count:750, speed:3.8, wind:13 },
+
+    fog:            { kind:"fog", count:40, speed:0.4, wind:0.4 },
+    sandstorm:      { kind:"sand", count:250, speed:2, wind:5 },
+    "floating-dust":{ kind:"dust", count:100, speed:0.6, wind:1 },
+    "blowing-sand": { kind:"sand", count:200, speed:2.5, wind:7 },
+    "strong-sandstorm": { kind:"sandstorm", count:650, speed:4, wind:13 }
+};
 
 function resizeWeather() {
     const rect = weatherCanvas.getBoundingClientRect();
@@ -1710,51 +1752,41 @@ function resizeWeather() {
     weatherCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 
-function createWeatherParticles() {
-    const type = weatherSelect.value;
-    let count = 0;
+function makeParticle(kind, randomY = true) {
+    const snow = kind === "snow" || kind === "snowstorm";
+    const hail = kind === "hail";
+    const sand = kind === "sand" || kind === "sandstorm";
+    const fog = kind === "fog";
+    const dust = kind === "dust";
 
-    if ([
-        "shower", "light-rain", "moderate-rain",
-        "heavy-rain", "rainstorm", "severe-rainstorm",
-        "extreme-rainstorm", "thunderstorm", "hailstorm",
-        "light-moderate-rain", "moderate-heavy-rain",
-        "heavy-rainstorm", "rainstorm-severe",
-        "severe-extreme-rain", "freezing-rain", "sleet"
-    ].includes(type)) {
-        count = type === "light-rain" ? 35 :
-                type === "moderate-rain" ? 80 :
-                type === "heavy-rain" ? 140 :
-                type === "rainstorm" ||
-                type === "severe-rainstorm" ||
-                type === "extreme-rainstorm" ? 220 : 100;
-    } else if ([
-        "snow-shower", "light-snow", "moderate-snow",
-        "heavy-snow", "blizzard", "light-moderate-snow",
-        "moderate-heavy-snow", "heavy-blizzard"
-    ].includes(type)) {
-        count = type === "light-snow" ? 35 :
-                type === "heavy-snow" ||
-                type === "blizzard" ||
-                type === "heavy-blizzard" ? 160 : 80;
-    } else if (type === "hailstorm") {
-        count = 110;
-    } else if ([
-        "sandstorm", "floating-dust",
-        "blowing-sand", "strong-sandstorm"
-    ].includes(type)) {
-        count = type === "strong-sandstorm" ? 180 : 90;
-    } else if (type === "fog") {
-        count = 28;
-    }
-
-    weatherParticles = Array.from({ length: count }, () => ({
+    return {
         x: Math.random() * weatherWidth,
-        y: Math.random() * weatherHeight,
-        size: 1 + Math.random() * 3,
-        speed: 1 + Math.random() * 5,
-        drift: Math.random() * 2 - 1
-    }));
+        y: randomY ? Math.random() * weatherHeight : -Math.random() * 100,
+        size: snow ? 1.5 + Math.random() * 4 :
+              hail ? 2 + Math.random() * 4 :
+              fog ? 35 + Math.random() * 90 :
+              sand ? 1 + Math.random() * 3 :
+              dust ? 0.5 + Math.random() * 1.5 :
+              1 + Math.random() * 2.5,
+        length: 12 + Math.random() * 28,
+        speed: 0.5 + Math.random() * 1.5,
+        phase: Math.random() * Math.PI * 2,
+        alpha: 0.25 + Math.random() * 0.65,
+        kind
+    };
+}
+
+function createWeatherParticles() {
+    const config = weatherConfig[weatherSelect.value] || weatherConfig.sunny;
+    const mobile = window.innerWidth < 700;
+
+    // 手機降低粒子數，避免畫面卡頓
+    const count = Math.round(config.count * (mobile ? 0.45 : 1));
+
+    weatherParticles = Array.from(
+        { length: count },
+        () => makeParticle(config.kind)
+    );
 }
 
 function applyWeather() {
@@ -1767,103 +1799,198 @@ function applyWeather() {
 
     document.body.classList.add("weather-" + type);
 
-    if (introCaption) {
-        introCaption.textContent = "";
-    }
+    lightningPower = 0;
+    lightningTimer = 0;
+    weatherLastTime = 0;
 
     resizeWeather();
     createWeatherParticles();
+
+    // 各種天氣專屬的額外視覺效果
+    weatherEffects.style.background = "";
+
+    if (type === "fog") {
+        weatherEffects.style.background =
+            "linear-gradient(180deg,#e9f1f0aa,#ffffff77,#cdd9dfaa)";
+    }
+
+    if ([
+        "sandstorm", "floating-dust",
+        "blowing-sand", "strong-sandstorm"
+    ].includes(type)) {
+        weatherEffects.style.background =
+            "linear-gradient(90deg,#b68b4a22,#d6b77955,#b68b4a22)";
+    }
 }
 
 function drawWeather(now) {
     const dt = Math.min((now - (weatherLastTime || now)) / 16.67, 2);
     weatherLastTime = now;
 
+    const config = weatherConfig[weatherSelect.value] || weatherConfig.sunny;
+    const kind = config.kind;
+
+    windTime += dt * 0.025;
+
     weatherCtx.clearRect(0, 0, weatherWidth, weatherHeight);
 
-    const type = weatherSelect.value;
+    // 雷雨與冰雹的閃電：隨機發生，不再固定間隔
+    if (kind === "storm" || kind === "hail") {
+        lightningTimer -= dt;
+
+        if (lightningTimer <= 0 && Math.random() < 0.035 * dt) {
+            lightningPower = 0.35 + Math.random() * 0.5;
+            lightningTimer = 10 + Math.random() * 25;
+        }
+
+        if (lightningPower > 0) {
+            weatherCtx.fillStyle = `rgba(255,255,255,${lightningPower})`;
+            weatherCtx.fillRect(0, 0, weatherWidth, weatherHeight);
+            lightningPower *= Math.pow(0.72, dt);
+            if (lightningPower < 0.025) lightningPower = 0;
+        }
+    }
+
+    // 暴雨以上：疊加厚重、持續移動的雨幕
+    if (kind === "rain" || kind === "storm") {
+        const intensity = config.count / 90;
+
+        if (intensity >= 4) {
+            const bands = Math.min(8, Math.floor(intensity));
+
+            for (let i = 0; i < bands; i++) {
+                const x = (windTime * config.wind * 100 + i * 173)
+                    % (weatherWidth + 250) - 125;
+
+                const gradient = weatherCtx.createLinearGradient(
+                    x, 0, x - config.wind * 15, weatherHeight
+                );
+
+                gradient.addColorStop(0, "rgba(180,210,235,0)");
+                gradient.addColorStop(0.5, `rgba(180,210,235,${0.025 + intensity * 0.004})`);
+                gradient.addColorStop(1, "rgba(180,210,235,0)");
+
+                weatherCtx.fillStyle = gradient;
+                weatherCtx.fillRect(x, 0, 220, weatherHeight);
+            }
+        }
+    }
 
     for (const p of weatherParticles) {
-        if ([
-            "shower", "light-rain", "moderate-rain",
-            "heavy-rain", "rainstorm", "severe-rainstorm",
-            "extreme-rainstorm", "thunderstorm", "hailstorm",
-            "light-moderate-rain", "moderate-heavy-rain",
-            "heavy-rainstorm", "rainstorm-severe",
-            "severe-extreme-rain", "freezing-rain", "sleet"
-        ].includes(type)) {
-            weatherCtx.strokeStyle = type === "freezing-rain"
-                ? "rgba(220,245,255,.8)"
-                : "rgba(65,115,160,.65)";
+        const gust = Math.sin(windTime + p.phase) * config.wind * 0.35;
+        const drift = config.wind * 0.65 + gust;
 
-            weatherCtx.lineWidth = type === "light-rain" ? 1 : 1.5;
+        if (p.kind === "rain" || p.kind === "storm" ||
+            p.kind === "ice" || p.kind === "sleet") {
+
+            const isExtreme = config.count >= 850;
+            const isLight = config.count <= 100;
+
+            weatherCtx.strokeStyle = p.kind === "ice"
+                ? `rgba(225,248,255,${p.alpha})`
+                : `rgba(${isExtreme ? "195,220,242" : "65,115,160"},${p.alpha})`;
+
+            weatherCtx.lineWidth = isExtreme ? 1.6 + p.size * 0.35 :
+                                   isLight ? 0.8 : 1;
+
             weatherCtx.beginPath();
             weatherCtx.moveTo(p.x, p.y);
-            weatherCtx.lineTo(p.x - 3, p.y + p.size * 6);
+            weatherCtx.lineTo(
+                p.x - drift * (isExtreme ? 1.8 : 0.55),
+                p.y + p.length * config.speed
+            );
             weatherCtx.stroke();
 
-            p.y += p.speed * 4 * dt;
-            p.x -= p.drift * dt;
+            p.x -= drift * config.speed * dt;
+            p.y += p.speed * config.speed * 5 * dt;
 
-        } else if ([
-            "snow-shower", "light-snow", "moderate-snow",
-            "heavy-snow", "blizzard", "light-moderate-snow",
-            "moderate-heavy-snow", "heavy-blizzard", "sleet"
-        ].includes(type)) {
+            if (p.kind === "sleet" && Math.random() < 0.025) {
+                weatherCtx.fillStyle = "#ffffff";
+                weatherCtx.beginPath();
+                weatherCtx.arc(p.x, p.y, p.size + 1, 0, Math.PI * 2);
+                weatherCtx.fill();
+            }
+
+        } else if (p.kind === "hail") {
+            weatherCtx.fillStyle = `rgba(235,248,255,${p.alpha})`;
+            weatherCtx.beginPath();
+            weatherCtx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+            weatherCtx.fill();
+
+            // 冰雹的高光
             weatherCtx.fillStyle = "rgba(255,255,255,.9)";
             weatherCtx.beginPath();
-            weatherCtx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+            weatherCtx.arc(p.x - 1, p.y - 1, p.size * 0.35, 0, Math.PI * 2);
             weatherCtx.fill();
 
-            p.y += p.speed * dt;
-            p.x += Math.sin(p.y / 25) * 1.5 * dt;
+            p.x -= drift * config.speed * dt;
+            p.y += p.speed * config.speed * 5 * dt;
 
-        } else if (type === "hailstorm") {
-            weatherCtx.fillStyle = "#e9f8ff";
-            weatherCtx.beginPath();
-            weatherCtx.arc(p.x, p.y, p.size + 1, 0, Math.PI * 2);
-            weatherCtx.fill();
-
-            p.y += p.speed * 4 * dt;
-            p.x -= p.drift * dt;
-
-        } else if ([
-            "sandstorm", "floating-dust",
-            "blowing-sand", "strong-sandstorm"
-        ].includes(type)) {
-            weatherCtx.fillStyle = "rgba(173,125,60,.4)";
+        } else if (p.kind === "snow" || p.kind === "snowstorm") {
+            weatherCtx.fillStyle = `rgba(255,255,255,${p.alpha})`;
             weatherCtx.beginPath();
             weatherCtx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
             weatherCtx.fill();
 
-            p.x += (p.speed + 2) * dt;
-            p.y += p.drift * dt;
+            p.x += (Math.sin(windTime + p.phase) * 1.5 - drift * 0.4)
+                * config.speed * dt;
+            p.y += p.speed * config.speed * (p.kind === "snowstorm" ? 3 : 1.5) * dt;
 
-        } else if (type === "fog") {
-            weatherCtx.fillStyle = "rgba(255,255,255,.22)";
+        } else if (p.kind === "sand" || p.kind === "sandstorm" || p.kind === "dust") {
+            weatherCtx.fillStyle = p.kind === "dust"
+                ? `rgba(150,125,90,${p.alpha * 0.4})`
+                : `rgba(190,143,75,${p.alpha * 0.7})`;
+
+            weatherCtx.beginPath();
+            weatherCtx.ellipse(p.x, p.y, p.size * 1.8, p.size, 0, 0, Math.PI * 2);
+            weatherCtx.fill();
+
+            p.x += (config.wind * 1.5 + p.speed * 2) * dt;
+            p.y += Math.sin(windTime + p.phase) * config.speed * dt;
+
+        } else if (p.kind === "fog") {
+            const fogGradient = weatherCtx.createRadialGradient(
+                p.x, p.y, 2, p.x, p.y, p.size
+            );
+
+            fogGradient.addColorStop(0, "rgba(255,255,255,0.16)");
+            fogGradient.addColorStop(1, "rgba(255,255,255,0)");
+
+            weatherCtx.fillStyle = fogGradient;
+            weatherCtx.beginPath();
+            weatherCtx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+            weatherCtx.fill();
+
+            p.x += Math.sin(windTime + p.phase) * 0.6 * dt;
+            p.y += Math.cos(windTime + p.phase) * 0.25 * dt;
+
+        } else if (p.kind === "cloud") {
+            weatherCtx.fillStyle = "rgba(255,255,255,0.07)";
             weatherCtx.beginPath();
             weatherCtx.ellipse(
-                p.x, p.y, 65 + p.size * 10, 12 + p.size * 3,
+                p.x, p.y, 55 + p.size * 5, 18 + p.size * 2,
                 0, 0, Math.PI * 2
             );
             weatherCtx.fill();
 
-            p.x += p.drift * dt;
+            p.x += config.wind * 0.3 * dt;
         }
 
-        if (p.y > weatherHeight + 20) {
-            p.y = -10;
+        // 從上方重新生成，讓雨雪保持連續
+        if (p.y > weatherHeight + 50) {
+            p.y = -Math.random() * 80;
             p.x = Math.random() * weatherWidth;
         }
 
-        if (p.x > weatherWidth + 20) p.x = -10;
-        if (p.x < -20) p.x = weatherWidth + 10;
+        if (p.x > weatherWidth + 80) p.x = -30;
+        if (p.x < -80) p.x = weatherWidth + 30;
     }
 
     requestAnimationFrame(drawWeather);
 }
 
 weatherSelect.addEventListener("change", applyWeather);
+
 window.addEventListener("resize", () => {
     resizeWeather();
     createWeatherParticles();
@@ -1993,4 +2120,65 @@ requestAnimationFrame(gameLoop);
         font-size: 12px;
     }
 }
+
+/* 天氣強度與背景層次 */
+#weatherEffects {
+    z-index: 4;
+    mix-blend-mode: normal;
+}
+
+#weatherParticles {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+}
+
+/* 雨勢越強，背景越暗 */
+body.weather-light-rain #game {
+    background: linear-gradient(180deg, #94b7d1, #c8deed 78%);
+}
+
+body.weather-moderate-rain #game {
+    background: linear-gradient(180deg, #718da8, #b6cbdc 78%);
+}
+
+body.weather-heavy-rain #game {
+    background: linear-gradient(180deg, #4e6680, #9fb7cb 78%);
+}
+
+body.weather-rainstorm #game {
+    background: linear-gradient(180deg, #34475f, #849bb1 78%);
+}
+
+body.weather-severe-rainstorm #game {
+    background: linear-gradient(180deg, #26364b, #6e849a 78%);
+}
+
+body.weather-extreme-rainstorm #game {
+    background: linear-gradient(180deg, #172538, #536a83 78%);
+}
+
+/* 強風沙塵暴 */
+body.weather-strong-sandstorm #game {
+    background: linear-gradient(180deg, #85633f, #c6a477 78%);
+}
+
+/* 暴雪 */
+body.weather-blizzard #game,
+body.weather-heavy-blizzard #game {
+    background: linear-gradient(180deg, #829db5, #e8f4ff 78%);
+}
+
+/* 雷雨背景 */
+body.weather-thunderstorm #game,
+body.weather-hailstorm #game {
+    background: linear-gradient(180deg, #182638, #697f95 78%);
+}
+
+/* 霧天降低背景對比 */
+body.weather-fog #game {
+    background: linear-gradient(180deg, #b5c3ca, #e3e9eb 78%);
+}
+
 </style>
