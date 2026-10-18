@@ -1625,38 +1625,26 @@ const navLabels = [
     { match: ["遊戲"], speech: "這裡是遊戲區，收集了各種有趣的遊戲。" },
     { match: ["工具"], speech: "這裡是工具區，可以使用方便的小工具。" }
 ];
+
+// 移除語音功能，改為純顯示文字並透過 setTimeout 讓畫面停留一段閱讀時間
 function speak(text) {
     const bubble = document.getElementById("petSpeech");
     document.getElementById("petSpeechText").textContent = text;
     bubble.classList.add("show");
     introCaption.textContent = text;
+    
     return new Promise(resolve => {
-        let finished = false;
-        const finish = () => {
-            if (finished) return;
-            finished = true;
-            resolve();
-        };
-        if (!("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) {
-            setTimeout(finish, Math.min(2400, 650 + text.length * 55));
-            return;
-        }
-        speechSynthesis.cancel();
-        const utter = new SpeechSynthesisUtterance(text);
-        utter.lang = "zh-TW";
-        utter.rate = 1.28;
-        utter.pitch = 1.15;
-        utter.onend = finish;
-        utter.onerror = finish;
-        speechSynthesis.speak(utter);
-        // 避免瀏覽器語音事件沒有回傳時卡住；一般情況會由 onend 提前結束
-        setTimeout(finish, Math.min(3600, 900 + text.length * 105));
+        // 根據文字長度計算停留時間（字越多停留越久，最少 1.2 秒，最多 3.5 秒）
+        const duration = Math.min(3500, Math.max(1200, text.length * 200));
+        setTimeout(resolve, duration);
     });
 }
+
 function findNavItem(words) {
     const candidates = [...document.querySelectorAll('#nav_bar a, #nav_bar button, #nav_bar [role="button"], #nav_bar summary')];
     return candidates.find(el => words.some(word => (el.innerText || el.textContent || "").trim().includes(word)));
 }
+
 function flyPetTo(x, y) {
     return new Promise(resolve => {
         const startX = player.x, startY = player.y;
@@ -1680,6 +1668,7 @@ function flyPetTo(x, y) {
         requestAnimationFrame(frame);
     });
 }
+
 async function runIntroduction() {
     if (introRunning) return;
     introRunning = true; introBtn.disabled = true;
@@ -1702,6 +1691,7 @@ async function runIntroduction() {
     document.getElementById("petSpeech").classList.remove("show");
     introRunning = false; introBtn.disabled = false;
 }
+
 introBtn.addEventListener("click", runIntroduction);
 const weatherSelect = document.getElementById("weatherBtn");
 const weatherCanvas = document.getElementById("weatherParticles");
