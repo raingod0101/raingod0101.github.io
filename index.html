@@ -930,19 +930,9 @@ body.weather-hailstorm #lightning {
 
             <!-- 最近更新紀錄 -->
             <div class="changelog-box">
-                <h2 class="changelog-title">📢 最近更新 (Update Log)</h2>
                 <ul class="changelog-list">
                     <li class="changelog-item">
-                        <span class="changelog-date"></span>
                         <span class="changelog-text"><a href="https://is.gd/gtsweb" target="_blank" rel="noopener noreferrer">幾何遊戲</a></span>
-                    </li>
-                    <li class="changelog-item">
-                        <span class="changelog-date"></span>
-                        <span class="changelog-text"></span>
-                    </li>
-                    <li class="changelog-item">
-                        <span class="changelog-date"></span>
-                        <span class="changelog-text"></span>
                     </li>
                 </ul>
             </div>
@@ -1300,25 +1290,25 @@ const player = {
     gravity: 1700,
     onGround: true,
     facing: 1,
-    flying: false
+    flying: false,
+    dizzy: false,
+    dizzyTimer: null,
+    shakeCount: 0,
+    lastDirection: 0,
+    shakeTimer: null
 };
 
 const groundHeight = 65;
 let lastTime = performance.now();
 let landingTimer = null;
 
-/*
-  雲朵模式下，玩家的 y 代表
-  怪獸底部距離地面的高度。
-*/
 function startFlying() {
-    if (player.flying) return;
+    if (player.flying || player.dizzy) return;
 
     player.flying = true;
     player.vy = 0;
     player.onGround = false;
 
-    // 從地面升起一段高度
     player.y = Math.max(player.y, 155);
 
     monster.classList.remove("walking", "airborne", "landing");
@@ -1341,7 +1331,6 @@ function stopFlying() {
 
     monster.classList.remove("riding");
 
-    // 平穩下降回地面
     player.y = Math.max(0, player.y);
     player.vy = -80;
     player.onGround = false;
@@ -1350,6 +1339,7 @@ function stopFlying() {
 }
 
 function toggleFlying() {
+    if (player.dizzy) return;
     if (player.flying) {
         stopFlying();
     } else {
@@ -1358,8 +1348,9 @@ function toggleFlying() {
 }
 
 function jump() {
+    if (player.dizzy) return;
+
     if (player.flying) {
-        // 飛行時空白鍵加速上升
         player.y += 35;
         player.y = Math.min(player.y, game.clientHeight - 300);
         return;
@@ -1425,9 +1416,8 @@ window.addEventListener("blur", () => {
 });
 
 function bindHoldButton(button, keyName) {
-    // 方向按鈕共用的啟動邏輯：
-    // 地面時按「上」＝跳躍；飛行時按「上／下」＝升高／下降。
     function activate() {
+        if (player.dizzy) return;
         if (keyName === "up" && !player.flying) {
             jump();
             return;
@@ -1435,7 +1425,6 @@ function bindHoldButton(button, keyName) {
         keys[keyName] = true;
     }
 
-    // 電腦：滑鼠移入就操作，移出就停止（保留原本的操作方式）
     button.addEventListener("mouseenter", () => {
         if (window.matchMedia("(hover: hover)").matches) activate();
     });
@@ -1446,7 +1435,6 @@ function bindHoldButton(button, keyName) {
         }
     });
 
-    // 手機／觸控與滑鼠點按：按下時操作
     button.addEventListener("pointerdown", event => {
         event.preventDefault();
         activate();
@@ -1461,7 +1449,6 @@ function bindHoldButton(button, keyName) {
     button.addEventListener("pointercancel", release);
     button.addEventListener("lostpointercapture", release);
 
-    // 舊版觸控瀏覽器的備援；避免觸控事件沒有觸發 pointerdown
     button.addEventListener("touchstart", event => {
         event.preventDefault();
         activate();
@@ -1476,17 +1463,39 @@ bindHoldButton(document.getElementById("upBtn"), "up");
 bindHoldButton(document.getElementById("downBtn"), "down");
 
 const flyButton = document.getElementById("flyBtn");
-// 電腦：滑鼠移入即可切換飛行，不必點擊
 flyButton.addEventListener("mouseenter", () => {
     if (window.matchMedia("(hover: hover)").matches) toggleFlying();
 });
-// 手機：觸控按下切換飛行
 flyButton.addEventListener("pointerdown", event => {
     if (event.pointerType === "touch") {
         event.preventDefault();
         toggleFlying();
     }
 });
+
+function triggerDizzy() {
+    if (player.dizzy) return;
+    player.dizzy = true;
+    
+    // 強制停止移動與飛行
+    keys.left = false;
+    keys.right = false;
+    keys.up = false;
+    keys.down = false;
+    if (player.flying) {
+        stopFlying();
+    }
+
+    monster.classList.add("dizzy");
+    statusText.textContent = "(@_@) 好暈喔……";
+
+    clearTimeout(player.dizzyTimer);
+    player.dizzyTimer = setTimeout(() => {
+        player.dizzy = false;
+        monster.classList.remove("dizzy");
+        statusText.textContent = "待機中";
+    }, 3000); // 暈眩 3 秒
+}
 
 function update(dt) {
     const gameWidth = game.clientWidth;
@@ -1500,7 +1509,33 @@ function update(dt) {
     if (keys.left) direction--;
     if (keys.right) direction++;
 
-    // 左右移動
+    // 偵測左右頻繁晃動（玩弄小怪獸）
+    if (direction !== 0 && direction !== player.lastDirection) {
+        player.shakeCount++;
+        player.lastDirection = direction;
+
+        clearTimeout(player.shakeTimer);
+        player.shakeTimer = setTimeout(() => {
+            player.shakeCount = 0;
+        }, 600); // 600毫秒內連續左右切換達 4 次就判定為暈眩
+
+        if (player.shakeCount >= 4) {
+            triggerDizzy();
+            player.shakeCount = 0;
+        }
+    }
+
+    if (player.dizzy) {
+        // 暈眩時無法移動
+        cloud.style.display = "none";
+        monster.classList.remove("walking", "airborne");
+        statusText.textContent = "(@_@) 好暈喔……";
+        
+        monster.style.left = player.x + "px";
+        monster.style.bottom = (groundHeight + player.y) + "px";
+        return;
+    }
+
     if (direction !== 0) {
         player.x += direction * player.speed * dt;
         player.facing = direction;
@@ -1509,7 +1544,6 @@ function update(dt) {
     player.x = Math.max(0, Math.min(maxX, player.x));
 
     if (player.flying) {
-        // 飛行時上下移動
         if (keys.up) {
             player.y += player.speed * dt;
         }
@@ -1518,7 +1552,6 @@ function update(dt) {
             player.y -= player.speed * dt;
         }
 
-        // 限制飛行高度，避免飛出畫面
         const maxHeight = Math.max(
             100,
             gameHeight - groundHeight - monster.offsetHeight - 20
@@ -1526,11 +1559,9 @@ function update(dt) {
 
         player.y = Math.max(0, Math.min(maxHeight, player.y));
 
-        // 飛行中的小怪獸
         monster.classList.add("riding");
         monster.classList.remove("walking", "airborne");
 
-        // 雲朵位於怪獸腳下
         cloud.style.left =
             (player.x + monsterWidth / 2 - cloud.offsetWidth / 2)
             + "px";
@@ -1547,7 +1578,6 @@ function update(dt) {
             statusText.textContent = "乘坐雲朵中 ☁";
         }
     } else {
-        // 正常跳躍與重力
         if (!player.onGround) {
             const previousY = player.y;
 
@@ -1587,11 +1617,9 @@ function update(dt) {
         }
     }
 
-    // 更新怪獸位置
     monster.style.left = player.x + "px";
     monster.style.bottom = (groundHeight + player.y) + "px";
 
-    // 左右翻轉
     monster.style.transform =
         player.facing < 0 ? "scaleX(-1)" : "scaleX(1)";
 }
@@ -1600,16 +1628,17 @@ function gameLoop(now) {
     const dt = Math.min((now - lastTime) / 1000, 0.033);
     lastTime = now;
 
-    update(dt);
+    if (!introRunning) {
+        update(dt);
+    }
     requestAnimationFrame(gameLoop);
 }
 
-// 初始狀態：不提供重新開始按鈕
 function initializePet() {
     player.x = Math.max(20, Math.min(70, game.clientWidth - monster.offsetWidth));
-    player.y = 0; player.vy = 0; player.onGround = true; player.facing = 1; player.flying = false;
+    player.y = 0; player.vy = 0; player.onGround = true; player.facing = 1; player.flying = false; player.dizzy = false;
     Object.keys(keys).forEach(key => keys[key] = false);
-    monster.classList.remove("walking", "airborne", "riding", "landing", "intro-flying");
+    monster.classList.remove("walking", "airborne", "riding", "landing", "intro-flying", "dizzy");
     monster.style.left = player.x + "px";
     monster.style.bottom = groundHeight + "px";
     monster.style.transform = "scaleX(1)";
@@ -1626,7 +1655,6 @@ const navLabels = [
     { match: ["工具"], speech: "這裡是工具區，可以使用方便的小工具。" }
 ];
 
-// 移除語音功能，改為純顯示文字並透過 setTimeout 讓畫面停留一段閱讀時間
 function speak(text) {
     const bubble = document.getElementById("petSpeech");
     document.getElementById("petSpeechText").textContent = text;
@@ -1634,7 +1662,6 @@ function speak(text) {
     introCaption.textContent = text;
     
     return new Promise(resolve => {
-        // 根據文字長度計算停留時間（字越多停留越久，最少 1.2 秒，最多 3.5 秒）
         const duration = Math.min(3500, Math.max(1200, text.length * 200));
         setTimeout(resolve, duration);
     });
@@ -1645,25 +1672,47 @@ function findNavItem(words) {
     return candidates.find(el => words.some(word => (el.innerText || el.textContent || "").trim().includes(word)));
 }
 
-function flyPetTo(x, y) {
+function flyPetTo(targetWorldX, targetWorldY) {
     return new Promise(resolve => {
-        const startX = player.x, startY = player.y;
-        const targetX = Math.max(0, Math.min(game.clientWidth - monster.offsetWidth, x - monster.offsetWidth / 2));
-        const targetY = Math.max(65, Math.min(game.clientHeight - monster.offsetHeight - 20, game.clientHeight - y - monster.offsetHeight / 2));
-        const duration = 900, began = performance.now();
-        player.flying = true; player.onGround = false; player.vy = 0;
-        monster.classList.remove("walking", "airborne"); monster.classList.add("riding", "intro-flying");
-        cloud.classList.add("flying"); cloud.style.display = "block";
+        const startX = player.x;
+        const startY = player.y;
+        
+        const finalX = Math.max(0, Math.min(game.clientWidth - monster.offsetWidth, targetWorldX - monster.offsetWidth / 2));
+        const finalY = Math.max(20, Math.min(game.clientHeight - monster.offsetHeight - 40, targetWorldY));
+        
+        const duration = 800;
+        const began = performance.now();
+        
+        player.flying = true; 
+        player.onGround = false; 
+        player.vy = 0;
+        
+        monster.classList.remove("walking", "airborne"); 
+        monster.classList.add("riding", "intro-flying");
+        cloud.classList.add("flying"); 
+        cloud.style.display = "block";
+
         function frame(now) {
-            const t = Math.min(1, (now - began) / duration), eased = t*t*(3-2*t);
-            player.x = startX + (targetX - startX) * eased;
-            player.y = startY + (targetY - startY) * eased;
-            player.facing = targetX < startX ? -1 : 1;
-            monster.style.left = player.x + "px"; monster.style.bottom = (groundHeight + player.y) + "px";
+            const t = Math.min(1, (now - began) / duration);
+            const eased = t * t * (3 - 2 * t);
+            
+            player.x = startX + (finalX - startX) * eased;
+            player.y = startY + (finalY - startY) * eased;
+            
+            player.facing = finalX < startX ? -1 : 1;
+            
+            monster.style.left = player.x + "px"; 
+            monster.style.bottom = (groundHeight + player.y) + "px";
             monster.style.transform = player.facing < 0 ? "scaleX(-1)" : "scaleX(1)";
-            cloud.style.left = (player.x + monster.offsetWidth/2 - cloud.offsetWidth/2) + "px";
+            
+            cloud.style.left = (player.x + monster.offsetWidth / 2 - cloud.offsetWidth / 2) + "px";
             cloud.style.bottom = (groundHeight + player.y - cloud.offsetHeight + 7) + "px";
-            if (t < 1) requestAnimationFrame(frame); else resolve();
+            
+            if (t < 1) {
+                requestAnimationFrame(frame);
+            } else {
+                resolve();
+            }
         }
         requestAnimationFrame(frame);
     });
@@ -1671,32 +1720,54 @@ function flyPetTo(x, y) {
 
 async function runIntroduction() {
     if (introRunning) return;
-    introRunning = true; introBtn.disabled = true;
+    introRunning = true; 
+    introBtn.disabled = true;
+    
     const intro = "你好！我是雨神的小怪獸。今天由我帶你認識雨神網站！";
     await speak(intro);
-    // 先飛到導覽列下方，再依序拜訪各分類
-    await flyPetTo(game.clientWidth * .5, 78);
+    
+    const tourY = game.clientHeight * 0.65;
+    
+    await flyPetTo(game.clientWidth * 0.5, tourY);
+    
     for (const item of navLabels) {
         const el = findNavItem(item.match);
-        let x = game.clientWidth * .5;
-        if (el) { const r = el.getBoundingClientRect(); x = r.left + r.width / 2; }
-        await flyPetTo(x, 78);
+        let targetX = game.clientWidth * 0.5;
+        if (el) { 
+            const r = el.getBoundingClientRect(); 
+            const gameRect = game.getBoundingClientRect();
+            targetX = (r.left + r.width / 2) - gameRect.left; 
+        }
+        await flyPetTo(targetX, tourY);
         await speak(item.speech);
     }
+    
     await speak("介紹完畢！我回去繼續玩囉！");
-    await flyPetTo(Math.min(100, game.clientWidth * .12), game.clientHeight - 130);
-    player.flying = false; player.onGround = true; player.y = 0; player.vy = 0;
-    monster.classList.remove("riding", "intro-flying"); cloud.classList.remove("flying"); cloud.style.display = "none";
-    statusText.textContent = "待機中"; introCaption.textContent = "介紹完成！想再聽一次，按「介紹一下」。";
+    
+    await flyPetTo(Math.min(100, game.clientWidth * 0.12), 20);
+    
+    player.flying = false; 
+    player.onGround = true; 
+    player.y = 0; 
+    player.vy = 0;
+    
+    monster.classList.remove("riding", "intro-flying"); 
+    cloud.classList.remove("flying"); 
+    cloud.style.display = "none";
+    
+    statusText.textContent = "待機中"; 
+    introCaption.textContent = "介紹完成！想再聽一次，按「介紹一下」。";
     document.getElementById("petSpeech").classList.remove("show");
-    introRunning = false; introBtn.disabled = false;
+    
+    introRunning = false; 
+    introBtn.disabled = false;
 }
 
 introBtn.addEventListener("click", runIntroduction);
+
 const weatherSelect = document.getElementById("weatherBtn");
 const weatherCanvas = document.getElementById("weatherParticles");
 const weatherCtx = weatherCanvas.getContext("2d");
-
 
 const weatherTypes = [
     "sunny", "cloudy", "overcast", "shower",
@@ -1752,10 +1823,10 @@ const weatherConfig = {
     "moderate-heavy-snow": { kind:"snow", count:210, speed:1.2, wind:2 },
     "heavy-blizzard": { kind:"snowstorm", count:750, speed:3.8, wind:13 },
 
-    fog:            { kind:"fog", count:40, speed:0.4, wind:0.4 },
-    sandstorm:      { kind:"sand", count:250, speed:2, wind:5 },
-    "floating-dust":{ kind:"dust", count:100, speed:0.6, wind:1 },
-    "blowing-sand": { kind:"sand", count:200, speed:2.5, wind:7 },
+    fog:                { kind:"fog", count:40, speed:0.4, wind:0.4 },
+    sandstorm:          { kind:"sand", count:250, speed:2, wind:5 },
+    "floating-dust":    { kind:"dust", count:100, speed:0.6, wind:1 },
+    "blowing-sand":     { kind:"sand", count:200, speed:2.5, wind:7 },
     "strong-sandstorm": { kind:"sandstorm", count:650, speed:4, wind:13 }
 };
 
@@ -1799,8 +1870,6 @@ function makeParticle(kind, randomY = true) {
 function createWeatherParticles() {
     const config = weatherConfig[weatherSelect.value] || weatherConfig.sunny;
     const mobile = window.innerWidth < 700;
-
-    // 手機降低粒子數，避免畫面卡頓
     const count = Math.round(config.count * (mobile ? 0.45 : 1));
 
     weatherParticles = Array.from(
@@ -1826,7 +1895,6 @@ function applyWeather() {
     resizeWeather();
     createWeatherParticles();
 
-    // 各種天氣專屬的額外視覺效果
     weatherEffects.style.background = "";
 
     if (type === "fog") {
@@ -1854,7 +1922,6 @@ function drawWeather(now) {
 
     weatherCtx.clearRect(0, 0, weatherWidth, weatherHeight);
 
-    // 雷雨與冰雹的閃電：隨機發生，不再固定間隔
     if (kind === "storm" || kind === "hail") {
         lightningTimer -= dt;
 
@@ -1871,7 +1938,6 @@ function drawWeather(now) {
         }
     }
 
-    // 暴雨以上：疊加厚重、持續移動的雨幕
     if (kind === "rain" || kind === "storm") {
         const intensity = config.count / 90;
 
@@ -1937,7 +2003,6 @@ function drawWeather(now) {
             weatherCtx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
             weatherCtx.fill();
 
-            // 冰雹的高光
             weatherCtx.fillStyle = "rgba(255,255,255,.9)";
             weatherCtx.beginPath();
             weatherCtx.arc(p.x - 1, p.y - 1, p.size * 0.35, 0, Math.PI * 2);
@@ -1996,7 +2061,6 @@ function drawWeather(now) {
             p.x += config.wind * 0.3 * dt;
         }
 
-        // 從上方重新生成，讓雨雪保持連續
         if (p.y > weatherHeight + 50) {
             p.y = -Math.random() * 80;
             p.x = Math.random() * weatherWidth;
@@ -2030,10 +2094,7 @@ initializePet();
 requestAnimationFrame(gameLoop);
 </script>
 
-</body>
-</html>
 <style id="pet-dialog-and-clean-background">
-/* 首頁內容融入背景，不顯示大型毛玻璃卡片 */
 .hero-section {
     background: transparent !important;
 }
@@ -2060,77 +2121,57 @@ requestAnimationFrame(gameLoop);
     display: none;
 }
 
-/* 怪獸側面的聊天框 */
 #petSpeech {
     position: absolute;
     z-index: 80;
-
-    /* 放在怪獸側面，位置比原本低 */
     left: 72%;
     top: 42px;
-
-    /* 對話框垂直置中 */
     transform: translateY(-50%);
     transform-origin: center center;
-
     width: max-content;
     max-width: min(260px, 65vw);
     padding: 10px 14px;
-
     border: 2px solid #234b75;
     border-radius: 16px;
-
     background: #fff;
     color: #173653;
-
     font: 600 14px/1.45 Arial, "Microsoft JhengHei", sans-serif;
     white-space: normal;
     overflow-wrap: anywhere;
-
     box-shadow: 0 5px 18px #17365330;
-
     display: none;
     pointer-events: none;
 }
 
-/* 對話框尾巴 */
 #petSpeech::after {
     content: "";
-
     position: absolute;
     left: -8px;
     top: 50%;
-
     width: 14px;
     height: 14px;
-
     background: #fff;
     border-left: 2px solid #234b75;
     border-bottom: 2px solid #234b75;
-
     transform: translateY(-50%) rotate(45deg);
 }
 
-/* 顯示聊天框 */
 #petSpeech.show {
     display: block;
     animation: bubblePop .18s ease-out;
 }
 
-/* 對話框出現動畫 */
 @keyframes bubblePop {
     from {
         opacity: 0;
         scale: .92;
     }
-
     to {
         opacity: 1;
         scale: 1;
     }
 }
 
-/* 手機版：縮小聊天框，避免太寬 */
 @media (max-width: 600px) {
     #petSpeech {
         left: 70%;
@@ -2141,7 +2182,6 @@ requestAnimationFrame(gameLoop);
     }
 }
 
-/* 天氣強度與背景層次 */
 #weatherEffects {
     z-index: 4;
     mix-blend-mode: normal;
@@ -2154,7 +2194,6 @@ requestAnimationFrame(gameLoop);
     height: 100%;
 }
 
-/* 雨勢越強，背景越暗 */
 body.weather-light-rain #game {
     background: linear-gradient(180deg, #94b7d1, #c8deed 78%);
 }
@@ -2179,46 +2218,35 @@ body.weather-extreme-rainstorm #game {
     background: linear-gradient(180deg, #172538, #536a83 78%);
 }
 
-/* 強風沙塵暴 */
 body.weather-strong-sandstorm #game {
     background: linear-gradient(180deg, #85633f, #c6a477 78%);
 }
 
-/* 暴雪 */
 body.weather-blizzard #game,
 body.weather-heavy-blizzard #game {
     background: linear-gradient(180deg, #829db5, #e8f4ff 78%);
 }
 
-/* 雷雨背景 */
 body.weather-thunderstorm #game,
 body.weather-hailstorm #game {
     background: linear-gradient(180deg, #182638, #697f95 78%);
 }
 
-/* 霧天降低背景對比 */
 body.weather-fog #game {
     background: linear-gradient(180deg, #b5c3ca, #e3e9eb 78%);
 }
-/* ==============================
-   手機版操作與寵物聊天框修正
-   ============================== */
 
 @media (max-width: 700px) {
-
-    /* 遊戲場景限制在螢幕範圍 */
     #game {
         overflow: hidden;
         max-width: 100vw;
         max-height: 100dvh;
     }
 
-    /* 寵物不要超出遊戲場景 */
     #monster {
         max-width: 100%;
     }
 
-    /* 手機操作按鈕固定在底部，避開瀏海與底部手勢區 */
     #mobileControls {
         position: fixed !important;
         left: 0 !important;
@@ -2237,7 +2265,6 @@ body.weather-fog #game {
         pointer-events: none;
     }
 
-    /* 按鈕本身可以點擊 */
     #mobileControls button,
     #mobileControls .control-btn {
         pointer-events: auto;
@@ -2247,7 +2274,6 @@ body.weather-fog #game {
         -webkit-tap-highlight-color: transparent;
     }
 
-    /* 寵物聊天框：限制寬度，避免超出左右邊界 */
     #monster #petSpeech {
         position: fixed !important;
         left: 50% !important;
@@ -2264,7 +2290,6 @@ body.weather-fog #game {
         z-index: 10000 !important;
     }
 
-    /* 防止手機橫向溢出 */
     html,
     body {
         max-width: 100%;
@@ -2272,7 +2297,6 @@ body.weather-fog #game {
     }
 }
 
-/* 支援手機觸控 */
 button,
 #mobileControls {
     -webkit-user-select: none;
@@ -2281,5 +2305,37 @@ button,
 
 #mobileControls button {
     touch-action: manipulation;
+}
+/* 暈眩時的左右搖晃/旋轉動畫 */
+@keyframes dizzyShake {
+  0% { transform: scaleX(1) rotate(0deg); }
+  20% { transform: scaleX(1) rotate(-15deg) translateY(-5px); }
+  40% { transform: scaleX(1) rotate(15deg) translateY(0px); }
+  60% { transform: scaleX(1) rotate(-10deg) translateY(-3px); }
+  80% { transform: scaleX(1) rotate(10deg) translateY(0px); }
+  100% { transform: scaleX(1) rotate(0deg); }
+}
+
+/* 讓小怪獸套用暈眩動畫 */
+#monster.dizzy {
+  animation: dizzyShake 0.4s infinite linear !important;
+  filter: hue-rotate(90deg); /* 可選：讓怪獸稍微變色增加暈眩感 */
+}
+
+/* 在小怪獸頭頂加上暈眩符號 💫 */
+#monster.dizzy::after {
+  content: "💫";
+  position: absolute;
+  top: -28px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 22px;
+  animation: spinStars 0.8s infinite linear;
+}
+
+/* 暈眩星號旋轉動畫 */
+@keyframes spinStars {
+  0% { transform: translateX(-50%) rotate(0deg); }
+  100% { transform: translateX(-50%) rotate(360deg); }
 }
 </style>
