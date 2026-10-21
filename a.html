@@ -1,937 +1,2315 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>🥚 Steal An Egg · 縱向地圖版</title>
-  <style>
-    * { margin:0; padding:0; box-sizing:border-box; user-select:none; -webkit-tap-highlight-color:transparent; }
-    body {
-      background: radial-gradient(ellipse at 30% 20%, #151f35, #05080f);
-      min-height:100vh; display:flex; justify-content:center; align-items:center;
-      font-family:'Segoe UI', system-ui, sans-serif; padding:16px;
-    }
-    .game {
-      background: linear-gradient(180deg, #0e1524, #070b13);
-      border-radius:24px; padding:14px;
-      box-shadow:0 30px 60px rgba(0,0,0,.9), 0 0 0 1px #253349 inset, 0 0 0 3px #060a10;
-      max-width:1000px; width:100%;
-    }
-    canvas {
-      display:block; width:100%; height:auto; border-radius:16px;
-      box-shadow:0 0 0 2px #0a111c, 0 16px 40px rgba(0,0,0,.8);
-      cursor:pointer; background:#0a1018;
-    }
-    .hud {
-      display:flex; flex-wrap:wrap; gap:10px; justify-content:space-between;
-      align-items:center; padding:12px 4px 4px;
-    }
-    .stats { display:flex; flex-wrap:wrap; gap:8px; }
-    .stat {
-      display:flex; align-items:center; gap:6px;
-      background: linear-gradient(180deg,#182338,#0d1523);
-      border:1px solid #2c3f5c; border-radius:12px;
-      padding:7px 14px; color:#dbe7ff; font-weight:700; font-size:.9rem;
-      box-shadow:0 3px 0 #05090f, inset 0 1px 0 #3a5275;
-    }
-    .stat b { color:#fff; font-size:1rem; letter-spacing:.3px; }
-    .btns { display:flex; flex-wrap:wrap; gap:8px; }
-    button {
-      background: linear-gradient(180deg,#2b4a72,#16273d);
-      border:1px solid #43689a; border-radius:12px;
-      padding:9px 18px; color:#eaf3ff; font-weight:800; font-size:.82rem;
-      cursor:pointer; letter-spacing:.4px;
-      box-shadow:0 4px 0 #081019, inset 0 1px 0 #5a82b8;
-      transition:transform .06s, box-shadow .06s;
-    }
-    button:hover { filter:brightness(1.15); }
-    button:active { transform:translateY(3px); box-shadow:0 1px 0 #081019, inset 0 1px 0 #5a82b8; }
-    button:disabled { opacity:.35; transform:translateY(2px); box-shadow:0 2px 0 #081019; cursor:not-allowed; filter:grayscale(.6); }
-    .biome-tag {
-      display:flex; align-items:center; gap:8px; font-weight:800; font-size:.9rem;
-      background: linear-gradient(180deg,#1c2e46,#0e1725);
-      border:1px solid #3a5a80; border-radius:12px; padding:7px 16px; color:#cfe2ff;
-    }
-    .hint { display:flex; align-items:center; gap:6px; font-size:.78rem; color:#7fa0c8; font-weight:700; letter-spacing:.5px; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🥚 Steal An Egg · 守衛擊飛 + 存檔版</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;user-select:none;-webkit-tap-highlight-color:transparent}
+  body{
+    background:radial-gradient(ellipse at 30% 20%, #151f35, #05080f);
+    min-height:100vh;display:flex;justify-content:center;align-items:center;
+    font-family:'Segoe UI',system-ui,sans-serif;padding:12px;
+  }
+  .game{
+    background:linear-gradient(180deg,#0e1524,#070b13);
+    border-radius:24px;padding:12px;
+    box-shadow:0 30px 60px rgba(0,0,0,.9),0 0 0 1px #253349 inset,0 0 0 3px #060a10;
+    max-width:1100px;width:100%;
+  }
+  canvas{
+    display:block;width:100%;height:auto;border-radius:16px;
+    box-shadow:0 0 0 2px #0a111c,0 16px 40px rgba(0,0,0,.8);
+    cursor:crosshair;background:#0a1018;
+  }
+  .hud{
+    display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;
+    align-items:center;padding:10px 4px 4px;
+  }
+  .stats{display:flex;flex-wrap:wrap;gap:6px}
+  .stat{
+    display:flex;align-items:center;gap:5px;
+    background:linear-gradient(180deg,#182338,#0d1523);
+    border:1px solid #2c3f5c;border-radius:10px;
+    padding:6px 12px;color:#dbe7ff;font-weight:700;font-size:.8rem;
+    box-shadow:0 3px 0 #05090f,inset 0 1px 0 #3a5275;
+  }
+  .stat b{color:#fff;font-size:.95rem;letter-spacing:.2px}
+  .stat.speed{background:linear-gradient(180deg,#1a3a2a,#0d1f14);border-color:#3a7a5a}
+  .stat.speed b{color:#7affb0}
+  .stat.pet{background:linear-gradient(180deg,#2a1a3a,#150d1f);border-color:#5a3a7a}
+  .stat.pet b{color:#c9a0ff}
+  .btns{display:flex;flex-wrap:wrap;gap:6px}
+  button{
+    background:linear-gradient(180deg,#2b4a72,#16273d);
+    border:1px solid #43689a;border-radius:10px;
+    padding:8px 14px;color:#eaf3ff;font-weight:800;font-size:.78rem;
+    cursor:pointer;letter-spacing:.3px;
+    box-shadow:0 4px 0 #081019,inset 0 1px 0 #5a82b8;
+    transition:transform .06s,box-shadow .06s;
+  }
+  button:hover{filter:brightness(1.15)}
+  button:active{transform:translateY(3px);box-shadow:0 1px 0 #081019}
+  button:disabled{opacity:.35;transform:translateY(2px);box-shadow:0 2px 0 #081019;cursor:not-allowed;filter:grayscale(.6)}
+  button.sell{
+    background:linear-gradient(180deg,#8a2a2a,#4a1010);
+    border-color:#aa4444;
+  }
+  button.sell:active{box-shadow:0 1px 0 #081019}
+  button.save{
+    background:linear-gradient(180deg,#2a6a3a,#143a1a);
+    border-color:#3a9a5a;
+  }
+  .biome-tag{
+    display:flex;align-items:center;gap:6px;font-weight:800;font-size:.85rem;
+    background:linear-gradient(180deg,#1c2e46,#0e1725);
+    border:1px solid #3a5a80;border-radius:10px;padding:6px 14px;color:#cfe2ff;
+  }
+  .hint{display:flex;align-items:center;gap:5px;font-size:.72rem;color:#7fa0c8;font-weight:700;letter-spacing:.3px}
+  .key-hint{
+    display:inline-block;background:#1a2a3a;border:1px solid #3a5a7a;
+    border-radius:4px;padding:1px 5px;font-size:.65rem;color:#aaddff;margin:0 1px;
+  }
+  .train-indicator{
+    display:flex;align-items:center;gap:5px;font-size:.72rem;
+    color:#ffd966;font-weight:800;
+  }
+  /* 選取寵物面板 */
+  .pet-panel{
+    position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+    background:linear-gradient(180deg,#1a2438,#0d1523);
+    border:2px solid #5a3a7a;border-radius:16px;
+    padding:12px 20px;z-index:50;
+    display:none;align-items:center;gap:16px;
+    box-shadow:0 10px 40px rgba(0,0,0,0.8),0 0 0 1px #2a3a5a;
+    max-width:90%;flex-wrap:wrap;justify-content:center;
+  }
+  .pet-panel.open{display:flex}
+  .pet-panel canvas{width:50px;height:50px}
+  .pet-panel .info{display:flex;flex-direction:column;gap:2px}
+  .pet-panel .pname{font-size:1rem;font-weight:800;color:#ffd966}
+  .pet-panel .pinc{font-size:.8rem;color:#9fd89f;font-weight:700}
+  .pet-panel .prar{font-size:.7rem;font-weight:800}
+  .pet-panel .sell-btn{
+    background:linear-gradient(180deg,#8a2a2a,#4a1010);
+    border-color:#aa4444;font-size:.8rem;padding:8px 16px;
+  }
+  .pet-panel .close-btn{
+    background:#2a2a3a;border-color:#4a4a5a;font-size:.7rem;padding:6px 12px;
+  }
+  /* 圖鑑面板 */
+  .index-panel{
+    position:fixed;top:0;left:0;right:0;bottom:0;
+    background:rgba(5,10,20,0.96);
+    backdrop-filter:blur(12px);
+    z-index:100;display:none;flex-direction:column;
+    padding:24px;overflow-y:auto;
+  }
+  .index-panel.open{display:flex}
+  .index-header{
+    display:flex;justify-content:space-between;align-items:center;
+    margin-bottom:20px;flex-wrap:wrap;gap:12px;
+  }
+  .index-header h2{
+    color:#ffd966;font-size:1.4rem;font-weight:900;
+    text-shadow:0 0 20px rgba(255,200,50,0.5);
+  }
+  .index-header button{
+    background:linear-gradient(180deg,#8a2a2a,#4a1010);
+    border-color:#aa4444;
+  }
+  .index-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(140px,1fr));
+    gap:12px;
+  }
+  .index-card{
+    background:linear-gradient(180deg,#1a2438,#0d1523);
+    border:2px solid #2c3f5c;border-radius:14px;
+    padding:10px;display:flex;flex-direction:column;
+    align-items:center;gap:6px;position:relative;
+    transition:all 0.2s;
+  }
+  .index-card.unlocked{
+    border-color:#ffd966;
+    box-shadow:0 0 20px rgba(255,200,50,0.2);
+  }
+  .index-card.locked{
+    opacity:0.35;filter:grayscale(1);
+  }
+  .index-card canvas{
+    width:60px;height:60px;
+  }
+  .index-card .name{
+    font-size:0.75rem;font-weight:800;color:#dbe7ff;text-align:center;
+    line-height:1.2;min-height:1.8em;
+  }
+  .index-card .biome-label{
+    font-size:0.6rem;color:#7fa0c8;font-weight:700;
+  }
+  .index-card .rarity-label{
+    font-size:0.6rem;font-weight:800;padding:2px 8px;
+    border-radius:10px;background:#0a1018;
+  }
+  .index-card .reward-btn{
+    font-size:0.65rem;padding:4px 10px;
+    background:linear-gradient(180deg,#2a6a3a,#143a1a);
+    border-color:#3a9a5a;border-radius:8px;
+  }
+  .index-card .reward-btn.claimed{
+    opacity:0.4;cursor:default;filter:grayscale(1);
+  }
+  .index-tabs{
+    display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;
+  }
+  .index-tab{
+    padding:8px 16px;border-radius:10px;
+    background:#0d1523;border:1px solid #2c3f5c;
+    color:#7fa0c8;font-weight:800;font-size:0.8rem;
+    cursor:pointer;transition:all 0.15s;
+  }
+  .index-tab.active{
+    background:linear-gradient(180deg,#2b4a72,#16273d);
+    color:#eaf3ff;border-color:#5a82b8;
+  }
+  /* 擊飛警告 */
+  .knockback-flash{
+    position:fixed;top:0;left:0;right:0;bottom:0;
+    background:rgba(255,0,0,0.3);
+    pointer-events:none;z-index:150;
+    animation:flash 0.4s ease-out;
+  }
+  @keyframes flash{
+    0%{opacity:0.8}
+    100%{opacity:0}
+  }
+</style>
 </head>
 <body>
 <div class="game">
-  <canvas id="c" width="1000" height="640"></canvas>
+  <canvas id="c" width="1080" height="680"></canvas>
   <div class="hud">
     <div class="stats">
-      <div class="stat">⚡ <b id="uiSpeed">10</b></div>
+      <div class="stat speed">⚡ <b id="uiSpeed">10</b> <span style="color:#7fa0c8;font-size:.7rem">速度</span></div>
       <div class="stat">💰 <b id="uiCash">0</b></div>
       <div class="stat">🥚 <b id="uiEgg">0</b></div>
-      <div class="stat">🐾 <b id="uiPet">0</b></div>
-      <div class="stat">📈 <b id="uiCps">0</b>/s</div>
+      <div class="stat pet">📖 <b id="uiIndex">0/64</b></div>
     </div>
     <div class="btns">
-      <button id="btnTrain">🏃 訓練</button>
-      <button id="btnUp">⬆️ 跑步機 <span id="lvTxt">1</span></button>
+      <button id="btnUp">⬆️ 跑步機 <span id="lvTxt">1</span> <span id="costTxt" style="color:#ffaa00">$40</span></button>
+      <button id="btnIndex">📖 圖鑑</button>
       <button id="btnEquip">✨ 一鍵最佳</button>
-      <button id="btnSell">💸 賣出最低</button>
+      <button id="btnSellSelected" class="sell" disabled>💸 出售選中</button>
+      <button id="btnSave" class="save">💾 存檔</button>
     </div>
   </div>
-  <div class="hud" style="padding-top:6px">
+  <div class="hud" style="padding-top:4px">
     <div class="biome-tag"><span id="uiBiomeIcon">🌲</span> <span id="uiBiome">森林</span></div>
-    <div class="hint">📜 點擊上方生物群系傳送 / 滾輪縮放視角</div>
+    <div class="train-indicator" id="trainStatus">🚶 未在訓練</div>
+    <div class="hint">🎮 <span class="key-hint">WASD</span> 移動 &nbsp;|&nbsp; 站上跑步機自動訓練 &nbsp;|&nbsp; 點擊寵物選取後可出售</div>
   </div>
 </div>
+
+<!-- 選中寵物面板 -->
+<div class="pet-panel" id="petPanel">
+  <canvas id="petPanelCanvas" width="50" height="50"></canvas>
+  <div class="info">
+    <div class="pname" id="ppName">-</div>
+    <div class="pinc" id="ppInc">-</div>
+    <div class="prar" id="ppRar">-</div>
+  </div>
+  <button class="sell-btn" id="btnSellPanel">💸 出售</button>
+  <button class="close-btn" id="btnClosePanel">✕</button>
+</div>
+
+<!-- 圖鑑面板 -->
+<div class="index-panel" id="indexPanel">
+  <div class="index-header">
+    <h2>📖 寵物圖鑑</h2>
+    <div class="index-tabs" id="indexTabs"></div>
+    <button id="btnCloseIndex">✕ 關閉</button>
+  </div>
+  <div class="index-grid" id="indexGrid"></div>
+</div>
+
 <script>
 (function(){
-  const c = document.getElementById('c');
-  const ctx = c.getContext('2d');
-  const W = 1000, H = 640;
+  const c=document.getElementById('c');
+  const ctx=c.getContext('2d');
+  const W=1080,H=680;
 
-  // ========== 世界設定 (縱向地圖) ==========
-  const WORLD = {
-    // 世界座標系：基地在下方 (Y 大)，宇宙在上方 (Y 小)
-    baseY: 3200,       // 世界底部 (玩家基地)
-    safeY: 2500,       // 安全線 (Y < 2500 危險)
-    // 生物群系分界 (Y 範圍)
-    biomes: [
-      { name:'森林', icon:'🌲', yMin:2000, yMax:2500, req:0,      color:'#16301c', accent:'#2e5a34', guardian:'雞',   nestsY:2200, nestXs:[300,700], petNames:['雞','狗','鳥','穴鴞','浣熊','狐狸','熊','Brr Brr Patapim'] },
-      { name:'火山', icon:'🌋', yMin:1500, yMax:2000, req:700,    color:'#3a1616', accent:'#5a2020', guardian:'地獄犬', nestsY:1700, nestXs:[200,500,800], petNames:['熔岩壁虎','熔岩蛙','烈焰牛','熔岩鬣蜥','Chillin Chilli','地獄犬','鳳凰','熔岩龍'] },
-      { name:'深淵', icon:'🌊', yMin:1000, yMax:1500, req:2500,   color:'#0c1a30', accent:'#163a5a', guardian:'白鯨',   nestsY:1200, nestXs:[300,700], petNames:['鸚鵡魚','劍魚','鯊魚','虎鯨','鯨鯊','白鯨','海妖','El Maja'] },
-      { name:'史前', icon:'🦕', yMin:500,  yMax:1000, req:17000,  color:'#2a2818', accent:'#4a4520', guardian:'暴龍',   nestsY:700,  nestXs:[250,750], petNames:['渡渡鳥','翼龍','甲龍','三角龍','雷龍','暴龍','Tralaledon','滄龍'] },
-      { name:'宇宙', icon:'🌌', yMin:0,    yMax:500,  req:700000, color:'#160e28', accent:'#2a1a4a', guardian:'骷髏王', nestsY:200,  nestXs:[500], petNames:['蜈蚣','宇宙壁虎','宇宙猩猩','La Vacca','骷髏王','宇宙龍','永恆月龍','獨角獸'] },
+  // ========== 世界設定 ==========
+  const WORLD={
+    safeY:2500,
+    biomes:[
+      {name:'森林',icon:'🌲',yMin:2000,yMax:2500,reqDisplay:0,color:'#16301c',accent:'#2e5a34',guardian:'雞',nestsY:2200,nestXs:[300,700],petNames:['雞','狗','鳥','穴鴞','浣熊','狐狸','熊','Brr Brr Patapim']},
+      {name:'火山',icon:'🌋',yMin:1500,yMax:2000,reqDisplay:700,color:'#3a1616',accent:'#5a2020',guardian:'地獄犬',nestsY:1700,nestXs:[200,500,800],petNames:['熔岩壁虎','熔岩蛙','烈焰牛','熔岩鬣蜥','Chillin Chilli','地獄犬','鳳凰','熔岩龍']},
+      {name:'深淵',icon:'🌊',yMin:1000,yMax:1500,reqDisplay:2500,color:'#0c1a30',accent:'#163a5a',guardian:'白鯨',nestsY:1200,nestXs:[300,700],petNames:['鸚鵡魚','劍魚','鯊魚','虎鯨','鯨鯊','白鯨','海妖','El Maja']},
+      {name:'史前',icon:'🦕',yMin:500,yMax:1000,reqDisplay:17000,color:'#2a2818',accent:'#4a4520',guardian:'暴龍',nestsY:700,nestXs:[250,750],petNames:['渡渡鳥','翼龍','甲龍','三角龍','雷龍','暴龍','Tralaledon','滄龍']},
+      {name:'宇宙',icon:'🌌',yMin:0,yMax:500,reqDisplay:700000,color:'#160e28',accent:'#2a1a4a',guardian:'骷髏王',nestsY:200,nestXs:[500],petNames:['蜈蚣','宇宙壁虎','宇宙猩猩','La Vacca','骷髏王','宇宙龍','永恆月龍','獨角獸']},
+      {name:'櫻花',icon:'🌸',yMin:-600,yMax:0,reqDisplay:1500000,color:'#2a1a2a',accent:'#6a3a5a',guardian:'櫻花精靈',nestsY:-300,nestXs:[250,750],petNames:['花瓣精靈','櫻桃鼠','粉蝶','花妖','櫻花鹿','櫻龍','月兔','櫻花女神']},
+      {name:'泰坦',icon:'🏛️',yMin:-1200,yMax:-600,reqDisplay:2500000,color:'#1a1a2a',accent:'#4a4a6a',guardian:'泰坦巨神',nestsY:-900,nestXs:[300,700],petNames:['泰坦幼獸','青銅巨像','守護石像','雷電巨人','大地泰坦','天空泰坦','時空泰坦','泰坦之王']},
+      {name:'虛空',icon:'🕳️',yMin:-2000,yMax:-1200,reqDisplay:100000000000,color:'#05050a',accent:'#2a2a4a',guardian:'虛空吞噬者',nestsY:-1600,nestXs:[500],petNames:['虛空碎片','暗影獸','虛空之眼','混沌行者','深淵領主','虛空巨獸','終焉之龍','創世神']},
     ],
-    // 稀有度
-    rarities: [
-      {n:'Common',c:'#9aa7b8'}, {n:'Uncommon',c:'#5ec8ff'}, {n:'Rare',c:'#4a7dff'},
-      {n:'Epic',c:'#b56cff'}, {n:'Legendary',c:'#ffb03a'}, {n:'Mythic',c:'#ff4a6a'},
-      {n:'Cosmic',c:'#ff6ee0'}, {n:'Secret',c:'#f5f5f5'}, {n:'Divine',c:'#ffe066'}
+    rarities:[
+      {n:'Common',c:'#9aa7b8'},{n:'Uncommon',c:'#5ec8ff'},{n:'Rare',c:'#4a7dff'},
+      {n:'Epic',c:'#b56cff'},{n:'Legendary',c:'#ffb03a'},{n:'Mythic',c:'#ff4a6a'},
+      {n:'Cosmic',c:'#ff6ee0'},{n:'Secret',c:'#f5f5f5'},{n:'Divine',c:'#ffe066'}
     ],
-    // 每群系寵物稀有度 (8隻)
-    petRarity: [
-      [0,0,1,2,2,3,3,4], //森林
-      [2,3,4,4,5,7,8,8], //火山
-      [2,3,4,5,6,6,7,8], //深淵
-      [2,4,5,6,6,7,8,8], //史前
-      [2,5,6,6,7,8,8,8], //宇宙
+    petRarity:[
+      [0,0,1,2,2,3,3,4],
+      [2,3,4,4,5,7,8,8],
+      [2,3,4,5,6,6,7,8],
+      [2,4,5,6,6,7,8,8],
+      [2,5,6,6,7,8,8,8],
+      [2,4,5,6,6,7,8,8],
+      [2,5,6,7,7,8,8,8],
+      [6,7,7,8,8,8,8,8],
     ],
-    // 每群系寵物基礎產值
-    petIncome: [
+    petIncome:[
       [1,2,8,35,45,180,240,1800],
       [180,850,9500,11000,55000,8000000,85000000,100000000],
       [220,1100,15000,80000,700000,850000,15000000,130000000],
       [280,22000,120000,1200000,1500000,180000000,32000000,180000000],
       [300,28000,180000,2200000,45000000,60000000,250000000,1000000000],
+      [350,35000,250000,3500000,60000000,80000000,350000000,1500000000],
+      [400,50000,400000,5000000,80000000,120000000,500000000,2000000000],
+      [500,80000,800000,8000000,150000000,200000000,800000000,5000000000],
     ],
-    // 速度門檻 (實際顯示用，已縮小)
-    speedReq: [0, 700, 2500, 17000, 700000],
   };
 
-  // ========== 遊戲狀態 ==========
-  const S = {
-    player: { x:500, y:2900, r:16, speed:10, trailMul:1, carry:null, stun:0, tsLv:1 },
-    cash: 0,
-    eggs: [],      // { x, y, r, size, mul, petIdx, biomeIdx, collected, float }
-    guards: [],    // { x, y, r, spd, alert, stun, hx, hy, biomeIdx, name }
-    pets: [],      // { id, name, inc, rar, biomeIdx, x, y, vx, vy, selected, slot }
-    biomeIdx: 0,   // 當前解鎖的最高生物群系
-    eggTimer: 0,
-    lastT: 0,
-    cps: 0,
-    selectedPet: null,
-    camera: { x: 500, y: 2700 }, // 相機中心 (世界座標)
-    zoom: 1.0,
-    // 跑步機位置 (世界座標)
-    treadmill: { x: 500, y: 2850 },
-    // 農場寵物欄位 (世界座標)
-    farmPods: [
-      {x:130, y:2780}, {x:130, y:2900}, {x:130, y:3020},
-      {x:870, y:2780}, {x:870, y:2900}, {x:870, y:3020},
-    ],
-    // 合成機位置
-    fuseMachine: { x: 930, y: 3080 },
-    safeLineY: 2500,
+  // ========== 速度門檻判定 ==========
+  function canEnterBiome(biomeIdx){
+    const p=S.player;
+    return p.displaySpeed>=WORLD.biomes[biomeIdx].reqDisplay;
+  }
+
+  // ========== 寵物造型數據 ==========
+  const BIOME_PALETTES=[
+    {body:'#6aaa4a',belly:'#aadd77',eye:'#3a2a1a',accent:'#ffaa00'},
+    {body:'#cc4422',belly:'#ff8844',eye:'#ffdd00',accent:'#ff2200'},
+    {body:'#2266aa',belly:'#44aaff',eye:'#00ffaa',accent:'#00ccff'},
+    {body:'#887744',belly:'#bbaa66',eye:'#ffcc00',accent:'#ff8800'},
+    {body:'#7744cc',belly:'#aa88ff',eye:'#ff66ff',accent:'#cc00ff'},
+    {body:'#dd66aa',belly:'#ffaacc',eye:'#ff44aa',accent:'#ff88cc'},
+    {body:'#aaaaaa',belly:'#dddddd',eye:'#ffffff',accent:'#ffdd44'},
+    {body:'#442266',belly:'#8866aa',eye:'#ff00aa',accent:'#aa00ff'},
+  ];
+
+  const PET_SHAPES=[
+    ['chicken','dog','bird','owl','raccoon','fox','bear','crystal'],
+    ['lizard','frog','cow','iguana','chili','hound','phoenix','dragon'],
+    ['parrotfish','swordfish','shark','orca','whaleshark','beluga','kraken','mermaid'],
+    ['dodo','pterodactyl','ankylo','triceratops','brontosaurus','trex','crystal','mosasaur'],
+    ['centipede','gecko','gorilla','crystal','skeleton','cosmicdragon','moondragon','unicorn'],
+    ['petal','mouse','butterfly','flower','deer','sakuradragon','rabbit','goddess'],
+    ['titanbaby','colossus','statue','thunder','earth','sky','time','king'],
+    ['shard','shadow','eye','chaos','abyss','voidbeast','enddragon','creator'],
+  ];
+
+  function displayToReal(display){
+    if(display<=0) return 1.2;
+    const base=1.2;
+    const logPart=Math.log10(1+display/30);
+    return base + Math.pow(logPart,1.7)*2.8;
+  }
+
+  function treadmillCost(lv){
+    return Math.floor(40 * Math.pow(1.8, lv-1));
+  }
+
+  // ========== 圖鑑 ==========
+  const IndexData={
+    discovered:new Set(),
+    claimed:new Set(),
+    total: WORLD.biomes.length * 8,
   };
 
-  // ========== 工具函數 ==========
-  const rnd = (a,b) => Math.random()*(b-a)+a;
-  const dist = (x1,y1,x2,y2) => Math.hypot(x2-x1, y2-y1);
-  const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+  // ========== 存檔系統 ==========
+  const SAVE_KEY='steal_an_egg_save_v1';
 
-  function worldToScreen(wx, wy) {
-    const z = S.zoom;
-    return {
-      x: (wx - S.camera.x) * z + W/2,
-      y: (wy - S.camera.y) * z + H/2,
+  function saveGame(){
+    const data={
+      version:1,
+      player:{
+        displaySpeed:S.player.displaySpeed,
+        tsLv:S.player.tsLv,
+        x:S.player.x,
+        y:S.player.y,
+      },
+      cash:S.cash,
+      pets:S.pets.map(p=>({
+        name:p.name,inc:p.inc,rar:p.rar,biomeIdx:p.biomeIdx,petIdx:p.petIdx,slot:p.slot,
+      })),
+      biomeIdx:S.biomeIdx,
+      discovered:[...IndexData.discovered],
+      claimed:[...IndexData.claimed],
+      cps:S.cps,
+      timestamp:Date.now(),
     };
-  }
-  function screenToWorld(sx, sy) {
-    const z = S.zoom;
-    return {
-      x: (sx - W/2) / z + S.camera.x,
-      y: (sy - H/2) / z + S.camera.y,
-    };
+    try{
+      localStorage.setItem(SAVE_KEY,JSON.stringify(data));
+      showToast('💾 存檔成功！','#2a6a3a','#3a9a5a');
+    }catch(e){
+      showToast('❌ 存檔失敗','#8a2a2a','#aa4444');
+    }
   }
 
-  function shade(hex, amt) {
-    const n = parseInt(hex.slice(1), 16);
-    let r = clamp((n>>16) + amt, 0, 255);
-    let g = clamp(((n>>8)&0xff) + amt, 0, 255);
-    let b = clamp((n&0xff) + amt, 0, 255);
+  function loadGame(){
+    try{
+      const raw=localStorage.getItem(SAVE_KEY);
+      if(!raw)return false;
+      const data=JSON.parse(raw);
+      if(!data||data.version!==1)return false;
+
+      S.player.displaySpeed=data.player.displaySpeed||10;
+      S.player.tsLv=data.player.tsLv||1;
+      S.player.x=data.player.x||540;
+      S.player.y=data.player.y||2900;
+      S.cash=data.cash||0;
+      S.biomeIdx=data.biomeIdx||0;
+      S.cps=data.cps||0;
+
+      // 重建寵物
+      S.pets=[];
+      if(data.pets&&Array.isArray(data.pets)){
+        for(const p of data.pets){
+          S.pets.push({
+            id:Math.random().toString(36).slice(2),
+            name:p.name,inc:p.inc,rar:p.rar,biomeIdx:p.biomeIdx,petIdx:p.petIdx,
+            x:S.farmPods[p.slot]?S.farmPods[p.slot].x:130,
+            y:S.farmPods[p.slot]?S.farmPods[p.slot].y:2780,
+            vx:rnd(-8,8),vy:rnd(-8,8),selected:false,
+            slot:p.slot,
+          });
+        }
+      }
+
+      // 圖鑑
+      IndexData.discovered.clear();
+      IndexData.claimed.clear();
+      if(data.discovered)data.discovered.forEach(k=>IndexData.discovered.add(k));
+      if(data.claimed)data.claimed.forEach(k=>IndexData.claimed.add(k));
+
+      // 重新計算被動收入
+      S.cps=S.pets.reduce((s,pt)=>s+pt.inc,0)*0.05;
+
+      showToast('📂 讀取存檔成功！','#2a4a72','#5a82b8');
+      return true;
+    }catch(e){
+      console.error('讀取失敗',e);
+      return false;
+    }
+  }
+
+  function showToast(msg,bg1,bg2){
+    const toast=document.createElement('div');
+    toast.style.cssText=`position:fixed;top:20px;left:50%;transform:translateX(-50%);
+      background:linear-gradient(180deg,${bg1},${bg2});
+      border:2px solid #ffd966;border-radius:12px;padding:10px 24px;
+      color:#ffd966;font-weight:800;font-size:1rem;z-index:200;
+      box-shadow:0 0 30px rgba(255,200,50,0.5);pointer-events:none;`;
+    toast.textContent=msg;
+    document.body.appendChild(toast);
+    setTimeout(()=>{toast.style.opacity='0';toast.style.transition='opacity 0.5s';setTimeout(()=>toast.remove(),500)},1500);
+  }
+
+  // ========== 狀態 ==========
+  const S={
+    player:{
+      x:540,y:2900,r:15,
+      displaySpeed:10,
+      trailMul:1,
+      carry:null,stun:0,tsLv:1,
+      knockbackTimer:0,vx:0,vy:0,
+      training:false,
+      trainTickTimer:0,
+    },
+    cash:0,eggs:[],guards:[],pets:[],
+    biomeIdx:0,eggTimer:0,lastT:0,cps:0,
+    selectedPet:null,
+    camera:{x:540,y:2650},zoom:1.0,time:0,
+    treadmill:{x:540,y:2850},
+    farmPods:[
+      {x:130,y:2780},{x:130,y:2900},{x:130,y:3020},
+      {x:950,y:2780},{x:950,y:2900},{x:950,y:3020},
+    ],
+    fuseMachine:{x:990,y:3080},
+    safeLineY:2500,
+    totalTrainSteps:0,
+    indexOpen:false,
+    indexTab:0,
+    panelOpen:false,
+  };
+
+  const keys={};
+
+  const rnd=(a,b)=>Math.random()*(b-a)+a;
+  const dist=(x1,y1,x2,y2)=>Math.hypot(x2-x1,y2-y1);
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+
+  function worldToScreen(wx,wy){
+    const z=S.zoom;
+    return{x:(wx-S.camera.x)*z+W/2,y:(wy-S.camera.y)*z+H/2};
+  }
+  function screenToWorld(sx,sy){
+    const z=S.zoom;
+    return{x:(sx-W/2)/z+S.camera.x,y:(sy-H/2)/z+S.camera.y};
+  }
+
+  function shade(hex,amt){
+    const n=parseInt(hex.slice(1),16);
+    let r=clamp((n>>16)+amt,0,255),g=clamp(((n>>8)&0xff)+amt,0,255),b=clamp((n&0xff)+amt,0,255);
     return '#'+((r<<16)|(g<<8)|b).toString(16).padStart(6,'0');
   }
-  function hexA(hex, a) {
-    const n = parseInt(hex.slice(1), 16);
+  function hexA(hex,a){
+    const n=parseInt(hex.slice(1),16);
     return `rgba(${n>>16},${(n>>8)&255},${n&255},${a})`;
   }
-  function fmt(n) {
-    if (n >= 1e9) return (n/1e9).toFixed(1)+'B';
-    if (n >= 1e6) return (n/1e6).toFixed(1)+'M';
-    if (n >= 1e3) return (n/1e3).toFixed(1)+'K';
+  function fmt(n){
+    if(n>=1e12)return (n/1e12).toFixed(2)+'T';
+    if(n>=1e9)return (n/1e9).toFixed(2)+'B';
+    if(n>=1e6)return (n/1e6).toFixed(2)+'M';
+    if(n>=1e3)return (n/1e3).toFixed(2)+'K';
+    return Math.floor(n).toString();
+  }
+  function fmtSpeed(n){
+    if(n>=1e9)return (n/1e9).toFixed(2)+'B';
+    if(n>=1e6)return (n/1e6).toFixed(2)+'M';
+    if(n>=1e3)return (n/1e3).toFixed(2)+'K';
     return Math.floor(n).toString();
   }
 
-  // ========== 初始化 ==========
-  function reset() {
-    S.player = { x:500, y:2900, r:16, speed:10, trailMul:1, carry:null, stun:0, tsLv:1 };
-    S.cash = 0;
-    S.eggs = [];
-    S.guards = [];
-    S.pets = [];
-    S.biomeIdx = 0;
-    S.eggTimer = 0;
-    S.cps = 0;
-    S.selectedPet = null;
-    S.camera = { x:500, y:2650 };
-    S.zoom = 1.0;
+  // ========== 寵物繪製 ==========
+  function drawPetShape(ctx, shape, palette, size, time, rarityColor){
+    const s=size;
+    const body=palette.body;
+    const belly=palette.belly;
+    const eyeC=palette.eye;
+    const accent=palette.accent;
+    const bob=Math.sin(time*3)*2;
 
-    // 生成每個群系的蛋和守衛
-    for (let bi = 0; bi < WORLD.biomes.length; bi++) {
+    ctx.save();
+    ctx.translate(0,bob);
+
+    switch(shape){
+      case 'chicken':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,0,s*0.7,s*0.8,0,0,7);ctx.fill();
+        ctx.fillStyle=shade(body,-20);
+        ctx.beginPath();ctx.ellipse(-s*0.5,s*0.1,s*0.3,s*0.4,0.3,0,7);ctx.fill();
+        ctx.beginPath();ctx.ellipse(s*0.5,s*0.1,s*0.3,s*0.4,-0.3,0,7);ctx.fill();
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.arc(0,-s*0.5,s*0.45,0,7);ctx.fill();
+        ctx.fillStyle='#ff3333';
+        ctx.beginPath();ctx.arc(-s*0.1,-s*0.9,s*0.15,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.1,-s*0.9,s*0.15,0,7);ctx.fill();
+        ctx.fillStyle='#ffaa00';
+        ctx.beginPath();ctx.moveTo(-s*0.15,-s*0.4);ctx.lineTo(s*0.15,-s*0.4);ctx.lineTo(0,-s*0.2);ctx.closePath();ctx.fill();
+        ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(-s*0.2,-s*0.55,s*0.12,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.2,-s*0.55,s*0.12,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(-s*0.2,-s*0.55,s*0.06,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.2,-s*0.55,s*0.06,0,7);ctx.fill();
+        break;
+
+      case 'dog':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,s*0.1,s*0.6,s*0.5,0,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(0,-s*0.4,s*0.4,0,7);ctx.fill();
+        ctx.fillStyle=shade(body,-25);
+        ctx.beginPath();ctx.ellipse(-s*0.35,-s*0.7,s*0.15,s*0.25,0.4,0,7);ctx.fill();
+        ctx.beginPath();ctx.ellipse(s*0.35,-s*0.7,s*0.15,s*0.25,-0.4,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(0,-s*0.35,s*0.08,0,7);ctx.fill();
+        ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(-s*0.18,-s*0.5,s*0.1,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.18,-s*0.5,s*0.1,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(-s*0.18,-s*0.5,s*0.05,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.18,-s*0.5,s*0.05,0,7);ctx.fill();
+        ctx.fillStyle='#ff6688';ctx.beginPath();ctx.ellipse(0,-s*0.2,s*0.08,s*0.1,0,0,7);ctx.fill();
+        break;
+
+      case 'bird':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,0,s*0.6,s*0.7,0,0,7);ctx.fill();
+        ctx.fillStyle=shade(body,-20);
+        ctx.beginPath();ctx.ellipse(-s*0.45,s*0.05,s*0.25,s*0.35,0.5,0,7);ctx.fill();
+        ctx.beginPath();ctx.ellipse(s*0.45,s*0.05,s*0.25,s*0.35,-0.5,0,7);ctx.fill();
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.arc(0,-s*0.45,s*0.38,0,7);ctx.fill();
+        ctx.fillStyle='#ffaa00';
+        ctx.beginPath();ctx.moveTo(-s*0.12,-s*0.4);ctx.lineTo(s*0.12,-s*0.4);ctx.lineTo(0,-s*0.15);ctx.closePath();ctx.fill();
+        ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(-s*0.15,-s*0.55,s*0.1,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.15,-s*0.55,s*0.1,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(-s*0.15,-s*0.55,s*0.05,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.15,-s*0.55,s*0.05,0,7);ctx.fill();
+        break;
+
+      case 'owl':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,0,s*0.65,s*0.75,0,0,7);ctx.fill();
+        ctx.fillStyle=shade(body,-20);
+        ctx.beginPath();ctx.ellipse(-s*0.5,s*0.05,s*0.2,s*0.4,0.3,0,7);ctx.fill();
+        ctx.beginPath();ctx.ellipse(s*0.5,s*0.05,s*0.2,s*0.4,-0.3,0,7);ctx.fill();
+        ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(-s*0.22,-s*0.2,s*0.18,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.22,-s*0.2,s*0.18,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(-s*0.22,-s*0.2,s*0.09,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.22,-s*0.2,s*0.09,0,7);ctx.fill();
+        ctx.fillStyle='#ffaa00';ctx.beginPath();ctx.moveTo(-s*0.08,-s*0.05);ctx.lineTo(s*0.08,-s*0.05);ctx.lineTo(0,s*0.1);ctx.closePath();ctx.fill();
+        break;
+
+      case 'raccoon':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,s*0.1,s*0.6,s*0.5,0,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(0,-s*0.35,s*0.4,0,7);ctx.fill();
+        ctx.fillStyle=shade(body,-30);
+        ctx.beginPath();ctx.ellipse(-s*0.35,-s*0.65,s*0.12,s*0.2,0.4,0,7);ctx.fill();
+        ctx.beginPath();ctx.ellipse(s*0.35,-s*0.65,s*0.12,s*0.2,-0.4,0,7);ctx.fill();
+        ctx.fillStyle='#333';
+        ctx.beginPath();ctx.ellipse(-s*0.18,-s*0.4,s*0.2,s*0.12,0,0,7);ctx.fill();
+        ctx.beginPath();ctx.ellipse(s*0.18,-s*0.4,s*0.2,s*0.12,0,0,7);ctx.fill();
+        ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(-s*0.18,-s*0.42,s*0.08,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.18,-s*0.42,s*0.08,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(-s*0.18,-s*0.42,s*0.04,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.18,-s*0.42,s*0.04,0,7);ctx.fill();
+        break;
+
+      case 'fox':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,s*0.15,s*0.6,s*0.45,0,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(0,-s*0.3,s*0.4,0,7);ctx.fill();
+        ctx.fillStyle=shade(body,-15);
+        ctx.beginPath();ctx.moveTo(-s*0.35,-s*0.55);ctx.lineTo(-s*0.15,-s*0.95);ctx.lineTo(-s*0.05,-s*0.55);ctx.closePath();ctx.fill();
+        ctx.beginPath();ctx.moveTo(s*0.35,-s*0.55);ctx.lineTo(s*0.15,-s*0.95);ctx.lineTo(s*0.05,-s*0.55);ctx.closePath();ctx.fill();
+        ctx.fillStyle='#fff';
+        ctx.beginPath();ctx.ellipse(0,-s*0.15,s*0.2,s*0.15,0,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(0,-s*0.22,s*0.06,0,7);ctx.fill();
+        ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(-s*0.18,-s*0.42,s*0.09,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.18,-s*0.42,s*0.09,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(-s*0.18,-s*0.42,s*0.045,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.18,-s*0.42,s*0.045,0,7);ctx.fill();
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(s*0.65,s*0.05,s*0.2,s*0.4,0.6,0,7);ctx.fill();
+        ctx.fillStyle='#fff';
+        ctx.beginPath();ctx.ellipse(s*0.8,s*0.0,s*0.08,s*0.1,0.6,0,7);ctx.fill();
+        break;
+
+      case 'bear':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,s*0.1,s*0.65,s*0.55,0,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(0,-s*0.35,s*0.42,0,7);ctx.fill();
+        ctx.fillStyle=shade(body,-15);
+        ctx.beginPath();ctx.arc(-s*0.32,-s*0.7,s*0.15,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.32,-s*0.7,s*0.15,0,7);ctx.fill();
+        ctx.fillStyle=belly;
+        ctx.beginPath();ctx.ellipse(0,-s*0.15,s*0.2,s*0.15,0,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(0,-s*0.18,s*0.07,0,7);ctx.fill();
+        ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(-s*0.18,-s*0.42,s*0.09,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.18,-s*0.42,s*0.09,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(-s*0.18,-s*0.42,s*0.045,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.18,-s*0.42,s*0.045,0,7);ctx.fill();
+        break;
+
+      case 'lizard':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,s*0.1,s*0.55,s*0.35,0,0,7);ctx.fill();
+        ctx.beginPath();ctx.ellipse(0,-s*0.3,s*0.35,s*0.3,0,0,7);ctx.fill();
+        ctx.fillStyle=accent;
+        for(let i=0;i<3;i++){
+          ctx.beginPath();ctx.moveTo(-s*0.15+i*s*0.15,s*0.3);ctx.lineTo(-s*0.1+i*s*0.15,s*0.5);ctx.lineTo(-s*0.2+i*s*0.15,s*0.3);ctx.closePath();ctx.fill();
+        }
+        ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(-s*0.15,-s*0.35,s*0.1,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.15,-s*0.35,s*0.1,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(-s*0.15,-s*0.35,s*0.05,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.15,-s*0.35,s*0.05,0,7);ctx.fill();
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.moveTo(s*0.5,s*0.1);ctx.lineTo(s*0.9,s*0.0);ctx.lineTo(s*0.5,s*0.3);ctx.closePath();ctx.fill();
+        break;
+
+      case 'frog':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,s*0.15,s*0.65,s*0.5,0,0,7);ctx.fill();
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.arc(-s*0.3,-s*0.3,s*0.22,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.3,-s*0.3,s*0.22,0,7);ctx.fill();
+        ctx.fillStyle='#fff';
+        ctx.beginPath();ctx.arc(-s*0.3,-s*0.32,s*0.14,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.3,-s*0.32,s*0.14,0,7);ctx.fill();
+        ctx.fillStyle='#000';
+        ctx.beginPath();ctx.arc(-s*0.3,-s*0.32,s*0.07,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.3,-s*0.32,s*0.07,0,7);ctx.fill();
+        ctx.strokeStyle='#000';ctx.lineWidth=s*0.04;
+        ctx.beginPath();ctx.arc(0,s*0.0,s*0.25,0.2,Math.PI-0.2);ctx.stroke();
+        break;
+
+      case 'cow':
+        ctx.fillStyle='#fff';
+        ctx.beginPath();ctx.ellipse(0,s*0.1,s*0.6,s*0.5,0,0,7);ctx.fill();
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(-s*0.25,s*0.0,s*0.2,s*0.15,0.3,0,7);ctx.fill();
+        ctx.beginPath();ctx.ellipse(s*0.2,s*0.2,s*0.18,s*0.12,-0.2,0,7);ctx.fill();
+        ctx.fillStyle='#fff';
+        ctx.beginPath();ctx.arc(0,-s*0.35,s*0.4,0,7);ctx.fill();
+        ctx.fillStyle='#ffdd88';
+        ctx.beginPath();ctx.arc(-s*0.3,-s*0.65,s*0.1,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.3,-s*0.65,s*0.1,0,7);ctx.fill();
+        ctx.fillStyle='#ffccbb';
+        ctx.beginPath();ctx.ellipse(0,-s*0.15,s*0.18,s*0.12,0,0,7);ctx.fill();
+        ctx.fillStyle='#000';
+        ctx.beginPath();ctx.arc(-s*0.06,-s*0.17,s*0.03,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.06,-s*0.17,s*0.03,0,7);ctx.fill();
+        ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(-s*0.18,-s*0.42,s*0.09,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.18,-s*0.42,s*0.09,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(-s*0.18,-s*0.42,s*0.045,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.18,-s*0.42,s*0.045,0,7);ctx.fill();
+        break;
+
+      case 'iguana':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,s*0.15,s*0.55,s*0.35,0,0,7);ctx.fill();
+        ctx.beginPath();ctx.ellipse(0,-s*0.25,s*0.3,s*0.28,0,0,7);ctx.fill();
+        ctx.fillStyle=accent;
+        ctx.beginPath();ctx.moveTo(-s*0.2,-s*0.5);ctx.lineTo(0,-s*0.7);ctx.lineTo(s*0.2,-s*0.5);ctx.closePath();ctx.fill();
+        ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(-s*0.12,-s*0.3,s*0.08,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.12,-s*0.3,s*0.08,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(-s*0.12,-s*0.3,s*0.04,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.12,-s*0.3,s*0.04,0,7);ctx.fill();
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.moveTo(s*0.5,s*0.15);ctx.lineTo(s*0.9,s*0.1);ctx.lineTo(s*0.5,s*0.3);ctx.closePath();ctx.fill();
+        break;
+
+      case 'chili':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,s*0.1,s*0.35,s*0.55,0,0,7);ctx.fill();
+        ctx.fillStyle='#44aa44';
+        ctx.beginPath();ctx.ellipse(0,-s*0.45,s*0.15,s*0.1,0,0,7);ctx.fill();
+        ctx.beginPath();ctx.moveTo(0,-s*0.4);ctx.lineTo(s*0.15,-s*0.6);ctx.lineTo(-s*0.05,-s*0.55);ctx.closePath();ctx.fill();
+        ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(-s*0.12,-s*0.1,s*0.09,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.12,-s*0.1,s*0.09,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(-s*0.12,-s*0.1,s*0.045,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.12,-s*0.1,s*0.045,0,7);ctx.fill();
+        break;
+
+      case 'hound':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,s*0.1,s*0.6,s*0.45,0,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(0,-s*0.35,s*0.4,0,7);ctx.fill();
+        ctx.fillStyle=shade(body,-20);
+        ctx.beginPath();ctx.moveTo(-s*0.35,-s*0.6);ctx.lineTo(-s*0.25,-s*0.95);ctx.lineTo(-s*0.1,-s*0.6);ctx.closePath();ctx.fill();
+        ctx.beginPath();ctx.moveTo(s*0.35,-s*0.6);ctx.lineTo(s*0.25,-s*0.95);ctx.lineTo(s*0.1,-s*0.6);ctx.closePath();ctx.fill();
+        ctx.fillStyle='#ff6600';
+        ctx.beginPath();ctx.moveTo(-s*0.3,-s*0.7);ctx.lineTo(-s*0.25,-s*1.0);ctx.lineTo(-s*0.15,-s*0.75);ctx.closePath();ctx.fill();
+        ctx.beginPath();ctx.moveTo(s*0.3,-s*0.7);ctx.lineTo(s*0.25,-s*1.0);ctx.lineTo(s*0.15,-s*0.75);ctx.closePath();ctx.fill();
+        ctx.fillStyle='#ff2200';ctx.beginPath();ctx.arc(-s*0.18,-s*0.42,s*0.09,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.18,-s*0.42,s*0.09,0,7);ctx.fill();
+        ctx.fillStyle='#ffdd00';ctx.beginPath();ctx.arc(-s*0.18,-s*0.42,s*0.04,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.18,-s*0.42,s*0.04,0,7);ctx.fill();
+        break;
+
+      case 'phoenix':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,0,s*0.55,s*0.65,0,0,7);ctx.fill();
+        ctx.fillStyle='#ff6600';
+        ctx.beginPath();ctx.moveTo(-s*0.4,s*0.1);ctx.lineTo(-s*0.9,-s*0.3);ctx.lineTo(-s*0.5,-s*0.2);ctx.closePath();ctx.fill();
+        ctx.beginPath();ctx.moveTo(s*0.4,s*0.1);ctx.lineTo(s*0.9,-s*0.3);ctx.lineTo(s*0.5,-s*0.2);ctx.closePath();ctx.fill();
+        ctx.fillStyle='#ffaa00';
+        ctx.beginPath();ctx.moveTo(-s*0.35,s*0.05);ctx.lineTo(-s*0.7,-s*0.2);ctx.lineTo(-s*0.4,-s*0.1);ctx.closePath();ctx.fill();
+        ctx.beginPath();ctx.moveTo(s*0.35,s*0.05);ctx.lineTo(s*0.7,-s*0.2);ctx.lineTo(s*0.4,-s*0.1);ctx.closePath();ctx.fill();
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.arc(0,-s*0.45,s*0.32,0,7);ctx.fill();
+        ctx.fillStyle='#ffcc00';
+        ctx.beginPath();ctx.arc(-s*0.1,-s*0.75,s*0.1,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.1,-s*0.75,s*0.1,0,7);ctx.fill();
+        ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(-s*0.12,-s*0.5,s*0.08,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.12,-s*0.5,s*0.08,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(-s*0.12,-s*0.5,s*0.04,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.12,-s*0.5,s*0.04,0,7);ctx.fill();
+        break;
+
+      case 'dragon':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,s*0.1,s*0.6,s*0.45,0,0,7);ctx.fill();
+        ctx.beginPath();ctx.ellipse(s*0.3,-s*0.3,s*0.35,s*0.3,0.2,0,7);ctx.fill();
+        ctx.fillStyle=accent;
+        ctx.beginPath();ctx.moveTo(-s*0.2,s*0.0);ctx.lineTo(-s*0.7,-s*0.5);ctx.lineTo(-s*0.3,-s*0.2);ctx.closePath();ctx.fill();
+        ctx.beginPath();ctx.moveTo(-s*0.1,s*0.0);ctx.lineTo(-s*0.5,-s*0.6);ctx.lineTo(-s*0.1,-s*0.2);ctx.closePath();ctx.fill();
+        ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(s*0.35,-s*0.35,s*0.09,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(s*0.35,-s*0.35,s*0.045,0,7);ctx.fill();
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.moveTo(-s*0.5,s*0.1);ctx.lineTo(-s*0.9,s*0.0);ctx.lineTo(-s*0.5,s*0.3);ctx.closePath();ctx.fill();
+        ctx.fillStyle=accent;
+        for(let i=0;i<3;i++){
+          ctx.beginPath();ctx.moveTo(-s*0.3+i*s*0.2,s*0.15);ctx.lineTo(-s*0.25+i*s*0.2,s*0.35);ctx.lineTo(-s*0.35+i*s*0.2,s*0.15);ctx.closePath();ctx.fill();
+        }
+        break;
+
+      case 'parrotfish':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,0,s*0.7,s*0.45,0,0,7);ctx.fill();
+        ctx.fillStyle=accent;
+        for(let i=0;i<3;i++){
+          ctx.fillRect(-s*0.3+i*s*0.25,s*0.05,s*0.08,s*0.3);
+        }
+        ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(-s*0.25,-s*0.1,s*0.1,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(-s*0.25,-s*0.1,s*0.05,0,7);ctx.fill();
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.moveTo(s*0.5,0);ctx.lineTo(s*0.9,s*0.2);ctx.lineTo(s*0.9,-s*0.2);ctx.closePath();ctx.fill();
+        break;
+
+      case 'swordfish':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,0,s*0.6,s*0.35,0,0,7);ctx.fill();
+        ctx.fillStyle=shade(body,20);
+        ctx.beginPath();ctx.moveTo(s*0.4,-s*0.05);ctx.lineTo(s*1.0,-s*0.1);ctx.lineTo(s*0.4,s*0.1);ctx.closePath();ctx.fill();
+        ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(-s*0.2,-s*0.1,s*0.08,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(-s*0.2,-s*0.1,s*0.04,0,7);ctx.fill();
+        ctx.fillStyle=accent;
+        ctx.beginPath();ctx.moveTo(-s*0.5,0);ctx.lineTo(-s*0.9,s*0.25);ctx.lineTo(-s*0.9,-s*0.25);ctx.closePath();ctx.fill();
+        break;
+
+      case 'shark':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,0,s*0.7,s*0.4,0,0,7);ctx.fill();
+        ctx.fillStyle=shade(body,-15);
+        ctx.beginPath();ctx.moveTo(-s*0.1,-s*0.2);ctx.lineTo(s*0.1,-s*0.6);ctx.lineTo(s*0.3,-s*0.2);ctx.closePath();ctx.fill();
+        ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(-s*0.25,-s*0.05,s*0.08,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(-s*0.25,-s*0.05,s*0.04,0,7);ctx.fill();
+        ctx.fillStyle='#fff';
+        ctx.beginPath();ctx.moveTo(-s*0.1,s*0.15);ctx.lineTo(s*0.15,s*0.15);ctx.lineTo(s*0.05,s*0.25);ctx.closePath();ctx.fill();
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.moveTo(s*0.5,0);ctx.lineTo(s*0.9,s*0.3);ctx.lineTo(s*0.9,-s*0.3);ctx.closePath();ctx.fill();
+        break;
+
+      case 'orca':
+        ctx.fillStyle='#111';
+        ctx.beginPath();ctx.ellipse(0,0,s*0.65,s*0.4,0,0,7);ctx.fill();
+        ctx.fillStyle='#fff';
+        ctx.beginPath();ctx.ellipse(0,s*0.1,s*0.4,s*0.15,0,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(-s*0.3,-s*0.05,s*0.08,0,7);ctx.fill();
+        ctx.fillStyle='#111';
+        ctx.beginPath();ctx.moveTo(-s*0.1,-s*0.2);ctx.lineTo(s*0.1,-s*0.6);ctx.lineTo(s*0.3,-s*0.2);ctx.closePath();ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(-s*0.25,-s*0.05,s*0.05,0,7);ctx.fill();
+        ctx.fillStyle='#111';
+        ctx.beginPath();ctx.moveTo(s*0.5,0);ctx.lineTo(s*0.9,s*0.3);ctx.lineTo(s*0.9,-s*0.3);ctx.closePath();ctx.fill();
+        break;
+
+      case 'whaleshark':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,0,s*0.75,s*0.45,0,0,7);ctx.fill();
+        ctx.fillStyle='#fff';
+        for(let i=0;i<6;i++){
+          ctx.beginPath();ctx.arc(-s*0.3+i*s*0.12,s*0.05+Math.sin(i)*s*0.1,s*0.04,0,7);ctx.fill();
+        }
+        ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(-s*0.3,-s*0.1,s*0.08,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(-s*0.3,-s*0.1,s*0.04,0,7);ctx.fill();
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.moveTo(s*0.6,0);ctx.lineTo(s*1.0,s*0.25);ctx.lineTo(s*1.0,-s*0.25);ctx.closePath();ctx.fill();
+        break;
+
+      case 'beluga':
+        ctx.fillStyle='#e0e8f0';
+        ctx.beginPath();ctx.ellipse(0,0,s*0.65,s*0.45,0,0,7);ctx.fill();
+        ctx.fillStyle='#e0e8f0';
+        ctx.beginPath();ctx.arc(-s*0.3,-s*0.15,s*0.3,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(-s*0.4,-s*0.2,s*0.05,0,7);ctx.fill();
+        ctx.fillStyle='#e0e8f0';
+        ctx.beginPath();ctx.moveTo(s*0.5,0);ctx.lineTo(s*0.85,s*0.2);ctx.lineTo(s*0.85,-s*0.2);ctx.closePath();ctx.fill();
+        break;
+
+      case 'kraken':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,-s*0.1,s*0.45,s*0.4,0,0,7);ctx.fill();
+        ctx.fillStyle=shade(body,-20);
+        for(let i=0;i<5;i++){
+          const angle=-Math.PI/2+i*Math.PI/5;
+          ctx.beginPath();
+          ctx.ellipse(Math.cos(angle)*s*0.45,s*0.2+Math.sin(angle)*s*0.15,s*0.08,s*0.25,angle,0,7);
+          ctx.fill();
+        }
+        ctx.fillStyle='#ff0';ctx.beginPath();ctx.arc(-s*0.15,-s*0.15,s*0.1,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.15,-s*0.15,s*0.1,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(-s*0.15,-s*0.15,s*0.05,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.15,-s*0.15,s*0.05,0,7);ctx.fill();
+        break;
+
+      case 'mermaid':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.moveTo(0,s*0.2);ctx.quadraticCurveTo(s*0.4,s*0.5,s*0.7,s*0.3);ctx.quadraticCurveTo(s*0.5,s*0.6,s*0.2,s*0.5);ctx.closePath();ctx.fill();
+        ctx.fillStyle='#ffccaa';
+        ctx.beginPath();ctx.ellipse(0,s*0.0,s*0.25,s*0.35,0,0,7);ctx.fill();
+        ctx.fillStyle=accent;
+        ctx.beginPath();ctx.arc(0,-s*0.3,s*0.3,0,7);ctx.fill();
+        ctx.fillStyle='#ffccaa';
+        ctx.beginPath();ctx.arc(0,-s*0.25,s*0.2,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(-s*0.07,-s*0.28,s*0.04,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.07,-s*0.28,s*0.04,0,7);ctx.fill();
+        break;
+
+      case 'dodo':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,0,s*0.6,s*0.6,0,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(0,-s*0.45,s*0.35,0,7);ctx.fill();
+        ctx.fillStyle='#ffaa00';
+        ctx.beginPath();ctx.ellipse(0,-s*0.35,s*0.15,s*0.2,0,0,7);ctx.fill();
+        ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(-s*0.12,-s*0.55,s*0.08,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.12,-s*0.55,s*0.08,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(-s*0.12,-s*0.55,s*0.04,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.12,-s*0.55,s*0.04,0,7);ctx.fill();
+        ctx.fillStyle=shade(body,-20);
+        ctx.beginPath();ctx.ellipse(0,s*0.5,s*0.2,s*0.15,0,0,7);ctx.fill();
+        break;
+
+      case 'pterodactyl':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,0,s*0.5,s*0.4,0,0,7);ctx.fill();
+        ctx.fillStyle=shade(body,-20);
+        ctx.beginPath();ctx.moveTo(-s*0.3,s*0.0);ctx.lineTo(-s*0.9,-s*0.3);ctx.lineTo(-s*0.3,-s*0.1);ctx.closePath();ctx.fill();
+        ctx.beginPath();ctx.moveTo(s*0.3,s*0.0);ctx.lineTo(s*0.9,-s*0.3);ctx.lineTo(s*0.3,-s*0.1);ctx.closePath();ctx.fill();
+        ctx.fillStyle=accent;
+        ctx.beginPath();ctx.moveTo(-s*0.1,-s*0.4);ctx.lineTo(0,-s*0.7);ctx.lineTo(s*0.1,-s*0.4);ctx.closePath();ctx.fill();
+        ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(-s*0.1,-s*0.3,s*0.08,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(-s*0.1,-s*0.3,s*0.04,0,7);ctx.fill();
+        break;
+
+      case 'ankylo':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,s*0.1,s*0.7,s*0.4,0,0,7);ctx.fill();
+        ctx.fillStyle=shade(body,20);
+        for(let i=0;i<4;i++){
+          ctx.beginPath();ctx.arc(-s*0.3+i*s*0.2,s*0.0,s*0.12,0,7);ctx.fill();
+        }
+        ctx.fillStyle=accent;
+        ctx.beginPath();ctx.arc(-s*0.7,s*0.1,s*0.15,0,7);ctx.fill();
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(s*0.5,s*0.05,s*0.25,s*0.2,0,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(s*0.55,s*0.0,s*0.05,0,7);ctx.fill();
+        break;
+
+      case 'triceratops':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,s*0.1,s*0.65,s*0.4,0,0,7);ctx.fill();
+        ctx.fillStyle=accent;
+        ctx.beginPath();ctx.arc(s*0.5,s*0.0,s*0.35,0,7);ctx.fill();
+        ctx.fillStyle='#fff';
+        ctx.beginPath();ctx.moveTo(s*0.6,-s*0.2);ctx.lineTo(s*0.8,-s*0.5);ctx.lineTo(s*0.5,-s*0.25);ctx.closePath();ctx.fill();
+        ctx.beginPath();ctx.moveTo(s*0.4,-s*0.2);ctx.lineTo(s*0.45,-s*0.45);ctx.lineTo(s*0.3,-s*0.25);ctx.closePath();ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(s*0.45,s*0.0,s*0.05,0,7);ctx.fill();
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.moveTo(-s*0.5,s*0.1);ctx.lineTo(-s*0.8,s*0.0);ctx.lineTo(-s*0.5,s*0.3);ctx.closePath();ctx.fill();
+        break;
+
+      case 'brontosaurus':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,s*0.1,s*0.6,s*0.35,0,0,7);ctx.fill();
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(s*0.4,-s*0.25,s*0.15,s*0.35,0.3,0,7);ctx.fill();
+        ctx.beginPath();ctx.ellipse(s*0.55,-s*0.55,s*0.15,s*0.12,0.2,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(s*0.58,-s*0.58,s*0.04,0,7);ctx.fill();
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.moveTo(-s*0.5,s*0.1);ctx.lineTo(-s*0.9,s*0.0);ctx.lineTo(-s*0.5,s*0.3);ctx.closePath();ctx.fill();
+        break;
+
+      case 'trex':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,s*0.05,s*0.55,s*0.45,0,0,7);ctx.fill();
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(s*0.4,-s*0.2,s*0.35,s*0.28,0.1,0,7);ctx.fill();
+        ctx.fillStyle='#fff';
+        for(let i=0;i<4;i++){
+          ctx.beginPath();ctx.moveTo(s*0.3+i*s*0.1,s*0.05);ctx.lineTo(s*0.35+i*s*0.1,s*0.0);ctx.lineTo(s*0.32+i*s*0.1,s*0.1);ctx.closePath();ctx.fill();
+        }
+        ctx.fillStyle='#ff0';ctx.beginPath();ctx.arc(s*0.45,-s*0.25,s*0.07,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(s*0.45,-s*0.25,s*0.03,0,7);ctx.fill();
+        ctx.fillStyle=shade(body,-15);
+        ctx.beginPath();ctx.ellipse(s*0.2,s*0.1,s*0.08,s*0.15,0.3,0,7);ctx.fill();
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.moveTo(-s*0.45,s*0.1);ctx.lineTo(-s*0.8,s*0.0);ctx.lineTo(-s*0.45,s*0.3);ctx.closePath();ctx.fill();
+        break;
+
+      case 'mosasaur':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,0,s*0.7,s*0.35,0,0,7);ctx.fill();
+        ctx.fillStyle=shade(body,-15);
+        ctx.beginPath();ctx.ellipse(-s*0.2,s*0.2,s*0.15,s*0.1,0.3,0,7);ctx.fill();
+        ctx.beginPath();ctx.ellipse(s*0.1,s*0.2,s*0.15,s*0.1,-0.3,0,7);ctx.fill();
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(s*0.5,-s*0.05,s*0.3,s*0.2,0.1,0,7);ctx.fill();
+        ctx.fillStyle='#fff';
+        for(let i=0;i<3;i++){
+          ctx.beginPath();ctx.moveTo(s*0.55+i*s*0.08,s*0.1);ctx.lineTo(s*0.58+i*s*0.08,s*0.05);ctx.lineTo(s*0.6+i*s*0.08,s*0.15);ctx.closePath();ctx.fill();
+        }
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(s*0.55,-s*0.08,s*0.04,0,7);ctx.fill();
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.moveTo(-s*0.6,0);ctx.lineTo(-s*0.9,s*0.2);ctx.lineTo(-s*0.9,-s*0.2);ctx.closePath();ctx.fill();
+        break;
+
+      case 'crystal':
+        ctx.fillStyle=body;
+        ctx.beginPath();
+        for(let i=0;i<6;i++){
+          const angle=i*Math.PI/3-Math.PI/6;
+          const px=Math.cos(angle)*s*0.5;
+          const py=Math.sin(angle)*s*0.5;
+          if(i===0)ctx.moveTo(px,py);
+          else ctx.lineTo(px,py);
+        }
+        ctx.closePath();ctx.fill();
+        ctx.fillStyle=accent;
+        ctx.beginPath();
+        for(let i=0;i<6;i++){
+          const angle=i*Math.PI/3-Math.PI/6;
+          const px=Math.cos(angle)*s*0.25;
+          const py=Math.sin(angle)*s*0.25;
+          if(i===0)ctx.moveTo(px,py);
+          else ctx.lineTo(px,py);
+        }
+        ctx.closePath();ctx.fill();
+        break;
+
+      case 'centipede':
+        ctx.fillStyle=body;
+        for(let i=0;i<5;i++){
+          ctx.beginPath();ctx.arc(-s*0.3+i*s*0.15,Math.sin(i*0.8+time)*s*0.1,s*0.12,0,7);ctx.fill();
+        }
+        ctx.fillStyle='#ff0';ctx.beginPath();ctx.arc(-s*0.35,-s*0.05,s*0.05,0,7);ctx.fill();
+        break;
+
+      case 'gecko':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,0,s*0.5,s*0.3,0,0,7);ctx.fill();
+        ctx.beginPath();ctx.ellipse(s*0.3,-s*0.1,s*0.2,s*0.18,0.2,0,7);ctx.fill();
+        ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(s*0.35,-s*0.12,s*0.07,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(s*0.35,-s*0.12,s*0.035,0,7);ctx.fill();
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.moveTo(-s*0.4,s*0.0);ctx.lineTo(-s*0.7,s*0.2);ctx.lineTo(-s*0.6,-s*0.15);ctx.closePath();ctx.fill();
+        break;
+
+      case 'gorilla':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,s*0.15,s*0.55,s*0.45,0,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(0,-s*0.25,s*0.35,0,7);ctx.fill();
+        ctx.fillStyle=belly;
+        ctx.beginPath();ctx.ellipse(0,s*0.15,s*0.25,s*0.25,0,0,7);ctx.fill();
+        ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(-s*0.12,-s*0.3,s*0.08,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.12,-s*0.3,s*0.08,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(-s*0.12,-s*0.3,s*0.04,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.12,-s*0.3,s*0.04,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.ellipse(0,-s*0.18,s*0.08,s*0.05,0,0,7);ctx.fill();
+        break;
+
+      case 'skeleton':
+        ctx.fillStyle='#e0e0e0';
+        ctx.beginPath();ctx.arc(0,-s*0.2,s*0.35,0,7);ctx.fill();
+        ctx.fillStyle='#111';ctx.beginPath();ctx.arc(-s*0.12,-s*0.25,s*0.08,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.12,-s*0.25,s*0.08,0,7);ctx.fill();
+        ctx.fillStyle='#e0e0e0';
+        ctx.fillRect(-s*0.1,-s*0.05,s*0.2,s*0.4);
+        ctx.strokeStyle='#e0e0e0';ctx.lineWidth=s*0.04;
+        for(let i=0;i<3;i++){
+          ctx.beginPath();ctx.moveTo(-s*0.25,s*0.05+i*s*0.1);ctx.lineTo(s*0.25,s*0.05+i*s*0.1);ctx.stroke();
+        }
+        break;
+
+      case 'cosmicdragon':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,s*0.1,s*0.55,s*0.4,0,0,7);ctx.fill();
+        ctx.fillStyle=accent;
+        ctx.beginPath();ctx.moveTo(-s*0.2,0);ctx.lineTo(-s*0.8,-s*0.4);ctx.lineTo(-s*0.3,-s*0.15);ctx.closePath();ctx.fill();
+        ctx.beginPath();ctx.moveTo(s*0.2,0);ctx.lineTo(s*0.8,-s*0.4);ctx.lineTo(s*0.3,-s*0.15);ctx.closePath();ctx.fill();
+        ctx.fillStyle='#fff';
+        for(let i=0;i<5;i++){
+          ctx.beginPath();ctx.arc(-s*0.4+i*s*0.2,-s*0.2+Math.sin(i)*s*0.1,s*0.03,0,7);ctx.fill();
+        }
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(s*0.35,-s*0.25,s*0.25,s*0.2,0.1,0,7);ctx.fill();
+        ctx.fillStyle='#ff0';ctx.beginPath();ctx.arc(s*0.4,-s*0.3,s*0.06,0,7);ctx.fill();
+        break;
+
+      case 'moondragon':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,s*0.1,s*0.5,s*0.35,0,0,7);ctx.fill();
+        ctx.fillStyle='#fff';
+        ctx.beginPath();ctx.arc(-s*0.15,s*0.05,s*0.15,0,7);ctx.fill();
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.arc(-s*0.05,s*0.0,s*0.12,0,7);ctx.fill();
+        ctx.fillStyle=accent;
+        ctx.beginPath();ctx.moveTo(-s*0.2,0);ctx.lineTo(-s*0.6,-s*0.4);ctx.lineTo(-s*0.25,-s*0.1);ctx.closePath();ctx.fill();
+        ctx.beginPath();ctx.moveTo(s*0.2,0);ctx.lineTo(s*0.6,-s*0.4);ctx.lineTo(s*0.25,-s*0.1);ctx.closePath();ctx.fill();
+        ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(s*0.25,-s*0.15,s*0.06,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(s*0.25,-s*0.15,s*0.03,0,7);ctx.fill();
+        break;
+
+      case 'unicorn':
+        ctx.fillStyle='#fff';
+        ctx.beginPath();ctx.ellipse(0,s*0.1,s*0.5,s*0.4,0,0,7);ctx.fill();
+        ctx.fillStyle='#ffd700';
+        ctx.beginPath();ctx.moveTo(0,-s*0.45);ctx.lineTo(-s*0.08,-s*0.8);ctx.lineTo(s*0.08,-s*0.8);ctx.closePath();ctx.fill();
+        ctx.fillStyle=accent;
+        ctx.beginPath();ctx.arc(s*0.15,-s*0.3,s*0.15,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.25,-s*0.15,s*0.12,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(-s*0.15,-s*0.25,s*0.06,0,7);ctx.fill();
+        break;
+
+      case 'petal':
+        ctx.fillStyle=body;
+        for(let i=0;i<5;i++){
+          const angle=i*Math.PI*2/5-Math.PI/2;
+          ctx.beginPath();ctx.ellipse(Math.cos(angle)*s*0.25,Math.sin(angle)*s*0.25,s*0.2,s*0.12,angle,0,7);ctx.fill();
+        }
+        ctx.fillStyle='#ffdd44';
+        ctx.beginPath();ctx.arc(0,0,s*0.15,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(-s*0.05,-s*0.05,s*0.04,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.05,-s*0.05,s*0.04,0,7);ctx.fill();
+        break;
+
+      case 'mouse':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,s*0.1,s*0.45,s*0.35,0,0,7);ctx.fill();
+        ctx.fillStyle=shade(body,20);
+        ctx.beginPath();ctx.arc(-s*0.3,-s*0.3,s*0.2,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.3,-s*0.3,s*0.2,0,7);ctx.fill();
+        ctx.fillStyle='#ffaa88';
+        ctx.beginPath();ctx.arc(-s*0.3,-s*0.3,s*0.12,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.3,-s*0.3,s*0.12,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(-s*0.12,-s*0.05,s*0.05,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.12,-s*0.05,s*0.05,0,7);ctx.fill();
+        ctx.fillStyle='#ff6688';ctx.beginPath();ctx.arc(0,s*0.0,s*0.04,0,7);ctx.fill();
+        break;
+
+      case 'butterfly':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(-s*0.3,-s*0.1,s*0.25,s*0.3,0.3,0,7);ctx.fill();
+        ctx.beginPath();ctx.ellipse(s*0.3,-s*0.1,s*0.25,s*0.3,-0.3,0,7);ctx.fill();
+        ctx.fillStyle=accent;
+        ctx.beginPath();ctx.ellipse(-s*0.25,s*0.15,s*0.15,s*0.2,0.3,0,7);ctx.fill();
+        ctx.beginPath();ctx.ellipse(s*0.25,s*0.15,s*0.15,s*0.2,-0.3,0,7);ctx.fill();
+        ctx.fillStyle='#333';
+        ctx.beginPath();ctx.ellipse(0,s*0.05,s*0.08,s*0.3,0,0,7);ctx.fill();
+        ctx.strokeStyle='#333';ctx.lineWidth=s*0.03;
+        ctx.beginPath();ctx.moveTo(0,-s*0.25);ctx.quadraticCurveTo(-s*0.15,-s*0.5,-s*0.2,-s*0.55);ctx.stroke();
+        ctx.beginPath();ctx.moveTo(0,-s*0.25);ctx.quadraticCurveTo(s*0.15,-s*0.5,s*0.2,-s*0.55);ctx.stroke();
+        break;
+
+      case 'flower':
+        ctx.fillStyle=body;
+        for(let i=0;i<6;i++){
+          const angle=i*Math.PI/3;
+          ctx.beginPath();ctx.ellipse(Math.cos(angle)*s*0.25,Math.sin(angle)*s*0.25,s*0.18,s*0.1,angle,0,7);ctx.fill();
+        }
+        ctx.fillStyle='#ffdd44';
+        ctx.beginPath();ctx.arc(0,0,s*0.15,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(-s*0.05,-s*0.05,s*0.04,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.05,-s*0.05,s*0.04,0,7);ctx.fill();
+        break;
+
+      case 'deer':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,s*0.15,s*0.45,s*0.35,0,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(0,-s*0.2,s*0.3,0,7);ctx.fill();
+        ctx.strokeStyle='#aa8844';ctx.lineWidth=s*0.04;
+        ctx.beginPath();ctx.moveTo(-s*0.15,-s*0.4);ctx.lineTo(-s*0.3,-s*0.65);ctx.stroke();
+        ctx.beginPath();ctx.moveTo(s*0.15,-s*0.4);ctx.lineTo(s*0.3,-s*0.65);ctx.stroke();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(-s*0.12,-s*0.25,s*0.05,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.12,-s*0.25,s*0.05,0,7);ctx.fill();
+        ctx.fillStyle='#fff';
+        for(let i=0;i<3;i++){
+          ctx.beginPath();ctx.arc(-s*0.2+i*s*0.2,s*0.15,s*0.03,0,7);ctx.fill();
+        }
+        break;
+
+      case 'sakuradragon':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,s*0.1,s*0.5,s*0.35,0,0,7);ctx.fill();
+        ctx.fillStyle=accent;
+        ctx.beginPath();ctx.moveTo(-s*0.2,0);ctx.lineTo(-s*0.7,-s*0.4);ctx.lineTo(-s*0.25,-s*0.1);ctx.closePath();ctx.fill();
+        ctx.beginPath();ctx.moveTo(s*0.2,0);ctx.lineTo(s*0.7,-s*0.4);ctx.lineTo(s*0.25,-s*0.1);ctx.closePath();ctx.fill();
+        ctx.fillStyle='#ffaacc';
+        for(let i=0;i<3;i++){
+          ctx.beginPath();ctx.arc(-s*0.3+i*s*0.25,-s*0.15,s*0.06,0,7);ctx.fill();
+        }
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(s*0.25,-s*0.15,s*0.05,0,7);ctx.fill();
+        break;
+
+      case 'rabbit':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,s*0.15,s*0.4,s*0.35,0,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(0,-s*0.15,s*0.28,0,7);ctx.fill();
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(-s*0.15,-s*0.55,s*0.1,s*0.25,0.1,0,7);ctx.fill();
+        ctx.beginPath();ctx.ellipse(s*0.15,-s*0.55,s*0.1,s*0.25,-0.1,0,7);ctx.fill();
+        ctx.fillStyle='#ffaacc';
+        ctx.beginPath();ctx.ellipse(-s*0.15,-s*0.55,s*0.05,s*0.18,0.1,0,7);ctx.fill();
+        ctx.beginPath();ctx.ellipse(s*0.15,-s*0.55,s*0.05,s*0.18,-0.1,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(-s*0.1,-s*0.2,s*0.05,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.1,-s*0.2,s*0.05,0,7);ctx.fill();
+        ctx.fillStyle='#ff6688';ctx.beginPath();ctx.arc(0,-s*0.12,s*0.03,0,7);ctx.fill();
+        break;
+
+      case 'goddess':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.moveTo(0,s*0.3);ctx.lineTo(-s*0.4,s*0.5);ctx.lineTo(s*0.4,s*0.5);ctx.closePath();ctx.fill();
+        ctx.fillStyle='#ffddbb';
+        ctx.beginPath();ctx.ellipse(0,s*0.05,s*0.2,s*0.25,0,0,7);ctx.fill();
+        ctx.fillStyle=accent;
+        ctx.beginPath();ctx.arc(0,-s*0.25,s*0.28,0,7);ctx.fill();
+        ctx.fillStyle='#ffddbb';
+        ctx.beginPath();ctx.arc(0,-s*0.2,s*0.18,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(-s*0.06,-s*0.22,s*0.04,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.06,-s*0.22,s*0.04,0,7);ctx.fill();
+        ctx.strokeStyle='#ffd700';ctx.lineWidth=s*0.03;
+        ctx.beginPath();ctx.arc(0,-s*0.45,s*0.15,0,7);ctx.stroke();
+        break;
+
+      case 'titanbaby':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,s*0.1,s*0.5,s*0.4,0,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(0,-s*0.25,s*0.3,0,7);ctx.fill();
+        ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(-s*0.1,-s*0.3,s*0.07,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.1,-s*0.3,s*0.07,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(-s*0.1,-s*0.3,s*0.035,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.1,-s*0.3,s*0.035,0,7);ctx.fill();
+        break;
+
+      case 'colossus':
+        ctx.fillStyle=body;
+        ctx.fillRect(-s*0.3,-s*0.1,s*0.6,s*0.5);
+        ctx.beginPath();ctx.arc(0,-s*0.25,s*0.3,0,7);ctx.fill();
+        ctx.fillStyle='#ff0';ctx.beginPath();ctx.arc(-s*0.1,-s*0.28,s*0.06,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.1,-s*0.28,s*0.06,0,7);ctx.fill();
+        break;
+
+      case 'statue':
+        ctx.fillStyle=shade(body,20);
+        ctx.beginPath();ctx.ellipse(0,s*0.15,s*0.35,s*0.3,0,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(0,-s*0.15,s*0.25,0,7);ctx.fill();
+        ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(-s*0.08,-s*0.18,s*0.05,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.08,-s*0.18,s*0.05,0,7);ctx.fill();
+        break;
+
+      case 'thunder':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,s*0.1,s*0.45,s*0.4,0,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(0,-s*0.25,s*0.28,0,7);ctx.fill();
+        ctx.fillStyle='#ff0';
+        ctx.beginPath();ctx.moveTo(-s*0.15,-s*0.5);ctx.lineTo(0,-s*0.8);ctx.lineTo(s*0.15,-s*0.5);ctx.closePath();ctx.fill();
+        ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(-s*0.08,-s*0.3,s*0.06,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.08,-s*0.3,s*0.06,0,7);ctx.fill();
+        break;
+
+      case 'earth':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,s*0.15,s*0.55,s*0.4,0,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(0,-s*0.2,s*0.3,0,7);ctx.fill();
+        ctx.fillStyle='#44aa44';
+        ctx.beginPath();ctx.arc(-s*0.1,-s*0.25,s*0.08,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.15,-s*0.15,s*0.1,0,7);ctx.fill();
+        ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(s*0.1,-s*0.3,s*0.05,0,7);ctx.fill();
+        break;
+
+      case 'sky':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,s*0.1,s*0.45,s*0.35,0,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(0,-s*0.2,s*0.25,0,7);ctx.fill();
+        ctx.fillStyle='#fff';
+        ctx.beginPath();ctx.arc(-s*0.2,-s*0.4,s*0.12,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.2,-s*0.4,s*0.12,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(-s*0.08,-s*0.22,s*0.04,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.08,-s*0.22,s*0.04,0,7);ctx.fill();
+        break;
+
+      case 'time':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,s*0.1,s*0.45,s*0.35,0,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(0,-s*0.2,s*0.28,0,7);ctx.fill();
+        ctx.strokeStyle='#fff';ctx.lineWidth=s*0.03;
+        ctx.beginPath();ctx.arc(0,-s*0.2,s*0.15,0,7);ctx.stroke();
+        ctx.beginPath();ctx.moveTo(0,-s*0.2);ctx.lineTo(0,-s*0.35);ctx.stroke();
+        ctx.beginPath();ctx.moveTo(0,-s*0.2);ctx.lineTo(s*0.1,-s*0.2);ctx.stroke();
+        ctx.fillStyle='#ff0';ctx.beginPath();ctx.arc(-s*0.08,-s*0.35,s*0.05,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.08,-s*0.35,s*0.05,0,7);ctx.fill();
+        break;
+
+      case 'king':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,s*0.15,s*0.55,s*0.4,0,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(0,-s*0.2,s*0.32,0,7);ctx.fill();
+        ctx.fillStyle='#ffd700';
+        ctx.beginPath();ctx.moveTo(-s*0.25,-s*0.45);ctx.lineTo(-s*0.15,-s*0.7);ctx.lineTo(-s*0.05,-s*0.45);ctx.lineTo(0,-s*0.75);ctx.lineTo(s*0.05,-s*0.45);ctx.lineTo(s*0.15,-s*0.7);ctx.lineTo(s*0.25,-s*0.45);ctx.closePath();ctx.fill();
+        ctx.fillStyle='#ff0';ctx.beginPath();ctx.arc(-s*0.1,-s*0.22,s*0.06,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.1,-s*0.22,s*0.06,0,7);ctx.fill();
+        break;
+
+      case 'shard':
+        ctx.fillStyle=body;
+        ctx.beginPath();
+        ctx.moveTo(0,-s*0.5);ctx.lineTo(s*0.3,s*0.0);ctx.lineTo(0,s*0.5);ctx.lineTo(-s*0.3,s*0.0);ctx.closePath();ctx.fill();
+        ctx.fillStyle=accent;
+        ctx.beginPath();
+        ctx.moveTo(0,-s*0.25);ctx.lineTo(s*0.15,s*0.0);ctx.lineTo(0,s*0.25);ctx.lineTo(-s*0.15,s*0.0);ctx.closePath();ctx.fill();
+        break;
+
+      case 'shadow':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,s*0.1,s*0.5,s*0.4,0,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(0,-s*0.2,s*0.3,0,7);ctx.fill();
+        ctx.fillStyle='#ff00aa';ctx.beginPath();ctx.arc(-s*0.12,-s*0.25,s*0.08,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.12,-s*0.25,s*0.08,0,7);ctx.fill();
+        ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(-s*0.12,-s*0.25,s*0.04,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.12,-s*0.25,s*0.04,0,7);ctx.fill();
+        break;
+
+      case 'eye':
+        ctx.fillStyle='#fff';
+        ctx.beginPath();ctx.ellipse(0,0,s*0.5,s*0.35,0,0,7);ctx.fill();
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.arc(0,0,s*0.25,0,7);ctx.fill();
+        ctx.fillStyle='#000';
+        ctx.beginPath();ctx.arc(0,0,s*0.12,0,7);ctx.fill();
+        ctx.strokeStyle=accent;ctx.lineWidth=s*0.04;
+        ctx.beginPath();ctx.arc(0,0,s*0.6,0,7);ctx.stroke();
+        break;
+
+      case 'chaos':
+        ctx.fillStyle=body;
+        for(let i=0;i<8;i++){
+          const angle=i*Math.PI/4+S.time*0.5;
+          ctx.beginPath();
+          ctx.ellipse(Math.cos(angle)*s*0.35,Math.sin(angle)*s*0.35,s*0.15,s*0.08,angle,0,7);
+          ctx.fill();
+        }
+        ctx.fillStyle=accent;
+        ctx.beginPath();ctx.arc(0,0,s*0.2,0,7);ctx.fill();
+        break;
+
+      case 'abyss':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,s*0.1,s*0.55,s*0.45,0,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(0,-s*0.2,s*0.35,0,7);ctx.fill();
+        ctx.fillStyle='#ff00aa';
+        ctx.beginPath();ctx.arc(-s*0.15,-s*0.3,s*0.06,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.15,-s*0.3,s*0.06,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(0,-s*0.1,s*0.06,0,7);ctx.fill();
+        ctx.strokeStyle=shade(body,-20);ctx.lineWidth=s*0.06;
+        for(let i=0;i<4;i++){
+          ctx.beginPath();
+          ctx.moveTo(-s*0.4+i*s*0.25,s*0.3);
+          ctx.quadraticCurveTo(-s*0.3+i*s*0.25,s*0.6+Math.sin(time+i)*s*0.1,-s*0.4+i*s*0.25,s*0.8);
+          ctx.stroke();
+        }
+        break;
+
+      case 'voidbeast':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,0,s*0.6,s*0.5,0,0,7);ctx.fill();
+        ctx.strokeStyle=accent;ctx.lineWidth=s*0.04;
+        ctx.beginPath();ctx.moveTo(-s*0.2,-s*0.3);ctx.lineTo(s*0.1,s*0.0);ctx.lineTo(-s*0.1,s*0.3);ctx.stroke();
+        ctx.fillStyle='#ff0';ctx.beginPath();ctx.arc(-s*0.2,-s*0.1,s*0.08,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.2,-s*0.1,s*0.08,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(-s*0.2,-s*0.1,s*0.04,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.2,-s*0.1,s*0.04,0,7);ctx.fill();
+        break;
+
+      case 'enddragon':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,s*0.1,s*0.55,s*0.4,0,0,7);ctx.fill();
+        ctx.fillStyle=accent;
+        ctx.beginPath();ctx.moveTo(-s*0.2,0);ctx.lineTo(-s*0.9,-s*0.5);ctx.lineTo(-s*0.3,-s*0.1);ctx.closePath();ctx.fill();
+        ctx.beginPath();ctx.moveTo(s*0.2,0);ctx.lineTo(s*0.9,-s*0.5);ctx.lineTo(s*0.3,-s*0.1);ctx.closePath();ctx.fill();
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(s*0.35,-s*0.25,s*0.28,s*0.22,0.1,0,7);ctx.fill();
+        ctx.fillStyle='#ff0';ctx.beginPath();ctx.arc(s*0.4,-s*0.3,s*0.07,0,7);ctx.fill();
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.moveTo(-s*0.5,s*0.1);ctx.lineTo(-s*0.9,s*0.0);ctx.lineTo(-s*0.5,s*0.3);ctx.closePath();ctx.fill();
+        break;
+
+      case 'creator':
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,0,s*0.5,s*0.5,0,0,7);ctx.fill();
+        ctx.strokeStyle='#ffd700';ctx.lineWidth=s*0.04;
+        ctx.beginPath();ctx.arc(0,0,s*0.7,0,7);ctx.stroke();
+        ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(-s*0.12,-s*0.1,s*0.1,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.12,-s*0.1,s*0.1,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(-s*0.12,-s*0.1,s*0.05,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.12,-s*0.1,s*0.05,0,7);ctx.fill();
+        ctx.fillStyle='#fff';
+        for(let i=0;i<6;i++){
+          const angle=i*Math.PI/3+time*0.2;
+          ctx.beginPath();ctx.arc(Math.cos(angle)*s*0.6,Math.sin(angle)*s*0.6,s*0.04,0,7);ctx.fill();
+        }
+        break;
+
+      default:
+        ctx.fillStyle=body;
+        ctx.beginPath();ctx.ellipse(0,0,s*0.5,s*0.5,0,0,7);ctx.fill();
+        ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(-s*0.15,-s*0.1,s*0.1,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.15,-s*0.1,s*0.1,0,7);ctx.fill();
+        ctx.fillStyle='#000';ctx.beginPath();ctx.arc(-s*0.15,-s*0.1,s*0.05,0,7);ctx.fill();
+        ctx.beginPath();ctx.arc(s*0.15,-s*0.1,s*0.05,0,7);ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
+  // ========== 初始化 ==========
+  function reset(){
+    S.player={
+      x:540,y:2900,r:15,
+      displaySpeed:10,
+      trailMul:1,carry:null,stun:0,tsLv:1,
+      knockbackTimer:0,vx:0,vy:0,
+      training:false,trainTickTimer:0,
+    };
+    S.cash=0;S.eggs=[];S.guards=[];S.pets=[];S.biomeIdx=0;S.eggTimer=0;S.cps=0;
+    S.selectedPet=null;S.camera={x:540,y:2650};S.zoom=1.0;
+    S.totalTrainSteps=0;
+    IndexData.discovered.clear();
+    IndexData.claimed.clear();
+    for(let bi=0;bi<WORLD.biomes.length;bi++){
       spawnEggsForBiome(bi);
       spawnGuardsForBiome(bi);
     }
+    buildIndexUI();
     updateUI();
   }
 
-  function spawnEggsForBiome(bi) {
-    const b = WORLD.biomes[bi];
-    for (const nx of b.nestXs) {
-      for (let i = 0; i < 3; i++) {
-        const sizeRoll = Math.random();
-        let size = 'normal', mul = 1, r = 12;
-        if (sizeRoll > 0.9) { size='giant'; mul=4; r=20; }
-        else if (sizeRoll > 0.65) { size='huge'; mul=2.2; r=16; }
-        const petIdx = Math.floor(Math.random()*8);
+  function spawnEggsForBiome(bi){
+    const b=WORLD.biomes[bi];
+    for(const nx of b.nestXs){
+      for(let i=0;i<3;i++){
+        const sr=Math.random();
+        let size='normal',mul=1,r=12;
+        if(sr>0.9){size='giant';mul=4;r=20}
+        else if(sr>0.65){size='huge';mul=2.2;r=16}
+        const petIdx=Math.floor(Math.random()*8);
         S.eggs.push({
-          x: nx + rnd(-50, 50),
-          y: b.nestsY + rnd(-35, 35),
-          r, size, mul, petIdx, biomeIdx: bi,
-          collected: false, float: Math.random()*10,
+          x:nx+rnd(-50,50),y:b.nestsY+rnd(-35,35),
+          r,size,mul,petIdx,biomeIdx:bi,collected:false,float:Math.random()*10,
         });
       }
     }
   }
 
-  function spawnGuardsForBiome(bi) {
-    const b = WORLD.biomes[bi];
-    const gx = b.nestXs[Math.floor(b.nestXs.length/2)];
+  function spawnGuardsForBiome(bi){
+    const b=WORLD.biomes[bi];
+    const gx=b.nestXs[Math.floor(b.nestXs.length/2)];
     S.guards.push({
-      x: gx, y: b.nestsY - 60,
-      r: 18, spd: 1.2 + bi*0.15,
-      alert: false, stun: 0,
-      hx: gx, hy: b.nestsY - 60,
-      biomeIdx: bi, name: b.guardian,
+      x:gx,y:b.nestsY-60,r:18,spd:0.8+bi*0.12,
+      alert:false,stun:0,hx:gx,hy:b.nestsY-60,
+      biomeIdx:bi,name:b.guardian,
+      isSpeedGuard:false, // 標記是否為速度懲罰守衛
     });
   }
 
-  // ========== 更新 ==========
-  function update(dt) {
-    const p = S.player;
+  // ========== 圖鑑 UI ==========
+  function buildIndexUI(){
+    const tabs=document.getElementById('indexTabs');
+    tabs.innerHTML='';
+    WORLD.biomes.forEach((b,i)=>{
+      const tab=document.createElement('div');
+      tab.className='index-tab'+(i===S.indexTab?' active':'');
+      tab.textContent=b.icon+' '+b.name;
+      tab.onclick=()=>{S.indexTab=i;buildIndexUI()};
+      tabs.appendChild(tab);
+    });
 
-    // 眩暈
-    if (p.stun > 0) {
-      p.stun = Math.max(0, p.stun - dt);
+    const grid=document.getElementById('indexGrid');
+    grid.innerHTML='';
+    const bi=S.indexTab;
+    const b=WORLD.biomes[bi];
+    for(let pi=0;pi<8;pi++){
+      const key=bi+'_'+pi;
+      const unlocked=IndexData.discovered.has(key);
+      const claimed=IndexData.claimed.has(key);
+      const rar=WORLD.petRarity[bi][pi];
+      const rc=WORLD.rarities[rar].c;
+
+      const card=document.createElement('div');
+      card.className='index-card '+(unlocked?'unlocked':'locked');
+
+      const cv=document.createElement('canvas');
+      cv.width=60;cv.height=60;
+      const cx=cv.getContext('2d');
+      if(unlocked){
+        const palette=BIOME_PALETTES[bi];
+        const shape=PET_SHAPES[bi][pi];
+        cx.translate(30,30);
+        drawPetShape(cx,shape,palette,26,performance.now()/1000,rc);
+      }else{
+        cx.fillStyle='#2a3a4a';
+        cx.font='30px "Segoe UI"';
+        cx.textAlign='center';cx.textBaseline='middle';
+        cx.fillText('?',30,30);
+      }
+      card.appendChild(cv);
+
+      const name=document.createElement('div');
+      name.className='name';
+      name.textContent=unlocked?b.petNames[pi]:'???';
+      card.appendChild(name);
+
+      const bl=document.createElement('div');
+      bl.className='biome-label';
+      bl.textContent=b.icon+' '+b.name;
+      card.appendChild(bl);
+
+      const rl=document.createElement('div');
+      rl.className='rarity-label';
+      rl.style.color=rc;
+      rl.style.background=hexA(rc,0.15);
+      rl.textContent=unlocked?WORLD.rarities[rar].n:'未知';
+      card.appendChild(rl);
+
+      if(unlocked&&!claimed){
+        const rb=document.createElement('button');
+        rb.className='reward-btn';
+        rb.textContent='🎁 領取獎勵';
+        rb.onclick=(e)=>{
+          e.stopPropagation();
+          IndexData.claimed.add(key);
+          const reward=WORLD.petIncome[bi][pi]*20;
+          S.cash+=reward;
+          buildIndexUI();
+          updateUI();
+        };
+        card.appendChild(rb);
+      }else if(claimed){
+        const rb=document.createElement('button');
+        rb.className='reward-btn claimed';
+        rb.textContent='✓ 已領取';
+        rb.disabled=true;
+        card.appendChild(rb);
+      }
+
+      grid.appendChild(card);
+    }
+
+    const total=WORLD.biomes.length*8;
+    document.getElementById('uiIndex').textContent=IndexData.discovered.size+'/'+total;
+  }
+
+  function discoverPet(bi,pi){
+    const key=bi+'_'+pi;
+    if(!IndexData.discovered.has(key)){
+      IndexData.discovered.add(key);
+      const toast=document.createElement('div');
+      toast.style.cssText=`position:fixed;top:20px;left:50%;transform:translateX(-50%);
+        background:linear-gradient(180deg,#2a4a2a,#143a1a);
+        border:2px solid #ffd966;border-radius:12px;padding:10px 24px;
+        color:#ffd966;font-weight:800;font-size:1rem;z-index:200;
+        box-shadow:0 0 30px rgba(255,200,50,0.5);pointer-events:none;`;
+      toast.textContent=`📖 新發現！${WORLD.biomes[bi].petNames[pi]}`;
+      document.body.appendChild(toast);
+      setTimeout(()=>{toast.style.opacity='0';toast.style.transition='opacity 0.5s';setTimeout(()=>toast.remove(),500)},2000);
+    }
+  }
+
+  // ========== 擊飛效果 ==========
+  function triggerKnockback(forceX,forceY){
+    const p=S.player;
+    p.vx=forceX;
+    p.vy=forceY;
+    p.knockbackTimer=0.6;
+    p.stun=1.8;
+
+    // 紅色閃光
+    const flash=document.createElement('div');
+    flash.className='knockback-flash';
+    document.body.appendChild(flash);
+    setTimeout(()=>flash.remove(),400);
+  }
+
+  // ========== 寵物選擇面板 ==========
+  function openPetPanel(pet){
+    S.panelOpen=true;
+    S.selectedPet=pet;
+    for(const p of S.pets)p.selected=false;
+    pet.selected=true;
+
+    const panel=document.getElementById('petPanel');
+    panel.classList.add('open');
+
+    const cv=document.getElementById('petPanelCanvas');
+    const cx=cv.getContext('2d');
+    cx.clearRect(0,0,50,50);
+    const palette=BIOME_PALETTES[pet.biomeIdx];
+    const shape=PET_SHAPES[pet.biomeIdx][pet.petIdx];
+    cx.save();
+    cx.translate(25,25);
+    drawPetShape(cx,shape,palette,20,performance.now()/1000,WORLD.rarities[pet.rar].c);
+    cx.restore();
+
+    document.getElementById('ppName').textContent=pet.name;
+    document.getElementById('ppInc').textContent='💰 '+fmt(pet.inc)+' / 秒';
+    document.getElementById('ppRar').textContent=WORLD.rarities[pet.rar].n;
+    document.getElementById('ppRar').style.color=WORLD.rarities[pet.rar].c;
+
+    document.getElementById('btnSellSelected').disabled=false;
+    updateUI();
+  }
+
+  function closePetPanel(){
+    S.panelOpen=false;
+    S.selectedPet=null;
+    for(const p of S.pets)p.selected=false;
+    document.getElementById('petPanel').classList.remove('open');
+    document.getElementById('btnSellSelected').disabled=true;
+    updateUI();
+  }
+
+  function sellSelectedPet(){
+    if(!S.selectedPet)return;
+    const pet=S.selectedPet;
+    const sellPrice=pet.inc*15;
+    S.cash+=sellPrice;
+
+    const idx=S.pets.indexOf(pet);
+    if(idx>=0)S.pets.splice(idx,1);
+
+    S.cps=S.pets.reduce((s,pt)=>s+pt.inc,0)*0.05;
+
+    const toast=document.createElement('div');
+    toast.style.cssText=`position:fixed;top:20px;left:50%;transform:translateX(-50%);
+      background:linear-gradient(180deg,#4a2a2a,#2a1010);
+      border:2px solid #ffaa44;border-radius:12px;padding:10px 24px;
+      color:#ffaa44;font-weight:800;font-size:1rem;z-index:200;
+      box-shadow:0 0 30px rgba(255,150,50,0.5);pointer-events:none;`;
+    toast.textContent=`💸 已出售 ${pet.name} 獲得 $${fmt(sellPrice)}`;
+    document.body.appendChild(toast);
+    setTimeout(()=>{toast.style.opacity='0';toast.style.transition='opacity 0.5s';setTimeout(()=>toast.remove(),500)},1500);
+
+    closePetPanel();
+    updateUI();
+  }
+
+  // ========== 更新 ==========
+  function update(dt){
+    const p=S.player;
+    S.time+=dt;
+
+    if(p.knockbackTimer>0){
+      p.knockbackTimer-=dt;
+      p.x+=p.vx*dt;
+      p.y+=p.vy*dt;
+      p.vx*=0.88;p.vy*=0.88;
+      p.x=clamp(p.x,20,W-20);
+      p.y=clamp(p.y,-1900,3180);
+      p.stun=Math.max(0,p.stun-dt);
       updateUI();
       return;
     }
 
-    // 守衛 AI (只更新玩家附近的)
-    for (const g of S.guards) {
-      if (g.stun > 0) { g.stun -= dt; continue; }
-      const b = WORLD.biomes[g.biomeIdx];
-      const d = dist(p.x, p.y, g.x, g.y);
-      
-      // 玩家在該區域附近且攜帶蛋才追擊
-      const playerInBiome = p.y > b.yMin - 100 && p.y < b.yMax + 100;
-      let tx = g.hx, ty = g.hy;
-      if (p.carry && playerInBiome && d < 350) {
-        g.alert = true; tx = p.x; ty = p.y;
-      } else if (g.alert && d > 500) {
-        g.alert = false;
-      }
-
-      if (g.alert) {
-        const dx = p.x - g.x, dy = p.y - g.y;
-        const len = Math.hypot(dx, dy) || 1;
-        g.x += (dx/len) * g.spd * 1.8;
-        g.y += (dy/len) * g.spd * 1.8;
-      } else {
-        // 在巡邏範圍內左右移動
-        if (dist(g.x, g.y, g.hx, g.hy) > 40) {
-          const dx = g.hx - g.x, dy = g.hy - g.y;
-          const len = Math.hypot(dx, dy) || 1;
-          g.x += (dx/len) * g.spd * 0.5;
-          g.y += (dy/len) * g.spd * 0.5;
-        } else {
-          g.hx = b.nestXs[Math.floor(Math.random()*b.nestXs.length)] + rnd(-60, 60);
-          g.hy = b.nestsY - 60 + rnd(-30, 30);
-        }
-      }
-      // 保持在該區域內
-      g.x = clamp(g.x, 30, W-30);
-      g.y = clamp(g.y, b.yMin+20, b.yMax-20);
-    }
-
-    // 撿蛋
-    if (!p.carry) {
-      for (const e of S.eggs) {
-        if (e.collected) continue;
-        if (dist(p.x, p.y, e.x, e.y) < p.r + e.r + 4) {
-          e.collected = true;
-          p.carry = { ...e };
-          // 驚醒該區域守衛
-          for (const g of S.guards) {
-            if (g.biomeIdx === e.biomeIdx) g.alert = true;
-          }
-          updateUI();
-          break;
-        }
-      }
-    }
-
-    // 回基地 (Y > 2500 安全線)
-    if (p.carry && p.y > S.safeLineY) {
-      const egg = p.carry;
-      const b = WORLD.biomes[egg.biomeIdx];
-      const inc = WORLD.petIncome[egg.biomeIdx][egg.petIdx] * egg.mul;
-      const rar = WORLD.petRarity[egg.biomeIdx][egg.petIdx];
-      // 找空的農場欄位
-      const usedSlots = new Set(S.pets.map(pt => pt.slot).filter(s => s !== undefined));
-      let slot = -1;
-      for (let i = 0; i < S.farmPods.length; i++) {
-        if (!usedSlots.has(i)) { slot = i; break; }
-      }
-      if (slot === -1) slot = Math.floor(Math.random()*S.farmPods.length); // 滿了就隨機
-      
-      S.pets.push({
-        id: Math.random().toString(36).slice(2),
-        name: b.petNames[egg.petIdx],
-        inc, rar, biomeIdx: egg.biomeIdx,
-        x: S.farmPods[slot].x, y: S.farmPods[slot].y,
-        vx: rnd(-8,8), vy: rnd(-8,8),
-        selected: false, slot,
-      });
-      p.carry = null;
-      // 守衛停止追擊
-      for (const g of S.guards) g.alert = false;
-      S.cps = S.pets.reduce((s, pt) => s + pt.inc, 0) * 0.05;
+    if(p.stun>0){
+      p.stun=Math.max(0,p.stun-dt);
       updateUI();
+      return;
+    }
+
+    const onTreadmill=dist(p.x,p.y,S.treadmill.x,S.treadmill.y)<60;
+    p.training=onTreadmill;
+
+    if(onTreadmill){
+      p.trainTickTimer+=dt;
+      while(p.trainTickTimer>=0.25){
+        p.trainTickTimer-=0.25;
+        const gain=0.8+p.tsLv*0.7+Math.sqrt(p.displaySpeed)*0.08;
+        p.displaySpeed+=gain;
+        S.totalTrainSteps+=gain;
+      }
+    }
+
+    let dx=0,dy=0;
+    if(keys['w']||keys['arrowup'])dy-=1;
+    if(keys['s']||keys['arrowdown'])dy+=1;
+    if(keys['a']||keys['arrowleft'])dx-=1;
+    if(keys['d']||keys['arrowright'])dx+=1;
+
+    if(dx!==0||dy!==0){
+      const len=Math.hypot(dx,dy);
+      dx/=len;dy/=len;
+      const realSpeed=displayToReal(p.displaySpeed);
+      let moveSpeed=realSpeed*22*p.trailMul;
+      if(p.carry){
+        const w=p.carry.size==='giant'?0.35:(p.carry.size==='huge'?0.55:0.75);
+        moveSpeed*=w;
+      }
+      p.x+=dx*moveSpeed*dt;
+      p.y+=dy*moveSpeed*dt;
+      p.x=clamp(p.x,20,W-20);
+      p.y=clamp(p.y,-1900,3180);
+    }
+
+    // ★ 速度不足進入高階區域 → 被該區域守衛高速擊飛（無提示）
+    const currentBiome=findBiomeAtY(p.y);
+    if(currentBiome>0 && !canEnterBiome(currentBiome)){
+      // 找到該區域的守衛
+      let guard=null;
+      for(const g of S.guards){
+        if(g.biomeIdx===currentBiome){guard=g;break}
+      }
+      // 計算擊飛方向：從區域中心向外
+      const b=WORLD.biomes[currentBiome];
+      const centerY=(b.yMin+b.yMax)/2;
+      const dirY=Math.sign(2500-p.y)||1;
+      // 高速擊飛回安全線
+      triggerKnockback(rnd(-200,200), dirY*800);
+      // 守衛也震飛
+      if(guard){guard.stun=1.5;guard.alert=false}
+      updateUI();
+      return;
+    }
+
+    // 守衛 AI
+    for(const g of S.guards){
+      if(g.stun>0){g.stun-=dt;continue}
+      const b=WORLD.biomes[g.biomeIdx];
+      const d=dist(p.x,p.y,g.x,g.y);
+      const playerInBiome=p.y>b.yMin-100&&p.y<b.yMax+100;
+
+      let tx=g.hx,ty=g.hy;
+      if(p.carry&&playerInBiome&&d<350){g.alert=true;tx=p.x;ty=p.y}
+      else if(g.alert&&d>500)g.alert=false;
+
+      if(g.alert){
+        const gx=p.x-g.x,gy=p.y-g.y,len=Math.hypot(gx,gy)||1;
+        // 速度不足時守衛更快
+        const speedBoost=canEnterBiome(g.biomeIdx)?1:2.5;
+        g.x+=(gx/len)*g.spd*1.8*speedBoost;
+        g.y+=(gy/len)*g.spd*1.8*speedBoost;
+      }else{
+        if(dist(g.x,g.y,g.hx,g.hy)>40){
+          const gx=g.hx-g.x,gy=g.hy-g.y,len=Math.hypot(gx,gy)||1;
+          g.x+=(gx/len)*g.spd*0.5;
+          g.y+=(gy/len)*g.spd*0.5;
+        }else{
+          g.hx=b.nestXs[Math.floor(Math.random()*b.nestXs.length)]+rnd(-60,60);
+          g.hy=b.nestsY-60+rnd(-30,30);
+        }
+      }
+      g.x=clamp(g.x,30,W-30);
+      g.y=clamp(g.y,b.yMin+20,b.yMax-20);
+    }
+
+    // 撿蛋（速度不足則被守衛高速擊飛）
+    if(!p.carry){
+      for(const e of S.eggs){
+        if(e.collected)continue;
+        if(dist(p.x,p.y,e.x,e.y)<p.r+e.r+4){
+          if(!canEnterBiome(e.biomeIdx)){
+            // 被該區域守衛擊飛
+            let guard=null;
+            for(const g of S.guards){
+              if(g.biomeIdx===e.biomeIdx){guard=g;break}
+            }
+            triggerKnockback(rnd(-200,200), 700);
+            if(guard){guard.stun=1.5;guard.alert=false}
+            updateUI();
+            break;
+          }
+          e.collected=true;
+          p.carry={...e};
+          for(const g of S.guards){
+            if(g.biomeIdx===e.biomeIdx)g.alert=true;
+          }
+          updateUI();break;
+        }
+      }
+    }
+
+    // 回基地
+    if(p.carry&&p.y>S.safeLineY){
+      const egg=p.carry;
+      const b=WORLD.biomes[egg.biomeIdx];
+      const inc=WORLD.petIncome[egg.biomeIdx][egg.petIdx]*egg.mul;
+      const rar=WORLD.petRarity[egg.biomeIdx][egg.petIdx];
+      const usedSlots=new Set(S.pets.map(pt=>pt.slot).filter(s=>s!==undefined));
+      let slot=-1;
+      for(let i=0;i<S.farmPods.length;i++){
+        if(!usedSlots.has(i)){slot=i;break}
+      }
+      if(slot===-1)slot=Math.floor(Math.random()*S.farmPods.length);
+
+      S.pets.push({
+        id:Math.random().toString(36).slice(2),
+        name:b.petNames[egg.petIdx],
+        inc,rar,biomeIdx:egg.biomeIdx,petIdx:egg.petIdx,
+        x:S.farmPods[slot].x,y:S.farmPods[slot].y,
+        vx:rnd(-8,8),vy:rnd(-8,8),
+        selected:false,slot,
+      });
+      discoverPet(egg.biomeIdx,egg.petIdx);
+      p.carry=null;
+      for(const g of S.guards)g.alert=false;
+      S.cps=S.pets.reduce((s,pt)=>s+pt.inc,0)*0.05;
+      updateUI();
+      saveGame(); // 自動存檔
     }
 
     // 守衛抓人
-    for (const g of S.guards) {
-      if (g.stun > 0) continue;
-      if (dist(p.x, p.y, g.x, g.y) < p.r + g.r + 6 && p.stun <= 0) {
-        if (p.carry) {
-          // 蛋掉落
-          const drop = p.carry;
-          S.eggs.push({
-            ...drop, x: p.x + rnd(-15,15), y: p.y + rnd(-15,15),
-            collected: false,
-          });
-          p.carry = null;
+    for(const g of S.guards){
+      if(g.stun>0)continue;
+      if(dist(p.x,p.y,g.x,g.y)<p.r+g.r+6&&p.stun<=0&&p.knockbackTimer<=0){
+        if(p.carry){
+          const drop=p.carry;
+          S.eggs.push({...drop,x:p.x+rnd(-15,15),y:p.y+rnd(-15,15),collected:false});
+          p.carry=null;
         }
-        p.stun = 1.6;
-        g.stun = 1.0;
-        g.alert = false;
+        const kbx=p.x-g.x,kby=p.y-g.y;
+        const kblen=Math.hypot(kbx,kby)||1;
+        const knockForce=350+displayToReal(p.displaySpeed)*10;
+        triggerKnockback((kbx/kblen)*knockForce,(kby/kblen)*knockForce);
+        g.stun=1.2;
+        g.alert=false;
         updateUI();
         break;
       }
     }
 
-    // 蛋重生
-    S.eggTimer += dt;
-    if (S.eggTimer > 20) {
-      S.eggTimer = 0;
-      S.eggs = S.eggs.filter(e => !e.collected);
-      if (S.eggs.length < 20) {
-        for (let bi = 0; bi < WORLD.biomes.length; bi++) {
-          spawnEggsForBiome(bi);
-        }
+    S.eggTimer+=dt;
+    if(S.eggTimer>20){
+      S.eggTimer=0;
+      S.eggs=S.eggs.filter(e=>!e.collected);
+      if(S.eggs.length<25){
+        for(let bi=0;bi<WORLD.biomes.length;bi++)spawnEggsForBiome(bi);
       }
     }
 
-    // 被動收入
-    S.cash += S.cps * dt;
+    S.cash+=S.cps*dt;
 
-    // 自動解鎖生物群系
-    const speed = p.speed * p.trailMul;
-    for (let i = 1; i < WORLD.biomes.length; i++) {
-      if (S.biomeIdx < i && speed >= WORLD.speedReq[i]) {
-        S.biomeIdx = i;
+    for(let i=1;i<WORLD.biomes.length;i++){
+      if(S.biomeIdx<i&&p.displaySpeed>=WORLD.biomes[i].reqDisplay){
+        S.biomeIdx=i;
         updateUI();
         break;
       }
     }
 
-    // 農場寵物悠遊
-    for (const pt of S.pets) {
-      pt.x += pt.vx * dt * 3;
-      pt.y += pt.vy * dt * 3;
-      // 限制在農場區域
-      const pod = S.farmPods[pt.slot];
-      if (pod) {
-        if (dist(pt.x, pt.y, pod.x, pod.y) > 45) {
-          pt.vx = (pod.x - pt.x) * 0.02;
-          pt.vy = (pod.y - pt.y) * 0.02;
-        }
+    for(const pt of S.pets){
+      pt.x+=pt.vx*dt*3;
+      pt.y+=pt.vy*dt*3;
+      const pod=S.farmPods[pt.slot];
+      if(pod&&dist(pt.x,pt.y,pod.x,pod.y)>45){
+        pt.vx=(pod.x-pt.x)*0.02;
+        pt.vy=(pod.y-pt.y)*0.02;
       }
-      pt.x = clamp(pt.x, 80, W-80);
-      pt.y = clamp(pt.y, 2700, 3150);
+      pt.x=clamp(pt.x,80,W-80);
+      pt.y=clamp(pt.y,2700,3150);
     }
 
-    // 相機跟隨
-    S.camera.x += (p.x - S.camera.x) * 0.08;
-    S.camera.y += (p.y - 200 - S.camera.y) * 0.08;
+    S.camera.x+=(p.x-S.camera.x)*0.08;
+    S.camera.y+=(p.y-200-S.camera.y)*0.08;
 
     updateUI();
   }
 
+  function findBiomeAtY(y){
+    for(let i=0;i<WORLD.biomes.length;i++){
+      const b=WORLD.biomes[i];
+      if(y>=b.yMin&&y<=b.yMax)return i;
+    }
+    if(y<0)return WORLD.biomes.length-1;
+    return 0;
+  }
+
   // ========== 繪製 ==========
-  function draw() {
-    const z = S.zoom;
-    ctx.clearRect(0, 0, W, H);
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle='#0a1018';
+    ctx.fillRect(0,0,W,H);
 
-    // 背景
-    ctx.fillStyle = '#0a1018';
-    ctx.fillRect(0, 0, W, H);
+    for(let bi=WORLD.biomes.length-1;bi>=0;bi--){
+      const b=WORLD.biomes[bi];
+      const p1=worldToScreen(0,b.yMax);
+      const p2=worldToScreen(W,b.yMin);
+      const y1=p1.y,y2=p2.y;
+      if(y2>H||y1<0)continue;
 
-    // 繪製每個生物群系 (從上到下)
-    for (let bi = WORLD.biomes.length-1; bi >= 0; bi--) {
-      const b = WORLD.biomes[bi];
-      const p1 = worldToScreen(0, b.yMax);
-      const p2 = worldToScreen(W, b.yMin);
-      const y1 = p1.y, y2 = p2.y;
-      if (y2 > H || y1 < 0) continue;
+      const grad=ctx.createLinearGradient(0,y2,0,y1);
+      grad.addColorStop(0,shade(b.color,12));
+      grad.addColorStop(0.5,b.color);
+      grad.addColorStop(1,shade(b.color,-12));
+      ctx.fillStyle=grad;
+      ctx.fillRect(0,y2,W,y1-y2);
 
-      // 區域背景
-      const grad = ctx.createLinearGradient(0, y2, 0, y1);
-      grad.addColorStop(0, shade(b.color, 12));
-      grad.addColorStop(0.5, b.color);
-      grad.addColorStop(1, shade(b.color, -12));
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, y2, W, y1 - y2);
-
-      // 區域名稱
-      ctx.font = '800 14px "Segoe UI"';
-      ctx.fillStyle = hexA(b.accent, 0.8);
-      ctx.textAlign = 'left';
-      ctx.fillText(`${b.icon} ${b.name}  ${b.req > 0 ? '⚡' + fmt(b.req) : ''}`, 20, y2 + 24);
+      ctx.font='800 14px "Segoe UI"';
+      ctx.fillStyle=hexA(b.accent,0.8);
+      ctx.textAlign='left';
+      const reqStr=b.reqDisplay>0?'⚡'+fmtSpeed(b.reqDisplay):'新手區';
+      ctx.fillText(`${b.icon} ${b.name}  ${reqStr}`,20,y2+24);
     }
 
-    // 安全線
-    const safeY = worldToScreen(0, S.safeLineY).y;
-    if (safeY > -20 && safeY < H+20) {
+    const safeY=worldToScreen(0,S.safeLineY).y;
+    if(safeY>-20&&safeY<H+20){
       ctx.save();
-      ctx.setLineDash([12, 8]);
-      ctx.strokeStyle = '#ff5a5a';
-      ctx.lineWidth = 3;
-      ctx.shadowBlur = 14;
-      ctx.shadowColor = '#ff0000';
+      ctx.setLineDash([12,8]);
+      ctx.strokeStyle='#ff5a5a';
+      ctx.lineWidth=3;
+      ctx.shadowBlur=14;
+      ctx.shadowColor='#ff0000';
       ctx.beginPath();
-      ctx.moveTo(0, safeY);
-      ctx.lineTo(W, safeY);
+      ctx.moveTo(0,safeY);
+      ctx.lineTo(W,safeY);
       ctx.stroke();
       ctx.restore();
-
-      ctx.font = '700 12px "Segoe UI"';
-      ctx.fillStyle = '#ff8888';
-      ctx.textAlign = 'center';
-      ctx.fillText('⚠️ 安全線 (回到下方基地)', W/2, safeY - 8);
+      ctx.font='700 12px "Segoe UI"';
+      ctx.fillStyle='#ff8888';
+      ctx.textAlign='center';
+      ctx.fillText('⚠️ 安全線 (回到下方基地)',W/2,safeY-8);
     }
 
-    // 蛋
-    for (const e of S.eggs) {
-      if (!e.collected) drawEgg(e);
-    }
-
-    // 守衛
-    for (const g of S.guards) drawGuard(g);
-
-    // 基地 (Y > 2700 區域)
+    for(const e of S.eggs)if(!e.collected)drawEgg(e);
+    for(const g of S.guards)drawGuard(g);
     drawBase();
-
-    // 玩家
     drawPlayer();
-
-    // 農場寵物
-    for (const pt of S.pets) drawFarmPet(pt);
-
-    // 繪製 HUD 固定資訊
+    for(const pt of S.pets)drawFarmPet(pt);
     drawHUD();
   }
 
-  function drawBase() {
-    const p = worldToScreen(0, 2700);
-    const p2 = worldToScreen(0, 3200);
-    if (p2.y < 0 || p.y > H) return;
+  function drawBase(){
+    const p=worldToScreen(0,2700);
+    const p2=worldToScreen(0,3200);
+    if(p2.y<0||p.y>H)return;
 
-    // 基地背景
-    ctx.fillStyle = '#1c3a24aa';
-    ctx.fillRect(0, p.y, W, p2.y - p.y);
+    ctx.fillStyle='#1c3a24aa';
+    ctx.fillRect(0,p.y,W,p2.y-p.y);
+    ctx.strokeStyle='#4a7a4a';
+    ctx.lineWidth=2;
+    ctx.strokeRect(4,p.y,W-8,p2.y-p.y-4);
 
-    // 基地邊框
-    ctx.strokeStyle = '#4a7a4a';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(4, p.y, W-8, p2.y - p.y - 4);
-
-    // 跑步機
-    const tm = worldToScreen(S.treadmill.x, S.treadmill.y);
+    const tm=worldToScreen(S.treadmill.x,S.treadmill.y);
     ctx.save();
-    ctx.shadowBlur = 20;
-    ctx.shadowColor = '#5ec8ff66';
-    ctx.fillStyle = '#2a4a6a';
+    if(S.player.training){
+      const gl=ctx.createRadialGradient(tm.x,tm.y,20,tm.x,tm.y,90);
+      gl.addColorStop(0,'rgba(94,200,255,0.5)');
+      gl.addColorStop(1,'rgba(94,200,255,0)');
+      ctx.fillStyle=gl;
+      ctx.beginPath();
+      ctx.arc(tm.x,tm.y,90,0,7);
+      ctx.fill();
+    }
+    ctx.shadowBlur=20;
+    ctx.shadowColor='#5ec8ff88';
+    ctx.fillStyle=S.player.training?'#3a5a8a':'#2a4a6a';
     ctx.beginPath();
-    ctx.roundRect(tm.x-50, tm.y-25, 100, 50, 10);
+    ctx.roundRect(tm.x-65,tm.y-35,130,70,14);
     ctx.fill();
-    ctx.strokeStyle = '#5ec8ff';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle=S.player.training?'#7addff':'#5ec8ff';
+    ctx.lineWidth=S.player.training?3:2;
     ctx.stroke();
-    ctx.font = '700 12px "Segoe UI"';
-    ctx.fillStyle = '#aaddff';
-    ctx.textAlign = 'center';
-    ctx.fillText('🏃 跑步機', tm.x, tm.y+5);
+    ctx.font='800 13px "Segoe UI"';
+    ctx.fillStyle=S.player.training?'#cceeff':'#aaddff';
+    ctx.textAlign='center';
+    ctx.fillText('🏃 跑步機',tm.x,tm.y-8);
+    ctx.font='700 10px "Segoe UI"';
+    ctx.fillStyle='#8ab8dd';
+    ctx.fillText(S.player.training?'訓練中...':'站在上面自動訓練',tm.x,tm.y+14);
     ctx.restore();
 
-    // 農場寵物底座
-    for (const pod of S.farmPods) {
-      const sp = worldToScreen(pod.x, pod.y);
-      if (sp.y < 0 || sp.y > H) continue;
+    for(const pod of S.farmPods){
+      const sp=worldToScreen(pod.x,pod.y);
+      if(sp.y<0||sp.y>H)continue;
       ctx.save();
-      ctx.fillStyle = '#2a4a2a88';
-      ctx.strokeStyle = '#4a7a4a88';
-      ctx.lineWidth = 2;
+      ctx.fillStyle='#2a4a2a88';
+      ctx.strokeStyle='#4a7a4a88';
+      ctx.lineWidth=2;
       ctx.beginPath();
-      ctx.arc(sp.x, sp.y, 22, 0, 7);
+      ctx.arc(sp.x,sp.y,22,0,7);
       ctx.fill();
       ctx.stroke();
       ctx.restore();
     }
 
-    // 合成機
-    const fm = worldToScreen(S.fuseMachine.x, S.fuseMachine.y);
+    const fm=worldToScreen(S.fuseMachine.x,S.fuseMachine.y);
     ctx.save();
-    ctx.fillStyle = '#3a2a4a';
-    ctx.strokeStyle = '#b56cff';
-    ctx.lineWidth = 2;
+    ctx.fillStyle='#3a2a4a';
+    ctx.strokeStyle='#b56cff';
+    ctx.lineWidth=2;
     ctx.beginPath();
-    ctx.roundRect(fm.x-35, fm.y-20, 70, 40, 8);
+    ctx.roundRect(fm.x-35,fm.y-20,70,40,8);
     ctx.fill();
     ctx.stroke();
-    ctx.font = '700 11px "Segoe UI"';
-    ctx.fillStyle = '#c9a0ff';
-    ctx.textAlign = 'center';
-    ctx.fillText('🔮 合成機', fm.x, fm.y+4);
+    ctx.font='700 11px "Segoe UI"';
+    ctx.fillStyle='#c9a0ff';
+    ctx.textAlign='center';
+    ctx.fillText('🔮 合成機',fm.x,fm.y+4);
     ctx.restore();
   }
 
-  function drawEgg(e) {
-    const sp = worldToScreen(e.x, e.y);
-    if (sp.y < -50 || sp.y > H+50) return;
-    const b = WORLD.biomes[e.biomeIdx];
-    const rar = WORLD.petRarity[e.biomeIdx][e.petIdx];
-    const rc = WORLD.rarities[rar].c;
-    const bob = Math.sin(S.time*2 + e.float) * 3;
-    const sc = S.zoom;
+  function drawEgg(e){
+    const sp=worldToScreen(e.x,e.y);
+    if(sp.y<-50||sp.y>H+50)return;
+    const rar=WORLD.petRarity[e.biomeIdx][e.petIdx];
+    const rc=WORLD.rarities[rar].c;
+    const bob=Math.sin(S.time*2+e.float)*3;
+    const sc=S.zoom;
 
     ctx.save();
-    ctx.translate(sp.x, sp.y + bob*sc);
-    ctx.scale(sc, sc);
+    ctx.translate(sp.x,sp.y+bob*sc);
+    ctx.scale(sc,sc);
 
-    // 光暈
-    if (rar >= 3 || e.size !== 'normal') {
-      const glow = ctx.createRadialGradient(0,0,e.r*0.5, 0,0,e.r*2.4);
-      glow.addColorStop(0, hexA(rc, 0.5));
-      glow.addColorStop(1, hexA(rc, 0));
-      ctx.fillStyle = glow;
+    if(rar>=3||e.size!=='normal'){
+      const glow=ctx.createRadialGradient(0,0,e.r*0.5,0,0,e.r*2.4);
+      glow.addColorStop(0,hexA(rc,0.5));
+      glow.addColorStop(1,hexA(rc,0));
+      ctx.fillStyle=glow;
       ctx.beginPath();
-      ctx.arc(0, 0, e.r*2.4, 0, 7);
+      ctx.arc(0,0,e.r*2.4,0,7);
       ctx.fill();
     }
 
-    // 蛋體
-    ctx.shadowBlur = 10;
-    ctx.shadowColor = '#00000088';
-    const grad = ctx.createRadialGradient(-e.r*0.3, -e.r*0.4, e.r*0.15, 0, 0, e.r*1.3);
-    if (e.size === 'giant') { grad.addColorStop(0,'#aaddff'); grad.addColorStop(1,'#1a4a7a'); }
-    else if (e.size === 'huge') { grad.addColorStop(0,'#cce0ff'); grad.addColorStop(1,'#3a6a9a'); }
-    else { grad.addColorStop(0,'#f0f0f0'); grad.addColorStop(1,'#7a7a7a'); }
+    ctx.shadowBlur=10;
+    ctx.shadowColor='#00000088';
+    const grad=ctx.createRadialGradient(-e.r*0.3,-e.r*0.4,e.r*0.15,0,0,e.r*1.3);
+    if(e.size==='giant'){grad.addColorStop(0,'#aaddff');grad.addColorStop(1,'#1a4a7a')}
+    else if(e.size==='huge'){grad.addColorStop(0,'#cce0ff');grad.addColorStop(1,'#3a6a9a')}
+    else{grad.addColorStop(0,'#f0f0f0');grad.addColorStop(1,'#7a7a7a')}
     ctx.beginPath();
-    ctx.ellipse(0, 0, e.r, e.r*1.3, 0, 0, 7);
-    ctx.fillStyle = grad;
+    ctx.ellipse(0,0,e.r,e.r*1.3,0,0,7);
+    ctx.fillStyle=grad;
     ctx.fill();
 
-    // 高光
-    ctx.shadowBlur = 0;
-    ctx.globalAlpha = 0.5;
-    ctx.fillStyle = '#fff';
+    ctx.shadowBlur=0;
+    ctx.globalAlpha=0.5;
+    ctx.fillStyle='#fff';
     ctx.beginPath();
-    ctx.ellipse(-e.r*0.35, -e.r*0.45, e.r*0.25, e.r*0.35, -0.4, 0, 7);
+    ctx.ellipse(-e.r*0.35,-e.r*0.45,e.r*0.25,e.r*0.35,-0.4,0,7);
     ctx.fill();
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha=1;
 
-    // 稀有度星
-    if (rar >= 4) {
-      ctx.font = 'bold 14px "Segoe UI"';
-      ctx.fillStyle = rc;
-      ctx.shadowBlur = 12;
-      ctx.shadowColor = rc;
-      ctx.textAlign = 'center';
-      ctx.fillText('★', 0, -e.r*1.6);
+    if(rar>=4){
+      ctx.font='bold 14px "Segoe UI"';
+      ctx.fillStyle=rc;
+      ctx.shadowBlur=12;
+      ctx.shadowColor=rc;
+      ctx.textAlign='center';
+      ctx.fillText('★',0,-e.r*1.6);
     }
     ctx.restore();
   }
 
-  function drawGuard(g) {
-    const sp = worldToScreen(g.x, g.y);
-    if (sp.y < -60 || sp.y > H+60) return;
-    const sc = S.zoom;
-    const b = WORLD.biomes[g.biomeIdx];
+  function drawGuard(g){
+    const sp=worldToScreen(g.x,g.y);
+    if(sp.y<-60||sp.y>H+60)return;
+    const sc=S.zoom;
+    const b=WORLD.biomes[g.biomeIdx];
 
     ctx.save();
-    ctx.translate(sp.x, sp.y);
-    ctx.scale(sc, sc);
+    ctx.translate(sp.x,sp.y);
+    ctx.scale(sc,sc);
 
-    // 光暈
-    if (g.alert) {
-      const gl = ctx.createRadialGradient(0,0,g.r*0.5, 0,0,g.r*2.6);
-      gl.addColorStop(0, 'rgba(255,80,80,0.5)');
-      gl.addColorStop(1, 'rgba(255,80,80,0)');
-      ctx.fillStyle = gl;
+    if(g.alert){
+      const gl=ctx.createRadialGradient(0,0,g.r*0.5,0,0,g.r*2.6);
+      gl.addColorStop(0,'rgba(255,80,80,0.5)');
+      gl.addColorStop(1,'rgba(255,80,80,0)');
+      ctx.fillStyle=gl;
       ctx.beginPath();
       ctx.arc(0,0,g.r*2.6,0,7);
       ctx.fill();
     }
 
-    // 身體
-    ctx.shadowBlur = 14;
-    ctx.shadowColor = '#000a';
-    const grad = ctx.createRadialGradient(-g.r*0.3,-g.r*0.3,g.r*0.2, 0,0,g.r*1.2);
-    if (g.alert) { grad.addColorStop(0,'#ff7070'); grad.addColorStop(1,'#5a1010'); }
-    else { grad.addColorStop(0, b.accent); grad.addColorStop(1,'#1a0a0a'); }
+    ctx.shadowBlur=14;
+    ctx.shadowColor='#000a';
+    const grad=ctx.createRadialGradient(-g.r*0.3,-g.r*0.3,g.r*0.2,0,0,g.r*1.2);
+    if(g.alert){grad.addColorStop(0,'#ff7070');grad.addColorStop(1,'#5a1010')}
+    else{grad.addColorStop(0,b.accent);grad.addColorStop(1,'#1a0a0a')}
     ctx.beginPath();
     ctx.arc(0,0,g.r,0,7);
-    ctx.fillStyle = grad;
+    ctx.fillStyle=grad;
     ctx.fill();
-    ctx.strokeStyle = g.alert ? '#ffcc00' : '#aa4444';
-    ctx.lineWidth = g.alert ? 4 : 2;
+    ctx.strokeStyle=g.alert?'#ffcc00':'#aa4444';
+    ctx.lineWidth=g.alert?4:2;
     ctx.stroke();
 
-    // 眼睛
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = '#fff';
-    ctx.beginPath(); ctx.arc(-6,-3,4.5,0,7); ctx.fill();
-    ctx.beginPath(); ctx.arc(6,-3,4.5,0,7); ctx.fill();
-    ctx.fillStyle = '#000';
-    ctx.beginPath(); ctx.arc(-6,-3,2.2,0,7); ctx.fill();
-    ctx.beginPath(); ctx.arc(6,-3,2.2,0,7); ctx.fill();
+    ctx.shadowBlur=0;
+    ctx.fillStyle='#fff';
+    ctx.beginPath();ctx.arc(-6,-3,4.5,0,7);ctx.fill();
+    ctx.beginPath();ctx.arc(6,-3,4.5,0,7);ctx.fill();
+    ctx.fillStyle='#000';
+    ctx.beginPath();ctx.arc(-6,-3,2.2,0,7);ctx.fill();
+    ctx.beginPath();ctx.arc(6,-3,2.2,0,7);ctx.fill();
 
-    // 驚嘆號
-    if (g.alert) {
-      ctx.font = '900 22px "Segoe UI"';
-      ctx.fillStyle = '#ffaa00';
-      ctx.shadowBlur = 14;
-      ctx.shadowColor = '#ff8800';
-      ctx.textAlign = 'center';
-      ctx.fillText('!', 0, -g.r-8);
+    if(g.alert){
+      ctx.font='900 22px "Segoe UI"';
+      ctx.fillStyle='#ffaa00';
+      ctx.shadowBlur=14;
+      ctx.shadowColor='#ff8800';
+      ctx.textAlign='center';
+      ctx.fillText('!',0,-g.r-8);
     }
     ctx.restore();
   }
 
-  function drawPlayer() {
-    const p = S.player;
-    const sp = worldToScreen(p.x, p.y);
-    const sc = S.zoom;
+  function drawPlayer(){
+    const p=S.player;
+    const sp=worldToScreen(p.x,p.y);
+    const sc=S.zoom;
 
     ctx.save();
-    ctx.translate(sp.x, sp.y);
-    ctx.scale(sc, sc);
-    if (p.stun > 0) ctx.globalAlpha = 0.5 + Math.sin(S.time*20)*0.25;
+    ctx.translate(sp.x,sp.y);
+    ctx.scale(sc,sc);
 
-    // 光環
-    const gl = ctx.createRadialGradient(0,0,p.r*0.6, 0,0,p.r*2);
+    if(p.stun>0)ctx.globalAlpha=0.5+Math.sin(S.time*20)*0.25;
+
+    const gl=ctx.createRadialGradient(0,0,p.r*0.6,0,0,p.r*2);
     gl.addColorStop(0,'rgba(100,180,255,0.5)');
     gl.addColorStop(1,'rgba(100,180,255,0)');
-    ctx.fillStyle = gl;
+    ctx.fillStyle=gl;
     ctx.beginPath();
     ctx.arc(0,0,p.r*2,0,7);
     ctx.fill();
 
-    // 身體
-    ctx.shadowBlur = 16;
-    ctx.shadowColor = '#000c';
-    const grad = ctx.createRadialGradient(-p.r*0.3,-p.r*0.3,p.r*0.2, 0,0,p.r*1.2);
+    ctx.shadowBlur=16;
+    ctx.shadowColor='#000c';
+    const grad=ctx.createRadialGradient(-p.r*0.3,-p.r*0.3,p.r*0.2,0,0,p.r*1.2);
     grad.addColorStop(0,'#7ad0ff');
     grad.addColorStop(1,'#1a4a8a');
     ctx.beginPath();
     ctx.arc(0,0,p.r,0,7);
-    ctx.fillStyle = grad;
+    ctx.fillStyle=grad;
     ctx.fill();
-    ctx.strokeStyle = '#aaddff';
-    ctx.lineWidth = 3;
+    ctx.strokeStyle='#aaddff';
+    ctx.lineWidth=3;
     ctx.stroke();
 
-    // 眼睛
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = '#fff';
-    ctx.beginPath(); ctx.arc(-5,-3,4.5,0,7); ctx.fill();
-    ctx.beginPath(); ctx.arc(5,-3,4.5,0,7); ctx.fill();
-    ctx.fillStyle = '#000';
-    ctx.beginPath(); ctx.arc(-5,-3,2,0,7); ctx.fill();
-    ctx.beginPath(); ctx.arc(5,-3,2,0,7); ctx.fill();
+    ctx.shadowBlur=0;
+    ctx.fillStyle='#fff';
+    ctx.beginPath();ctx.arc(-5,-3,4.5,0,7);ctx.fill();
+    ctx.beginPath();ctx.arc(5,-3,4.5,0,7);ctx.fill();
+    ctx.fillStyle='#000';
+    ctx.beginPath();ctx.arc(-5,-3,2,0,7);ctx.fill();
+    ctx.beginPath();ctx.arc(5,-3,2,0,7);ctx.fill();
 
-    // 攜帶的蛋
-    if (p.carry) {
-      ctx.shadowBlur = 18;
-      ctx.shadowColor = '#ffaa00';
-      const cg = ctx.createRadialGradient(-3,-24,3, 0,-18,15);
+    if(p.carry){
+      ctx.shadowBlur=18;
+      ctx.shadowColor='#ffaa00';
+      const cg=ctx.createRadialGradient(-3,-24,3,0,-18,15);
       cg.addColorStop(0,'#ffe68f');
       cg.addColorStop(1,'#b8860b');
       ctx.beginPath();
       ctx.ellipse(0,-20,12,16,0,0,7);
-      ctx.fillStyle = cg;
+      ctx.fillStyle=cg;
       ctx.fill();
-      ctx.shadowBlur = 0;
-      ctx.font = '12px "Segoe UI"';
-      ctx.fillStyle = '#fff';
-      ctx.fillText('★', -4, -24);
+      ctx.shadowBlur=0;
+      ctx.font='12px "Segoe UI"';
+      ctx.fillStyle='#fff';
+      ctx.fillText('★',-4,-24);
     }
     ctx.restore();
   }
 
-  function drawFarmPet(pt) {
-    const sp = worldToScreen(pt.x, pt.y);
-    if (sp.y < -30 || sp.y > H+30) return;
-    const sc = S.zoom;
-    const rc = WORLD.rarities[pt.rar].c;
-    const bob = Math.sin(S.time*3 + pt.inc) * 2;
+  function drawFarmPet(pt){
+    const sp=worldToScreen(pt.x,pt.y);
+    if(sp.y<-30||sp.y>H+30)return;
+    const sc=S.zoom;
+    const rc=WORLD.rarities[pt.rar].c;
 
     ctx.save();
-    ctx.translate(sp.x, sp.y + bob*sc);
-    ctx.scale(sc, sc);
+    ctx.translate(sp.x,sp.y);
+    ctx.scale(sc,sc);
 
-    // 選中光環
-    if (pt.selected) {
-      const gl = ctx.createRadialGradient(0,0,8, 0,0,40);
-      gl.addColorStop(0, hexA(rc, 0.7));
-      gl.addColorStop(1, hexA(rc, 0));
-      ctx.fillStyle = gl;
+    if(pt.selected){
+      const gl=ctx.createRadialGradient(0,0,8,0,0,40);
+      gl.addColorStop(0,hexA(rc,0.7));
+      gl.addColorStop(1,hexA(rc,0));
+      ctx.fillStyle=gl;
       ctx.beginPath();
       ctx.arc(0,0,40,0,7);
       ctx.fill();
     }
 
-    // 身體
-    ctx.shadowBlur = 10;
-    ctx.shadowColor = '#000a';
-    const grad = ctx.createRadialGradient(-5,-6,4, 0,0,18);
-    grad.addColorStop(0, hexA(rc, 0.9));
-    grad.addColorStop(1, shade(rc,-40));
-    ctx.beginPath();
-    ctx.ellipse(0,0,14,16,0,0,7);
-    ctx.fillStyle = grad;
-    ctx.fill();
-    ctx.strokeStyle = rc;
-    ctx.lineWidth = 2;
-    ctx.stroke();
+    const palette=BIOME_PALETTES[pt.biomeIdx];
+    const shape=PET_SHAPES[pt.biomeIdx][pt.petIdx];
+    drawPetShape(ctx,shape,palette,20,S.time,rc);
 
-    // 眼睛
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = '#fff';
-    ctx.beginPath(); ctx.arc(-4,-3,3.5,0,7); ctx.fill();
-    ctx.beginPath(); ctx.arc(4,-3,3.5,0,7); ctx.fill();
-    ctx.fillStyle = '#000';
-    ctx.beginPath(); ctx.arc(-4,-3,1.6,0,7); ctx.fill();
-    ctx.beginPath(); ctx.arc(4,-3,1.6,0,7); ctx.fill();
-
-    // 稀有度冠
-    if (pt.rar >= 5) {
-      ctx.font = '10px "Segoe UI"';
-      ctx.fillStyle = rc;
-      ctx.textAlign = 'center';
-      ctx.shadowBlur = 8;
-      ctx.shadowColor = rc;
-      ctx.fillText('👑', 0, -20);
-      ctx.shadowBlur = 0;
+    if(pt.rar>=5){
+      ctx.strokeStyle=rc;
+      ctx.lineWidth=1.5;
+      ctx.shadowBlur=10;
+      ctx.shadowColor=rc;
+      ctx.beginPath();
+      ctx.arc(0,0,24,0,7);
+      ctx.stroke();
+      ctx.shadowBlur=0;
     }
+
     ctx.restore();
 
-    // 名字與產值
-    if (sc > 0.7) {
-      ctx.font = '600 10px "Segoe UI"';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = '#cfe2ff';
-      ctx.shadowBlur = 4;
-      ctx.shadowColor = '#000';
-      ctx.fillText(pt.name.slice(0,8), sp.x, sp.y + 28*sc);
-      ctx.font = '700 9px "Segoe UI"';
-      ctx.fillStyle = '#9fd89f';
-      ctx.fillText('$'+fmt(pt.inc)+'/s', sp.x, sp.y + 40*sc);
-      ctx.shadowBlur = 0;
+    if(sc>0.7){
+      ctx.font='600 10px "Segoe UI"';
+      ctx.textAlign='center';
+      ctx.fillStyle='#cfe2ff';
+      ctx.shadowBlur=4;
+      ctx.shadowColor='#000';
+      ctx.fillText(pt.name.slice(0,8),sp.x,sp.y+30*sc);
+      ctx.font='700 9px "Segoe UI"';
+      ctx.fillStyle='#9fd89f';
+      ctx.fillText('$'+fmt(pt.inc)+'/s',sp.x,sp.y+42*sc);
+      ctx.shadowBlur=0;
     }
   }
 
-  function drawHUD() {
-    // 相機位置指示 (左上)
-    ctx.font = '700 11px "Segoe UI"';
-    ctx.fillStyle = '#5a7a9a';
-    ctx.textAlign = 'left';
-    ctx.fillText(`📍 Y:${Math.floor(S.player.y)}  ${S.player.carry ? '🥚攜帶中' : ''}`, 16, H-16);
+  function drawHUD(){
+    ctx.font='700 11px "Segoe UI"';
+    ctx.fillStyle='#5a7a9a';
+    ctx.textAlign='left';
+    ctx.fillText(`📍 Y:${Math.floor(S.player.y)}  ${S.player.carry?'🥚攜帶中':''}`,16,H-16);
+    ctx.textAlign='right';
+    ctx.fillText(`🔍 ${(S.zoom*100).toFixed(0)}%`,W-16,H-16);
 
-    // 縮放指示
-    ctx.textAlign = 'right';
-    ctx.fillText(`🔍 ${(S.zoom*100).toFixed(0)}%`, W-16, H-16);
+    if(S.player.knockbackTimer>0){
+      ctx.textAlign='center';
+      ctx.font='900 28px "Segoe UI"';
+      ctx.fillStyle='#ff6a6a';
+      ctx.shadowBlur=20;
+      ctx.shadowColor='#ff0000';
+      ctx.fillText('💥 被擊飛!',W/2,H/2-100);
+      ctx.shadowBlur=0;
+    }
+
+    if(S.player.training){
+      ctx.textAlign='center';
+      ctx.font='900 24px "Segoe UI"';
+      ctx.fillStyle='#7affb0';
+      ctx.shadowBlur=18;
+      ctx.shadowColor='#00ff88';
+      ctx.fillText('⚡ 訓練中...',W/2,60);
+      ctx.shadowBlur=0;
+    }
   }
 
-  // ========== 輸入 ==========
-  // 滑鼠拖動移動玩家
-  let isDragging = false;
-  let dragStart = { x:0, y:0 };
+  // ========== 鍵盤 ==========
+  window.addEventListener('keydown',e=>{
+    const k=e.key.toLowerCase();
+    keys[k]=true;
+    if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(k)){
+      e.preventDefault();
+    }
+    if(k==='escape'){
+      if(S.panelOpen)closePetPanel();
+      if(S.indexOpen){S.indexOpen=false;document.getElementById('indexPanel').classList.remove('open')}
+    }
+  });
+  window.addEventListener('keyup',e=>{
+    keys[e.key.toLowerCase()]=false;
+  });
 
-  c.addEventListener('mousedown', e => {
-    const rect = c.getBoundingClientRect();
-    const sx = (e.clientX - rect.left) * (W / rect.width);
-    const sy = (e.clientY - rect.top) * (H / rect.height);
-    const w = screenToWorld(sx, sy);
+  // ========== 滑鼠 ==========
+  c.addEventListener('click',e=>{
+    const rect=c.getBoundingClientRect();
+    const sx=(e.clientX-rect.left)*(W/rect.width);
+    const sy=(e.clientY-rect.top)*(H/rect.height);
+    const w=screenToWorld(sx,sy);
 
-    // 檢查是否點擊農場寵物
-    for (const pt of S.pets) {
-      if (dist(w.x, w.y, pt.x, pt.y) < 30) {
-        S.selectedPet = pt;
-        for (const p2 of S.pets) p2.selected = false;
-        pt.selected = true;
-        updateUI();
+    for(const pt of S.pets){
+      if(dist(w.x,w.y,pt.x,pt.y)<30){
+        openPetPanel(pt);
         return;
       }
     }
 
-    // 檢查是否點擊跑步機
-    if (dist(w.x, w.y, S.treadmill.x, S.treadmill.y) < 70) {
-      // 訓練
-      const p = S.player;
-      p.speed += 3 + p.tsLv * 1.2;
-      updateUI();
-      return;
-    }
-
-    // 否則開始拖動
-    isDragging = true;
-    dragStart = { x: sx, y: sy, wx: w.x, wy: w.y };
+    if(S.panelOpen)closePetPanel();
   });
 
-  c.addEventListener('mousemove', e => {
-    const rect = c.getBoundingClientRect();
-    const sx = (e.clientX - rect.left) * (W / rect.width);
-    const sy = (e.clientY - rect.top) * (H / rect.height);
-
-    if (isDragging) {
-      // 拖動玩家 (世界座標)
-      const w = screenToWorld(sx, sy);
-      const p = S.player;
-      if (p.stun <= 0) {
-        p.x = clamp(w.x, 20, W-20);
-        p.y = clamp(w.y, 20, 3180);
-      }
-    }
-  });
-
-  c.addEventListener('mouseup', () => { isDragging = false; });
-  c.addEventListener('mouseleave', () => { isDragging = false; });
-
-  // 滾輪縮放
-  c.addEventListener('wheel', e => {
+  c.addEventListener('wheel',e=>{
     e.preventDefault();
-    S.zoom = clamp(S.zoom * (e.deltaY > 0 ? 0.92 : 1.08), 0.5, 2.5);
-  }, { passive: false });
+    S.zoom=clamp(S.zoom*(e.deltaY>0?0.92:1.08),0.4,2.5);
+  },{passive:false});
 
-  // 點擊農場寵物取消選中
-  c.addEventListener('click', e => {
-    // 已由 mousedown 處理
-  });
+  // ========== UI ==========
+  function updateUI(){
+    const p=S.player;
+    document.getElementById('uiSpeed').textContent=fmtSpeed(p.displaySpeed);
+    document.getElementById('uiCash').textContent=fmt(S.cash);
+    document.getElementById('uiEgg').textContent=p.carry?'1':'0';
+    document.getElementById('lvTxt').textContent=p.tsLv;
+    document.getElementById('costTxt').textContent='$'+fmt(treadmillCost(p.tsLv));
 
-  // ========== UI 更新 ==========
-  function updateUI() {
-    const p = S.player;
-    document.getElementById('uiSpeed').textContent = Math.floor(p.speed * p.trailMul).toLocaleString();
-    document.getElementById('uiCash').textContent = fmt(S.cash);
-    document.getElementById('uiEgg').textContent = p.carry ? '1' : '0';
-    document.getElementById('uiPet').textContent = S.pets.length;
-    document.getElementById('uiCps').textContent = fmt(S.cps);
-    document.getElementById('lvTxt').textContent = p.tsLv;
+    const b=WORLD.biomes[S.biomeIdx];
+    document.getElementById('uiBiome').textContent=b.name;
+    document.getElementById('uiBiomeIcon').textContent=b.icon;
 
-    const b = WORLD.biomes[S.biomeIdx];
-    document.getElementById('uiBiome').textContent = b.name;
-    document.getElementById('uiBiomeIcon').textContent = b.icon;
+    document.getElementById('trainStatus').textContent=p.training?'⚡ 訓練中！速度快速累積':'🚶 未在訓練（站上跑步機）';
 
-    const btnUp = document.getElementById('btnUp');
-    btnUp.disabled = S.cash < 40 * p.tsLv;
+    const total=WORLD.biomes.length*8;
+    document.getElementById('uiIndex').textContent=IndexData.discovered.size+'/'+total;
+
+    document.getElementById('btnUp').disabled=S.cash<treadmillCost(p.tsLv);
+    document.getElementById('btnSellSelected').disabled=!S.selectedPet;
   }
 
-  // ========== 按鈕 ==========
-  document.getElementById('btnTrain').addEventListener('click', () => {
-    const p = S.player;
-    if (p.stun > 0) return;
-    p.speed += 3 + p.tsLv * 1.2;
+  document.getElementById('btnUp').addEventListener('click',()=>{
+    const p=S.player;
+    const cost=treadmillCost(p.tsLv);
+    if(S.cash>=cost){S.cash-=cost;p.tsLv++;updateUI();saveGame()}
+  });
+
+  document.getElementById('btnIndex').addEventListener('click',()=>{
+    S.indexOpen=true;
+    document.getElementById('indexPanel').classList.add('open');
+    buildIndexUI();
+  });
+
+  document.getElementById('btnCloseIndex').addEventListener('click',()=>{
+    S.indexOpen=false;
+    document.getElementById('indexPanel').classList.remove('open');
+  });
+
+  document.getElementById('btnEquip').addEventListener('click',()=>{
+    if(S.pets.length===0)return;
+    S.cps=S.pets.reduce((s,pt)=>s+pt.inc,0)*0.05;
     updateUI();
   });
 
-  document.getElementById('btnUp').addEventListener('click', () => {
-    const p = S.player;
-    const cost = 40 * p.tsLv;
-    if (S.cash >= cost) {
-      S.cash -= cost;
-      p.tsLv++;
-      p.speed += 8;
-      updateUI();
-    }
+  document.getElementById('btnSellSelected').addEventListener('click',()=>{
+    sellSelectedPet();
   });
 
-  document.getElementById('btnEquip').addEventListener('click', () => {
-    if (S.pets.length === 0) return;
-    S.cps = S.pets.reduce((s, pt) => s + pt.inc, 0) * 0.05;
-    updateUI();
+  document.getElementById('btnSellPanel').addEventListener('click',()=>{
+    sellSelectedPet();
   });
 
-  document.getElementById('btnSell').addEventListener('click', () => {
-    if (S.pets.length === 0) return;
-    // 賣出產值最低的寵物
-    S.pets.sort((a,b) => a.inc - b.inc);
-    const sold = S.pets.shift();
-    S.cash += sold.inc * 10;
-    S.cps = S.pets.reduce((s, pt) => s + pt.inc, 0) * 0.05;
-    updateUI();
+  document.getElementById('btnClosePanel').addEventListener('click',()=>{
+    closePetPanel();
+  });
+
+  document.getElementById('btnSave').addEventListener('click',()=>{
+    saveGame();
   });
 
   // ========== 主循環 ==========
-  function loop(now) {
-    const dt = Math.min(0.05, (now - (S.lastT || now)) / 1000);
-    S.lastT = now;
-    S.time = (S.time || 0) + dt;
-    if (dt > 0) update(dt);
+  function loop(now){
+    const dt=Math.min(0.05,(now-(S.lastT||now))/1000);
+    S.lastT=now;
+    if(dt>0)update(dt);
     draw();
     requestAnimationFrame(loop);
   }
 
   // 啟動
   reset();
+  // 嘗試讀取存檔
+  const loaded=loadGame();
+  if(loaded){
+    // 重新計算被動收入
+    S.cps=S.pets.reduce((s,pt)=>s+pt.inc,0)*0.05;
+    // 更新相機位置
+    S.camera.x=S.player.x;
+    S.camera.y=S.player.y-200;
+    buildIndexUI();
+    updateUI();
+  } else {
+    // 首次遊玩，延遲一下再存檔
+    setTimeout(saveGame,1000);
+  }
   requestAnimationFrame(loop);
-  setInterval(updateUI, 150);
+  setInterval(updateUI,150);
+
+  setInterval(()=>{
+    if(S.indexOpen)buildIndexUI();
+  },200);
+
+  // 每 10 秒自動存檔
+  setInterval(saveGame,10000);
+
+  // 關閉前存檔
+  window.addEventListener('beforeunload',saveGame);
 })();
 </script>
 </body>
