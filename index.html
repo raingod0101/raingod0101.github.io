@@ -187,6 +187,7 @@ body {
 }
 
 #title {
+    display:none !important;
     position: absolute;
     z-index: 20;
     top: 18px;
@@ -896,6 +897,36 @@ body.ui-hidden #info {
     pointer-events: none !important;
 }
 body.ui-hidden .hero-section { pointer-events:none !important; }
+/* 頭頂血量 */
+.overhead-hp {
+    position:absolute; z-index:40; width:132px; padding:5px 7px;
+    box-sizing:border-box; border:1px solid #ffffffed; border-radius:10px;
+    background:rgba(255,255,255,.92); color:#173653; text-align:center;
+    font:800 12px Arial,"Microsoft JhengHei",sans-serif;
+    box-shadow:0 3px 12px #17365330; pointer-events:none;
+    transform:translate(-50%,-100%);
+}
+.overhead-hp .overhead-track { height:8px; background:#e9b9b9; border-radius:8px; overflow:hidden; margin-top:3px; }
+.overhead-hp .overhead-fill { height:100%; width:100%; background:#31c85a; transition:width .2s; }
+.overhead-hp.fire .overhead-fill { background:#ff6a24; }
+body.ui-hidden .overhead-hp { visibility:hidden !important; }
+#battleMessage[hidden] { display:none !important; }
+#battleMessage { transition:opacity .18s; }
+/* RAINGOD 標誌只在開場動畫出現，頁面其他區域不持續顯示 */
+.raingod-title { display:none !important; }
+
+/* 進場 RAINGOD 開場動畫，只顯示三秒 */
+#raingodIntroSplash {
+    position:fixed; inset:0; z-index:30000; display:grid; place-items:center;
+    background:radial-gradient(circle at center,#e8f7ff 0%,#8ecbff 52%,#2c72bd 100%);
+    color:#fff; font:900 clamp(36px,9vw,84px) Arial,sans-serif; letter-spacing:.22em;
+    text-shadow:0 5px 0 #1b5d9d,0 12px 35px #103f7a99;
+    animation:raingodIntroOut 3s ease forwards; pointer-events:none;
+}
+#raingodIntroSplash span { display:block; animation:raingodLogoPop .85s cubic-bezier(.2,1.5,.4,1) both; }
+#raingodIntroSplash small { display:block; margin-top:14px; font:800 14px Arial,"Microsoft JhengHei",sans-serif; letter-spacing:.32em; text-align:center; }
+@keyframes raingodLogoPop { from { opacity:0; transform:scale(.45) translateY(25px); filter:blur(12px); } to { opacity:1; transform:scale(1) translateY(0); filter:blur(0); } }
+@keyframes raingodIntroOut { 0%,75% { opacity:1; visibility:visible; } 100% { opacity:0; visibility:hidden; } }
 @media(max-width:600px) {
   #toggleBattleButtons { top:58px; right:8px; padding:8px 10px; font-size:12px; }
 }
@@ -903,6 +934,7 @@ body.ui-hidden .hero-section { pointer-events:none !important; }
 
 </head>
 <body>
+    <div id="raingodIntroSplash" aria-hidden="true"><div><span>RAINGOD</span><small>雨神Raingod</small></div></div>
 
     <link rel="stylesheet" href="menu.css">
     <div id="nav_bar"></div>
@@ -913,8 +945,6 @@ body.ui-hidden .hero-section { pointer-events:none !important; }
 
     <section class="hero-section">
         <div class="title-container">
-            <h1 class="raingod-title">RAINGOD</h1>
-            <div class="tech-line"></div>
             <div class="home-actions">
                 <button id="introBtn" class="promo-btn" type="button">🐲 介紹一下</button>
                 <select id="weatherBtn" class="promo-btn" aria-label="選擇天氣">
@@ -985,17 +1015,13 @@ body.ui-hidden .hero-section { pointer-events:none !important; }
   <button id="skillStorm" type="button">⚡ 雲端雷擊</button>
   <button id="skillTsunami" type="button">🌊 海嘯攻擊</button>
   <button id="skillFlame" type="button">🔥 雨神火焰衝擊</button>
-  <button id="skillFireball" type="button">☄️ 火神烈焰球</button>
-  <button id="skillFireRush" type="button">🔥 火神衝撞</button>
-  <button id="skillFireStorm" type="button">🌋 火焰風暴</button>
-  <button id="skillDuel" type="button">👊 火神打雨神</button>
   <button id="newButterfly" type="button">🦋 生成蝴蝶</button>
  </div>
  <div>
   <span class="hpbox">🐲 雨神 HP <span id="rainHPText">100</span><div class="hpbar"><div id="rainHP" class="hpfill"></div></div></span>
   <span class="hpbox">🔥 火神 HP <span id="fireHPText">100</span><div class="hpbar"><div id="fireHP" class="hpfill"></div></div></span>
  </div>
- <div id="battleMessage">帶著寵物在地圖探索，碰到蝴蝶就會張嘴吃掉！</div>
+ <div id="battleMessage" aria-live="polite" hidden></div>
 </div>
 
 <div id="weatherEffects">
@@ -2715,6 +2741,37 @@ window.addEventListener('DOMContentLoaded', () => {
     const fireSvg = fire.querySelector('svg');
     stage.appendChild(fire);
 
+    // 將兩位角色的血量條放在角色頭頂，並隨角色移動
+    function makeOverheadHP(id, label, type) {
+        const el = document.createElement('div');
+        el.id = id;
+        el.className = 'overhead-hp ' + type;
+        el.innerHTML = '<div class="overhead-label">' + label + ' <span class="overhead-number">100</span>/100</div><div class="overhead-track"><div class="overhead-fill"></div></div>';
+        stage.appendChild(el);
+        return el;
+    }
+    const rainHeadHP = makeOverheadHP('rainHeadHP', '🐲 雨神', 'rain');
+    const fireHeadHP = makeOverheadHP('fireHeadHP', '🔥 火神', 'fire');
+    function positionOverheadHP(el, character, visible) {
+        if (!visible || !character || getComputedStyle(character).display === 'none') {
+            el.style.display = 'none';
+            return;
+        }
+        el.style.display = 'block';
+        const cr = character.getBoundingClientRect();
+        const sr = stage.getBoundingClientRect();
+        el.style.left = (cr.left + cr.width / 2 - sr.left) + 'px';
+        el.style.top = Math.max(4, cr.top - sr.top - 8) + 'px';
+    }
+    function updateOverheadHP() {
+        rainHeadHP.querySelector('.overhead-number').textContent = rainHP;
+        rainHeadHP.querySelector('.overhead-fill').style.width = rainHP + '%';
+        fireHeadHP.querySelector('.overhead-number').textContent = fireHP;
+        fireHeadHP.querySelector('.overhead-fill').style.width = fireHP + '%';
+        positionOverheadHP(rainHeadHP, pet, rainHP > 0);
+        positionOverheadHP(fireHeadHP, fire, fireSummoned && fireHP > 0);
+    }
+
     /* 不新增張嘴圖案，只新增倒下時的 X 眼睛 */
     function addXEyes(monster) {
         const svg = monster.querySelector('svg');
@@ -2737,9 +2794,24 @@ window.addEventListener('DOMContentLoaded', () => {
     let fireAutoTimer = null;
 
     const message = document.getElementById('battleMessage');
+    let messageHideTimer = null;
+    let messageFadeTimer = null;
 
     function say(t) {
-        if (message) message.textContent = t;
+        if (!message) return;
+        if (messageHideTimer) clearTimeout(messageHideTimer);
+        if (messageFadeTimer) clearTimeout(messageFadeTimer);
+        message.textContent = t;
+        message.hidden = false;
+        message.style.opacity = '1';
+        messageHideTimer = setTimeout(() => {
+            message.style.opacity = '0';
+            messageFadeTimer = setTimeout(() => {
+                message.hidden = true;
+                message.style.opacity = '1';
+                messageFadeTimer = null;
+            }, 200);
+        }, 3000);
     }
 
     function flying() {
@@ -2765,6 +2837,7 @@ window.addEventListener('DOMContentLoaded', () => {
         const hp = which === 'rain' ? rainHP : fireHP;
         document.getElementById(which + 'HP').style.width = hp + '%';
         document.getElementById(which + 'HPText').textContent = hp;
+        updateOverheadHP();
     }
 
     function spawnButterfly() {
@@ -2810,6 +2883,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 
     function tickButterflies() {
+        updateOverheadHP();
         const pr = rect(pet);
 
         butterflies = butterflies.filter(o => {
@@ -2950,15 +3024,20 @@ window.addEventListener('DOMContentLoaded', () => {
         fireAutoTimer = setInterval(() => {
             if (!fireSummoned || fireHP <= 0 || rainHP <= 0) return;
 
-            const attacks = [
-                ['🔥', 7, '火神自動火焰'],
-                ['💥', 5, '火神爆擊'],
-                ['🟠🔥', 8, '火神烈焰彈']
-            ];
-
-            const a = attacks[Math.floor(Math.random() * attacks.length)];
-
-            emojiProjectile(fire, pet, a[0], a[1], 'rain', a[2], true);
+            // 火神不需要技能按鈕，會自行輪流使用不同攻擊
+            const roll = Math.random();
+            if (roll < 0.42) {
+                emojiProjectile(fire, pet, '☄️🔥', 18, 'rain', '火神烈焰球', true);
+            } else if (roll < 0.68) {
+                fire.classList.add('rushing');
+                setTimeout(() => fire.classList.remove('rushing'), 600);
+                emojiProjectile(fire, pet, '💥', 20, 'rain', '火神衝撞', true);
+            } else if (roll < 0.88) {
+                say('火神召喚火焰風暴！');
+                emojiProjectile(fire, pet, '🌋🔥', 24, 'rain', '火焰風暴', true);
+            } else {
+                emojiProjectile(fire, pet, '👊🔥', 25, 'rain', '火神打雨神', true);
+            }
         }, 2600);
     }
 
@@ -3163,56 +3242,25 @@ window.addEventListener('DOMContentLoaded', () => {
         say('雨神發動火焰衝擊！');
     });
 
-    withCooldown('skillFireball', 3.5, () => {
-        if (!fireSummoned || fireHP <= 0) {
-            say('請先召喚還有生命值的火神！');
-            return false;
-        }
-
-        emojiProjectile(fire, pet, '☄️🔥', 18, 'rain', '火神烈焰球', true);
-    });
-
-    withCooldown('skillFireRush', 5, () => {
-        if (!fireSummoned || fireHP <= 0) {
-            say('請先召喚還有生命值的火神！');
-            return false;
-        }
-
-        fire.classList.add('rushing');
-        setTimeout(() => fire.classList.remove('rushing'), 600);
-
-        emojiProjectile(fire, pet, '💥', 20, 'rain', '火神衝撞', true);
-    });
-
-    withCooldown('skillFireStorm', 7, () => {
-        if (!fireSummoned || fireHP <= 0) {
-            say('請先召喚還有生命值的火神！');
-            return false;
-        }
-
-        say('火神召喚火焰風暴！');
-        emojiProjectile(fire, pet, '🌋🔥', 24, 'rain', '火焰風暴', true);
-    });
-
-    withCooldown('skillDuel', 4, () => {
-        if (!fireSummoned || fireHP <= 0) {
-            say('請先召喚還有生命值的火神！');
-            return false;
-        }
-
-        emojiProjectile(fire, pet, '👊🔥', 25, 'rain', '火神打雨神', true);
-    });
-
     setInterval(() => {
         if (butterflies.length < 5) spawnButterfly();
     }, 6500);
 
     spawnButterfly();
     spawnButterfly();
+    updateOverheadHP();
 
     requestAnimationFrame(tickButterflies);
 });
 
+</script>
+
+<script id="raingod-intro-splash-script">
+(() => {
+    const splash = document.getElementById('raingodIntroSplash');
+    if (!splash) return;
+    window.setTimeout(() => splash.remove(), 3000);
+})();
 </script>
 
 <script id="raingod-global-ui-toggle-script">
