@@ -90,7 +90,86 @@
         .unit-body { font-size: 28px; line-height: 1; }
         .hp-bar { width: 100%; height: 4px; background: #000; margin-bottom: 2px; border-radius: 2px; overflow: hidden; border: 0.5px solid #555; }
         .hp-inner { height: 100%; background: #2ecc71; width: 100%; transition: width 0.1s; }
-        
+        /* 角色高低差與待機浮動 */
+.unit {
+    bottom: calc(50px + var(--lane-y, 0px));
+    will-change: left, bottom;
+}
+
+.unit-body {
+    display: inline-block;
+    transform-origin: center bottom;
+    animation: unitIdle 1.8s ease-in-out infinite;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,.45));
+}
+
+@keyframes unitIdle {
+    0%, 100% { transform: translateY(0) scale(1); }
+    50% { transform: translateY(-2px) scale(1.03); }
+}
+
+/* 攻擊時角色稍微彈動 */
+.unit.attacking .unit-body {
+    animation: unitAttack .24s ease-out;
+}
+
+@keyframes unitAttack {
+    0% { transform: translateX(0) scale(1); }
+    45% { transform: translateX(var(--attack-shift, 5px)) scale(1.2); }
+    100% { transform: translateX(0) scale(1); }
+}
+
+/* 攻擊飛行物 */
+.battle-projectile {
+    position: absolute;
+    z-index: 40;
+    pointer-events: none;
+    font-size: 25px;
+    line-height: 1;
+    filter: drop-shadow(0 0 7px currentColor);
+    will-change: left, top, transform;
+}
+
+.battle-projectile.fly {
+    transition:
+        left .34s linear,
+        top .34s ease-in-out,
+        transform .34s linear;
+}
+
+/* 命中爆發 */
+.battle-hit {
+    position: absolute;
+    z-index: 45;
+    pointer-events: none;
+    font-size: 29px;
+    line-height: 1;
+    animation: hitBurst .42s ease-out forwards;
+    filter: drop-shadow(0 0 8px currentColor);
+}
+
+@keyframes hitBurst {
+    0% { opacity: 1; transform: translate(-50%,-50%) scale(.35) rotate(0); }
+    65% { opacity: 1; transform: translate(-50%,-50%) scale(1.35) rotate(20deg); }
+    100% { opacity: 0; transform: translate(-50%,-50%) scale(1.8) rotate(45deg); }
+}
+
+/* 地面近戰衝擊波 */
+.battle-shockwave {
+    position: absolute;
+    width: 35px;
+    height: 20px;
+    border: 3px solid #ffe66d;
+    border-radius: 50%;
+    z-index: 35;
+    pointer-events: none;
+    animation: shockwave .38s ease-out forwards;
+}
+
+@keyframes shockwave {
+    from { opacity: 1; transform: scale(.4); }
+    to { opacity: 0; transform: scale(2.5); }
+}
         #gacha-anim { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.92); z-index: 1000; display: none; flex-direction: column; align-items: center; justify-content: center; font-size: 70px; }
         #ui-panel::-webkit-scrollbar { display: none; }
         
@@ -782,12 +861,22 @@
             const fIdx = getFormIdx(lv);
             const mult = 1 + (lv - 1) * 0.15;
 
-            createUnitEntity({
-                side: 'player', icon: c.forms[fIdx],
-                targetAttr: c.targetAttr, isArea: c.isArea,
-                x: 70, hp: c.hp * mult, max: c.hp * mult,
-                atk: c.atk * mult, spd: c.spd, range: c.range
-            });
+            const allies = battle.units.filter(u => u.side === 'player');
+
+createUnitEntity({
+    side: 'player',
+    icon: c.forms[fIdx],
+    targetAttr: c.targetAttr,
+    isArea: c.isArea,
+    x: 70 + (allies.length % 5) * 13,
+    laneY: Math.random() * 12 - 6,
+    attackType: getAttackType(c.targetAttr, c.isArea),
+    hp: c.hp * mult,
+    max: c.hp * mult,
+    atk: c.atk * mult,
+    spd: c.spd,
+    range: c.range
+});
         } else {
             const stg = STAGES[battle.currentStage];
             const enemyId = stg.ePool[Math.floor(Math.random() * stg.ePool.length)];
@@ -798,15 +887,122 @@
                 save();
             }
 
-            createUnitEntity({
-                side: 'enemy', icon: e.icon, attr: e.attr,
-                x: battle.width - 90,
-                hp: e.hp, max: e.hp,
-                atk: e.atk, spd: e.spd, range: e.range, reward: e.reward
-            });
+            const enemies = battle.units.filter(u => u.side === 'enemy');
+
+createUnitEntity({
+    side: 'enemy',
+    icon: e.icon,
+    attr: e.attr,
+    x: battle.width - 90 - (enemies.length % 5) * 13,
+    laneY: Math.random() * 12 - 6,
+    attackType: getAttackType(e.attr, false),
+    hp: e.hp,
+    max: e.hp,
+    atk: e.atk,
+    spd: e.spd,
+    range: e.range,
+    reward: e.reward
+});
         }
     }
+// 依角色屬性決定攻擊類型
+function getAttackType(attr, isArea) {
+    const types = {
+        '紅': 'fire',
+        '飛': 'lightning',
+        '聖': 'holy',
+        '星': 'water',
+        '屍': 'dark',
+        '無': isArea ? 'wave' : 'melee'
+    };
 
+    return types[attr] || (isArea ? 'wave' : 'melee');
+}
+
+// 建立飛行攻擊與命中特效
+function playUnitAttack(unit, target) {
+    const stage = document.getElementById('stage');
+    const body = unit.el.querySelector('.unit-body');
+
+    unit.el.classList.remove('attacking');
+    void unit.el.offsetWidth;
+    unit.el.classList.add('attacking');
+
+    setTimeout(() => {
+        if (unit.el) unit.el.classList.remove('attacking');
+    }, 260);
+
+    const effects = {
+        fire:     { icon: '🔥', color: '#ff5722', hit: '💥' },
+        lightning:{ icon: '⚡', color: '#ffe66d', hit: '🌩️' },
+        holy:     { icon: '✨', color: '#fff2a8', hit: '🌟' },
+        water:    { icon: '💧', color: '#45d9ff', hit: '💦' },
+        dark:     { icon: '🌀', color: '#bd70ff', hit: '💜' },
+        wave:     { icon: '🌊', color: '#55c8ff', hit: '💥' },
+        melee:    { icon: '💥', color: '#ffffff', hit: '💢' }
+    };
+
+    const fx = effects[unit.attackType] || effects.melee;
+
+    const fromX = unit.x + (unit.side === 'player' ? 35 : 5);
+    const fromY = stage.clientHeight - 50 - (unit.laneY || 0) - 22;
+
+    // 近戰：在目標附近產生衝擊波
+    if (unit.attackType === 'melee') {
+        const hitX = target ? target.x + 20 : fromX;
+        const hitY = target
+            ? stage.clientHeight - 50 - (target.laneY || 0) - 8
+            : fromY;
+
+        const wave = document.createElement('div');
+        wave.className = 'battle-shockwave';
+        wave.style.left = hitX + 'px';
+        wave.style.top = hitY + 'px';
+        stage.appendChild(wave);
+        setTimeout(() => wave.remove(), 450);
+        return;
+    }
+
+    const projectile = document.createElement('div');
+    projectile.className = 'battle-projectile';
+    projectile.textContent = fx.icon;
+    projectile.style.color = fx.color;
+    projectile.style.left = fromX + 'px';
+    projectile.style.top = fromY + 'px';
+    stage.appendChild(projectile);
+
+    const hitX = target
+        ? target.x + 20
+        : (unit.side === 'player' ? battle.width - 70 : 70);
+
+    const hitY = target
+        ? stage.clientHeight - 50 - (target.laneY || 0) - 22
+        : fromY;
+
+    requestAnimationFrame(() => {
+        projectile.classList.add('fly');
+        projectile.style.left = hitX + 'px';
+        projectile.style.top = hitY + 'px';
+
+        if (unit.attackType === 'lightning') {
+            projectile.style.transform = 'scale(1.7) rotate(20deg)';
+        }
+    });
+
+    setTimeout(() => {
+        projectile.remove();
+
+        const hit = document.createElement('div');
+        hit.className = 'battle-hit';
+        hit.textContent = fx.hit;
+        hit.style.color = fx.color;
+        hit.style.left = hitX + 'px';
+        hit.style.top = hitY + 'px';
+        stage.appendChild(hit);
+
+        setTimeout(() => hit.remove(), 450);
+    }, 350);
+}
     function createUnitEntity(cfg) {
         const el = document.createElement('div');
         el.className = 'unit';
@@ -850,6 +1046,8 @@
                     // 執行攻擊
                     if (targets.length > 0) {
                         const hitTargets = u.isArea ? targets : [targets[0]];
+                        // 每次攻擊都播放角色專屬動畫
+playUnitAttack(u, hitTargets[0]);
                         hitTargets.forEach(target => {
                             let damage = u.atk;
                             // 屬性克制加成：玩家對特攻屬性傷害 x1.8
