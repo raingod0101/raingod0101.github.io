@@ -213,7 +213,7 @@
             const LAND_COSTS = [100, 300, 800];
             const SPRINKLER_COST = 100;
             const SPRINKLER_BOOST_MS = 60 * 1000;
-            const SPRINKLER_GROWTH_BONUS = 0.5;
+const SPRINKLER_GROWTH_BONUS = 0.5;
             const STOCK_CYCLE_MS = 5 * 60 * 1000;
             const MACHINE_COST = 100;
             const MACHINE_UPGRADE_COST = 50;
@@ -340,8 +340,8 @@
                 return Math.ceil(800 * Math.pow(1.25, plotCount - 2) / 50) * 50;
             }
             function growthMs(seed) {
-                return seed.growMs;
-            }
+    return seed.growMs / 5;
+}
             function stockBucket(now=Date.now()) { return Math.floor(now / STOCK_CYCLE_MS); }
             function seededRandom(text) {
                 let h = 2166136261;
@@ -374,15 +374,44 @@
                 const remaining = Number(data.farm.seedStockRemaining[seed.id]);
                 return Number.isFinite(remaining) ? Math.max(0, remaining) : 0;
             }
-            function applySprinklerBoost(now=Date.now()) {
-                const farm=data.farm, until=Number(farm.sprinklerBoostUntil)||0;
-                const last=Number(farm.sprinklerBoostLastTick)||now;
-                const activeEnd=Math.min(now,until);
-                if (until > 0 && activeEnd > last) {
-                    const extraGrowth=(activeEnd-last)*SPRINKLER_GROWTH_BONUS;
-                    farm.plots.forEach(plot=>{ if(plot.seed) plot.plantedAt=Math.max(0, plot.plantedAt-extraGrowth); });
+            function sprinklerStacks(now = Date.now()) {
+                const until = Number(data.farm.sprinklerBoostUntil) || 0;
+                if (until <= now) return 0;
+                return Math.max(1, Math.ceil((until - now) / SPRINKLER_BOOST_MS));
+            }
+
+            function sprinklerMultiplier(now = Date.now()) {
+                return 1 + sprinklerStacks(now) * SPRINKLER_GROWTH_BONUS;
+            }
+
+            function applySprinklerBoost(now = Date.now()) {
+                const farm = data.farm;
+                const until = Number(farm.sprinklerBoostUntil) || 0;
+                const last = Number(farm.sprinklerBoostLastTick) || now;
+
+                if (until > last && now > last) {
+                    // 每一秒依照當下剩餘的灑水器段數加速，購買後下一個更新週期立即套用。
+                    // 將時間切成最多 60 秒一段，避免跨段時整段套用錯誤倍率。
+                    let cursor = last;
+                    const activeEnd = Math.min(now, until);
+                    let extraGrowth = 0;
+
+                    while (cursor < activeEnd) {
+                        const remaining = until - cursor;
+                        const stacks = Math.max(1, Math.ceil(remaining / SPRINKLER_BOOST_MS));
+                        const nextBoundary = until - (stacks - 1) * SPRINKLER_BOOST_MS;
+                        const segmentEnd = Math.min(activeEnd, Math.max(cursor + 1, nextBoundary));
+                        extraGrowth += (segmentEnd - cursor) * stacks * SPRINKLER_GROWTH_BONUS;
+                        cursor = segmentEnd;
+                    }
+
+                    if (extraGrowth > 0) {
+                        farm.plots.forEach(plot => {
+                            if (plot.seed) plot.plantedAt = Math.max(0, plot.plantedAt - extraGrowth);
+                        });
+                    }
                 }
-                farm.sprinklerBoostLastTick=now;
+                farm.sprinklerBoostLastTick = now;
             }
             function formatTime(ms) {
                 const seconds = Math.max(0, Math.ceil(ms / 1000));
@@ -479,18 +508,32 @@
                 render();
             }
             function buySprinkler() {
-                if(data.resources.plantCoins<SPRINKLER_COST) {
-                    setMessage("植物幣不足，購買灑水器需要 "+SPRINKLER_COST+" 植物幣。");
+                if (data.resources.plantCoins < SPRINKLER_COST) {
+                    setMessage("植物幣不足，購買灑水器需要 " + SPRINKLER_COST + " 植物幣。");
                     return;
                 }
-                const now=Date.now();
+
+                const now = Date.now();
+
+                // 先結算購買前的加速，避免新買的倍率套用到過去。
                 applySprinklerBoost(now);
-                data.resources.plantCoins-=SPRINKLER_COST;
-                data.farm.sprinklerBoostUntil=Math.max(now, Number(data.farm.sprinklerBoostUntil)||0)+SPRINKLER_BOOST_MS;
-                data.farm.sprinklerBoostLastTick=now;
+                data.resources.plantCoins -= SPRINKLER_COST;
+
+                // 立刻增加一段 60 秒效果；連續購買會立即提高當下倍率。
+                data.farm.sprinklerBoostUntil =
+                    Math.max(now, Number(data.farm.sprinklerBoostUntil) || 0) + SPRINKLER_BOOST_MS;
+                data.farm.sprinklerBoostLastTick = now;
+
+                // 立即給目前所有生長中的作物一小段成長進度，讓購買效果當下可感受到。
+                const stacks = sprinklerStacks(now);
+                const instantGrowth = 1000 * stacks * SPRINKLER_GROWTH_BONUS;
+                data.farm.plots.forEach(plot => {
+                    if (plot.seed) plot.plantedAt = Math.max(0, plot.plantedAt - instantGrowth);
+                });
+
                 saveData();
                 render();
-                setMessage("灑水器啟動！接下來 60 秒作物生長速度提升 50%，可以再次購買延長時間。");
+                setMessage("💧 灑水器立即生效！目前生長速度 " + sprinklerMultiplier(now).toFixed(1) + " 倍，並增加 60 秒加速時間。");
             }
             function dailyReward() {
                 const now = new Date();
@@ -1015,7 +1058,7 @@
                 const sprinkler=document.createElement("p");
                 const boostRemain=Math.max(0,(Number(data.farm.sprinklerBoostUntil)||0)-Date.now());
                 sprinkler.id="sprinkler-status";
-                sprinkler.textContent=boostRemain>0?"💧 灑水加速中 · 生長速度 +50% · 剩餘 "+formatTime(boostRemain):"💧 灑水器每次 100 植物幣 · 加速 60 秒（可重複購買延長）";
+                sprinkler.textContent=boostRemain>0?"💧 灑水加速中 · 生長速度 "+sprinklerMultiplier(Date.now()).toFixed(1)+" 倍 · 剩餘 "+formatTime(boostRemain):"💧 灑水器每次 100 植物幣 · 立即加速 60 秒（可連續購買）";
                 stack.appendChild(sprinkler);
                 const today=new Date();
                 const dayKey=today.getFullYear()+"-"+String(today.getMonth()+1).padStart(2,"0")+"-"+String(today.getDate()).padStart(2,"0");
@@ -1033,7 +1076,7 @@
                 stack.appendChild(upgrade);
                 const controls=document.createElement("div"); controls.style.display="flex"; controls.style.flexWrap="wrap"; controls.style.gap="6px";
                 const sprinklerBtn=document.createElement("button"); sprinklerBtn.type="button"; sprinklerBtn.className="button tiny";
-                sprinklerBtn.textContent="再買灑水器（+60 秒）· "+SPRINKLER_COST;
+                sprinklerBtn.textContent="立即加速 +60 秒 · "+SPRINKLER_COST;
                 sprinklerBtn.disabled=data.resources.plantCoins<SPRINKLER_COST; sprinklerBtn.onclick=buySprinkler; controls.appendChild(sprinklerBtn);
                 const machineBtn=document.createElement("button"); machineBtn.type="button"; machineBtn.className="button tiny secondary";
                 const elapsed=machine.startedAt?Date.now()-machine.startedAt:0;
@@ -1100,7 +1143,7 @@
                 const sprinklerStatus=$("sprinkler-status");
                 if(sprinklerStatus) {
                     const remain=Math.max(0,(Number(data.farm.sprinklerBoostUntil)||0)-Date.now());
-                    sprinklerStatus.textContent=remain>0?"💧 灑水加速中 · 生長速度 +50% · 剩餘 "+formatTime(remain):"💧 灑水器每次 100 植物幣 · 加速 60 秒（可重複購買延長）";
+                    sprinklerStatus.textContent=remain>0?"💧 灑水加速中 · 生長速度 "+sprinklerMultiplier(Date.now()).toFixed(1)+" 倍 · 剩餘 "+formatTime(remain):"💧 灑水器每次 100 植物幣 · 立即加速 60 秒（可連續購買）";
                 }
                 if(stockBucket()!==lastRenderedStockBucket) { lastRenderedStockBucket=stockBucket(); renderSeeds(); }
                 const stockTimer=$("seed-stock-timer");
