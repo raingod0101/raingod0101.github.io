@@ -1,4 +1,36 @@
 (function() {
+    // --- 放置超過 1 小時自動 Refresh（必須放在最前面，載入資料前執行）---
+    (function autoRefreshIfIdle() {
+        const IDLE_LIMIT = 60 * 60 * 1000; // 1 小時
+        const KEY = 'raingod_last_active_at';
+
+        let last = 0;
+        try { last = parseInt(sessionStorage.getItem(KEY) || '0', 10) || 0; } catch (e) { last = 0; }
+
+        const now = Date.now();
+
+        // 若距離上次活動超過 1 小時，先 refresh 網頁
+        if (last > 0 && now - last > IDLE_LIMIT) {
+            try { sessionStorage.setItem(KEY, String(now)); } catch (e) {}
+            // 使用 replace 避免使用者按上一頁又回到舊狀態
+            window.location.reload();
+            return;
+        }
+
+        // 更新活動時間
+        try { sessionStorage.setItem(KEY, String(now)); } catch (e) {}
+
+        // 頁面關閉或切到背景時更新活動時間，讓「放置」判定更準確
+        const touch = () => {
+            try { sessionStorage.setItem(KEY, String(Date.now())); } catch (e) {}
+        };
+        window.addEventListener('beforeunload', touch);
+        window.addEventListener('pagehide', touch);
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') touch();
+        });
+    })();
+
     const baseUrl = "https://raingod0101.github.io/";
     const v = new Date().getTime();
     let currentIp = "Unknown_IP"; 
