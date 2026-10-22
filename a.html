@@ -500,7 +500,7 @@
     }
   }
 
-  // ========== 擊飛（越強守衛擊飛超遠）==========
+  // ========== 擊飛 ==========
   function triggerKnockback(fx,fy){
     S.player.vx=fx;S.player.vy=fy;
     S.player.knockbackTimer=1.0;S.player.stun=2.5;
@@ -585,7 +585,7 @@
       p.x=clamp(p.x,20,W-20);p.y=clamp(p.y,-31000,3300);
     }
 
-    // 守衛邏輯
+    // ========== 守衛邏輯 ==========
     for(const g of S.guards){
       if(g.stun>0){g.stun-=dt;continue}
       
@@ -596,6 +596,7 @@
           g.sleeping=false;
           g.alert=true;
           g.chasing=true;
+          g.returning=false;
           // 如果守衛不在玩家所在區域，先衝刺
           const playerBiome = getBiomeIndex(p.y);
           const guardBiome = getBiomeIndex(g.y);
@@ -618,7 +619,6 @@
         const targetY = WORLD.biomes[playerBiome].nestsY;
         const gx = p.x - g.x, gy = targetY - g.y;
         const len = Math.hypot(gx, gy) || 1;
-        // 衝刺速度：超級快
         const dashSpeed = 60 + g.biomeIdx * 8;
         g.x += (gx/len) * dashSpeed;
         g.y += (gy/len) * dashSpeed;
@@ -658,12 +658,28 @@
         g.x += (gx/len) * returnSpeed;
         g.y += (gy/len) * returnSpeed;
         
+        // ★ 如果玩家在守衛回家路上偷了該區域的蛋 → 立刻衝刺追擊
+        if(p.carry && p.carry.biomeIdx === g.biomeIdx && !g.sleeping){
+          // 玩家帶著這個守衛區域的蛋 → 守衛立刻停止回家，轉為追擊
+          g.returning = false;
+          g.chasing = true;
+          g.alert = true;
+          // 如果不在同一區域，先衝刺
+          const playerBiome = getBiomeIndex(p.y);
+          const guardBiome = getBiomeIndex(g.y);
+          if(guardBiome !== playerBiome){
+            g.dashPhase = true;
+            g.dashTimer = 1.2;
+          }
+        }
+        
+        // 回到巢穴附近
         if(dist(g.x, g.y, g.hx, g.hy) < 30){
           g.returning = false;
           g.sleeping = true;
           g.alert = false;
           g.wakeTimer = 0;
-          // 檢查自己區域內是否有掉落的蛋，放回原位
+          // ★ 檢查自己區域內是否有掉落的蛋，放回原位
           for(const e of S.eggs){
             if(!e.collected && e.biomeIdx === g.biomeIdx && dist(e.x, e.y, g.hx, g.hy) < 300){
               e.x = e.origX;
@@ -750,7 +766,6 @@
         }
         const kbx=p.x-g.x,kby=p.y-g.y;
         const kblen=Math.hypot(kbx,kby)||1;
-        // 擊飛力超大幅增加
         const baseForce = 800 + displayToReal(p.displaySpeed)*20;
         const biomeBonus = g.biomeIdx * 800;
         const force = baseForce + biomeBonus;
