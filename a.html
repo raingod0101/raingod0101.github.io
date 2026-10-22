@@ -430,6 +430,9 @@
       alert:false,stun:0,hx:gx,hy:b.nestsY-60,biomeIdx:bi,
       sleeping:true, // 初始睡眠
       wakeTimer:0,   // 驚醒倒數（0.5秒）
+      // 跨區域追擊相關
+      chaseTarget:null, // 追擊目標（玩家位置）
+      chaseTimer:0,     // 追擊持續時間（越強區域越長）
     });
   }
 
@@ -521,7 +524,7 @@
     closePetPanel();saveGame(true);updateUI();
   }
 
-  // ========== 更新（核心邏輯：偷蛋後 0.5 秒守衛驚醒追擊，被打飛後回去睡覺）==========
+  // ========== 更新（核心邏輯：守衛跨區域追擊，越強區域追擊越長）==========
   function update(dt){
     const p=S.player;
     S.time+=dt;
@@ -568,7 +571,7 @@
       p.x=clamp(p.x,20,W-20);p.y=clamp(p.y,-1900,3180);
     }
 
-    // ★ 核心：守衛甦醒計時（0.5秒）
+    // ★ 核心：守衛甦醒計時（0.5秒）與跨區域追擊
     for(const g of S.guards){
       if(g.stun>0){g.stun-=dt;continue}
       
@@ -578,6 +581,8 @@
         if(g.wakeTimer<=0){
           g.sleeping=false;
           g.alert=true;
+          // 初始化追擊計時（越強區域追擊越長）
+          g.chaseTimer = 3 + g.biomeIdx * 1.5; // 森林3秒，虛空~13.5秒
         }
         continue; // 倒數中不移動
       }
@@ -590,53 +595,79 @@
       // 已甦醒的守衛
       const b=WORLD.biomes[g.biomeIdx];
       const d=dist(p.x,p.y,g.x,g.y);
-      const playerInBiome=p.y>b.yMin-100&&p.y<b.yMax+100;
       
-      let shouldChase=false;
-      // 玩家拿蛋且在同一區域 → 追擊
-      if(p.carry&&playerInBiome)shouldChase=true;
-      // 玩家速度不足且進入該區域 → 追擊
-      if(p.y>b.yMin&&p.y<b.yMax&&p.displaySpeed<b.reqDisplay)shouldChase=true;
+      // ★ 跨區域追擊：只要玩家還帶著蛋或還在追擊計時內，就繼續追
+      let shouldChase = false;
+      
+      // 如果玩家帶著蛋（不論在哪個區域）→ 追擊
+      if(p.carry && g.alert) {
+        shouldChase = true;
+        g.chaseTimer = Math.max(g.chaseTimer, 0); // 保持計時
+      }
+      
+      // 如果玩家速度不足且進入了該守衛的區域 → 追擊
+      if(p.y > b.yMin - 200 && p.y < b.yMax + 200 && p.displaySpeed < b.reqDisplay) {
+        shouldChase = true;
+        g.chaseTimer = Math.max(g.chaseTimer, 1); // 給一點時間
+      }
+      
+      // 追擊計時器遞減（只有當玩家不在該區域且沒帶蛋時才遞減）
+      if(!shouldChase) {
+        g.chaseTimer -= dt;
+        if(g.chaseTimer > 0) {
+          // 還在追擊計時內，繼續追（即使玩家跑到其他區域）
+          shouldChase = true;
+        }
+      }
       
       if(shouldChase){
-        g.alert=true;
-        const gx=p.x-g.x,gy=p.y-g.y;
-        const len=Math.hypot(gx,gy)||1;
-        let guardSpd=g.spd*1.8;
-        if(p.displaySpeed<b.reqDisplay){
-          const playerRealSpd=displayToReal(p.displaySpeed)*2.2;
-          const guardRealSpd=Math.max(playerRealSpd*1.3,3);
-          guardSpd=guardRealSpd;
+        g.alert = true;
+        // 追擊玩家
+        const gx = p.x - g.x, gy = p.y - g.y;
+        const len = Math.hypot(gx, gy) || 1;
+        
+        // 越強區域守衛速度越快
+        let guardSpd = g.spd * 1.8 + g.biomeIdx * 0.3;
+        
+        if(p.displaySpeed < b.reqDisplay && p.carry && p.carry.biomeIdx === g.biomeIdx) {
+          const playerRealSpd = displayToReal(p.displaySpeed) * 2.2;
+          const guardRealSpd = Math.max(playerRealSpd * 1.3, 3);
+          guardSpd = guardRealSpd + g.biomeIdx * 0.2;
         }
-        g.x+=(gx/len)*guardSpd;
-        g.y+=(gy/len)*guardSpd;
-        // 守衛追到安全線以上就放棄回去（但玩家若還在上面會繼續追）
-        if(g.y>WORLD.safeY+20 && !p.carry){
-          g.alert=false;
-          g.y=WORLD.safeY+20;
-          // 回到睡眠狀態，返回巢穴
-          g.sleeping=true;
-          g.wakeTimer=0;
-          g.x=g.hx; g.y=g.hy;
+        
+        g.x += (gx / len) * guardSpd;
+        g.y += (gy / len) * guardSpd;
+        
+        // 守衛追到安全線且玩家沒帶蛋 → 放棄回去
+        if(g.y > WORLD.safeY + 20 && !p.carry) {
+          g.alert = false;
+          g.chaseTimer = 0;
+          g.sleeping = true;
+          g.wakeTimer = 0;
+          g.x = g.hx; g.y = g.hy;
         }
-      }else{
+      } else {
         // 回家
-        if(dist(g.x,g.y,g.hx,g.hy)>40){
-          const gx=g.hx-g.x,gy=g.hy-g.y,len=Math.hypot(gx,gy)||1;
-          g.x+=(gx/len)*g.spd*0.5;g.y+=(gy/len)*g.spd*0.5;
-        }else{
-          g.hx=b.nestXs[Math.floor(Math.random()*b.nestXs.length)]+rnd(-60,60);
-          g.hy=b.nestsY-60+rnd(-30,30);
-          // 如果回到巢穴附近且沒有警報，重新進入睡眠
-          if(!p.carry || p.carry.biomeIdx!==g.biomeIdx){
-            g.sleeping=true;
-            g.alert=false;
-            g.wakeTimer=0;
+        if(dist(g.x, g.y, g.hx, g.hy) > 40) {
+          const gx = g.hx - g.x, gy = g.hy - g.y, len = Math.hypot(gx, gy) || 1;
+          g.x += (gx / len) * g.spd * 0.5;
+          g.y += (gy / len) * g.spd * 0.5;
+        } else {
+          g.hx = b.nestXs[Math.floor(Math.random() * b.nestXs.length)] + rnd(-60, 60);
+          g.hy = b.nestsY - 60 + rnd(-30, 30);
+          // 回到巢穴附近且沒警報 → 重新睡眠
+          if(!p.carry || p.carry.biomeIdx !== g.biomeIdx) {
+            g.sleeping = true;
+            g.alert = false;
+            g.wakeTimer = 0;
+            g.chaseTimer = 0;
           }
         }
       }
-      g.x=clamp(g.x,30,W-30);
-      g.y=clamp(g.y,b.yMin+20,b.yMax-20);
+      
+      // 守衛可以跨區域移動，但仍有一定範圍限制（避免跑太遠）
+      g.x = clamp(g.x, 30, W - 30);
+      g.y = clamp(g.y, -2100, 3300); // 允許跨區域
     }
 
     // 撿蛋（拿走守衛的蛋）
@@ -680,6 +711,7 @@
         g.alert=false;
         g.sleeping=true;
         g.wakeTimer=0;
+        g.chaseTimer=0;
         g.x=g.hx; g.y=g.hy;
       }
       S.cps=S.pets.reduce((s,pt)=>s+pt.inc,0);
@@ -701,9 +733,9 @@
         triggerKnockback((kbx/kblen)*force,(kby/kblen)*force);
         g.stun=1.2;
         g.alert=false;
-        // ★ 守衛打完人後回去睡覺
         g.sleeping=true;
         g.wakeTimer=0;
+        g.chaseTimer=0;
         g.x=g.hx; g.y=g.hy;
         updateUI();break;
       }
@@ -855,6 +887,13 @@
     if(g.wakeTimer>0){
       const flash=Math.sin(S.time*30)*0.5+0.5;
       ctx.shadowBlur=20;ctx.shadowColor=`rgba(255,50,50,${flash})`;
+    }
+    
+    // 追擊中的守衛顯示紅色光環
+    if(g.alert && !g.sleeping && g.chaseTimer > 0){
+      const pulse = Math.sin(S.time * 8) * 0.3 + 0.7;
+      ctx.shadowBlur = 25;
+      ctx.shadowColor = `rgba(255, 50, 50, ${pulse})`;
     }
     
     const grad=ctx.createRadialGradient(-g.r*0.3,-g.r*0.3,g.r*0.2,0,0,g.r*1.2);
