@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>2D 籃球單挑</title>
+<title>2D 籃球單挑 · 線上對戰</title>
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
@@ -21,21 +21,118 @@
     display: block;
     touch-action: none;
   }
+
+  #overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.88);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 100;
+    font-family: system-ui, sans-serif;
+  }
+  #overlay.hidden { display: none; }
+  .panel {
+    background: #181826;
+    padding: 38px 46px;
+    border-radius: 22px;
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.06);
+    max-width: 90vw;
+  }
+  .panel.hidden { display: none; }
+  .panel h1 {
+    margin: 0 0 8px;
+    font-size: 40px;
+    color: #ffd35c;
+    letter-spacing: 2px;
+  }
+  .panel h2 {
+    margin: 0 0 20px;
+    font-size: 25px;
+    color: #eee;
+  }
+  .panel p {
+    margin: 0 0 22px;
+    font-size: 15px;
+    color: #9a9aac;
+    min-height: 22px;
+  }
+  .panel button {
+    display: block;
+    width: 280px;
+    margin: 13px auto;
+    padding: 15px;
+    font-size: 19px;
+    font-weight: 600;
+    border: none;
+    border-radius: 13px;
+    background: linear-gradient(135deg, #4a9eff, #2a6edb);
+    color: #fff;
+    cursor: pointer;
+    transition: transform 0.08s, filter 0.15s;
+    font-family: inherit;
+  }
+  .panel button:hover { filter: brightness(1.12); }
+  .panel button:active { transform: scale(0.97); }
+  #btnOnline { background: linear-gradient(135deg, #ff8a1e, #d96a12); }
+  #btnCancel { background: #444452; }
+  .panel .subtitle {
+    font-size: 12px;
+    color: #6a6a7a;
+    margin-top: 22px;
+    line-height: 1.8;
+  }
 </style>
 </head>
 <body>
+
+<div id="overlay">
+  <div id="menu" class="panel">
+    <h1>2D 籃球單挑</h1>
+    <p style="color:#8a8a9c;font-size:14px;margin-bottom:24px;">先得 11 分，或 60 秒結束分高者勝</p>
+    <button id="btnSolo">單挑電腦</button>
+    <button id="btnOnline">線上配對</button>
+    <div class="subtitle">A/D 或 ←/→ 移動　·　空白鍵投籃/封蓋<br>E 或 Shift 抄球</div>
+  </div>
+
+  <div id="matching" class="panel hidden">
+    <h2>正在配對…</h2>
+    <p id="matchStatus">連線中</p>
+    <button id="btnCancel">取消配對</button>
+  </div>
+</div>
+
 <canvas id="game" width="1000" height="700"></canvas>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script>
 'use strict';
 
+// ======================================================
+// Firebase
+// ======================================================
+let db = null;
+try {
+  if (typeof firebase !== 'undefined') {
+    firebase.initializeApp({
+      databaseURL: 'https://game-24b43-default-rtdb.firebaseio.com/'
+    });
+    db = firebase.database();
+  }
+} catch (e) {
+  console.warn('Firebase 初始化失敗：', e);
+}
+
+// ======================================================
+// 常數
+// ======================================================
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const W = 1000, H = 700;
 
-// ===== 場地常數 =====
-const COURT = { x: 30, y: 40, w: 940, h: 580 };   // 只當水平活動範圍用
-const GROUND_Y = 620;                              // 地板平面（球員腳底）
-const FLOOR_Y = GROUND_Y + 8;                      // 地板繪製起點
+const COURT = { x: 30, y: 40, w: 940, h: 580 };
+const GROUND_Y = 620;
+const FLOOR_Y = GROUND_Y + 8;
 const HOOP_Y = 340;
 const GRAVITY = 2600;
 const JUMP_V = -1250;
@@ -44,15 +141,22 @@ const HOOP_L = { x: 110, y: HOOP_Y, r: 22, side: 'left' };
 const HOOP_R = { x: 890, y: HOOP_Y, r: 22, side: 'right' };
 const THREE_DIST = 280;
 
-// ===== 球員 =====
-const player = { x: 600, y: GROUND_Y - 22, r: 22, vy: 0, onGround: true, facing: 1, moving: false };
-const cpu    = { x: 720, y: GROUND_Y - 22, r: 22, vy: 0, onGround: true, facing: -1, moving: false,
+// 遠距離命中率懲罰（二次曲線）
+const ACC_NEAR = 130;          // 此距離內不罰
+const ACC_FAR = 740;           // 此距離外懲罰最大
+const ACC_MAX_PENALTY = 0.62;
+
+// ======================================================
+// 遊戲物件
+// ======================================================
+const player = { x: 380, y: GROUND_Y - 22, r: 22, vy: 0, onGround: true, facing: 1, moving: false };
+const cpu    = { x: 560, y: GROUND_Y - 22, r: 22, vy: 0, onGround: true, facing: -1, moving: false,
                  shootCD: 0, stealCD: 0 };
 
-// ===== 球 =====
 const ball = {
-  x: 600, y: GROUND_Y - 40, r: 10,
+  x: 380, y: GROUND_Y - 40, r: 10,
   vx: 0, vy: 0,
+  targetX: 380, targetY: GROUND_Y - 40,
   state: 'held',
   owner: 'player',
   shooter: null,
@@ -63,7 +167,6 @@ const ball = {
   pickupCD: 0
 };
 
-// ===== 遊戲狀態 =====
 const state = {
   score: { player: 0, cpu: 0 },
   timeLeft: 60,
@@ -71,11 +174,7 @@ const state = {
   msg: '', msgTimer: 0
 };
 
-// ===== 輸入 =====
-const input = {
-  left: false, right: false,
-  action: false, steal: false
-};
+const input = { left: false, right: false, action: false, steal: false };
 
 let charging = false, power = 0, powerDir = 1;
 let prevAction = false;
@@ -83,12 +182,39 @@ let stealCD = 0;
 
 const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 
-// ===== 工具 =====
+// ======================================================
+// 網路狀態
+// ======================================================
+const net = {
+  mode: 'solo',
+  myId: 'p_' + Math.random().toString(36).slice(2, 10),
+  roomId: null,
+  isHost: false,
+  opponentId: null,
+  matchRef: null,
+  roomRef: null,
+  stateRef: null,
+  inputRef: null,
+  remoteInput: null,
+  prevRemoteAction: false,
+  cpuCharging: false,
+  cpuPower: 0,
+  inputTimer: 0,
+  stateTimer: 0,
+  matchListener: null,
+  lastSentAction: false,
+  leaving: false
+};
+
+// ======================================================
+// 工具
+// ======================================================
 function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
-function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
 function showMsg(t) { state.msg = t; state.msgTimer = 1.5; }
 
-// ===== 球權 =====
+// ======================================================
+// 球權
+// ======================================================
 function giveBall(who) {
   ball.state = 'held';
   ball.owner = who;
@@ -99,11 +225,11 @@ function giveBall(who) {
 
 function resetPossession(who) {
   if (who === 'player') {
-    player.x = 600; cpu.x = 750;
-    player.facing = 1; cpu.facing = -1;
+    player.x = 380; player.facing = 1;
+    cpu.x = 560;    cpu.facing = -1;
   } else {
-    player.x = 250; cpu.x = 400;
-    player.facing = 1; cpu.facing = -1;
+    player.x = 440; player.facing = 1;
+    cpu.x = 620;    cpu.facing = -1;
   }
   player.y = GROUND_Y - player.r;
   cpu.y = GROUND_Y - cpu.r;
@@ -113,9 +239,39 @@ function resetPossession(who) {
   charging = false;
   power = 0;
   stealCD = 0;
+  net.cpuCharging = false;
+  net.cpuPower = 0;
 }
 
-// ===== 投籃 / 灌籃 =====
+// ======================================================
+// 命中率：距離越遠越低（二次曲線）
+// ======================================================
+function calcAccuracy(shooterX, hoopX, powerVal, moving, defenderDist) {
+  const distX = Math.abs(shooterX - hoopX);
+
+  let base;
+  if (powerVal >= 0.6 && powerVal <= 0.85) {
+    base = 0.90;                              // 完美蓄力
+  } else {
+    const off = powerVal < 0.6 ? 0.6 - powerVal : powerVal - 0.85;
+    base = 0.72 - off * 0.7;                  // 蓄力偏差扣分
+  }
+
+  // 距離懲罰：ACC_NEAR 內為 0，ACC_FAR 外為最大，中間用二次曲線
+  const t = clamp((distX - ACC_NEAR) / (ACC_FAR - ACC_NEAR), 0, 1);
+  const distPenalty = t * t * ACC_MAX_PENALTY;
+
+  let acc = base - distPenalty;
+
+  if (moving) acc -= 0.08;
+  if (defenderDist < 60) acc -= 0.12;
+
+  return clamp(acc, 0.04, 0.96);
+}
+
+// ======================================================
+// 投籃 / 灌籃
+// ======================================================
 function attemptShot(who, powerVal) {
   const shooter = who === 'player' ? player : cpu;
   const defender = who === 'player' ? cpu : player;
@@ -137,19 +293,8 @@ function attemptShot(who, powerVal) {
   }
 
   const distX = Math.abs(shooter.x - hoop.x);
-  let acc = 0.55;
-  if (powerVal >= 0.6 && powerVal <= 0.85) acc += 0.35;
-  else {
-    const off = powerVal < 0.6 ? 0.6 - powerVal : powerVal - 0.85;
-    acc -= off * 0.8;
-  }
-  if (distX > 350) acc -= 0.2;
-  else if (distX > 250) acc -= 0.1;
-  if (shooter.moving) acc -= 0.1;
   const defDist = Math.abs(shooter.x - defender.x);
-  if (defDist < 60) acc -= 0.15;
-  acc = clamp(acc, 0.05, 0.95);
-
+  const acc = calcAccuracy(shooter.x, hoop.x, powerVal, shooter.moving, defDist);
   const points = distX > THREE_DIST ? 3 : 2;
 
   ball.state = 'shot';
@@ -164,7 +309,7 @@ function attemptShot(who, powerVal) {
   ball.willScore = Math.random() < acc;
   ball.points = points;
 
-  if (who === 'player' && points === 3) showMsg('三分出手！');
+  if (points === 3) showMsg('三分出手！');
 }
 
 function attemptDunk(who) {
@@ -206,14 +351,13 @@ function attemptDunk(who) {
   showMsg('灌籃！');
 }
 
-// ===== 投籃結算 =====
 function resolveShot() {
   const scorer = ball.shooter;
   const hoop = scorer === 'player' ? HOOP_R : HOOP_L;
 
   if (ball.willScore) {
     state.score[scorer] += ball.points;
-    showMsg((scorer === 'player' ? '你' : '電腦') + ' 得分 +' + ball.points);
+    showMsg('進球 +' + ball.points);
 
     if (state.phase === 'sudden' || state.timeLeft <= 0) {
       endGame();
@@ -229,11 +373,12 @@ function resolveShot() {
     ball.vx = (Math.random() - 0.5) * 350;
     ball.vy = -250 - Math.random() * 150;
     ball.pickupCD = 0.2;
-    if (scorer === 'player') showMsg('沒進！');
   }
 }
 
-// ===== 玩家更新 =====
+// ======================================================
+// 本地玩家（單機 / Host）
+// ======================================================
 function updatePlayer(dt) {
   let dir = 0;
   if (input.left) dir -= 1;
@@ -301,7 +446,9 @@ function updatePlayerAction(dt) {
   }
 }
 
-// ===== CPU 更新 =====
+// ======================================================
+// 電腦 AI（單機）
+// ======================================================
 function updateCPU(dt) {
   if (state.phase === 'ended') return;
   if (cpu.shootCD > 0) cpu.shootCD -= dt;
@@ -354,7 +501,7 @@ function updateCPU(dt) {
       cpu.stealCD = 1.5;
       if (Math.random() < 0.28) {
         giveBall('cpu');
-        showMsg('電腦抄球！');
+        showMsg('抄球成功！');
         charging = false;
         power = 0;
       }
@@ -378,14 +525,81 @@ function updateCPU(dt) {
   cpu.x = clamp(cpu.x, COURT.x + cpu.r, COURT.x + COURT.w - cpu.r);
 }
 
-// ===== 球更新 =====
+// ======================================================
+// 遠端玩家（Host 端驅動 cpu）
+// ======================================================
+function updateRemote(dt) {
+  const inp = net.remoteInput;
+  if (!inp) return;
+
+  let dir = 0;
+  if (inp.left) dir -= 1;
+  if (inp.right) dir += 1;
+  cpu.x += dir * 380 * dt;
+  cpu.moving = dir !== 0;
+  if (dir !== 0) cpu.facing = dir;
+
+  cpu.vy += GRAVITY * dt;
+  cpu.y += cpu.vy * dt;
+  const standY = GROUND_Y - cpu.r;
+  if (cpu.y >= standY) {
+    cpu.y = standY;
+    cpu.vy = 0;
+    cpu.onGround = true;
+  } else {
+    cpu.onGround = false;
+  }
+  cpu.x = clamp(cpu.x, COURT.x + cpu.r, COURT.x + COURT.w - cpu.r);
+
+  const hasBall = ball.owner === 'cpu' && ball.state === 'held';
+
+  if (inp.action && !net.prevRemoteAction) {
+    if (hasBall) {
+      net.cpuCharging = true;
+      net.cpuPower = 0;
+    } else if (cpu.onGround) {
+      cpu.vy = JUMP_V;
+      cpu.onGround = false;
+    }
+  }
+
+  if (!inp.action && net.prevRemoteAction) {
+    if (net.cpuCharging && hasBall) {
+      net.cpuCharging = false;
+      const p = typeof inp.power === 'number' ? inp.power : 0.5;
+      const distX = Math.abs(cpu.x - HOOP_L.x);
+      if (distX < 110) attemptDunk('cpu');
+      else attemptShot('cpu', p);
+      net.cpuPower = 0;
+    }
+  }
+  net.prevRemoteAction = inp.action;
+
+  if (cpu.stealCD > 0) cpu.stealCD -= dt;
+  if (inp.steal && cpu.stealCD <= 0 && ball.owner === 'player' && ball.state === 'held') {
+    cpu.stealCD = 1.0;
+    if (Math.abs(player.x - cpu.x) < 55 && Math.random() < 0.32) {
+      giveBall('cpu');
+      showMsg('抄球成功！');
+      charging = false;
+      power = 0;
+    }
+  }
+
+  if (net.cpuCharging) {
+    net.cpuPower = Math.min(1, net.cpuPower + 1.6 * dt);
+  }
+}
+
+// ======================================================
+// 球
+// ======================================================
 function updateBall(dt) {
   if (ball.state === 'held') {
     const holder = ball.owner === 'player' ? player : cpu;
     ball.x = holder.x + holder.facing * 22;
     ball.y = holder.y + 8;
     ball.vx = ball.vy = 0;
-
   } else if (ball.state === 'shot') {
     ball.t += dt;
     const p = Math.min(1, ball.t / ball.dur);
@@ -399,7 +613,6 @@ function updateBall(dt) {
     ball.y = inv * inv * ball.startY + 2 * inv * p * midY + p * p * ball.endY;
 
     if (p >= 1) resolveShot();
-
   } else if (ball.state === 'loose') {
     ball.vy += GRAVITY * dt;
     ball.x += ball.vx * dt;
@@ -419,7 +632,9 @@ function updateBall(dt) {
   }
 }
 
-// ===== 碰撞 & 撿球 =====
+// ======================================================
+// 碰撞 / 撿球
+// ======================================================
 function resolveCollision() {
   const dx = player.x - cpu.x;
   const d = Math.abs(dx);
@@ -452,7 +667,9 @@ function tryPickup() {
   }
 }
 
-// ===== 主更新 =====
+// ======================================================
+// 主更新（單機 / Host）
+// ======================================================
 function update(dt) {
   if (state.phase === 'ended') return;
 
@@ -474,13 +691,63 @@ function update(dt) {
 
   updatePlayer(dt);
   updatePlayerAction(dt);
-  updateCPU(dt);
+
+  if (net.mode === 'host') updateRemote(dt);
+  else updateCPU(dt);
+
   updateBall(dt);
   resolveCollision();
   tryPickup();
 }
 
-// ===== 結束 =====
+// ======================================================
+// Guest 端本地更新
+// ======================================================
+function updateGuestLocal(dt) {
+  if (state.phase === 'ended') return;
+
+  // 本地蓄力（僅 UI 與送出用）
+  if (input.action) {
+    if (!charging) { charging = true; power = 0; powerDir = 1; }
+    power += powerDir * 1.6 * dt;
+    if (power >= 1) { power = 1; powerDir = -1; }
+    if (power <= 0) { power = 0; powerDir = 1; }
+  } else {
+    charging = false;
+  }
+
+  if (state.msgTimer > 0) state.msgTimer -= dt;
+
+  if (state.phase === 'playing') {
+    state.timeLeft -= dt;
+    if (state.timeLeft < 0) state.timeLeft = 0;
+  }
+
+  // 球平滑追
+  ball.x += (ball.targetX - ball.x) * 0.5;
+  ball.y += (ball.targetY - ball.y) * 0.5;
+
+  // 送出輸入（12Hz + 動作邊緣立即送）
+  const actionChanged = input.action !== net.lastSentAction;
+  net.inputTimer += dt;
+  if (net.inputTimer >= 0.08 || actionChanged) {
+    net.inputTimer = 0;
+    net.lastSentAction = input.action;
+    if (net.inputRef) {
+      net.inputRef.set({
+        left: input.left,
+        right: input.right,
+        action: input.action,
+        steal: input.steal,
+        power: power
+      }).catch(() => {});
+    }
+  }
+}
+
+// ======================================================
+// 結束
+// ======================================================
 function endGame() {
   state.phase = 'ended';
   state.msgTimer = 0;
@@ -490,11 +757,92 @@ function endGame() {
   input.steal = false;
   input.left = false;
   input.right = false;
+
+  // Host 寫入最終 state，讓 Guest 同步結束
+  if (net.mode === 'host' && net.roomId && db) {
+    db.ref('rooms/' + net.roomId + '/state').set(serializeState()).catch(() => {});
+  }
 }
 
-// ================= 場地繪製（修正版） =================
+// ======================================================
+// 序列化 / 套用遠端狀態
+// ======================================================
+function serializeState() {
+  return {
+    p1: { x: player.x, y: player.y, facing: player.facing, onGround: player.onGround, moving: player.moving },
+    p2: { x: cpu.x, y: cpu.y, facing: cpu.facing, onGround: cpu.onGround, moving: cpu.moving },
+    ball: {
+      x: ball.x, y: ball.y,
+      state: ball.state,
+      owner: ball.owner,
+      shooter: ball.shooter,
+      points: ball.points,
+      t: ball.t, dur: ball.dur,
+      startX: ball.startX, startY: ball.startY,
+      endX: ball.endX, endY: ball.endY
+    },
+    score: { p1: state.score.player, p2: state.score.cpu },
+    timeLeft: state.timeLeft,
+    phase: state.phase,
+    msg: state.msg,
+    msgTimer: state.msgTimer,
+    ts: Date.now()
+  };
+}
+
+function applyRemoteState(rs) {
+  if (!rs || net.isHost) return;
+
+  if (rs.p2) {
+    player.x = rs.p2.x;
+    player.y = rs.p2.y;
+    player.facing = rs.p2.facing;
+    player.onGround = rs.p2.onGround;
+    player.moving = rs.p2.moving;
+  }
+  if (rs.p1) {
+    cpu.x = rs.p1.x;
+    cpu.y = rs.p1.y;
+    cpu.facing = rs.p1.facing;
+    cpu.onGround = rs.p1.onGround;
+    cpu.moving = rs.p1.moving;
+  }
+
+  if (rs.ball) {
+    ball.state = rs.ball.state;
+    ball.owner = rs.ball.owner === 'player' ? 'cpu'
+               : rs.ball.owner === 'cpu' ? 'player' : null;
+    ball.shooter = rs.ball.shooter === 'player' ? 'cpu'
+                 : rs.ball.shooter === 'cpu' ? 'player' : null;
+    ball.points = rs.ball.points;
+    ball.t = rs.ball.t;
+    ball.dur = rs.ball.dur;
+    ball.startX = rs.ball.startX;
+    ball.startY = rs.ball.startY;
+    ball.endX = rs.ball.endX;
+    ball.endY = rs.ball.endY;
+    ball.targetX = rs.ball.x;
+    ball.targetY = rs.ball.y;
+    if (Math.abs(ball.x - ball.targetX) > 250) {
+      ball.x = ball.targetX;
+      ball.y = ball.targetY;
+    }
+  }
+
+  if (rs.score) {
+    state.score.player = rs.score.p2;
+    state.score.cpu = rs.score.p1;
+  }
+  state.timeLeft = rs.timeLeft;
+  state.phase = rs.phase;
+  state.msg = rs.msg;
+  state.msgTimer = rs.msgTimer;
+}
+
+// ======================================================
+// 繪製
+// ======================================================
 function drawCourt() {
-  // ---- 背景（上半部是牆，不是地板）----
   const bg = ctx.createLinearGradient(0, 0, 0, GROUND_Y);
   bg.addColorStop(0, '#0b0b14');
   bg.addColorStop(0.7, '#161623');
@@ -502,7 +850,6 @@ function drawCourt() {
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, W, GROUND_Y);
 
-  // 看台：用低透明度小方塊堆幾排，表現觀眾席
   for (let row = 0; row < 6; row++) {
     const alpha = 0.05 - row * 0.005;
     ctx.fillStyle = `rgba(255,255,255,${Math.max(alpha, 0.01)})`;
@@ -513,7 +860,6 @@ function drawCourt() {
     }
   }
 
-  // 牆面下方廣告帶
   const adTop = GROUND_Y - 110;
   ctx.fillStyle = 'rgba(255,255,255,0.045)';
   ctx.fillRect(0, adTop, W, 110);
@@ -524,7 +870,6 @@ function drawCourt() {
   ctx.lineTo(W, adTop);
   ctx.stroke();
 
-  // 廣告帶上的色塊裝飾
   const adColors = ['#2b4a7a', '#7a2b3a', '#2b7a5a', '#6a5a22', '#4a2b7a'];
   for (let i = 0; i < 6; i++) {
     ctx.globalAlpha = 0.22;
@@ -533,7 +878,6 @@ function drawCourt() {
     ctx.globalAlpha = 1;
   }
 
-  // ---- 地板（只佔畫面底部）----
   const wood = ctx.createLinearGradient(0, FLOOR_Y, 0, H);
   wood.addColorStop(0, '#c8873f');
   wood.addColorStop(0.35, '#b57a35');
@@ -541,7 +885,6 @@ function drawCourt() {
   ctx.fillStyle = wood;
   ctx.fillRect(0, FLOOR_Y, W, H - FLOOR_Y);
 
-  // 地板橫向木紋
   ctx.strokeStyle = 'rgba(0,0,0,0.13)';
   ctx.lineWidth = 1;
   for (let y = FLOOR_Y + 12; y < H; y += 14) {
@@ -550,7 +893,6 @@ function drawCourt() {
     ctx.lineTo(W, y);
     ctx.stroke();
   }
-  // 地板縱向接縫（透視感）
   for (let x = 30; x < W; x += 88) {
     ctx.beginPath();
     ctx.moveTo(x, FLOOR_Y + 6);
@@ -558,7 +900,6 @@ function drawCourt() {
     ctx.stroke();
   }
 
-  // 地板前緣高光
   ctx.strokeStyle = 'rgba(255,255,255,0.35)';
   ctx.lineWidth = 3;
   ctx.beginPath();
@@ -566,7 +907,6 @@ function drawCourt() {
   ctx.lineTo(W, FLOOR_Y);
   ctx.stroke();
 
-  // 中線（在地板上，不是空中）
   ctx.strokeStyle = 'rgba(255,255,255,0.45)';
   ctx.lineWidth = 3;
   ctx.beginPath();
@@ -574,7 +914,6 @@ function drawCourt() {
   ctx.lineTo(W / 2, H - 8);
   ctx.stroke();
 
-  // 三分線（畫在地板上）
   const threeL = HOOP_L.x + THREE_DIST;
   const threeR = HOOP_R.x - THREE_DIST;
   ctx.setLineDash([10, 7]);
@@ -590,7 +929,6 @@ function drawCourt() {
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // 地板上的「3」標記
   ctx.fillStyle = 'rgba(255,255,255,0.16)';
   ctx.font = 'bold 30px system-ui, sans-serif';
   ctx.textAlign = 'center';
@@ -606,7 +944,6 @@ function drawHoop(hoop) {
   const by = hoop.y - 110;
   const bh = 220;
 
-  // 從籃板往上延伸的吊桿（讓籃框看起來是掛著的）
   ctx.strokeStyle = 'rgba(120,120,140,0.8)';
   ctx.lineWidth = 6;
   ctx.beginPath();
@@ -614,19 +951,16 @@ function drawHoop(hoop) {
   ctx.lineTo(boardX, 0);
   ctx.stroke();
 
-  // 籃板
   ctx.fillStyle = 'rgba(235,235,245,0.9)';
   ctx.fillRect(boardX - bw / 2, by, bw, bh);
   ctx.strokeStyle = '#555';
   ctx.lineWidth = 2;
   ctx.strokeRect(boardX - bw / 2, by, bw, bh);
 
-  // 內框
   ctx.strokeStyle = '#ff5533';
   ctx.lineWidth = 3;
   ctx.strokeRect(boardX - bw / 2, hoop.y - 45, bw, 90);
 
-  // 支架
   const rimSide = isRight ? hoop.x + hoop.r : hoop.x - hoop.r;
   ctx.strokeStyle = '#555';
   ctx.lineWidth = 5;
@@ -635,14 +969,12 @@ function drawHoop(hoop) {
   ctx.lineTo(rimSide, hoop.y);
   ctx.stroke();
 
-  // 籃圈
   ctx.strokeStyle = '#ff6633';
   ctx.lineWidth = 6;
   ctx.beginPath();
   ctx.arc(hoop.x, hoop.y, hoop.r, 0, Math.PI * 2);
   ctx.stroke();
 
-  // 網
   ctx.strokeStyle = 'rgba(240,240,240,0.55)';
   ctx.lineWidth = 1.5;
   const nb = hoop.y + 50;
@@ -652,24 +984,24 @@ function drawHoop(hoop) {
     const x1 = hoop.x + Math.cos(a) * hoop.r;
     const y1 = hoop.y + Math.sin(a) * hoop.r;
     const x2 = hoop.x + (i % 2 === 0 ? -1 : 1) * nw;
-    const y2 = nb;
     ctx.beginPath();
     ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
+    ctx.lineTo(x2, nb);
     ctx.stroke();
   }
 }
 
-function drawPlayer(ent, color, isPlayer) {
+function drawPlayerEntity(ent, isLocal) {
   const { x, y, r } = ent;
 
-  // 影（永遠貼在地板平面）
   ctx.fillStyle = 'rgba(0,0,0,0.3)';
   ctx.beginPath();
   ctx.ellipse(x, GROUND_Y - 3, r * 0.95, r * 0.3, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  if (ball.owner === (isPlayer ? 'player' : 'cpu') && ball.state === 'held') {
+  const isHolding = (isLocal && ball.owner === 'player' && ball.state === 'held') ||
+                    (!isLocal && ball.owner === 'cpu' && ball.state === 'held');
+  if (isHolding) {
     ctx.strokeStyle = 'rgba(255,215,80,0.75)';
     ctx.lineWidth = 3;
     ctx.beginPath();
@@ -678,8 +1010,8 @@ function drawPlayer(ent, color, isPlayer) {
   }
 
   const g = ctx.createRadialGradient(x - r * 0.35, y - r * 0.35, r * 0.1, x, y, r);
-  g.addColorStop(0, isPlayer ? '#8cc8ff' : '#ff9999');
-  g.addColorStop(1, color);
+  g.addColorStop(0, isLocal ? '#8cc8ff' : '#ff9999');
+  g.addColorStop(1, isLocal ? '#4a9eff' : '#ff5a5a');
   ctx.fillStyle = g;
   ctx.beginPath();
   ctx.arc(x, y, r, 0, Math.PI * 2);
@@ -689,7 +1021,6 @@ function drawPlayer(ent, color, isPlayer) {
   ctx.lineWidth = 2.5;
   ctx.stroke();
 
-  // 眼睛
   ctx.fillStyle = '#fff';
   const ex = x + ent.facing * r * 0.32;
   const ey = y - r * 0.22;
@@ -698,10 +1029,9 @@ function drawPlayer(ent, color, isPlayer) {
   ctx.fill();
 }
 
-function drawBall() {
+function drawBallEntity() {
   const { x, y, r } = ball;
 
-  // 球影（貼地板，空中時淡且小）
   const t = clamp((GROUND_Y - y) / 320, 0, 1);
   ctx.globalAlpha = 0.25 * (1 - t * 0.6);
   ctx.fillStyle = '#000';
@@ -751,21 +1081,51 @@ function drawPowerBar() {
   ctx.fillRect(bx + fillW - 2, by - 4, 4, bh + 8);
 }
 
+function drawRemotePowerBar() {
+  if (net.mode !== 'host' || !net.cpuCharging) return;
+  const bw = 110, bh = 14;
+  const bx = cpu.x - bw / 2;
+  const by = cpu.y - 65;
+
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.fillRect(bx, by, bw, bh);
+  ctx.fillStyle = '#ffb43c';
+  ctx.fillRect(bx, by, bw * net.cpuPower, bh);
+  ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(bx, by, bw, bh);
+}
+
 function drawUI() {
   ctx.textAlign = 'left';
   ctx.font = 'bold 34px system-ui, sans-serif';
-  ctx.fillStyle = '#4a9eff';
-  ctx.fillText('你 ' + state.score.player, 40, 62);
 
-  ctx.textAlign = 'right';
-  ctx.fillStyle = '#ff5a5a';
-  ctx.fillText(state.score.cpu + ' 電腦', W - 40, 62);
+  if (net.mode === 'guest') {
+    ctx.fillStyle = '#ff5a5a';
+    ctx.fillText('對手 ' + state.score.cpu, 40, 62);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#4a9eff';
+    ctx.fillText(state.score.player + ' 你', W - 40, 62);
+  } else {
+    ctx.fillStyle = '#4a9eff';
+    ctx.fillText('你 ' + state.score.player, 40, 62);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#ff5a5a';
+    const label = net.mode === 'host' ? '對手' : '電腦';
+    ctx.fillText(state.score.cpu + ' ' + label, W - 40, 62);
+  }
 
   ctx.textAlign = 'center';
   ctx.font = 'bold 30px system-ui, sans-serif';
   const t = Math.max(0, Math.ceil(state.timeLeft));
   ctx.fillStyle = t <= 10 ? '#ff4444' : (state.phase === 'sudden' ? '#ffd35c' : '#fff');
   ctx.fillText((state.phase === 'sudden' ? 'OT ' : '') + '0:' + (t < 10 ? '0' + t : t), W / 2, 58);
+
+  if (net.mode === 'host' || net.mode === 'guest') {
+    ctx.font = '11px system-ui, sans-serif';
+    ctx.fillStyle = net.mode === 'host' ? 'rgba(109,255,158,0.55)' : 'rgba(255,180,60,0.55)';
+    ctx.fillText(net.mode === 'host' ? '● 主機' : '● 連線中', W / 2, 82);
+  }
 
   if (state.msgTimer > 0) {
     ctx.save();
@@ -784,24 +1144,42 @@ function drawUI() {
     ctx.fillRect(0, 0, W, H);
     ctx.textAlign = 'center';
 
-    const won = state.score.player > state.score.cpu;
-    const tied = state.score.player === state.score.cpu;
+    const myScore = state.score.player;
+    const oppScore = state.score.cpu;
+    const won = myScore > oppScore;
+    const tied = myScore === oppScore;
 
     ctx.font = 'bold 80px system-ui, sans-serif';
     ctx.fillStyle = won ? '#6dff9e' : (tied ? '#ffd35c' : '#ff6b6b');
-    ctx.fillText(won ? '你贏了！' : (tied ? '平手' : '電腦贏了'), W / 2, H / 2 - 40);
+    ctx.fillText(won ? '你贏了！' : (tied ? '平手' : '你輸了'), W / 2, H / 2 - 40);
 
     ctx.font = '32px system-ui, sans-serif';
     ctx.fillStyle = '#ddd';
-    ctx.fillText(`${state.score.player} : ${state.score.cpu}`, W / 2, H / 2 + 30);
+    ctx.fillText(`${myScore} : ${oppScore}`, W / 2, H / 2 + 30);
 
     ctx.font = '20px system-ui, sans-serif';
     ctx.fillStyle = '#aaa';
-    ctx.fillText(isTouch ? '點擊畫面重新開始' : '按 R 重新開始', W / 2, H / 2 + 110);
+    ctx.fillText(isTouch ? '點擊畫面返回主選單' : '按 R 返回主選單', W / 2, H / 2 + 110);
   }
 }
 
-// ===== 手機觸控 =====
+function render() {
+  ctx.clearRect(0, 0, W, H);
+  drawCourt();
+  drawHoop(HOOP_L);
+  drawHoop(HOOP_R);
+  drawPlayerEntity(player, true);
+  drawPlayerEntity(cpu, false);
+  drawBallEntity();
+  drawPowerBar();
+  drawRemotePowerBar();
+  drawTouchControls();
+  drawUI();
+}
+
+// ======================================================
+// 觸控
+// ======================================================
 const JOY_R = 65;
 const ACTION_BTN = { x: W - 120, y: H - 130, r: 70 };
 const STEAL_BTN  = { x: W - 275, y: H - 75, r: 50 };
@@ -826,10 +1204,17 @@ function clearTouch() {
   touch.action = null;
   touch.steal = null;
   input.left = input.right = false;
+  input.action = false;
+  input.steal = false;
+  net.lastSentAction = false;
 }
 
 canvas.addEventListener('pointerdown', e => {
-  if (state.phase === 'ended') { resetGame(); return; }
+  if (state.phase === 'ended') {
+    if (net.mode === 'host' || net.mode === 'guest') leaveRoomAndReturn();
+    else resetGame();
+    return;
+  }
   e.preventDefault();
   const p = toCanvas(e.clientX, e.clientY);
 
@@ -893,7 +1278,6 @@ function drawTouchControls() {
     ctx.strokeStyle = '#fff';
     ctx.lineWidth = 3;
     ctx.stroke();
-
     ctx.globalAlpha = 0.7;
     ctx.beginPath();
     ctx.arc(touch.joy.cx + touch.joy.dx, touch.joy.cy + touch.joy.dy, 32, 0, Math.PI * 2);
@@ -936,28 +1320,19 @@ function drawBtn(b, label, active, color) {
   ctx.textBaseline = 'alphabetic';
 }
 
-// ===== 渲染 =====
-function render() {
-  ctx.clearRect(0, 0, W, H);
-  drawCourt();
-  drawHoop(HOOP_L);
-  drawHoop(HOOP_R);
-  drawPlayer(player, '#4a9eff', true);
-  drawPlayer(cpu, '#ff5a5a', false);
-  drawBall();
-  drawPowerBar();
-  drawTouchControls();
-  drawUI();
-}
-
-// ===== 鍵盤 =====
+// ======================================================
+// 鍵盤
+// ======================================================
 document.addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
   if (k === 'a' || k === 'arrowleft') input.left = true;
   if (k === 'd' || k === 'arrowright') input.right = true;
   if (k === ' ') { input.action = true; e.preventDefault(); }
   if (k === 'e' || k === 'shift') input.steal = true;
-  if (k === 'r' && state.phase === 'ended') resetGame();
+  if (k === 'r' && state.phase === 'ended') {
+    if (net.mode === 'host' || net.mode === 'guest') leaveRoomAndReturn();
+    else resetGame();
+  }
 });
 document.addEventListener('keyup', e => {
   const k = e.key.toLowerCase();
@@ -967,7 +1342,191 @@ document.addEventListener('keyup', e => {
   if (k === 'e' || k === 'shift') input.steal = false;
 });
 
-// ===== 主迴圈 =====
+// ======================================================
+// 配對 / 房間
+// ======================================================
+const overlay = document.getElementById('overlay');
+const menuPanel = document.getElementById('menu');
+const matchingPanel = document.getElementById('matching');
+const matchStatusEl = document.getElementById('matchStatus');
+
+document.getElementById('btnSolo').onclick = () => {
+  net.mode = 'solo';
+  overlay.classList.add('hidden');
+  resetGame();
+};
+
+document.getElementById('btnOnline').onclick = () => {
+  if (!db) {
+    alert('無法連線 Firebase，請確認網路與資料庫規則');
+    return;
+  }
+  startMatchmaking();
+};
+
+document.getElementById('btnCancel').onclick = () => cancelMatchmaking();
+
+function stopMatchListeners() {
+  if (net.matchRef) net.matchRef.child('room').off();
+  if (net.matchListener && db) {
+    db.ref('matchmaking').off('value', net.matchListener);
+    net.matchListener = null;
+  }
+}
+
+function startMatchmaking() {
+  menuPanel.classList.add('hidden');
+  matchingPanel.classList.remove('hidden');
+  matchStatusEl.textContent = '連線中…';
+
+  net.matchRef = db.ref('matchmaking/' + net.myId);
+  net.matchRef.set({ ts: Date.now(), status: 'waiting' })
+    .then(() => { matchStatusEl.textContent = '搜尋對手中…'; })
+    .catch(err => {
+      matchStatusEl.textContent = '連線失敗：' + (err.message || '權限不足？');
+    });
+
+  net.matchRef.child('room').on('value', snap => {
+    if (snap.exists() && !net.roomId) {
+      net.roomId = snap.val();
+      net.isHost = false;
+      net.mode = 'guest';
+      stopMatchListeners();
+      onMatched();
+    }
+  });
+
+  net.matchListener = db.ref('matchmaking').on('value', snap => {
+    if (net.roomId) return;
+    const all = snap.val() || {};
+    const candidates = [];
+    for (const [id, v] of Object.entries(all)) {
+      if (id === net.myId) continue;
+      if (!v || v.status !== 'waiting' || v.room) continue;
+      candidates.push([id, v]);
+    }
+    candidates.sort((a, b) => (a[1].ts || 0) - (b[1].ts || 0));
+    if (candidates.length === 0) return;
+    const oppId = candidates[0][0];
+    // 字典序小者發起，避免雙方同時建房間
+    if (net.myId < oppId) createRoom(oppId);
+  }, err => {
+    matchStatusEl.textContent = '讀取配對池失敗：' + (err.message || '權限不足');
+  });
+}
+
+function createRoom(oppId) {
+  if (net.roomId) return;
+  const rid = 'r_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
+  net.roomId = rid;
+  net.isHost = true;
+  net.mode = 'host';
+  net.opponentId = oppId;
+
+  stopMatchListeners();
+  resetGame();
+
+  db.ref('rooms/' + rid).set({
+    host: net.myId,
+    guest: oppId,
+    createdAt: Date.now(),
+    state: serializeState(),
+    guestInput: { left: false, right: false, action: false, steal: false, power: 0 }
+  }).then(() => {
+    db.ref('matchmaking/' + oppId + '/room').set(rid).catch(() => {});
+    net.matchRef.update({ status: 'matched', room: rid }).catch(() => {});
+    onMatched();
+  }).catch(err => {
+    console.error('建立房間失敗', err);
+    matchStatusEl.textContent = '建立房間失敗';
+    setTimeout(cancelMatchmaking, 1500);
+  });
+}
+
+function onMatched() {
+  overlay.classList.add('hidden');
+  matchStatusEl.textContent = '';
+
+  if (net.isHost) {
+    resetGame();
+    net.remoteInput = null;
+    net.prevRemoteAction = false;
+    net.cpuCharging = false;
+    net.cpuPower = 0;
+
+    net.inputRef = db.ref('rooms/' + net.roomId + '/guestInput');
+    net.inputRef.on('value', snap => {
+      const val = snap.val();
+      if (val) net.remoteInput = val;
+    });
+  } else {
+    resetGame();
+    net.stateRef = db.ref('rooms/' + net.roomId + '/state');
+    net.stateRef.on('value', snap => {
+      if (!snap.exists()) {
+        showMsg('對手已離開');
+        state.phase = 'ended';
+        return;
+      }
+      applyRemoteState(snap.val());
+    });
+
+    net.roomRef = db.ref('rooms/' + net.roomId);
+    net.roomRef.on('value', snap => {
+      if (!snap.exists() && net.roomId) {
+        showMsg('對手已離開');
+        state.phase = 'ended';
+      }
+    });
+  }
+}
+
+function cancelMatchmaking() {
+  stopMatchListeners();
+  if (db && net.myId) db.ref('matchmaking/' + net.myId).remove().catch(() => {});
+  net.roomId = null;
+  net.isHost = false;
+  net.mode = 'solo';
+  matchingPanel.classList.add('hidden');
+  menuPanel.classList.remove('hidden');
+  matchStatusEl.textContent = '';
+}
+
+function leaveRoomAndReturn() {
+  if (net.leaving) return;
+  net.leaving = true;
+
+  if (net.inputRef) { net.inputRef.off(); net.inputRef = null; }
+  if (net.stateRef) { net.stateRef.off(); net.stateRef = null; }
+  if (net.roomRef) { net.roomRef.off(); net.roomRef = null; }
+  if (net.matchRef) { net.matchRef.off(); net.matchRef = null; }
+
+  const oldRoomId = net.roomId;
+  const wasHost = net.isHost;
+
+  if (db) {
+    if (oldRoomId && wasHost) db.ref('rooms/' + oldRoomId).remove().catch(() => {});
+    db.ref('matchmaking/' + net.myId).remove().catch(() => {});
+  }
+
+  net.roomId = null;
+  net.isHost = false;
+  net.mode = 'solo';
+  net.remoteInput = null;
+  net.prevRemoteAction = false;
+  net.cpuCharging = false;
+  net.cpuPower = 0;
+
+  overlay.classList.remove('hidden');
+  menuPanel.classList.remove('hidden');
+  matchingPanel.classList.add('hidden');
+
+  setTimeout(() => { net.leaving = false; }, 300);
+}
+
+// ======================================================
+// 主迴圈
+// ======================================================
 let lastTime = 0;
 
 function loop(ts) {
@@ -976,9 +1535,20 @@ function loop(ts) {
   lastTime = ts;
   dt = Math.min(dt, 0.05);
 
-  update(dt);
-  render();
+  if (net.mode === 'guest') {
+    updateGuestLocal(dt);
+  } else {
+    update(dt);
+    if (net.mode === 'host' && net.roomId && state.phase !== 'ended' && db) {
+      net.stateTimer += dt;
+      if (net.stateTimer >= 0.05) {
+        net.stateTimer = 0;
+        db.ref('rooms/' + net.roomId + '/state').set(serializeState()).catch(() => {});
+      }
+    }
+  }
 
+  render();
   requestAnimationFrame(loop);
 }
 
@@ -988,17 +1558,33 @@ function resetGame() {
   state.phase = 'playing';
   state.msg = '';
   state.msgTimer = 0;
-  charging = false; power = 0;
+  charging = false;
+  power = 0;
   prevAction = false;
   stealCD = 0;
-  cpu.shootCD = 0; cpu.stealCD = 0;
+  cpu.shootCD = 0;
+  cpu.stealCD = 0;
+  net.cpuCharging = false;
+  net.cpuPower = 0;
+  net.prevRemoteAction = false;
+  net.stateTimer = 0;
+  net.inputTimer = 0;
+  net.lastSentAction = false;
   clearTouch();
   resetPossession('player');
   lastTime = 0;
+  ball.targetX = ball.x;
+  ball.targetY = ball.y;
 }
 
 resetGame();
 requestAnimationFrame(loop);
+
+if (!db) {
+  console.warn('Firebase 未載入，線上配對不可用。');
+} else {
+  console.log('Firebase 已連線。若配對失敗，請把 Realtime Database 規則設為 .read/.write = true');
+}
 </script>
 </body>
 </html>
