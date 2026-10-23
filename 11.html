@@ -1945,51 +1945,46 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       btnReturn.style.display = 'none';
     }
 
-    // ===== 邊緣基地指示器 =====
+        // ===== 邊緣基地指示器 =====
     const edge = document.getElementById('edgeIndicator');
     const arrow = document.getElementById('edgeArrow');
     const label = document.getElementById('edgeLabel');
 
-    // 只有當玩家不在安全區（即基地很可能不在畫面內）時才顯示
-    if (p.y >= S.safeLineY) {
+    const basePos = getBasePos(S.myBaseIdx);
+    // 取得基地在螢幕上的座標
+    const sp = worldToScreen(basePos.x, basePos.y);
+    
+    const margin = 50; // 距離邊緣的像素距離
+    // 判斷基地是否在畫面安全範圍內
+    const isInside = sp.x > margin && sp.x < W - margin && sp.y > margin && sp.y < H - margin;
+
+    if (isInside) {
       edge.style.display = 'none';
     } else {
-      const basePos = getBasePos(S.myBaseIdx);
-      // 取得基地在螢幕上的座標
-      const sp = worldToScreen(basePos.x, basePos.y);
+      edge.style.display = 'flex';
+
+      // 計算中心點到基地的向量
+      const cx = W / 2;
+      const cy = H / 2;
+      const dx = sp.x - cx;
+      const dy = sp.y - cy;
       
-      const margin = 50; // 距離邊緣的像素距離
-      // 判斷是否在畫面安全範圍內
-      const isInside = sp.x > margin && sp.x < W - margin && sp.y > margin && sp.y < H - margin;
+      // 計算指示器應該在的邊緣位置
+      let ex = clamp(sp.x, margin, W - margin);
+      let ey = clamp(sp.y, margin, H - margin);
+      
+      // 讓箭頭指向基地
+      const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+      arrow.style.transform = `rotate(${angle}deg)`;
 
-      if (isInside) {
-        edge.style.display = 'none';
-      } else {
-        edge.style.display = 'flex';
+      // 更新指示器位置
+      edge.style.left = ex + 'px';
+      edge.style.top = ey + 'px';
 
-        // 計算中心點到基地的向量
-        const cx = W / 2;
-        const cy = H / 2;
-        const dx = sp.x - cx;
-        const dy = sp.y - cy;
-        
-        // 計算指示器應該在的邊緣位置
-        let ex = clamp(sp.x, margin, W - margin);
-        let ey = clamp(sp.y, margin, H - margin);
-        
-        // 讓箭頭指向基地 (角度)
-        // canvas 的 0 度是向右，但 emoji ➡️ 本身是向右的，所以直接用 atan2
-        const angle = Math.atan2(dy, dx) * 180 / Math.PI;
-        arrow.style.transform = `rotate(${angle}deg)`;
-
-        // 更新指示器位置
-        edge.style.left = ex + 'px';
-        edge.style.top = ey + 'px';
-
-        // 顯示距離
-        const distToBase = Math.round(dist(p.x, p.y, basePos.x, basePos.y));
-        label.textContent = `🏠 基地 (${distToBase}m)`;
-      }
+      // 顯示距離
+      const distToBase = Math.round(dist(p.x, p.y, basePos.x, basePos.y));
+      label.textContent = `🏠 基地 (${distToBase}m)`;
+    }
     }
   }
   document.getElementById('btnUp').addEventListener('click',()=>{
