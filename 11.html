@@ -33,8 +33,9 @@ const ctx = canvas.getContext('2d');
 const W = 1000, H = 700;
 
 // ===== 場地常數 =====
-const COURT = { x: 30, y: 40, w: 940, h: 580 };
-const GROUND_Y = 620;
+const COURT = { x: 30, y: 40, w: 940, h: 580 };   // 只當水平活動範圍用
+const GROUND_Y = 620;                              // 地板平面（球員腳底）
+const FLOOR_Y = GROUND_Y + 8;                      // 地板繪製起點
 const HOOP_Y = 340;
 const GRAVITY = 2600;
 const JUMP_V = -1250;
@@ -52,8 +53,8 @@ const cpu    = { x: 720, y: GROUND_Y - 22, r: 22, vy: 0, onGround: true, facing:
 const ball = {
   x: 600, y: GROUND_Y - 40, r: 10,
   vx: 0, vy: 0,
-  state: 'held',        // held | shot | loose
-  owner: 'player',      // player | cpu | null
+  state: 'held',
+  owner: 'player',
   shooter: null,
   startX: 0, startY: 0, endX: 0, endY: 0,
   t: 0, dur: 0.7,
@@ -66,7 +67,7 @@ const ball = {
 const state = {
   score: { player: 0, cpu: 0 },
   timeLeft: 60,
-  phase: 'playing',     // playing | sudden | ended
+  phase: 'playing',
   msg: '', msgTimer: 0
 };
 
@@ -120,7 +121,6 @@ function attemptShot(who, powerVal) {
   const defender = who === 'player' ? cpu : player;
   const hoop = who === 'player' ? HOOP_R : HOOP_L;
 
-  // 封蓋判定
   if (!defender.onGround && Math.abs(defender.x - shooter.x) < 100) {
     if (Math.random() < 0.5) {
       ball.state = 'loose';
@@ -136,7 +136,6 @@ function attemptShot(who, powerVal) {
     }
   }
 
-  // 命中率
   const distX = Math.abs(shooter.x - hoop.x);
   let acc = 0.55;
   if (powerVal >= 0.6 && powerVal <= 0.85) acc += 0.35;
@@ -173,7 +172,6 @@ function attemptDunk(who) {
   const defender = who === 'player' ? cpu : player;
   const hoop = who === 'player' ? HOOP_R : HOOP_L;
 
-  // 封蓋判定
   if (!defender.onGround && Math.abs(defender.x - hoop.x) < 100) {
     if (Math.random() < 0.4) {
       ball.state = 'loose';
@@ -291,7 +289,6 @@ function updatePlayerAction(dt) {
   }
   prevAction = input.action;
 
-  // 抄球
   if (stealCD > 0) stealCD -= dt;
   if (input.steal && stealCD <= 0 && ball.owner === 'cpu' && ball.state === 'held') {
     stealCD = 1.0;
@@ -495,65 +492,110 @@ function endGame() {
   input.right = false;
 }
 
-// ===== 繪製 =====
+// ================= 場地繪製（修正版） =================
 function drawCourt() {
-  const bg = ctx.createLinearGradient(0, 0, 0, H);
-  bg.addColorStop(0, '#16161f');
-  bg.addColorStop(1, '#09090d');
+  // ---- 背景（上半部是牆，不是地板）----
+  const bg = ctx.createLinearGradient(0, 0, 0, GROUND_Y);
+  bg.addColorStop(0, '#0b0b14');
+  bg.addColorStop(0.7, '#161623');
+  bg.addColorStop(1, '#1d1d2b');
   ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, W, H);
+  ctx.fillRect(0, 0, W, GROUND_Y);
 
-  const wood = ctx.createLinearGradient(0, COURT.y, 0, COURT.y + COURT.h);
-  wood.addColorStop(0, '#cd8f4f');
-  wood.addColorStop(0.5, '#b87838');
-  wood.addColorStop(1, '#9d6428');
+  // 看台：用低透明度小方塊堆幾排，表現觀眾席
+  for (let row = 0; row < 6; row++) {
+    const alpha = 0.05 - row * 0.005;
+    ctx.fillStyle = `rgba(255,255,255,${Math.max(alpha, 0.01)})`;
+    for (let i = 0; i < 32; i++) {
+      const x = 14 + i * 31 + (row % 2) * 15;
+      const y = 60 + row * 30;
+      ctx.fillRect(x, y, 14, 14);
+    }
+  }
+
+  // 牆面下方廣告帶
+  const adTop = GROUND_Y - 110;
+  ctx.fillStyle = 'rgba(255,255,255,0.045)';
+  ctx.fillRect(0, adTop, W, 110);
+  ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, adTop);
+  ctx.lineTo(W, adTop);
+  ctx.stroke();
+
+  // 廣告帶上的色塊裝飾
+  const adColors = ['#2b4a7a', '#7a2b3a', '#2b7a5a', '#6a5a22', '#4a2b7a'];
+  for (let i = 0; i < 6; i++) {
+    ctx.globalAlpha = 0.22;
+    ctx.fillStyle = adColors[i % adColors.length];
+    ctx.fillRect(40 + i * 155, adTop + 28, 120, 54);
+    ctx.globalAlpha = 1;
+  }
+
+  // ---- 地板（只佔畫面底部）----
+  const wood = ctx.createLinearGradient(0, FLOOR_Y, 0, H);
+  wood.addColorStop(0, '#c8873f');
+  wood.addColorStop(0.35, '#b57a35');
+  wood.addColorStop(1, '#8a5a25');
   ctx.fillStyle = wood;
-  ctx.fillRect(COURT.x, COURT.y, COURT.w, COURT.h);
+  ctx.fillRect(0, FLOOR_Y, W, H - FLOOR_Y);
 
-  ctx.strokeStyle = 'rgba(0,0,0,0.06)';
+  // 地板橫向木紋
+  ctx.strokeStyle = 'rgba(0,0,0,0.13)';
   ctx.lineWidth = 1;
-  for (let y = COURT.y; y < COURT.y + COURT.h; y += 28) {
+  for (let y = FLOOR_Y + 12; y < H; y += 14) {
     ctx.beginPath();
-    ctx.moveTo(COURT.x, y);
-    ctx.lineTo(COURT.x + COURT.w, y);
+    ctx.moveTo(0, y);
+    ctx.lineTo(W, y);
+    ctx.stroke();
+  }
+  // 地板縱向接縫（透視感）
+  for (let x = 30; x < W; x += 88) {
+    ctx.beginPath();
+    ctx.moveTo(x, FLOOR_Y + 6);
+    ctx.lineTo(x, H);
     ctx.stroke();
   }
 
-  ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+  // 地板前緣高光
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
   ctx.lineWidth = 3;
-  ctx.strokeRect(COURT.x, COURT.y, COURT.w, COURT.h);
-
-  // 中線
   ctx.beginPath();
-  ctx.moveTo(W / 2, COURT.y);
-  ctx.lineTo(W / 2, COURT.y + COURT.h);
+  ctx.moveTo(0, FLOOR_Y);
+  ctx.lineTo(W, FLOOR_Y);
   ctx.stroke();
 
-  // 中圈
+  // 中線（在地板上，不是空中）
+  ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+  ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.arc(W / 2, COURT.y + COURT.h / 2, 60, 0, Math.PI * 2);
+  ctx.moveTo(W / 2, FLOOR_Y + 10);
+  ctx.lineTo(W / 2, H - 8);
   ctx.stroke();
 
-  // 三分線
-  ctx.setLineDash([10, 8]);
+  // 三分線（畫在地板上）
+  const threeL = HOOP_L.x + THREE_DIST;
+  const threeR = HOOP_R.x - THREE_DIST;
+  ctx.setLineDash([10, 7]);
+  ctx.strokeStyle = 'rgba(255,255,255,0.32)';
   ctx.lineWidth = 2;
-  ctx.strokeStyle = 'rgba(255,255,255,0.5)';
   ctx.beginPath();
-  ctx.moveTo(HOOP_R.x - THREE_DIST, COURT.y);
-  ctx.lineTo(HOOP_R.x - THREE_DIST, COURT.y + COURT.h);
+  ctx.moveTo(threeL, FLOOR_Y + 8);
+  ctx.lineTo(threeL, H - 6);
   ctx.stroke();
   ctx.beginPath();
-  ctx.moveTo(HOOP_L.x + THREE_DIST, COURT.y);
-  ctx.lineTo(HOOP_L.x + THREE_DIST, COURT.y + COURT.h);
+  ctx.moveTo(threeR, FLOOR_Y + 8);
+  ctx.lineTo(threeR, H - 6);
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // 3 標記
+  // 地板上的「3」標記
   ctx.fillStyle = 'rgba(255,255,255,0.16)';
-  ctx.font = 'bold 44px system-ui, sans-serif';
+  ctx.font = 'bold 30px system-ui, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('3', HOOP_R.x - THREE_DIST - 40, COURT.y + 70);
-  ctx.fillText('3', HOOP_L.x + THREE_DIST + 40, COURT.y + 70);
+  ctx.fillText('3', threeL + 32, H - 20);
+  ctx.fillText('3', threeR - 32, H - 20);
 }
 
 function drawHoop(hoop) {
@@ -563,6 +605,14 @@ function drawHoop(hoop) {
   const bw = 12;
   const by = hoop.y - 110;
   const bh = 220;
+
+  // 從籃板往上延伸的吊桿（讓籃框看起來是掛著的）
+  ctx.strokeStyle = 'rgba(120,120,140,0.8)';
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.moveTo(boardX, by);
+  ctx.lineTo(boardX, 0);
+  ctx.stroke();
 
   // 籃板
   ctx.fillStyle = 'rgba(235,235,245,0.9)';
@@ -613,13 +663,12 @@ function drawHoop(hoop) {
 function drawPlayer(ent, color, isPlayer) {
   const { x, y, r } = ent;
 
-  // 影
+  // 影（永遠貼在地板平面）
   ctx.fillStyle = 'rgba(0,0,0,0.3)';
   ctx.beginPath();
   ctx.ellipse(x, GROUND_Y - 3, r * 0.95, r * 0.3, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // 持球光環
   if (ball.owner === (isPlayer ? 'player' : 'cpu') && ball.state === 'held') {
     ctx.strokeStyle = 'rgba(255,215,80,0.75)';
     ctx.lineWidth = 3;
@@ -628,7 +677,6 @@ function drawPlayer(ent, color, isPlayer) {
     ctx.stroke();
   }
 
-  // 身體
   const g = ctx.createRadialGradient(x - r * 0.35, y - r * 0.35, r * 0.1, x, y, r);
   g.addColorStop(0, isPlayer ? '#8cc8ff' : '#ff9999');
   g.addColorStop(1, color);
@@ -653,16 +701,14 @@ function drawPlayer(ent, color, isPlayer) {
 function drawBall() {
   const { x, y, r } = ball;
 
-  // 影
-  if (y < GROUND_Y - 30) {
-    const t = clamp((GROUND_Y - y) / 300, 0, 1);
-    ctx.globalAlpha = 0.25 * (1 - t * 0.6);
-    ctx.fillStyle = '#000';
-    ctx.beginPath();
-    ctx.ellipse(x, GROUND_Y - 3, r * 0.9 * (1 - t * 0.3), r * 0.3, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 1;
-  }
+  // 球影（貼地板，空中時淡且小）
+  const t = clamp((GROUND_Y - y) / 320, 0, 1);
+  ctx.globalAlpha = 0.25 * (1 - t * 0.6);
+  ctx.fillStyle = '#000';
+  ctx.beginPath();
+  ctx.ellipse(x, GROUND_Y - 3, r * 0.9 * (1 - t * 0.3), r * 0.3, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
 
   const g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.1, x, y, r);
   g.addColorStop(0, '#ffc07a');
@@ -690,7 +736,6 @@ function drawPowerBar() {
   ctx.fillStyle = 'rgba(0,0,0,0.65)';
   ctx.fillRect(bx, by, bw, bh);
 
-  // 完美區
   ctx.fillStyle = 'rgba(90,255,130,0.45)';
   ctx.fillRect(bx + bw * 0.6, by, bw * 0.25, bh);
 
@@ -707,7 +752,6 @@ function drawPowerBar() {
 }
 
 function drawUI() {
-  // 比分
   ctx.textAlign = 'left';
   ctx.font = 'bold 34px system-ui, sans-serif';
   ctx.fillStyle = '#4a9eff';
@@ -717,14 +761,12 @@ function drawUI() {
   ctx.fillStyle = '#ff5a5a';
   ctx.fillText(state.score.cpu + ' 電腦', W - 40, 62);
 
-  // 計時
   ctx.textAlign = 'center';
   ctx.font = 'bold 30px system-ui, sans-serif';
   const t = Math.max(0, Math.ceil(state.timeLeft));
   ctx.fillStyle = t <= 10 ? '#ff4444' : (state.phase === 'sudden' ? '#ffd35c' : '#fff');
   ctx.fillText((state.phase === 'sudden' ? 'OT ' : '') + '0:' + (t < 10 ? '0' + t : t), W / 2, 58);
 
-  // 訊息
   if (state.msgTimer > 0) {
     ctx.save();
     ctx.globalAlpha = Math.min(1, state.msgTimer / 0.4);
@@ -737,7 +779,6 @@ function drawUI() {
     ctx.restore();
   }
 
-  // 結束
   if (state.phase === 'ended') {
     ctx.fillStyle = 'rgba(0,0,0,0.85)';
     ctx.fillRect(0, 0, W, H);
@@ -841,7 +882,6 @@ canvas.addEventListener('contextmenu', e => e.preventDefault());
 function drawTouchControls() {
   if (!isTouch) return;
 
-  // 搖桿
   if (touch.joy.id !== null) {
     ctx.save();
     ctx.globalAlpha = 0.18;
