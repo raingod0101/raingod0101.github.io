@@ -8,14 +8,34 @@
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{margin:0;height:100%;background:#07070d;overflow:hidden}
   body{font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;display:flex;align-items:center;justify-content:center}
-  #app{display:flex;flex-direction:column;width:100%;height:100%;max-width:1100px;padding:8px;gap:8px}
+  
+  /* 修复：整个应用严格限制在屏幕内，不允许溢出 */
+  #app{display:flex;flex-direction:column;width:100%;height:100%;max-width:1100px;padding:8px;gap:8px;overflow:hidden}
   #stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center}
   canvas{display:block;border-radius:10px;box-shadow:0 0 60px rgba(90,70,180,.25),0 0 0 1px rgba(255,255,255,.06);touch-action:none}
-  #controls{display:flex;gap:10px;justify-content:center;padding-bottom:env(safe-area-inset-bottom,0px)}
-  #controls button{min-width:88px;height:60px;padding:0 16px;border-radius:14px;border:2px solid rgba(255,255,255,.14);background:rgba(255,255,255,.06);color:#fff;font-size:19px;font-weight:700;cursor:pointer;user-select:none;touch-action:none;transition:background .08s,border-color .08s,transform .08s}
+  
+  /* 修复：底部按钮使用 Grid 布局，确保在任何手机屏幕上都不会超出边缘 */
+  #controls{
+    display:grid;
+    grid-template-columns:1fr 1fr 1.5fr 1fr;
+    gap:8px;
+    width:100%;
+    max-width:600px;
+    margin:0 auto;
+    padding:0 8px env(safe-area-inset-bottom,8px);
+  }
+  #controls button{
+    width:100%;
+    height:56px;
+    border-radius:12px;
+    border:2px solid rgba(255,255,255,.14);
+    background:rgba(255,255,255,.06);
+    color:#fff;font-size:19px;font-weight:700;
+    cursor:pointer;user-select:none;touch-action:none;
+    transition:background .08s,border-color .08s,transform .08s;
+  }
   #controls button.on{background:rgba(255,255,255,.22);border-color:rgba(255,255,255,.4);transform:scale(.96)}
-  #controls button[data-k="Space"]{min-width:130px}
-  #controls button[data-k="KeyR"]{min-width:80px;font-size:16px;opacity:.75}
+  #controls button[data-k="KeyR"]{font-size:15px;opacity:.75}
 </style>
 </head>
 <body>
@@ -44,17 +64,21 @@ const keys = Object.create(null);
 
 /* ===================== 关卡 ===================== */
 const LEVELS = [
-  // 1. 跳跃时地面消失
+  // 1. 假地板：跳过去安全，走过去会掉
   {
     name: '第 1 关 · 第一课',
-    hint: '按空格跳跃！',
-    realHint: '……也许不要跳',
+    hint: '按空格跳过去！',
+    realHint: '……走过去试试？',
     spawn: { x: 60, y: 420 },
-    platforms: [{ x: 0, y: 480, w: 960, h: 60, vanishOnJump: true }],
-    spikes: [{ x: 0, y: 540, w: 960, h: 80 }],
+    platforms: [
+      { x: 0, y: 480, w: 320, h: 60 },
+      { x: 320, y: 480, w: 240, h: 60, fake: true },
+      { x: 560, y: 480, w: 400, h: 60 },
+    ],
+    spikes: [{ x: 320, y: 540, w: 240, h: 80 }],
     doors: [{ x: 880, y: 424, w: 44, h: 56, real: true }],
   },
-  // 2. 假按钮、假门、真门在按钮上方
+  // 2. 假按钮、假门
   {
     name: '第 2 关 · 点击开始',
     hint: '点击中间的按钮开始',
@@ -69,7 +93,7 @@ const LEVELS = [
       { x: 458, y: 284, w: 44, h: 56, real: true },
     ],
   },
-  // 3. 周期性尖刺，提示说不会动
+  // 3. 周期性尖刺
   {
     name: '第 3 关 · 静止的尖刺',
     hint: '尖刺不会动，放心走',
@@ -256,7 +280,10 @@ function respawn() {
   player.deadT = 0;
   player.onGround = false;
   player.coyote = 0;
-  player.jumpHeld = false;
+  
+  // 修复死循环：强制把跳跃状态设为“已按住”，玩家必须松开按键才能再次跳跃
+  player.jumpHeld = true; 
+  
   player.reversing = false;
 
   for (const p of L.platforms) {
@@ -275,7 +302,6 @@ function respawn() {
     d.vanished = false;
     d.vanishT = 0;
     d.fleeing = false;
-    // used 不清除，让玩家记住假门
   }
 
   state.particles.length = 0;
@@ -341,12 +367,10 @@ function update(dt) {
 
   state.time += dt;
 
-  /* ---------- 平台计时 ---------- */
   for (const p of L.platforms) {
     if (p.vanishT > 0) p.vanishT -= dt;
   }
 
-  /* ---------- 传送区 ---------- */
   for (const z of L.zones) {
     if (z.cooldown > 0) z.cooldown -= dt;
     if (z.teleportTo && z.cooldown <= 0 && overlap(player, z)) {
@@ -360,21 +384,18 @@ function update(dt) {
     }
   }
 
-  /* ---------- 反转区 ---------- */
   let rev = false;
   for (const z of L.zones) {
     if (z.reverse && overlap(player, z)) rev = true;
   }
   player.reversing = rev;
 
-  /* ---------- 输入 ---------- */
   let dir = 0;
   if (keys['ArrowLeft']  || keys['KeyA']) dir -= 1;
   if (keys['ArrowRight'] || keys['KeyD']) dir += 1;
   if (rev) dir = -dir;
   player.vx = dir * MOVE;
 
-  /* ---------- 传送带 ---------- */
   let conveyor = 0;
   for (const p of L.platforms) {
     if (p.conveyor && !p.gone && p.vanishT <= 0 && player.onGround &&
@@ -384,7 +405,6 @@ function update(dt) {
     }
   }
 
-  /* ---------- 跳跃 ---------- */
   const jumpKey = !!(keys['Space'] || keys['ArrowUp'] || keys['KeyW']);
   if (jumpKey && !player.jumpHeld && (player.onGround || player.coyote > 0)) {
     player.vy = JUMP_V;
@@ -392,7 +412,6 @@ function update(dt) {
     player.coyote = 0;
     player.jumpHeld = true;
 
-    // 跳跃触发地面消失
     for (const p of L.platforms) {
       if (p.vanishOnJump && !p.gone) {
         p.vanishT = 0.42;
@@ -405,7 +424,6 @@ function update(dt) {
     if (player.vy < 0) player.vy += GRAV * 1.6 * dt;
   }
 
-  /* ---------- 水平移动 ---------- */
   player.x += (player.vx + conveyor) * dt;
   for (const p of L.platforms) {
     if (p.gone || p.vanishT > 0) continue;
@@ -417,7 +435,6 @@ function update(dt) {
   if (player.x < 0) player.x = 0;
   if (player.x + player.w > W) player.x = W - player.w;
 
-  /* ---------- 垂直移动 ---------- */
   player.vy = Math.min(player.vy + GRAV * dt, MAX_FALL);
   player.y += player.vy * dt;
   player.onGround = false;
@@ -437,7 +454,6 @@ function update(dt) {
     }
   }
 
-  /* ---------- 假地板计时 ---------- */
   for (const p of L.platforms) {
     if (!p.fake || p.gone) continue;
     if (p.contact) {
@@ -455,11 +471,9 @@ function update(dt) {
 
   player.coyote = player.onGround ? 0.1 : Math.max(0, player.coyote - dt);
 
-  /* ---------- 尖刺 ---------- */
   for (const s of L.spikes) {
     if (s.periodic) {
       const ph = ((state.time / s.cycle) + s.phase) % 1;
-      // 0~0.5 升起，0.5~1 落下，用平滑
       let t;
       if (ph < 0.5) t = Math.sin(ph * Math.PI * 2) * 0.5 + 0.5;
       else t = 0;
@@ -470,7 +484,6 @@ function update(dt) {
       }
       if (s.active && s.progress < 1) s.progress = Math.min(1, s.progress + dt / (s.delay || 0.3));
     } else if (s.jumpTriggered) {
-      // 玩家跳跃时升起
       if (player.vy !== 0 && !player.onGround) s.progress = Math.min(1, s.progress + dt / 0.15);
       else s.progress = Math.max(0, s.progress - dt / 0.3);
     } else {
@@ -486,7 +499,6 @@ function update(dt) {
     }
   }
 
-  /* ---------- 天花板 ---------- */
   for (const c of L.crashers) {
     if (!c.active) {
       if (player.x + player.w > c.x - c.trigger) c.active = true;
@@ -511,17 +523,14 @@ function update(dt) {
     }
   }
 
-  /* ---------- 门 ---------- */
   for (const d of L.doors) {
     if (d.used) continue;
 
-    // 逃跑
     if (d.flee && d.real) {
       if (!d.fleeing && player.x + player.w > d.x - 280) d.fleeing = true;
       if (d.fleeing && d.x < d.fleeMax) d.x = Math.min(d.fleeMax, d.x + d.speed * dt);
     }
 
-    // 靠近消失
     if (d.vanishNear && d.real) {
       const near = Math.abs((player.x + player.w / 2) - (d.x + d.w / 2)) < 90;
       if (near && d.vanishT <= 0 && Math.random() < 0.02) {
@@ -530,7 +539,6 @@ function update(dt) {
       if (d.vanishT > 0) d.vanishT -= dt;
     }
 
-    // 假门行为
     if (!d.real && !d.used) {
       if (d.behavior === 'vanish') {
         if (Math.abs((player.x + player.w / 2) - (d.x + d.w / 2)) < 70) {
@@ -546,7 +554,6 @@ function update(dt) {
       }
     }
 
-    // 真门判定
     if (d.real && !d.vanished && d.vanishT <= 0 && overlap(player, d)) {
       winLevel();
       return;
@@ -612,7 +619,6 @@ function render() {
   }
 
   if (L) {
-    // 区域
     for (const z of L.zones) {
       ctx.fillStyle = (z.color || '#9b6bff') + '22';
       ctx.fillRect(z.x, z.y, z.w, z.h);
@@ -631,7 +637,6 @@ function render() {
       }
     }
 
-    // 平台
     for (const p of L.platforms) {
       if (p.gone || p.vanishT > 0) continue;
       let ox = 0, oy = 0;
@@ -653,7 +658,6 @@ function render() {
       }
 
       if (p.conveyor) {
-        const dir = Math.sign(p.conveyor);
         ctx.fillStyle = 'rgba(255,180,80,0.5)';
         for (let i = 0; i < p.w; i += 28) {
           const off = ((state.time * p.conveyor) % 28 + 28) % 28;
@@ -662,7 +666,6 @@ function render() {
       }
     }
 
-    // 尖刺
     for (const s of L.spikes) {
       if (s.progress <= 0.01) continue;
       const hh = s.h * s.progress;
@@ -680,7 +683,6 @@ function render() {
       }
     }
 
-    // 天花板
     for (const c of L.crashers) {
       if (!c.active) continue;
       if (c.done && c.linger <= 0) continue;
@@ -693,10 +695,8 @@ function render() {
       ctx.globalAlpha = 1;
     }
 
-    // 门
     for (const d of L.doors) drawDoor(d);
 
-    // 玩家
     if (!player.dead) {
       const cx = player.x + player.w / 2;
       const cy = player.y + player.h / 2;
@@ -713,7 +713,6 @@ function render() {
       ctx.restore();
     }
 
-    // 粒子
     for (const p of state.particles) {
       ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
       ctx.fillStyle = p.color;
@@ -724,7 +723,6 @@ function render() {
 
   ctx.restore();
 
-  // HUD
   if (L) {
     ctx.textAlign = 'left';
     ctx.fillStyle = 'rgba(255,255,255,0.55)';
