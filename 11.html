@@ -2,49 +2,52 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Level Devil · HTML 版</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Level Devil · HTML</title>
 <style>
-  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html, body {
-    margin: 0; height: 100%;
-    background: #07070d;
-    display: flex; align-items: center; justify-content: center;
-    font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
-    overflow: hidden;
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:#07070d;overflow:hidden}
+  body{
+    font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+    display:flex;align-items:center;justify-content:center;
   }
-  #wrap { position: relative; width: min(100vw, 960px); }
-  canvas {
-    display: block; width: 100%; height: auto;
-    border-radius: 10px;
-    box-shadow: 0 0 60px rgba(80, 60, 160, .25), 0 0 0 1px rgba(255,255,255,.06);
-    image-rendering: pixelated;
+  #app{
+    display:flex;flex-direction:column;
+    width:100%;height:100%;max-width:1100px;
+    padding:8px;gap:8px;
   }
-  #touch {
-    position: absolute; inset: auto 0 8px 0;
-    display: none; justify-content: space-between;
-    padding: 0 16px; pointer-events: none;
+  #stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center}
+  canvas{
+    display:block;border-radius:10px;
+    box-shadow:0 0 60px rgba(90,70,180,.25),0 0 0 1px rgba(255,255,255,.06);
+    touch-action:none;
   }
-  #touch button {
-    pointer-events: auto;
-    width: 74px; height: 74px; border-radius: 50%;
-    border: 2px solid rgba(255,255,255,.18);
-    background: rgba(255,255,255,.07);
-    color: #fff; font-size: 24px; font-weight: 700;
-    backdrop-filter: blur(6px);
-    user-select: none;
+  #controls{
+    display:flex;gap:10px;justify-content:center;
+    padding-bottom:env(safe-area-inset-bottom,0px);
   }
-  #touch button.on { background: rgba(255,255,255,.25); }
-  @media (pointer: coarse) { #touch { display: flex; } }
+  #controls button{
+    min-width:88px;height:60px;padding:0 16px;
+    border-radius:14px;
+    border:2px solid rgba(255,255,255,.14);
+    background:rgba(255,255,255,.06);
+    color:#fff;font-size:19px;font-weight:700;
+    cursor:pointer;user-select:none;touch-action:none;
+    transition:background .08s,border-color .08s,transform .08s;
+  }
+  #controls button.on{background:rgba(255,255,255,.22);border-color:rgba(255,255,255,.4);transform:scale(.96)}
+  #controls button[data-k="Space"]{min-width:130px}
+  #controls button[data-k="KeyR"]{min-width:80px;font-size:16px;opacity:.75}
 </style>
 </head>
 <body>
-<div id="wrap">
-  <canvas id="game" width="960" height="540"></canvas>
-  <div id="touch">
+<div id="app">
+  <div id="stage"><canvas id="game" width="960" height="540"></canvas></div>
+  <div id="controls">
     <button data-k="ArrowLeft">◀</button>
     <button data-k="ArrowRight">▶</button>
     <button data-k="Space">跳</button>
+    <button data-k="KeyR">重来</button>
   </div>
 </div>
 
@@ -52,82 +55,128 @@
 (() => {
 'use strict';
 
-/* ===================== 基础设置 ===================== */
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const W = canvas.width, H = canvas.height;
+const stage = document.getElementById('stage');
 
-const GRAV     = 1900;   // 重力
-const MOVE     = 300;    // 水平速度
-const JUMP_V   = -700;   // 跳跃初速
-const MAX_FALL = 1150;   // 最大下落速度
+const GRAV = 1900;
+const MOVE = 300;
+const JUMP_V = -700;
+const MAX_FALL = 1150;
 
 const keys = Object.create(null);
 
-window.addEventListener('keydown', e => {
-  if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Space'].includes(e.code)) e.preventDefault();
-  keys[e.code] = true;
-  if (e.code === 'KeyR') restart();
-});
-window.addEventListener('keyup',  e => { keys[e.code] = false; });
-window.addEventListener('blur',   () => { for (const k in keys) keys[k] = false; });
-
-// 触屏
-document.querySelectorAll('#touch button').forEach(btn => {
-  const k = btn.dataset.k;
-  const on  = e => { e.preventDefault(); keys[k] = true;  btn.classList.add('on'); };
-  const off = e => { e.preventDefault(); keys[k] = false; btn.classList.remove('on'); };
-  btn.addEventListener('pointerdown', on);
-  btn.addEventListener('pointerup', off);
-  btn.addEventListener('pointercancel', off);
-  btn.addEventListener('pointerleave', off);
-});
-
-/* ===================== 关卡数据 ===================== */
+/* ===================== 关卡 ===================== */
 const LEVELS = [
   {
     name: '第 1 关 · 信任',
-    hint: '← → 移动 · 空格跳跃',
+    hint: '那块板子看起来很结实',
     spawn: { x: 60, y: 420 },
-    door:  { x: 856, y: 424, w: 44, h: 56 },
+    door: { x: 872, y: 424, w: 44, h: 56 },
     platforms: [
-      { x: 0,   y: 480, w: 400, h: 60 },
-      { x: 400, y: 480, w: 170, h: 60, fake: true },   // 踩上去会塌
-      { x: 570, y: 480, w: 390, h: 60 },
+      { x: 0, y: 480, w: 360, h: 60 },
+      { x: 360, y: 480, w: 180, h: 60, fake: true },
+      { x: 540, y: 480, w: 420, h: 60 },
     ],
   },
   {
     name: '第 2 关 · 尖刺',
-    hint: '地面看起来很开心',
+    hint: '地面在笑',
     spawn: { x: 60, y: 420 },
-    door:  { x: 872, y: 424, w: 44, h: 56 },
+    door: { x: 872, y: 424, w: 44, h: 56 },
     platforms: [{ x: 0, y: 480, w: 960, h: 60 }],
     spikes: [
-      { x: 340, y: 480, w: 64, h: 42, trigger: 130, delay: 0.32 },
-      { x: 620, y: 480, w: 64, h: 42, trigger: 130, delay: 0.32 },
+      { x: 290, y: 480, w: 100, h: 48, trigger: 110, delay: 0.30 },
+      { x: 540, y: 480, w: 100, h: 48, trigger: 110, delay: 0.30 },
+      { x: 790, y: 480, w: 100, h: 48, trigger: 100, delay: 0.28 },
     ],
   },
   {
     name: '第 3 关 · 反转',
-    hint: '紫色区域里……相信你的直觉',
+    hint: '紫色区域里，左右会颠倒',
     spawn: { x: 60, y: 420 },
-    door:  { x: 872, y: 424, w: 44, h: 56 },
+    door: { x: 872, y: 424, w: 44, h: 56 },
     platforms: [{ x: 0, y: 480, w: 960, h: 60 }],
-    zones: [{ x: 260, y: 0, w: 440, h: 540, reverse: true }],
+    zones: [{ x: 240, y: 0, w: 440, h: 540, reverse: true }],
+    spikes: [
+      { x: 400, y: 480, w: 80, h: 50, trigger: 70, delay: 0.26 },
+      { x: 620, y: 480, w: 80, h: 50, trigger: 70, delay: 0.26 },
+    ],
   },
   {
     name: '第 4 关 · 它会跑',
-    hint: '追上它',
+    hint: '门不想让你追上',
     spawn: { x: 50, y: 420 },
-    door:  { x: 640, y: 424, w: 44, h: 56, flee: true },
+    door: { x: 620, y: 424, w: 44, h: 56, flee: true, fleeMax: 870, fleeTrigger: 300, speed: 230 },
     platforms: [
-      { x: 0,   y: 480, w: 280, h: 60 },
+      { x: 0, y: 480, w: 280, h: 60 },
       { x: 280, y: 480, w: 160, h: 60, fake: true },
       { x: 440, y: 480, w: 520, h: 60 },
     ],
-    spikes: [
-      { x: 560, y: 480, w: 60, h: 40, trigger: 120, delay: 0.3 },
+    spikes: [{ x: 520, y: 480, w: 70, h: 46, trigger: 100, delay: 0.28 }],
+  },
+  {
+    name: '第 5 关 · 假门',
+    hint: '终点在哪儿？',
+    spawn: { x: 50, y: 420 },
+    door: { x: 470, y: 324, w: 44, h: 56 },
+    platforms: [
+      { x: 0, y: 480, w: 960, h: 60 },
+      { x: 420, y: 380, w: 150, h: 24 },
     ],
+    fakeDoors: [{ x: 898, y: 424, w: 44, h: 56 }],
+  },
+  {
+    name: '第 6 关 · 天降',
+    hint: '别停',
+    spawn: { x: 50, y: 420 },
+    door: { x: 900, y: 424, w: 44, h: 56 },
+    platforms: [{ x: 0, y: 480, w: 960, h: 60 }],
+    crashers: [
+      { x: 330, y: -100, w: 76, h: 120, trigger: 150, delay: 0.15 },
+      { x: 570, y: -100, w: 76, h: 120, trigger: 150, delay: 0.15 },
+      { x: 790, y: -100, w: 76, h: 120, trigger: 130, delay: 0.15 },
+    ],
+  },
+  {
+    name: '第 7 关 · 闪烁',
+    hint: '看准时机',
+    spawn: { x: 60, y: 420 },
+    door: { x: 880, y: 424, w: 44, h: 56 },
+    platforms: [
+      { x: 0, y: 480, w: 220, h: 60 },
+      { x: 280, y: 420, w: 90, h: 18, blink: { period: 1.4, phase: 0 } },
+      { x: 440, y: 360, w: 90, h: 18, blink: { period: 1.4, phase: 0.33 } },
+      { x: 600, y: 420, w: 90, h: 18, blink: { period: 1.4, phase: 0.66 } },
+      { x: 720, y: 480, w: 240, h: 60 },
+    ],
+  },
+  {
+    name: '第 8 关 · 移动平台',
+    hint: '跟着它走',
+    spawn: { x: 60, y: 420 },
+    door: { x: 880, y: 424, w: 44, h: 56 },
+    platforms: [
+      { x: 0, y: 480, w: 240, h: 60 },
+      { x: 320, y: 400, w: 120, h: 20, move: { ax: 80, ay: 0, period: 3, phase: 0 } },
+      { x: 560, y: 340, w: 120, h: 20, move: { ax: 0, ay: 60, period: 2.4, phase: 1.2 } },
+      { x: 720, y: 480, w: 240, h: 60 },
+    ],
+  },
+  {
+    name: '第 9 关 · 地狱',
+    hint: '祝你好运',
+    spawn: { x: 40, y: 420 },
+    door: { x: 880, y: 424, w: 44, h: 56 },
+    platforms: [
+      { x: 0, y: 480, w: 240, h: 60 },
+      { x: 240, y: 480, w: 150, h: 60, fake: true },
+      { x: 390, y: 480, w: 570, h: 60 },
+    ],
+    zones: [{ x: 120, y: 0, w: 280, h: 540, reverse: true }],
+    spikes: [{ x: 500, y: 480, w: 90, h: 50, trigger: 80, delay: 0.25 }],
+    crashers: [{ x: 700, y: -90, w: 76, h: 110, trigger: 130, delay: 0.15 }],
   },
 ];
 
@@ -136,13 +185,13 @@ const player = {
   x: 0, y: 0, w: 24, h: 28,
   vx: 0, vy: 0,
   onGround: false, coyote: 0, jumpHeld: false,
-  dead: false, deadT: 0,
-  reversing: false,
+  dead: false, deadT: 0, reversing: false,
 };
 
 const state = {
   levelIndex: 0,
   level: null,
+  time: 0,
   deaths: 0,
   shake: 0,
   hint: '',
@@ -152,7 +201,7 @@ const state = {
   particles: [],
 };
 
-/* ===================== 工具函数 ===================== */
+/* ===================== 工具 ===================== */
 function overlap(a, b) {
   return a.x < b.x + b.w && a.x + a.w > b.x &&
          a.y < b.y + b.h && a.y + a.h > b.y;
@@ -161,16 +210,27 @@ function overlap(a, b) {
 function burst(x, y, n, color) {
   for (let i = 0; i < n; i++) {
     const a = Math.random() * Math.PI * 2;
-    const s = 60 + Math.random() * 240;
+    const s = 60 + Math.random() * 260;
     state.particles.push({
       x, y,
       vx: Math.cos(a) * s,
-      vy: Math.sin(a) * s - 140,
+      vy: Math.sin(a) * s - 160,
       size: 2 + Math.random() * 4,
-      life: 0.4 + Math.random() * 0.5,
-      maxLife: 0.9,
+      life: 0.45 + Math.random() * 0.5,
+      maxLife: 0.95,
       color,
     });
+  }
+}
+
+function updateParticles(dt) {
+  for (let i = state.particles.length - 1; i >= 0; i--) {
+    const p = state.particles[i];
+    p.vy += 1300 * dt;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.life -= dt;
+    if (p.life <= 0) state.particles.splice(i, 1);
   }
 }
 
@@ -187,18 +247,32 @@ function roundRect(x, y, w, h, r) {
 /* ===================== 关卡加载 ===================== */
 function loadLevel(i) {
   const def = LEVELS[i];
+  state.levelIndex = i;
+  state.time = 0;
+  state.hint = def.hint || def.name;
+  state.hintT = 2.2;
+  state.particles.length = 0;
+  state.transition = 0;
+  state.shake = 0;
+
   state.level = {
     name: def.name,
-    hint: def.hint || '',
     spawn: { ...def.spawn },
-    door:  { ...def.door, baseX: def.door.x },
-    platforms: (def.platforms || []).map(p => ({ ...p, gone: false, shake: 0, contact: false })),
-    spikes:    (def.spikes    || []).map(s => ({ ...s, progress: 0, active: false })),
-    zones:     (def.zones     || []).map(z => ({ ...z })),
+    door: { ...def.door, baseX: def.door.x, fleeing: false },
+    platforms: (def.platforms || []).map(p => ({
+      ...p,
+      baseX: p.x, baseY: p.y,
+      gone: false, shake: 0, contact: false,
+      visible: true, dx: 0, dy: 0,
+    })),
+    spikes: (def.spikes || []).map(s => ({ ...s, active: false, progress: 0 })),
+    crashers: (def.crashers || []).map(c => ({
+      ...c, y0: c.y, active: false, done: false, t: 0, vy: 0, linger: 0,
+    })),
+    zones: (def.zones || []).map(z => ({ ...z })),
+    fakeDoors: (def.fakeDoors || []).map(d => ({ ...d })),
   };
-  state.hint = def.hint || def.name;
-  state.hintT = 2.4;
-  state.particles.length = 0;
+
   respawn();
 }
 
@@ -215,16 +289,35 @@ function respawn() {
   player.jumpHeld = false;
   player.reversing = false;
 
-  for (const p of L.platforms) { p.gone = false; p.shake = 0; p.contact = false; }
-  for (const s of L.spikes)    { s.active = false; s.progress = 0; }
+  for (const p of L.platforms) {
+    p.gone = false;
+    p.shake = 0;
+    p.contact = false;
+    p.dx = 0;
+    p.dy = 0;
+    p.x = p.baseX;
+    p.y = p.baseY;
+    p.visible = true;
+  }
+  for (const s of L.spikes) { s.active = false; s.progress = 0; }
+  for (const c of L.crashers) {
+    c.active = false;
+    c.done = false;
+    c.t = 0;
+    c.vy = 0;
+    c.linger = 0;
+    c.y = c.y0;
+  }
   L.door.x = L.door.baseX;
+  L.door.fleeing = false;
+
   state.particles.length = 0;
+  state.time = 0;
 }
 
 function restart() {
   if (state.won) {
     state.won = false;
-    state.levelIndex = 0;
     state.deaths = 0;
     loadLevel(0);
   } else {
@@ -235,16 +328,16 @@ function restart() {
 function killPlayer() {
   if (player.dead || state.won || state.transition > 0) return;
   player.dead = true;
-  player.deadT = 0.85;
+  player.deadT = 0.8;
   state.deaths++;
-  state.shake = 10;
-  burst(player.x + player.w / 2, player.y + player.h / 2, 20, '#ff4d6d');
+  state.shake = 12;
+  burst(player.x + player.w / 2, player.y + player.h / 2, 24, '#ff4d6d');
 }
 
 function winLevel() {
   if (state.transition > 0 || state.won) return;
-  state.transition = 0.4;
-  burst(state.level.door.x + 22, state.level.door.y + 28, 24, '#4ade80');
+  state.transition = 0.45;
+  burst(state.level.door.x + 22, state.level.door.y + 28, 28, '#4ade80');
 }
 
 /* ===================== 更新 ===================== */
@@ -252,36 +345,26 @@ function update(dt) {
   const L = state.level;
   if (!L) return;
 
-  state.shake = Math.max(0, state.shake - dt * 30);
   if (state.hintT > 0) state.hintT -= dt;
+  if (state.shake > 0) state.shake = Math.max(0, state.shake - dt * 45);
 
-  // 粒子
-  for (let i = state.particles.length - 1; i >= 0; i--) {
-    const p = state.particles[i];
-    p.vy += 1200 * dt;
-    p.x += p.vx * dt;
-    p.y += p.vy * dt;
-    p.life -= dt;
-    if (p.life <= 0) state.particles.splice(i, 1);
-  }
+  updateParticles(dt);
 
   if (state.won) return;
 
-  // 过关过渡
   if (state.transition > 0) {
     state.transition -= dt;
     if (state.transition <= 0) {
-      state.levelIndex++;
-      if (state.levelIndex >= LEVELS.length) {
+      const next = state.levelIndex + 1;
+      if (next >= LEVELS.length) {
         state.won = true;
       } else {
-        loadLevel(state.levelIndex);
+        loadLevel(next);
       }
     }
     return;
   }
 
-  // 死亡处理
   if (player.dead) {
     player.deadT -= dt;
     player.vy = Math.min(player.vy + GRAV * dt, MAX_FALL);
@@ -290,24 +373,57 @@ function update(dt) {
     return;
   }
 
-  /* ---- 土狼时间（用上一帧的 onGround） ---- */
-  player.coyote = player.onGround ? 0.1 : Math.max(0, player.coyote - dt);
+  state.time += dt;
 
-  /* ---- 反转区域 ---- */
+  /* ---------- 平台：闪烁 + 移动 ---------- */
+  for (const p of L.platforms) {
+    if (p.blink) {
+      const ph = ((state.time / p.blink.period) + (p.blink.phase || 0)) % 1;
+      p.visible = ph < 0.62;
+    } else {
+      p.visible = !p.gone;
+    }
+
+    if (p.move) {
+      const ph = p.move.phase || 0;
+      const nx = p.baseX + Math.sin(state.time * Math.PI * 2 / p.move.period + ph) * p.move.ax;
+      const ny = p.baseY + Math.cos(state.time * Math.PI * 2 / p.move.period + ph) * p.move.ay;
+      p.dx = nx - p.x;
+      p.dy = ny - p.y;
+      p.x = nx;
+      p.y = ny;
+    } else {
+      p.dx = 0;
+      p.dy = 0;
+    }
+  }
+
+  /* ---------- 玩家跟随移动平台 ---------- */
+  for (const p of L.platforms) {
+    if (!p.move || !p.visible) continue;
+    if (player.onGround &&
+        player.x + player.w > p.x && player.x < p.x + p.w &&
+        player.y + player.h >= p.y - 10 && player.y + player.h <= p.y + p.h + 6) {
+      player.x += p.dx;
+      player.y += p.dy;
+    }
+  }
+
+  /* ---------- 反转区 ---------- */
   let rev = false;
   for (const z of L.zones) {
     if (z.reverse && overlap(player, z)) rev = true;
   }
   player.reversing = rev;
 
-  /* ---- 水平输入 ---- */
+  /* ---------- 输入 ---------- */
   let dir = 0;
   if (keys['ArrowLeft']  || keys['KeyA']) dir -= 1;
   if (keys['ArrowRight'] || keys['KeyD']) dir += 1;
   if (rev) dir = -dir;
   player.vx = dir * MOVE;
 
-  /* ---- 跳跃 ---- */
+  /* ---------- 跳跃 ---------- */
   const jumpKey = !!(keys['Space'] || keys['ArrowUp'] || keys['KeyW']);
   if (jumpKey && !player.jumpHeld && (player.onGround || player.coyote > 0)) {
     player.vy = JUMP_V;
@@ -317,14 +433,13 @@ function update(dt) {
   }
   if (!jumpKey) {
     player.jumpHeld = false;
-    if (player.vy < 0) player.vy += GRAV * 1.7 * dt; // 松键小跳
+    if (player.vy < 0) player.vy += GRAV * 1.6 * dt;
   }
 
-  /* ---- 水平移动与碰撞 ---- */
-  const solids = L.platforms.filter(p => !p.gone);
-
+  /* ---------- 水平移动 ---------- */
   player.x += player.vx * dt;
-  for (const p of solids) {
+  for (const p of L.platforms) {
+    if (!p.visible) continue;
     if (overlap(player, p)) {
       if (player.vx > 0)      player.x = p.x - player.w;
       else if (player.vx < 0) player.x = p.x + p.w;
@@ -333,12 +448,13 @@ function update(dt) {
   if (player.x < 0) player.x = 0;
   if (player.x + player.w > W) player.x = W - player.w;
 
-  /* ---- 垂直移动与碰撞 ---- */
+  /* ---------- 垂直移动 ---------- */
   player.vy = Math.min(player.vy + GRAV * dt, MAX_FALL);
   player.y += player.vy * dt;
   player.onGround = false;
 
-  for (const p of solids) {
+  for (const p of L.platforms) {
+    if (!p.visible) continue;
     if (overlap(player, p)) {
       if (player.vy > 0) {
         player.y = p.y - player.h;
@@ -352,15 +468,16 @@ function update(dt) {
     }
   }
 
-  /* ---- 假地板计时 ---- */
+  /* ---------- 假地板计时 ---------- */
   for (const p of L.platforms) {
     if (!p.fake || p.gone) continue;
     if (p.contact) {
       p.shake += dt;
-      if (p.shake > 0.42) {
+      if (p.shake > 0.4) {
         p.gone = true;
-        burst(p.x + p.w / 2, p.y + 8, 18, '#3a3a5c');
-        state.shake = 7;
+        p.visible = false;
+        burst(p.x + p.w / 2, p.y + 8, 20, '#3a3a5c');
+        state.shake = 8;
       }
     } else {
       p.shake = Math.max(0, p.shake - dt * 1.5);
@@ -368,17 +485,18 @@ function update(dt) {
     p.contact = false;
   }
 
-  /* ---- 尖刺 ---- */
+  /* ---------- 土狼时间 ---------- */
+  player.coyote = player.onGround ? 0.1 : Math.max(0, player.coyote - dt);
+
+  /* ---------- 尖刺 ---------- */
   for (const s of L.spikes) {
     if (!s.active) {
-      if (player.x + player.w > s.x - (s.trigger || 130)) {
-        s.active = true;
-      }
+      if (player.x + player.w > s.x - s.trigger) s.active = true;
     }
     if (s.active && s.progress < 1) {
-      s.progress = Math.min(1, s.progress + dt / (s.delay || 0.32));
+      s.progress = Math.min(1, s.progress + dt / s.delay);
     }
-    if (s.progress > 0.06) {
+    if (s.progress > 0.05) {
       const hh = s.h * s.progress;
       if (overlap(player, { x: s.x, y: s.y - hh, w: s.w, h: hh })) {
         killPlayer();
@@ -387,80 +505,141 @@ function update(dt) {
     }
   }
 
-  /* ---- 会跑的门 ---- */
-  const d = L.door;
-  if (d.flee && d.x < 890) {
-    if (player.x + player.w > d.x - 300) {
-      d.x = Math.min(890, d.x + 430 * dt);
+  /* ---------- 天花板砸落 ---------- */
+  for (const c of L.crashers) {
+    if (!c.active) {
+      if (player.x + player.w > c.x - c.trigger) c.active = true;
+      continue;
+    }
+    if (c.done) {
+      if (c.linger > 0) c.linger -= dt;
+      continue;
+    }
+    c.t += dt;
+    if (c.t > c.delay) {
+      c.vy += 2600 * dt;
+      c.y += c.vy * dt;
+      if (c.y + c.h >= 480) {
+        c.y = 480 - c.h;
+        c.done = true;
+        c.linger = 0.35;
+        state.shake = 10;
+        burst(c.x + c.w / 2, 470, 16, '#8b3a4a');
+      }
+    }
+    if (!c.done && overlap(player, { x: c.x, y: c.y, w: c.w, h: c.h })) {
+      killPlayer();
+      return;
     }
   }
 
-  /* ---- 进门的判定 ---- */
+  /* ---------- 逃跑门 ---------- */
+  const d = L.door;
+  if (d.flee) {
+    if (!d.fleeing && player.x + player.w > d.x - d.fleeTrigger) d.fleeing = true;
+    if (d.fleeing && d.x < d.fleeMax) {
+      d.x = Math.min(d.fleeMax, d.x + d.speed * dt);
+    }
+  }
+
+  /* ---------- 假门 ---------- */
+  for (const fd of L.fakeDoors) {
+    if (overlap(player, fd)) {
+      killPlayer();
+      return;
+    }
+  }
+
+  /* ---------- 真门 ---------- */
   if (overlap(player, d)) {
     winLevel();
     return;
   }
 
-  /* ---- 掉出画面 ---- */
-  if (player.y > H + 120) {
-    killPlayer();
-  }
+  /* ---------- 掉出画面 ---------- */
+  if (player.y > H + 150) killPlayer();
 }
 
 /* ===================== 渲染 ===================== */
+function drawDoor(d) {
+  ctx.save();
+  ctx.shadowColor = '#4ade80';
+  ctx.shadowBlur = 24;
+  ctx.fillStyle = '#4ade80';
+  ctx.fillRect(d.x, d.y, d.w, d.h);
+  ctx.restore();
+  ctx.fillStyle = '#0d0d17';
+  ctx.fillRect(d.x + 5, d.y + 5, d.w - 10, d.h - 10);
+  ctx.fillStyle = '#4ade80';
+  ctx.fillRect(d.x + d.w - 14, d.y + d.h / 2 - 3, 6, 6);
+}
+
 function render() {
   const L = state.level;
 
   ctx.save();
-
-  if (state.shake > 0.5) {
+  if (state.shake > 0.4) {
     ctx.translate(
       (Math.random() - 0.5) * state.shake,
       (Math.random() - 0.5) * state.shake
     );
   }
 
-  // 背景
   const bg = ctx.createLinearGradient(0, 0, 0, H);
-  bg.addColorStop(0, '#151527');
-  bg.addColorStop(0.7, '#0d0d17');
-  bg.addColorStop(1, '#08080f');
+  bg.addColorStop(0, '#141426');
+  bg.addColorStop(0.6, '#0d0d18');
+  bg.addColorStop(1, '#07070d');
   ctx.fillStyle = bg;
-  ctx.fillRect(-40, -40, W + 80, H + 80);
+  ctx.fillRect(-60, -60, W + 120, H + 120);
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.025)';
+  ctx.lineWidth = 1;
+  for (let x = 0; x <= W; x += 48) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+  }
+  for (let y = 0; y <= H; y += 48) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  }
 
   if (L) {
-    // 反转区域
+    // 反转区
     for (const z of L.zones) {
-      ctx.fillStyle = 'rgba(160, 90, 255, 0.10)';
+      ctx.fillStyle = 'rgba(150,90,255,0.10)';
       ctx.fillRect(z.x, z.y, z.w, z.h);
-      ctx.strokeStyle = 'rgba(160, 90, 255, 0.35)';
+      ctx.strokeStyle = 'rgba(150,90,255,0.30)';
       ctx.lineWidth = 2;
-      ctx.setLineDash([10, 8]);
+      ctx.setLineDash([12, 8]);
       ctx.strokeRect(z.x + 1, z.y + 1, z.w - 2, z.h - 2);
       ctx.setLineDash([]);
       ctx.lineWidth = 1;
     }
 
-    // 平台（真假的画法完全一样）
+    // 平台
     for (const p of L.platforms) {
-      if (p.gone) continue;
+      if (!p.visible) {
+        if (p.blink) {
+          ctx.fillStyle = 'rgba(120,120,160,0.07)';
+          ctx.fillRect(p.x, p.y, p.w, p.h);
+        }
+        continue;
+      }
       let ox = 0, oy = 0;
       if (p.fake && p.shake > 0.01) {
-        const k = Math.min(p.shake / 0.42, 1);
-        ox = (Math.random() - 0.5) * 5 * k;
-        oy = (Math.random() - 0.5) * 3 * k;
+        const k = Math.min(p.shake / 0.4, 1);
+        ox = (Math.random() - 0.5) * 6 * k;
+        oy = (Math.random() - 0.5) * 4 * k;
       }
       ctx.fillStyle = '#232338';
       ctx.fillRect(p.x + ox, p.y + oy, p.w, p.h);
-      ctx.fillStyle = '#3a3a5c';
-      ctx.fillRect(p.x + ox, p.y + oy, p.w, 4);
+      ctx.fillStyle = '#3d3d63';
+      ctx.fillRect(p.x + ox, p.y + oy, p.w, 3);
     }
 
     // 尖刺
     for (const s of L.spikes) {
       if (s.progress <= 0.01) continue;
       const hh = s.h * s.progress;
-      const count = Math.max(1, Math.round(s.w / 16));
+      const count = Math.max(1, Math.round(s.w / 18));
       const step = s.w / count;
       ctx.fillStyle = '#ff4d6d';
       for (let i = 0; i < count; i++) {
@@ -472,23 +651,36 @@ function render() {
         ctx.closePath();
         ctx.fill();
       }
-      // 底部暗红
-      ctx.fillStyle = 'rgba(120, 20, 45, 0.8)';
-      ctx.fillRect(s.x, s.y - 3, s.w, 3);
+      ctx.fillStyle = 'rgba(120,20,45,0.85)';
+      ctx.fillRect(s.x, s.y - 2, s.w, 2);
     }
 
-    // 门
-    const d = L.door;
-    ctx.save();
-    ctx.shadowColor = '#4ade80';
-    ctx.shadowBlur = 22;
-    ctx.fillStyle = '#4ade80';
-    ctx.fillRect(d.x, d.y, d.w, d.h);
-    ctx.restore();
-    ctx.fillStyle = '#0d0d17';
-    ctx.fillRect(d.x + 5, d.y + 5, d.w - 10, d.h - 10);
-    ctx.fillStyle = '#4ade80';
-    ctx.fillRect(d.x + d.w - 14, d.y + d.h / 2 - 3, 6, 6);
+    // 天花板
+    for (const c of L.crashers) {
+      if (!c.active) continue;
+      if (c.done && c.linger <= 0) continue;
+      const alpha = c.done ? Math.max(0, c.linger / 0.35) : 1;
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = '#5a2530';
+      ctx.fillRect(c.x, c.y, c.w, c.h);
+      ctx.fillStyle = '#8b3a4a';
+      ctx.fillRect(c.x, c.y, c.w, 6);
+      ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(c.x + c.w * 0.3, c.y + 20);
+      ctx.lineTo(c.x + c.w * 0.45, c.y + c.h * 0.55);
+      ctx.lineTo(c.x + c.w * 0.35, c.y + c.h * 0.8);
+      ctx.stroke();
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = 1;
+    }
+
+    // 假门（画得和真门一模一样）
+    for (const fd of L.fakeDoors) drawDoor(fd);
+
+    // 真门
+    drawDoor(L.door);
 
     // 玩家
     if (!player.dead) {
@@ -496,13 +688,10 @@ function render() {
       const cy = player.y + player.h / 2;
       ctx.save();
       ctx.translate(cx, cy);
-      if (player.reversing) {
-        ctx.rotate(Math.sin(performance.now() / 80) * 0.09);
-      }
+      if (player.reversing) ctx.rotate(Math.sin(performance.now() / 90) * 0.08);
       ctx.fillStyle = player.reversing ? '#d8b4ff' : '#f0f0fa';
       roundRect(-player.w / 2, -player.h / 2, player.w, player.h, 5);
       ctx.fill();
-
       ctx.fillStyle = '#14141f';
       const look = player.vx > 0 ? 2 : player.vx < 0 ? -2 : 0;
       ctx.fillRect(-7 + look, -7, 4, 7);
@@ -521,46 +710,82 @@ function render() {
 
   ctx.restore();
 
-  /* ---------- HUD（不跟着震） ---------- */
+  // HUD
   if (L) {
     ctx.textAlign = 'left';
     ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.font = '600 16px ui-monospace, Menlo, Consolas, monospace';
+    ctx.font = '600 16px ui-monospace,Menlo,Consolas,monospace';
     ctx.fillText(L.name, 20, 32);
 
     ctx.textAlign = 'right';
     ctx.fillText('死亡 ' + state.deaths, W - 20, 32);
 
-    // 提示
     if (state.hintT > 0 && !state.won) {
-      ctx.globalAlpha = Math.min(1, state.hintT * 0.8);
+      ctx.globalAlpha = Math.min(1, state.hintT * 0.9);
       ctx.textAlign = 'center';
-      ctx.font = '700 26px system-ui, sans-serif';
+      ctx.font = '700 26px system-ui,sans-serif';
       ctx.fillStyle = '#fff';
-      ctx.fillText(state.hint, W / 2, 100);
+      ctx.fillText(state.hint, W / 2, 96);
       ctx.globalAlpha = 1;
     }
   }
 
-  // 通关画面
   if (state.won) {
-    ctx.fillStyle = 'rgba(5,5,10,0.86)';
+    ctx.fillStyle = 'rgba(5,5,10,0.88)';
     ctx.fillRect(0, 0, W, H);
     ctx.textAlign = 'center';
 
     ctx.fillStyle = '#4ade80';
-    ctx.font = '800 54px system-ui, sans-serif';
-    ctx.fillText('你赢了……吗？', W / 2, H / 2 - 30);
+    ctx.font = '800 54px system-ui,sans-serif';
+    ctx.fillText('你通关了', W / 2, H / 2 - 40);
 
     ctx.fillStyle = '#fff';
-    ctx.font = '400 22px system-ui, sans-serif';
-    ctx.fillText('总死亡次数：' + state.deaths, W / 2, H / 2 + 40);
+    ctx.font = '400 22px system-ui,sans-serif';
+    ctx.fillText('总死亡次数：' + state.deaths, W / 2, H / 2 + 26);
 
     ctx.fillStyle = 'rgba(255,255,255,0.45)';
-    ctx.font = '400 18px system-ui, sans-serif';
-    ctx.fillText('按 R 重新开始', W / 2, H / 2 + 84);
+    ctx.font = '400 18px system-ui,sans-serif';
+    ctx.fillText('按 R 或点「重来」再来一遍', W / 2, H / 2 + 76);
   }
 }
+
+/* ===================== 输入 ===================== */
+window.addEventListener('keydown', e => {
+  if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Space'].includes(e.code)) e.preventDefault();
+  keys[e.code] = true;
+  if (e.code === 'KeyR') restart();
+});
+window.addEventListener('keyup', e => { keys[e.code] = false; });
+window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+
+document.querySelectorAll('#controls button').forEach(b => {
+  const k = b.dataset.k;
+  const down = e => {
+    e.preventDefault();
+    if (k === 'KeyR') { restart(); return; }
+    keys[k] = true;
+    b.classList.add('on');
+    try { b.setPointerCapture(e.pointerId); } catch (_) {}
+  };
+  const up = () => {
+    if (k !== 'KeyR') { keys[k] = false; b.classList.remove('on'); }
+  };
+  b.addEventListener('pointerdown', down);
+  b.addEventListener('pointerup', up);
+  b.addEventListener('pointercancel', up);
+  b.addEventListener('lostpointercapture', up);
+});
+
+/* ===================== 自适应尺寸 ===================== */
+function fitCanvas() {
+  const r = stage.getBoundingClientRect();
+  if (r.width <= 0 || r.height <= 0) return;
+  const s = Math.min(r.width / W, r.height / H);
+  canvas.style.width  = Math.floor(W * s) + 'px';
+  canvas.style.height = Math.floor(H * s) + 'px';
+}
+window.addEventListener('resize', fitCanvas);
+window.addEventListener('orientationchange', () => setTimeout(fitCanvas, 120));
 
 /* ===================== 主循环 ===================== */
 let last = performance.now();
@@ -568,14 +793,19 @@ let last = performance.now();
 function loop(now) {
   let dt = (now - last) / 1000;
   last = now;
-  if (dt > 0.05) dt = 0.05;   // 防止切后台后瞬移
+  if (dt > 0.05) dt = 0.05;
   update(dt);
   render();
   requestAnimationFrame(loop);
 }
 
 loadLevel(0);
-requestAnimationFrame(loop);
+fitCanvas();
+requestAnimationFrame(() => {
+  fitCanvas();
+  last = performance.now();
+  requestAnimationFrame(loop);
+});
 
 })();
 </script>
