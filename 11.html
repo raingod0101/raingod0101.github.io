@@ -873,7 +873,14 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       grid.appendChild(card);
     });
   }
-
+  function stripToBagPet(pet){
+  return {
+    id: pet.id || Math.random().toString(36).slice(2),
+    name: pet.name, inc: pet.inc, rar: pet.rar,
+    biomeIdx: pet.biomeIdx, petIdx: pet.petIdx,
+    size: pet.size || 'normal',
+  };
+}
   function equipFromBag(idx) {
     if (S.pets.length >= S.petCap) {
       showToast('⚠️ 農場已滿，請先升級上限或賣掉現有寵物。', '#8a2a2a', '#5a0a0a');
@@ -2107,35 +2114,59 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     }
   });
   document.getElementById('btnBest').addEventListener('click',()=>{
-    if(S.pets.length===0){ showToast('⚠️ 沒有寵物可以放置', '#8a2a2a', '#5a0a0a'); return; }
-    S.pets.sort((a,b)=>b.inc-a.inc);
-    const myBase = getBasePos(S.myBaseIdx);
-    const newPets = [];
-    const usedSlots = new Set();
-    for(let i=0; i<S.pets.length; i++){
-      if(newPets.length >= S.petCap) break;
-      const pet = S.pets[i];
-      let slot = -1;
-      for(let j=0; j<FARM_OFFSETS.length; j++){
-        if(!usedSlots.has(j)){ slot = j; break; }
-      }
-      if(slot !== -1){
-        usedSlots.add(slot);
-        pet.slot = slot;
-        // 全部回到農場狀態（包括原本在手上的）
-        pet.state = 'farm';
-        const mx = myBase.x + rnd(-90, 90);
-        const my = myBase.y + rnd(-70, 90);
-        pet.x = mx; pet.y = my;
-        pet.wanderTargetX = mx; pet.wanderTargetY = my; pet.wanderTimer = 0;
-        newPets.push(pet);
-      }
+  // 1. 農場 + 背包 全部一起拿來比
+  const allPets = [...S.pets, ...S.bag];
+  if(allPets.length === 0){
+    showToast('⚠️ 沒有寵物可以放置', '#8a2a2a', '#5a0a0a');
+    return;
+  }
+
+  // 2. 有開著的寵物面板先關掉，避免 selectedPet 指向被移走的寵物
+  if(S.panelOpen) closePetPanel();
+
+  // 3. 收益高 → 低
+  allPets.sort((a,b)=>b.inc-a.inc);
+
+  const myBase = getBasePos(S.myBaseIdx);
+  const newFarm = [];
+  const newBag  = [];
+  const usedSlots = new Set();
+
+  for(const pet of allPets){
+    // 農場滿了，剩下的全丟背包
+    if(newFarm.length >= S.petCap){
+      newBag.push(stripToBagPet(pet));
+      continue;
     }
-    S.pets = newPets;
-    S.cps = S.pets.reduce((s,pt)=>s+pt.inc,0);
-    showToast('✨ 已將收益最高的寵物放入農場！', '#3a6a8a', '#1a3a5a');
-    updateUI(); saveGame(true);
-  });
+    // 找一個空位
+    let slot = -1;
+    for(let j=0;j<FARM_OFFSETS.length;j++){
+      if(!usedSlots.has(j)){ slot = j; break; }
+    }
+    if(slot === -1){ newBag.push(stripToBagPet(pet)); continue; }
+
+    usedSlots.add(slot);
+    if(!pet.id) pet.id = Math.random().toString(36).slice(2);
+
+    pet.slot = slot;
+    pet.state = 'farm';          // 一律收回農場（連手上拿著的也放下）
+    pet.selected = false;
+    const mx = myBase.x + rnd(-90, 90);
+    const my = myBase.y + rnd(-70, 90);
+    pet.x = mx; pet.y = my;
+    pet.wanderTargetX = mx; pet.wanderTargetY = my; pet.wanderTimer = 0;
+    newFarm.push(pet);
+  }
+
+  S.pets = newFarm;
+  S.bag  = newBag;
+  S.cps  = S.pets.reduce((s,pt)=>s+pt.inc,0);
+
+  showToast(`✨ 已將收益最高的 ${S.pets.length} 隻寵物放入農場（其餘 ${newBag.length} 隻進背包）`,
+            '#3a6a8a', '#1a3a5a');
+  updateUI();
+  saveGame(true);
+});
   document.getElementById('btnIndex').addEventListener('click',()=>{
     S.indexOpen=true;document.getElementById('indexPanel').classList.add('open');buildIndexUI();
   });
