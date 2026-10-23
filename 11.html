@@ -3,35 +3,56 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
-<title>Level Devil · HTML</title>
+<title>Level Devil · 修复版</title>
 <style>
-  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  html,body{margin:0;height:100%;background:#07070d;overflow:hidden}
-  body{font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;display:flex;align-items:center;justify-content:center}
-  #app{display:flex;flex-direction:column;width:100%;height:100%;max-width:1100px;padding:8px;gap:8px;overflow:hidden}
-  #stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center}
-  canvas{display:block;border-radius:10px;box-shadow:0 0 60px rgba(90,70,180,.25),0 0 0 1px rgba(255,255,255,.06);touch-action:none}
-  #controls{
-    display:grid;
-    grid-template-columns:1fr 1fr 1.5fr 1fr;
-    gap:8px;
-    width:100%;
-    max-width:600px;
-    margin:0 auto;
-    padding:0 8px env(safe-area-inset-bottom,8px);
+  /* 彻底禁用所有长按选中、拖拽、弹出菜单 */
+  * {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
   }
-  #controls button{
-    width:100%;
-    height:56px;
-    border-radius:12px;
-    border:2px solid rgba(255,255,255,.14);
-    background:rgba(255,255,255,.06);
-    color:#fff;font-size:19px;font-weight:700;
-    cursor:pointer;user-select:none;touch-action:none;
-    transition:background .08s,border-color .08s,transform .08s;
+  html, body {
+    margin: 0; height: 100%; background: #07070d; overflow: hidden;
+    font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    display: flex; align-items: center; justify-content: center;
   }
-  #controls button.on{background:rgba(255,255,255,.22);border-color:rgba(255,255,255,.4);transform:scale(.96)}
-  #controls button[data-k="KeyR"]{font-size:15px;opacity:.75}
+  #app {
+    display: flex; flex-direction: column;
+    width: 100%; height: 100%; max-width: 1100px;
+    padding: 8px; gap: 8px; overflow: hidden;
+  }
+  #stage {
+    flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center;
+  }
+  canvas {
+    display: block; border-radius: 10px;
+    box-shadow: 0 0 60px rgba(90, 70, 180, .25), 0 0 0 1px rgba(255, 255, 255, .06);
+    touch-action: none;
+  }
+  #controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1.5fr 1fr;
+    gap: 8px; width: 100%; max-width: 600px;
+    margin: 0 auto; padding: 0 8px env(safe-area-inset-bottom, 8px);
+  }
+  #controls button {
+    width: 100%; height: 56px; border-radius: 12px;
+    border: 2px solid rgba(255, 255, 255, .14);
+    background: rgba(255, 255, 255, .06);
+    color: #fff; font-size: 19px; font-weight: 700;
+    cursor: pointer; touch-action: none; outline: none;
+    transition: background .08s, border-color .08s, transform .08s;
+  }
+  #controls button.on {
+    background: rgba(255, 255, 255, .22);
+    border-color: rgba(255, 255, 255, .4);
+    transform: scale(.96);
+  }
+  #controls button[data-k="KeyR"] { font-size: 15px; opacity: .75; }
 </style>
 </head>
 <body>
@@ -46,6 +67,15 @@
 </div>
 
 <script>
+// 阻止双击缩放和右键菜单
+window.addEventListener('contextmenu', e => e.preventDefault());
+let lastTouchEnd = 0;
+document.addEventListener('touchend', e => {
+  const now = (new Date()).getTime();
+  if (now - lastTouchEnd <= 300) e.preventDefault();
+  lastTouchEnd = now;
+}, false);
+
 (() => {
 'use strict';
 
@@ -54,40 +84,41 @@ const ctx = canvas.getContext('2d');
 const W = canvas.width, H = canvas.height;
 const stage = document.getElementById('stage');
 
+// 物理常量（最高跳跃 128px，最远跳跃 220px）
 const GRAV = 1900, MOVE = 300, JUMP_V = -700, MAX_FALL = 1150;
 
 const keys = Object.create(null);
 
-/* ===================== 关卡 ===================== */
+/* ===================== 关卡数据 ===================== */
 const LEVELS = [
-  // 1. 假地板：跳过去安全，走过去会掉
+  // 1. 假地板（宽度改为 140，绝对跳得过去）
   {
     name: '第 1 关 · 第一课',
-    hint: '按空格跳过去！',
-    realHint: '……走过去试试？',
+    hint: '走过去看看？',
+    realHint: '按空格跳过那个缺口',
     spawn: { x: 60, y: 420 },
     platforms: [
       { x: 0, y: 480, w: 320, h: 60 },
-      { x: 320, y: 480, w: 240, h: 60, fake: true },
-      { x: 560, y: 480, w: 400, h: 60 },
+      { x: 320, y: 480, w: 140, h: 60, fake: true },
+      { x: 460, y: 480, w: 500, h: 60 },
     ],
-    // 修复：高度从 80 改为 60，尖刺顶部与假地板表面齐平，玩家站上去不会被秒杀
-    spikes: [{ x: 320, y: 540, w: 240, h: 60 }],
+    spikes: [{ x: 320, y: 540, w: 140, h: 80 }],
     doors: [{ x: 880, y: 424, w: 44, h: 56, real: true }],
   },
-  // 2. 假按钮、假门
+  // 2. 点击开始（改成阶梯，不撞头）
   {
     name: '第 2 关 · 点击开始',
-    hint: '点击中间的按钮开始',
-    realHint: '按钮是平台，真门在它上面',
+    hint: '去点那个按钮！',
+    realHint: '把按钮当台阶，门在最上面',
     spawn: { x: 60, y: 420 },
     platforms: [
       { x: 0, y: 480, w: 960, h: 60 },
-      { x: 380, y: 340, w: 200, h: 50, button: true },
+      { x: 280, y: 400, w: 100, h: 80 }, // 第一阶
+      { x: 380, y: 320, w: 200, h: 80, button: true }, // 第二阶（按钮）
     ],
     doors: [
-      { x: 880, y: 424, w: 44, h: 56, real: false, behavior: 'vanish' },
-      { x: 458, y: 284, w: 44, h: 56, real: true },
+      { x: 880, y: 424, w: 44, h: 56, real: false, behavior: 'vanish' }, // 右边的假门
+      { x: 458, y: 264, w: 44, h: 56, real: true }, // 顶部的真门
     ],
   },
   // 3. 周期性尖刺
@@ -124,7 +155,7 @@ const LEVELS = [
     platforms: [{ x: 0, y: 480, w: 960, h: 60, conveyor: -150 }],
     doors: [{ x: 40, y: 424, w: 44, h: 56, real: true }],
   },
-  // 6. 逃跑门 + 短暂消失
+  // 6. 逃跑门
   {
     name: '第 6 关 · 捉迷藏',
     hint: '追上去',
@@ -137,7 +168,7 @@ const LEVELS = [
   {
     name: '第 7 关 · 选择',
     hint: '三个门，只有一个是真的',
-    realHint: '真门会呼吸',
+    realHint: '真门会发光呼吸',
     spawn: { x: 60, y: 420 },
     platforms: [{ x: 0, y: 480, w: 960, h: 60 }],
     doors: [
@@ -157,8 +188,8 @@ const LEVELS = [
       { x: 220, y: 480, w: 140, h: 60, fake: true },
       { x: 360, y: 480, w: 600, h: 60 },
     ],
-    spikes: [{ x: 480, y: 480, w: 80, h: 60, trigger: 100, delay: 0.35 }],
-    crashers: [{ x: 720, y: -100, w: 70, h: 110, trigger: 120, delay: 0.25 }],
+    spikes: [{ x: 480, y: 480, w: 80, h: 60, trigger: 100, delay: 0.25 }],
+    crashers: [{ x: 720, y: -100, w: 70, h: 110, trigger: 120, delay: 0.15 }],
     zones: [{ x: 560, y: 0, w: 100, h: 540, teleportTo: { x: 40, y: 90 }, color: '#9b6bff' }],
     doors: [{ x: 880, y: 424, w: 44, h: 56, real: true, flee: true, fleeMax: 880, speed: 220 }],
   },
@@ -173,18 +204,8 @@ const player = {
 };
 
 const state = {
-  levelIndex: 0,
-  level: null,
-  time: 0,
-  deaths: 0,
-  shake: 0,
-  hint: '',
-  realHint: '',
-  hintT: 0,
-  phase: 0,
-  won: false,
-  transition: 0,
-  particles: [],
+  levelIndex: 0, level: null, time: 0, deaths: 0, shake: 0,
+  hint: '', realHint: '', hintT: 0, won: false, transition: 0, particles: [],
 };
 
 /* ===================== 工具 ===================== */
@@ -198,13 +219,9 @@ function burst(x, y, n, color) {
     const a = Math.random() * Math.PI * 2;
     const s = 60 + Math.random() * 260;
     state.particles.push({
-      x, y,
-      vx: Math.cos(a) * s,
-      vy: Math.sin(a) * s - 160,
-      size: 2 + Math.random() * 4,
-      life: 0.45 + Math.random() * 0.5,
-      maxLife: 0.95,
-      color,
+      x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 160,
+      size: 2 + Math.random() * 4, life: 0.45 + Math.random() * 0.5,
+      maxLife: 0.95, color,
     });
   }
 }
@@ -223,19 +240,18 @@ function updateParticles(dt) {
 function roundRect(x, y, w, h, r) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y,     x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x,     y + h, r);
-  ctx.arcTo(x,     y + h, x,     y,     r);
-  ctx.arcTo(x,     y,     x + w, y,     r);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
   ctx.closePath();
 }
 
-/* ===================== 关卡加载 ===================== */
+/* ===================== 关卡逻辑 ===================== */
 function loadLevel(i) {
   const def = LEVELS[i];
   state.levelIndex = i;
   state.time = 0;
-  state.phase = 0;
   state.hint = def.hint || def.name;
   state.realHint = def.realHint || def.hint || def.name;
   state.hintT = 2.6;
@@ -247,14 +263,9 @@ function loadLevel(i) {
     name: def.name,
     spawn: { ...def.spawn },
     platforms: (def.platforms || []).map(p => ({
-      ...p,
-      baseX: p.x, baseY: p.y,
-      gone: false, shake: 0, contact: false,
-      vanishT: 0,
+      ...p, baseX: p.x, baseY: p.y, gone: false, shake: 0, contact: false,
     })),
-    spikes: (def.spikes || []).map(s => ({
-      ...s, progress: 0, active: false,
-    })),
+    spikes: (def.spikes || []).map(s => ({ ...s, progress: 0, active: false })),
     crashers: (def.crashers || []).map(c => ({
       ...c, y0: c.y, active: false, done: false, t: 0, vy: 0, linger: 0,
     })),
@@ -277,32 +288,18 @@ function respawn() {
   player.deadT = 0;
   player.onGround = false;
   player.coyote = 0;
-
-  // 修复：只有玩家当前仍按着跳跃键时才锁定，避免重生后第一次跳跃失灵
-  player.jumpHeld = !!(keys['Space'] || keys['ArrowUp'] || keys['KeyW']);
-
+  player.jumpHeld = true; // 防止复活时按键卡死连跳
   player.reversing = false;
 
   for (const p of L.platforms) {
-    p.gone = false;
-    p.shake = 0;
-    p.contact = false;
-    p.vanishT = 0;
-    p.x = p.baseX;
-    p.y = p.baseY;
+    p.gone = false; p.shake = 0; p.contact = false; p.x = p.baseX; p.y = p.baseY;
   }
   for (const s of L.spikes) { s.progress = 0; s.active = false; }
   for (const c of L.crashers) { c.active = false; c.done = false; c.t = 0; c.vy = 0; c.linger = 0; c.y = c.y0; }
   for (const z of L.zones) z.cooldown = 0;
   for (const d of L.doors) {
-    d.x = d.baseX;
-    d.vanished = false;
-    d.vanishT = 0;
-    d.fleeing = false;
-    // 修复：重生后重置假门 used，避免第 7 关碰到假门死亡后假门永久失效
-    d.used = false;
+    d.x = d.baseX; d.vanished = false; d.vanishT = 0; d.fleeing = false;
   }
-
   state.particles.length = 0;
   state.time = 0;
 }
@@ -311,6 +308,7 @@ function restart() {
   if (state.won) {
     state.won = false;
     state.deaths = 0;
+    for (const d of LEVELS.flatMap(l => l.doors || [])) d.used = false;
     loadLevel(0);
   } else {
     loadLevel(state.levelIndex);
@@ -330,17 +328,16 @@ function winLevel() {
   if (state.transition > 0 || state.won) return;
   state.transition = 0.45;
   const d = state.level.doors.find(x => x.real);
-  if (d) burst(d.x + 22, d.y + 28, 28, '#4ade80');
+  burst(d.x + 22, d.y + 28, 28, '#4ade80');
 }
 
-/* ===================== 更新 ===================== */
+/* ===================== 物理更新 ===================== */
 function update(dt) {
   const L = state.level;
   if (!L) return;
 
   if (state.hintT > 0) state.hintT -= dt;
   if (state.shake > 0) state.shake = Math.max(0, state.shake - dt * 45);
-
   updateParticles(dt);
 
   if (state.won) return;
@@ -365,38 +362,28 @@ function update(dt) {
 
   state.time += dt;
 
-  for (const p of L.platforms) {
-    if (p.vanishT > 0) p.vanishT -= dt;
-  }
-
   for (const z of L.zones) {
     if (z.cooldown > 0) z.cooldown -= dt;
     if (z.teleportTo && z.cooldown <= 0 && overlap(player, z)) {
-      player.x = z.teleportTo.x;
-      player.y = z.teleportTo.y;
-      player.vx = 0;
-      player.vy = 0;
-      z.cooldown = 0.6;
-      state.shake = 8;
+      player.x = z.teleportTo.x; player.y = z.teleportTo.y;
+      player.vx = 0; player.vy = 0; z.cooldown = 0.6; state.shake = 8;
       burst(player.x + player.w / 2, player.y + player.h / 2, 14, z.color || '#9b6bff');
     }
   }
 
   let rev = false;
-  for (const z of L.zones) {
-    if (z.reverse && overlap(player, z)) rev = true;
-  }
+  for (const z of L.zones) if (z.reverse && overlap(player, z)) rev = true;
   player.reversing = rev;
 
   let dir = 0;
-  if (keys['ArrowLeft']  || keys['KeyA']) dir -= 1;
+  if (keys['ArrowLeft'] || keys['KeyA']) dir -= 1;
   if (keys['ArrowRight'] || keys['KeyD']) dir += 1;
   if (rev) dir = -dir;
   player.vx = dir * MOVE;
 
   let conveyor = 0;
   for (const p of L.platforms) {
-    if (p.conveyor && !p.gone && p.vanishT <= 0 && player.onGround &&
+    if (p.conveyor && !p.gone && player.onGround &&
         player.x + player.w > p.x && player.x < p.x + p.w &&
         Math.abs(player.y + player.h - p.y) < 6) {
       conveyor = p.conveyor;
@@ -409,13 +396,6 @@ function update(dt) {
     player.onGround = false;
     player.coyote = 0;
     player.jumpHeld = true;
-
-    for (const p of L.platforms) {
-      if (p.vanishOnJump && !p.gone) {
-        p.vanishT = 0.42;
-        burst(p.x + p.w / 2, p.y + 10, 12, '#3a3a5c');
-      }
-    }
   }
   if (!jumpKey) {
     player.jumpHeld = false;
@@ -424,9 +404,9 @@ function update(dt) {
 
   player.x += (player.vx + conveyor) * dt;
   for (const p of L.platforms) {
-    if (p.gone || p.vanishT > 0) continue;
+    if (p.gone) continue;
     if (overlap(player, p)) {
-      if (player.vx + conveyor > 0)      player.x = p.x - player.w;
+      if (player.vx + conveyor > 0) player.x = p.x - player.w;
       else if (player.vx + conveyor < 0) player.x = p.x + p.w;
     }
   }
@@ -438,7 +418,7 @@ function update(dt) {
   player.onGround = false;
 
   for (const p of L.platforms) {
-    if (p.gone || p.vanishT > 0) continue;
+    if (p.gone) continue;
     if (overlap(player, p)) {
       if (player.vy > 0) {
         player.y = p.y - player.h;
@@ -456,8 +436,7 @@ function update(dt) {
     if (!p.fake || p.gone) continue;
     if (p.contact) {
       p.shake += dt;
-      // 修复：假地板消失时间从 0.4 秒放宽到 0.6 秒，移动端也来得及二次起跳
-      if (p.shake > 0.6) {
+      if (p.shake > 0.35) {
         p.gone = true;
         burst(p.x + p.w / 2, p.y + 8, 20, '#3a3a5c');
         state.shake = 8;
@@ -472,18 +451,11 @@ function update(dt) {
 
   for (const s of L.spikes) {
     if (s.periodic) {
-      // 修复：尖刺改为平滑升起/降下，不再在 0.5 周期处瞬间归零
       const ph = ((state.time / s.cycle) + s.phase) % 1;
-      const raw = Math.sin(ph * Math.PI * 2);
-      s.progress = Math.max(0, Math.min(1, raw > 0 ? raw : 0));
+      s.progress = ph < 0.5 ? Math.sin(ph * Math.PI * 2) * 0.5 + 0.5 : 0;
     } else if (s.trigger != null) {
-      if (!s.active) {
-        if (player.x + player.w > s.x - s.trigger) s.active = true;
-      }
+      if (!s.active && player.x + player.w > s.x - s.trigger) s.active = true;
       if (s.active && s.progress < 1) s.progress = Math.min(1, s.progress + dt / (s.delay || 0.3));
-    } else if (s.jumpTriggered) {
-      if (player.vy !== 0 && !player.onGround) s.progress = Math.min(1, s.progress + dt / 0.15);
-      else s.progress = Math.max(0, s.progress - dt / 0.3);
     } else {
       s.progress = 1;
     }
@@ -491,8 +463,7 @@ function update(dt) {
     if (s.progress > 0.05) {
       const hh = s.h * s.progress;
       if (overlap(player, { x: s.x, y: s.y - hh, w: s.w, h: hh })) {
-        killPlayer();
-        return;
+        killPlayer(); return;
       }
     }
   }
@@ -508,54 +479,30 @@ function update(dt) {
       c.vy += 2600 * dt;
       c.y += c.vy * dt;
       if (c.y + c.h >= 480) {
-        c.y = 480 - c.h;
-        c.done = true;
-        c.linger = 0.35;
-        state.shake = 10;
-        burst(c.x + c.w / 2, 470, 16, '#8b3a4a');
+        c.y = 480 - c.h; c.done = true; c.linger = 0.35;
+        state.shake = 10; burst(c.x + c.w / 2, 470, 16, '#8b3a4a');
       }
     }
     if (!c.done && overlap(player, { x: c.x, y: c.y, w: c.w, h: c.h })) {
-      killPlayer();
-      return;
+      killPlayer(); return;
     }
   }
 
   for (const d of L.doors) {
     if (d.used) continue;
-
     if (d.flee && d.real) {
       if (!d.fleeing && player.x + player.w > d.x - 280) d.fleeing = true;
       if (d.fleeing && d.x < d.fleeMax) d.x = Math.min(d.fleeMax, d.x + d.speed * dt);
     }
-
     if (d.vanishNear && d.real) {
-      const near = Math.abs((player.x + player.w / 2) - (d.x + d.w / 2)) < 90;
-      if (near && d.vanishT <= 0 && Math.random() < 0.02) {
-        d.vanishT = 0.28;
-      }
+      if (Math.abs((player.x + player.w / 2) - (d.x + d.w / 2)) < 90 && d.vanishT <= 0 && Math.random() < 0.02) d.vanishT = 0.28;
       if (d.vanishT > 0) d.vanishT -= dt;
     }
-
     if (!d.real && !d.used) {
-      if (d.behavior === 'vanish') {
-        if (Math.abs((player.x + player.w / 2) - (d.x + d.w / 2)) < 70) {
-          d.vanished = true;
-        }
-      }
-      if (d.behavior === 'spike') {
-        if (overlap(player, d)) {
-          d.used = true;
-          killPlayer();
-          return;
-        }
-      }
+      if (d.behavior === 'vanish' && Math.abs((player.x + player.w / 2) - (d.x + d.w / 2)) < 70) d.vanished = true;
+      if (d.behavior === 'spike' && overlap(player, d)) { d.used = true; killPlayer(); return; }
     }
-
-    if (d.real && !d.vanished && d.vanishT <= 0 && overlap(player, d)) {
-      winLevel();
-      return;
-    }
+    if (d.real && !d.vanished && d.vanishT <= 0 && overlap(player, d)) { winLevel(); return; }
   }
 
   if (player.y > H + 150) killPlayer();
@@ -565,101 +512,61 @@ function update(dt) {
 function drawDoor(d) {
   const t = performance.now() / 1000;
   const breathe = d.breathe ? 0.5 + 0.5 * Math.sin(t * 3) : 1;
-
   if (!d.real) {
-    if (d.used) {
-      ctx.fillStyle = 'rgba(80,80,100,0.25)';
-      ctx.fillRect(d.x, d.y, d.w, d.h);
-      return;
-    }
+    if (d.used) { ctx.fillStyle = 'rgba(80,80,100,0.25)'; ctx.fillRect(d.x, d.y, d.w, d.h); return; }
     if (d.vanished) return;
   }
-
-  ctx.save();
-  // 修复：真门短暂消失时半透明，让玩家能看出它当前不可进入
-  if (d.real && d.vanishT > 0) ctx.globalAlpha = 0.25;
-
   const glow = d.real ? (d.breathe ? 14 + breathe * 16 : 20) : 10;
   const color = d.real ? '#4ade80' : '#8b8bff';
-
-  ctx.shadowColor = color;
-  ctx.shadowBlur = glow;
-  ctx.fillStyle = color;
-  ctx.fillRect(d.x, d.y, d.w, d.h);
-
-  ctx.shadowBlur = 0;
-  ctx.fillStyle = '#0d0d17';
-  ctx.fillRect(d.x + 5, d.y + 5, d.w - 10, d.h - 10);
-
-  ctx.fillStyle = color;
-  ctx.fillRect(d.x + d.w - 14, d.y + d.h / 2 - 3, 6, 6);
-
-  ctx.restore();
+  ctx.save(); ctx.shadowColor = color; ctx.shadowBlur = glow; ctx.fillStyle = color;
+  ctx.fillRect(d.x, d.y, d.w, d.h); ctx.restore();
+  ctx.fillStyle = '#0d0d17'; ctx.fillRect(d.x + 5, d.y + 5, d.w - 10, d.h - 10);
+  ctx.fillStyle = color; ctx.fillRect(d.x + d.w - 14, d.y + d.h / 2 - 3, 6, 6);
 }
 
 function render() {
   const L = state.level;
-
   ctx.save();
   if (state.shake > 0.4) {
     ctx.translate((Math.random() - 0.5) * state.shake, (Math.random() - 0.5) * state.shake);
   }
-
   const bg = ctx.createLinearGradient(0, 0, 0, H);
-  bg.addColorStop(0, '#141426');
-  bg.addColorStop(0.6, '#0d0d18');
-  bg.addColorStop(1, '#07070d');
-  ctx.fillStyle = bg;
-  ctx.fillRect(-60, -60, W + 120, H + 120);
+  bg.addColorStop(0, '#141426'); bg.addColorStop(0.6, '#0d0d18'); bg.addColorStop(1, '#07070d');
+  ctx.fillStyle = bg; ctx.fillRect(-60, -60, W + 120, H + 120);
 
-  ctx.strokeStyle = 'rgba(255,255,255,0.025)';
-  ctx.lineWidth = 1;
-  for (let x = 0; x <= W; x += 48) {
-    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
-  }
-  for (let y = 0; y <= H; y += 48) {
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
-  }
+  ctx.strokeStyle = 'rgba(255,255,255,0.025)'; ctx.lineWidth = 1;
+  for (let x = 0; x <= W; x += 48) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+  for (let y = 0; y <= H; y += 48) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
 
   if (L) {
     for (const z of L.zones) {
-      ctx.fillStyle = (z.color || '#9b6bff') + '22';
-      ctx.fillRect(z.x, z.y, z.w, z.h);
-      ctx.strokeStyle = (z.color || '#9b6bff') + '66';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([12, 8]);
-      ctx.strokeRect(z.x + 1, z.y + 1, z.w - 2, z.h - 2);
-      ctx.setLineDash([]);
-      ctx.lineWidth = 1;
-
+      ctx.fillStyle = (z.color || '#9b6bff') + '22'; ctx.fillRect(z.x, z.y, z.w, z.h);
+      ctx.strokeStyle = (z.color || '#9b6bff') + '66'; ctx.lineWidth = 2;
+      ctx.setLineDash([12, 8]); ctx.strokeRect(z.x + 1, z.y + 1, z.w - 2, z.h - 2);
+      ctx.setLineDash([]); ctx.lineWidth = 1;
       if (z.teleportTo) {
-        ctx.fillStyle = 'rgba(255,255,255,0.55)';
-        ctx.font = '600 13px system-ui,sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('安全区', z.x + z.w / 2, z.y + 30);
+        ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.font = '600 13px system-ui,sans-serif';
+        ctx.textAlign = 'center'; ctx.fillText('安全区', z.x + z.w / 2, z.y + 30);
       }
     }
 
     for (const p of L.platforms) {
-      if (p.gone || p.vanishT > 0) continue;
+      if (p.gone) continue;
       let ox = 0, oy = 0;
       if (p.fake && p.shake > 0.01) {
-        const k = Math.min(p.shake / 0.6, 1);
+        const k = Math.min(p.shake / 0.35, 1);
         ox = (Math.random() - 0.5) * 6 * k;
         oy = (Math.random() - 0.5) * 4 * k;
       }
-      ctx.fillStyle = '#232338';
-      ctx.fillRect(p.x + ox, p.y + oy, p.w, p.h);
-      ctx.fillStyle = '#3d3d63';
-      ctx.fillRect(p.x + ox, p.y + oy, p.w, 3);
+      ctx.fillStyle = '#232338'; ctx.fillRect(p.x + ox, p.y + oy, p.w, p.h);
+      ctx.fillStyle = '#3d3d63'; ctx.fillRect(p.x + ox, p.y + oy, p.w, 3);
 
       if (p.button) {
         ctx.fillStyle = 'rgba(255,255,255,0.85)';
         ctx.font = '700 20px system-ui,sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('点击开始', p.x + p.w / 2, p.y + 32);
+        ctx.fillText('点击开始', p.x + p.w / 2, p.y + 35);
       }
-
       if (p.conveyor) {
         ctx.fillStyle = 'rgba(255,180,80,0.5)';
         for (let i = 0; i < p.w; i += 28) {
@@ -677,24 +584,16 @@ function render() {
       ctx.fillStyle = '#ff4d6d';
       for (let i = 0; i < count; i++) {
         const x = s.x + i * step;
-        ctx.beginPath();
-        ctx.moveTo(x, s.y);
-        ctx.lineTo(x + step / 2, s.y - hh);
-        ctx.lineTo(x + step, s.y);
-        ctx.closePath();
-        ctx.fill();
+        ctx.beginPath(); ctx.moveTo(x, s.y); ctx.lineTo(x + step / 2, s.y - hh);
+        ctx.lineTo(x + step, s.y); ctx.closePath(); ctx.fill();
       }
     }
 
     for (const c of L.crashers) {
-      if (!c.active) continue;
-      if (c.done && c.linger <= 0) continue;
-      const alpha = c.done ? Math.max(0, c.linger / 0.35) : 1;
-      ctx.globalAlpha = alpha;
-      ctx.fillStyle = '#5a2530';
-      ctx.fillRect(c.x, c.y, c.w, c.h);
-      ctx.fillStyle = '#8b3a4a';
-      ctx.fillRect(c.x, c.y, c.w, 6);
+      if (!c.active || (c.done && c.linger <= 0)) continue;
+      ctx.globalAlpha = c.done ? Math.max(0, c.linger / 0.35) : 1;
+      ctx.fillStyle = '#5a2530'; ctx.fillRect(c.x, c.y, c.w, c.h);
+      ctx.fillStyle = '#8b3a4a'; ctx.fillRect(c.x, c.y, c.w, 6);
       ctx.globalAlpha = 1;
     }
 
@@ -703,75 +602,58 @@ function render() {
     if (!player.dead) {
       const cx = player.x + player.w / 2;
       const cy = player.y + player.h / 2;
-      ctx.save();
-      ctx.translate(cx, cy);
+      ctx.save(); ctx.translate(cx, cy);
       if (player.reversing) ctx.rotate(Math.sin(performance.now() / 90) * 0.08);
       ctx.fillStyle = player.reversing ? '#d8b4ff' : '#f0f0fa';
-      roundRect(-player.w / 2, -player.h / 2, player.w, player.h, 5);
-      ctx.fill();
+      roundRect(-player.w / 2, -player.h / 2, player.w, player.h, 5); ctx.fill();
       ctx.fillStyle = '#14141f';
       const look = player.vx > 0 ? 2 : player.vx < 0 ? -2 : 0;
-      ctx.fillRect(-7 + look, -7, 4, 7);
-      ctx.fillRect( 3 + look, -7, 4, 7);
+      ctx.fillRect(-7 + look, -7, 4, 7); ctx.fillRect(3 + look, -7, 4, 7);
       ctx.restore();
     }
 
     for (const p of state.particles) {
       ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
-      ctx.fillStyle = p.color;
-      ctx.fillRect(p.x, p.y, p.size, p.size);
+      ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, p.size, p.size);
     }
     ctx.globalAlpha = 1;
   }
-
   ctx.restore();
 
   if (L) {
-    ctx.textAlign = 'left';
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(255,255,255,0.55)';
     ctx.font = '600 16px ui-monospace,Menlo,Consolas,monospace';
     ctx.fillText(L.name, 20, 32);
-
-    ctx.textAlign = 'right';
-    ctx.fillText('死亡 ' + state.deaths, W - 20, 32);
+    ctx.textAlign = 'right'; ctx.fillText('死亡 ' + state.deaths, W - 20, 32);
 
     if (state.hintT > 0 && !state.won) {
       const t = state.hintT;
       const showFake = t > 1.2;
       ctx.globalAlpha = Math.min(1, t * 1.2);
-      ctx.textAlign = 'center';
-      ctx.font = '700 26px system-ui,sans-serif';
+      ctx.textAlign = 'center'; ctx.font = '700 26px system-ui,sans-serif';
       if (showFake) {
-        ctx.fillStyle = '#fff';
-        ctx.fillText(state.hint, W / 2, 96);
+        ctx.fillStyle = '#fff'; ctx.fillText(state.hint, W / 2, 96);
       } else {
         ctx.fillStyle = '#ff9f6b';
         const txt = state.realHint;
         ctx.fillText(txt, W / 2, 96);
         const m = ctx.measureText(txt);
-        ctx.strokeStyle = 'rgba(255,159,107,0.6)';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(W / 2 - m.width / 2, 96 - 8);
-        ctx.lineTo(W / 2 + m.width / 2, 96 - 8);
-        ctx.stroke();
+        ctx.strokeStyle = 'rgba(255,159,107,0.6)'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(W / 2 - m.width / 2, 96 - 8);
+        ctx.lineTo(W / 2 + m.width / 2, 96 - 8); ctx.stroke();
       }
       ctx.globalAlpha = 1;
     }
   }
 
   if (state.won) {
-    ctx.fillStyle = 'rgba(5,5,10,0.88)';
-    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = 'rgba(5,5,10,0.88)'; ctx.fillRect(0, 0, W, H);
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#4ade80';
-    ctx.font = '800 54px system-ui,sans-serif';
+    ctx.fillStyle = '#4ade80'; ctx.font = '800 54px system-ui,sans-serif';
     ctx.fillText('你通关了', W / 2, H / 2 - 40);
-    ctx.fillStyle = '#fff';
-    ctx.font = '400 22px system-ui,sans-serif';
+    ctx.fillStyle = '#fff'; ctx.font = '400 22px system-ui,sans-serif';
     ctx.fillText('总死亡次数：' + state.deaths, W / 2, H / 2 + 26);
-    ctx.fillStyle = 'rgba(255,255,255,0.45)';
-    ctx.font = '400 18px system-ui,sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.font = '400 18px system-ui,sans-serif';
     ctx.fillText('按 R 或点「重来」再来一遍', W / 2, H / 2 + 76);
   }
 }
@@ -794,13 +676,15 @@ document.querySelectorAll('#controls button').forEach(b => {
     b.classList.add('on');
     try { b.setPointerCapture(e.pointerId); } catch (_) {}
   };
-  const up = () => {
+  const up = (e) => {
+    if (e) e.preventDefault();
     if (k !== 'KeyR') { keys[k] = false; b.classList.remove('on'); }
   };
   b.addEventListener('pointerdown', down);
   b.addEventListener('pointerup', up);
   b.addEventListener('pointercancel', up);
   b.addEventListener('lostpointercapture', up);
+  b.addEventListener('contextmenu', e => e.preventDefault());
 });
 
 /* ===================== 自适应尺寸 ===================== */
