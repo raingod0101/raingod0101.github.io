@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
@@ -86,90 +86,278 @@
         .spawn-btn:disabled { opacity: 0.35; filter: grayscale(1); }
         .cd-mask { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px; border-radius: 6px; }
 
+        /* ============ 角色本體 ============ */
         .unit { position: absolute; bottom: 50px; width: 45px; text-align: center; z-index: 10; pointer-events: none; transition: transform 0.1s; }
         .unit-body { font-size: 28px; line-height: 1; }
         .hp-bar { width: 100%; height: 4px; background: #000; margin-bottom: 2px; border-radius: 2px; overflow: hidden; border: 0.5px solid #555; }
         .hp-inner { height: 100%; background: #2ecc71; width: 100%; transition: width 0.1s; }
-        /* 角色高低差與待機浮動 */
-.unit {
-    bottom: calc(50px + var(--lane-y, 0px));
-    will-change: left, bottom;
-}
 
-.unit-body {
-    display: inline-block;
-    transform-origin: center bottom;
-    animation: unitIdle 1.8s ease-in-out infinite;
-    filter: drop-shadow(0 2px 4px rgba(0,0,0,.45));
-}
+        /* ==================== 角色動作系統 ==================== */
+        .unit {
+            bottom: calc(50px + var(--lane-y, 0px));
+            will-change: left, bottom;
+            --dir: 1;                 /* 1 = 往右(玩家)  -1 = 往左(敵方) */
+        }
+        .unit[data-side="enemy"] { --dir: -1; }
 
-@keyframes unitIdle {
-    0%, 100% { transform: translateY(0) scale(1); }
-    50% { transform: translateY(-2px) scale(1.03); }
-}
+        .unit-body {
+            display: inline-block;
+            transform-origin: center bottom;
+            will-change: transform;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,.45));
+        }
 
-/* 攻擊時角色稍微彈動 */
-.unit.attacking .unit-body {
-    animation: unitAttack .24s ease-out;
-}
+        /* ---------- 1) pounce 撲跳型（貓、狐、野豬、犬、獨角獸） ---------- */
+        @keyframes idlePounce {
+            0%,100% { transform: translateY(0) scale(1,1); }
+            50%     { transform: translateY(-2px) scale(1.03,.97); }
+        }
+        @keyframes walkPounce {
+            0%,100% { transform: translateY(0) scale(1.06,.94); }
+            30%     { transform: translateY(-8px) scale(.94,1.08); }
+            60%     { transform: translateY(0) scale(1.08,.92); }
+            80%     { transform: translateY(-4px) scale(.98,1.02); }
+        }
+        @keyframes atkPounce {
+            0%   { transform: translate(0,0) scale(1,1) rotate(0); }
+            25%  { transform: translate(calc(var(--dir) * -8px), 0) scale(.82,1.2) rotate(calc(var(--dir) * -10deg)); }
+            55%  { transform: translate(calc(var(--dir) * 20px), -16px) scale(1.22,.85) rotate(calc(var(--dir) * 14deg)); }
+            100% { transform: translate(0,0) scale(1,1) rotate(0); }
+        }
 
-@keyframes unitAttack {
-    0% { transform: translateX(0) scale(1); }
-    45% { transform: translateX(var(--attack-shift, 5px)) scale(1.2); }
-    100% { transform: translateX(0) scale(1); }
-}
+        /* ---------- 2) chomp 撕咬型（犬狼、鯊魚） ---------- */
+        @keyframes idleChomp {
+            0%,100% { transform: translateY(0) rotate(0) scaleX(1); }
+            40%     { transform: translateY(-1px) rotate(-2deg) scaleX(1.04); }
+            70%     { transform: translateY(0) rotate(2deg) scaleX(.98); }
+        }
+        @keyframes walkChomp {
+            0%,100% { transform: translateY(0) rotate(-3deg) scale(1,1); }
+            25%     { transform: translateY(-5px) rotate(0deg) scale(.96,1.05); }
+            50%     { transform: translateY(0) rotate(3deg) scale(1.04,.96); }
+            75%     { transform: translateY(-5px) rotate(0deg) scale(.96,1.05); }
+        }
+        @keyframes atkChomp {
+            0%   { transform: translate(0,0) rotate(0) scale(1,1); }
+            20%  { transform: translate(calc(var(--dir) * -10px), 0) rotate(calc(var(--dir) * -6deg)) scale(.9,1.1); }
+            45%  { transform: translate(calc(var(--dir) * 18px), -6px) rotate(calc(var(--dir) * 10deg)) scale(1.15,.9); }
+            62%  { transform: translate(calc(var(--dir) * 10px), 0) rotate(calc(var(--dir) * -4deg)) scale(.94,1.06); }
+            100% { transform: translate(0,0) rotate(0) scale(1,1); }
+        }
 
-/* 攻擊飛行物 */
-.battle-projectile {
-    position: absolute;
-    z-index: 40;
-    pointer-events: none;
-    font-size: 25px;
-    line-height: 1;
-    filter: drop-shadow(0 0 7px currentColor);
-    will-change: left, top, transform;
-}
+        /* ---------- 3) flap 振翅飛行型（天使、鳥、龍、蝙蝠） ---------- */
+        @keyframes idleFlap {
+            0%,100% { transform: translateY(0) rotate(-2deg); }
+            50%     { transform: translateY(-5px) rotate(2deg); }
+        }
+        @keyframes walkFlap {
+            0%,100% { transform: translateY(-2px) rotate(-6deg) scale(1,.95); }
+            25%     { transform: translateY(-9px) rotate(0deg) scale(.95,1.06); }
+            50%     { transform: translateY(-3px) rotate(6deg) scale(1.05,.94); }
+            75%     { transform: translateY(-9px) rotate(0deg) scale(.95,1.06); }
+        }
+        @keyframes atkFlap {
+            0%   { transform: translate(0,0) scale(1,1) rotate(0); }
+            30%  { transform: translate(calc(var(--dir) * -6px), 4px) scale(.88,1.14) rotate(calc(var(--dir) * -8deg)); }
+            60%  { transform: translate(calc(var(--dir) * 16px), -22px) scale(1.18,.86) rotate(calc(var(--dir) * 16deg)); }
+            100% { transform: translate(0,0) scale(1,1) rotate(0); }
+        }
 
-.battle-projectile.fly {
-    transition:
-        left .34s linear,
-        top .34s ease-in-out,
-        transform .34s linear;
-}
+        /* ---------- 4) stomp 重踏型（石像、泰坦、熊、巨龍） ---------- */
+        @keyframes idleStomp {
+            0%,100% { transform: translateY(0) scale(1,1); }
+            50%     { transform: translateY(-1px) scale(1.05,.95); }
+        }
+        @keyframes walkStomp {
+            0%,100% { transform: translateY(0) scale(1.08,.92) rotate(-2deg); }
+            50%     { transform: translateY(-7px) scale(.94,1.08) rotate(2deg); }
+        }
+        @keyframes atkStomp {
+            0%   { transform: translate(0,0) scale(1,1); }
+            35%  { transform: translate(0, -22px) scale(.86,1.16); }
+            55%  { transform: translate(calc(var(--dir) * 12px), 0) scale(1.35,.7); }
+            75%  { transform: translate(0, -4px) scale(.96,1.04); }
+            100% { transform: translate(0,0) scale(1,1); }
+        }
 
-/* 命中爆發 */
-.battle-hit {
-    position: absolute;
-    z-index: 45;
-    pointer-events: none;
-    font-size: 29px;
-    line-height: 1;
-    animation: hitBurst .42s ease-out forwards;
-    filter: drop-shadow(0 0 8px currentColor);
-}
+        /* ---------- 5) float 漂浮型（水滴、幽靈、水母、鯨魚） ---------- */
+        @keyframes idleFloat {
+            0%,100% { transform: translateY(0) rotate(-3deg); }
+            50%     { transform: translateY(-6px) rotate(3deg); }
+        }
+        @keyframes walkFloat {
+            0%,100% { transform: translateY(-3px) rotate(-5deg) scale(1,1); }
+            33%     { transform: translateY(-9px) rotate(0deg) scale(1.05,.95); }
+            66%     { transform: translateY(-3px) rotate(5deg) scale(.95,1.05); }
+        }
+        @keyframes atkFloat {
+            0%   { transform: translate(0,0) scale(1) rotate(0); }
+            35%  { transform: translate(0, 6px) scale(.8,.8) rotate(0); }
+            60%  { transform: translate(calc(var(--dir) * 10px), -10px) scale(1.35) rotate(calc(var(--dir) * 20deg)); }
+            100% { transform: translate(0,0) scale(1) rotate(0); }
+        }
 
-@keyframes hitBurst {
-    0% { opacity: 1; transform: translate(-50%,-50%) scale(.35) rotate(0); }
-    65% { opacity: 1; transform: translate(-50%,-50%) scale(1.35) rotate(20deg); }
-    100% { opacity: 0; transform: translate(-50%,-50%) scale(1.8) rotate(45deg); }
-}
+        /* ---------- 6) march 機械行進型（機器人、企鵝、守護神） ---------- */
+        @keyframes idleMarch {
+            0%,100% { transform: translateY(0) rotate(0); }
+            25%     { transform: translateY(-1px) rotate(-1deg); }
+            75%     { transform: translateY(-1px) rotate(1deg); }
+        }
+        @keyframes walkMarch {
+            0%,100% { transform: translateY(0) rotate(-4deg); }
+            25%     { transform: translateY(-4px) rotate(0); }
+            50%     { transform: translateY(0) rotate(4deg); }
+            75%     { transform: translateY(-4px) rotate(0); }
+        }
+        @keyframes atkMarch {
+            0%   { transform: translate(0,0) rotate(0); }
+            25%  { transform: translate(calc(var(--dir) * -10px), 0) rotate(calc(var(--dir) * -8deg)); }
+            50%  { transform: translate(calc(var(--dir) * 20px), 0) rotate(calc(var(--dir) * 8deg)); }
+            100% { transform: translate(0,0) rotate(0); }
+        }
 
-/* 地面近戰衝擊波 */
-.battle-shockwave {
-    position: absolute;
-    width: 35px;
-    height: 20px;
-    border: 3px solid #ffe66d;
-    border-radius: 50%;
-    z-index: 35;
-    pointer-events: none;
-    animation: shockwave .38s ease-out forwards;
-}
+        /* ---------- 7) crawl 爬行蹣跚型（骷髏、殭屍、忍者、術士） ---------- */
+        @keyframes idleCrawl {
+            0%,100% { transform: translate(0,0) rotate(-5deg) scale(1,1); }
+            50%     { transform: translate(calc(var(--dir) * 2px), -2px) rotate(5deg) scale(1,.97); }
+        }
+        @keyframes walkCrawl {
+            0%,100% { transform: translate(0,0) rotate(-8deg) scale(1,.95); }
+            50%     { transform: translate(calc(var(--dir) * 3px), -5px) rotate(8deg) scale(.95,1.05); }
+        }
+        @keyframes atkCrawl {
+            0%   { transform: translate(0,0) rotate(-8deg) scale(1); }
+            35%  { transform: translate(calc(var(--dir) * -6px), 2px) rotate(-20deg) scale(.9,1.1); }
+            60%  { transform: translate(calc(var(--dir) * 14px), -8px) rotate(14deg) scale(1.2,.85); }
+            100% { transform: translate(0,0) rotate(-8deg) scale(1); }
+        }
 
-@keyframes shockwave {
-    from { opacity: 1; transform: scale(.4); }
-    to { opacity: 0; transform: scale(2.5); }
-}
+        /* ---------- 8) slither 蛇行型（毒藤、蛇、旋風） ---------- */
+        @keyframes idleSlither {
+            0%,100% { transform: translateX(0) skewX(0deg) scaleY(1); }
+            25%     { transform: translateX(calc(var(--dir) * 2px)) skewX(4deg) scaleY(.98); }
+            75%     { transform: translateX(calc(var(--dir) * -2px)) skewX(-4deg) scaleY(1.02); }
+        }
+        @keyframes walkSlither {
+            0%,100% { transform: translateX(0) skewX(-8deg) scaleY(1); }
+            50%     { transform: translateX(calc(var(--dir) * 4px)) skewX(8deg) scaleY(.94); }
+        }
+        @keyframes atkSlither {
+            0%   { transform: translate(0,0) skewX(0) scale(1); }
+            30%  { transform: translate(calc(var(--dir) * -8px), 0) skewX(-14deg) scaleY(1.2); }
+            55%  { transform: translate(calc(var(--dir) * 20px), -8px) skewX(18deg) scaleY(.85) scaleX(1.2); }
+            100% { transform: translate(0,0) skewX(0) scale(1); }
+        }
+
+        /* ---------- 9) charge 暴衝型（雷電獸、野豬、獵手、騎士） ---------- */
+        @keyframes idleCharge {
+            0%,100% { transform: translateY(0) rotate(0); }
+            50%     { transform: translateY(-2px) rotate(calc(var(--dir) * 2deg)); }
+        }
+        @keyframes walkCharge {
+            0%,100% { transform: translateY(0) rotate(calc(var(--dir) * 6deg)) scale(1.02,.98); }
+            50%     { transform: translateY(-6px) rotate(calc(var(--dir) * 10deg)) scale(.96,1.04); }
+        }
+        @keyframes atkCharge {
+            0%   { transform: translate(0,0) rotate(0) scale(1); }
+            20%  { transform: translate(calc(var(--dir) * -12px), 0) rotate(calc(var(--dir) * -8deg)) scale(.9,1.1); }
+            50%  { transform: translate(calc(var(--dir) * 26px), -10px) rotate(calc(var(--dir) * 14deg)) scale(1.25,.85); }
+            100% { transform: translate(0,0) rotate(0) scale(1); }
+        }
+
+        /* ===== 待機狀態 ===== */
+        .unit[data-motion="pounce"]  .unit-body { animation: idlePounce  1.8s ease-in-out infinite; }
+        .unit[data-motion="chomp"]   .unit-body { animation: idleChomp   1.6s ease-in-out infinite; }
+        .unit[data-motion="flap"]    .unit-body { animation: idleFlap    1.5s ease-in-out infinite; }
+        .unit[data-motion="stomp"]   .unit-body { animation: idleStomp   2.2s ease-in-out infinite; }
+        .unit[data-motion="float"]   .unit-body { animation: idleFloat   2.4s ease-in-out infinite; }
+        .unit[data-motion="march"]   .unit-body { animation: idleMarch   1.9s ease-in-out infinite; }
+        .unit[data-motion="crawl"]   .unit-body { animation: idleCrawl   1.7s ease-in-out infinite; }
+        .unit[data-motion="slither"] .unit-body { animation: idleSlither 2.0s ease-in-out infinite; }
+        .unit[data-motion="charge"]  .unit-body { animation: idleCharge  1.6s ease-in-out infinite; }
+
+        /* ===== 行走狀態 ===== */
+        .unit.moving[data-motion="pounce"]  .unit-body { animation: walkPounce  .42s ease-in-out infinite; }
+        .unit.moving[data-motion="chomp"]   .unit-body { animation: walkChomp   .36s ease-in-out infinite; }
+        .unit.moving[data-motion="flap"]    .unit-body { animation: walkFlap    .34s ease-in-out infinite; }
+        .unit.moving[data-motion="stomp"]   .unit-body { animation: walkStomp   .58s ease-in-out infinite; }
+        .unit.moving[data-motion="float"]   .unit-body { animation: walkFloat   .70s ease-in-out infinite; }
+        .unit.moving[data-motion="march"]   .unit-body { animation: walkMarch   .44s ease-in-out infinite; }
+        .unit.moving[data-motion="crawl"]   .unit-body { animation: walkCrawl   .52s ease-in-out infinite; }
+        .unit.moving[data-motion="slither"] .unit-body { animation: walkSlither .48s ease-in-out infinite; }
+        .unit.moving[data-motion="charge"]  .unit-body { animation: walkCharge  .32s ease-in-out infinite; }
+
+        /* ===== 攻擊狀態（放最後，優先級最高） ===== */
+        .unit.attacking[data-motion="pounce"]  .unit-body { animation: atkPounce  .38s ease-out; }
+        .unit.attacking[data-motion="chomp"]   .unit-body { animation: atkChomp   .38s ease-out; }
+        .unit.attacking[data-motion="flap"]    .unit-body { animation: atkFlap    .40s ease-out; }
+        .unit.attacking[data-motion="stomp"]   .unit-body { animation: atkStomp   .46s ease-out; }
+        .unit.attacking[data-motion="float"]   .unit-body { animation: atkFloat   .42s ease-out; }
+        .unit.attacking[data-motion="march"]   .unit-body { animation: atkMarch   .34s ease-out; }
+        .unit.attacking[data-motion="crawl"]   .unit-body { animation: atkCrawl   .40s ease-out; }
+        .unit.attacking[data-motion="slither"] .unit-body { animation: atkSlither .40s ease-out; }
+        .unit.attacking[data-motion="charge"]  .unit-body { animation: atkCharge  .36s ease-out; }
+
+        /* 出場彈跳 */
+        @keyframes spawnPop {
+            0%   { transform: scale(.2) translateY(14px); opacity: 0; }
+            65%  { transform: scale(1.18) translateY(-6px); opacity: 1; }
+            100% { transform: scale(1) translateY(0); opacity: 1; }
+        }
+        .unit.spawning .unit-body { animation: spawnPop .3s ease-out; }
+
+        /* 攻擊飛行物 */
+        .battle-projectile {
+            position: absolute;
+            z-index: 40;
+            pointer-events: none;
+            font-size: 25px;
+            line-height: 1;
+            filter: drop-shadow(0 0 7px currentColor);
+            will-change: left, top, transform;
+        }
+
+        .battle-projectile.fly {
+            transition:
+                left .34s linear,
+                top .34s ease-in-out,
+                transform .34s linear;
+        }
+
+        /* 命中爆發 */
+        .battle-hit {
+            position: absolute;
+            z-index: 45;
+            pointer-events: none;
+            font-size: 29px;
+            line-height: 1;
+            animation: hitBurst .42s ease-out forwards;
+            filter: drop-shadow(0 0 8px currentColor);
+        }
+
+        @keyframes hitBurst {
+            0% { opacity: 1; transform: translate(-50%,-50%) scale(.35) rotate(0); }
+            65% { opacity: 1; transform: translate(-50%,-50%) scale(1.35) rotate(20deg); }
+            100% { opacity: 0; transform: translate(-50%,-50%) scale(1.8) rotate(45deg); }
+        }
+
+        /* 地面近戰衝擊波 */
+        .battle-shockwave {
+            position: absolute;
+            width: 35px;
+            height: 20px;
+            border: 3px solid #ffe66d;
+            border-radius: 50%;
+            z-index: 35;
+            pointer-events: none;
+            animation: shockwave .38s ease-out forwards;
+        }
+
+        @keyframes shockwave {
+            from { opacity: 1; transform: scale(.4); }
+            to { opacity: 0; transform: scale(2.5); }
+        }
+
         #gacha-anim { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.92); z-index: 1000; display: none; flex-direction: column; align-items: center; justify-content: center; font-size: 70px; }
         #ui-panel::-webkit-scrollbar { display: none; }
         
@@ -318,6 +506,40 @@
         { name: '終極雨神尊', icons: ['🌧️', '👑', '⚡'], attr: '無' }
     ];
 
+    // ★ 每個主題對應的動作類型
+    const THEME_MOTIONS = [
+        'pounce',  // 雨神貓
+        'float',   // 水滴精靈
+        'charge',  // 雷霆幼獸
+        'chomp',   // 熾焰烈犬
+        'flap',    // 聖光幼天使
+        'stomp',   // 虛空幼龍
+        'crawl',   // 骷髏戰士
+        'march',   // 機械企鵝
+        'stomp',   // 石像鬼
+        'float',   // 深海巨章
+        'stomp',   // 雪域冰熊
+        'pounce',  // 夢幻獨角獸
+        'charge',  // 暗影獵手
+        'flap',    // 鳳凰幼雛
+        'pounce',  // 幻象狐仙
+        'stomp',   // 泰坦巨人
+        'flap',    // 暴風神鷹
+        'float',   // 極光仙子
+        'float',   // 冥界噬魂者
+        'march',   // 機械巨魔
+        'stomp',   // 熔岩怪獸
+        'float',   // 海芒水母
+        'charge',  // 狂暴野豬
+        'slither', // 毒藤巨獸
+        'march',   // 天界守護神
+        'float',   // 死靈術士
+        'march',   // 賽博機器人
+        'float',   // 深淵巨鯨
+        'flap',    // 風暴神龍
+        'stomp'    // 終極雨神尊
+    ];
+
     const PREFIX_EVO1 = ['強化型', '進階·', '狂暴的', '覺醒·', '極致·', '真力·', '超能·', '霸者·', '滅世·', '天啟·'];
     const PREFIX_EVO2 = ['神超絕·', '超光速·', '萬劫天尊·', '宇宙主宰·', '終極降臨·', '創世神光·', '毀滅之眼·', '無上尊者·', '星穹之主·', '混沌原初·'];
 
@@ -330,7 +552,8 @@
     function generateGods() {
         for (let i = 1; i <= 500; i++) {
             const id = `god_${i}`;
-            const theme = THEMES[(i - 1) % THEMES.length];
+            const themeIdx = (i - 1) % THEMES.length;
+            const theme = THEMES[themeIdx];
             const cycle = Math.floor((i - 1) / THEMES.length);
             
             const rIdx = i % 12 === 0 ? 5 : (i % 8 === 0 ? 4 : (i % 5 === 0 ? 3 : (i % 3 === 0 ? 2 : (i % 2 === 0 ? 1 : 0))));
@@ -356,6 +579,7 @@
                 formNames: [form1, form2, form3],
                 targetAttr: targetAttr,
                 isArea: isArea,
+                motion: THEME_MOTIONS[themeIdx],   // ★ 動作型態
                 hp: Math.floor(baseHp),
                 atk: Math.floor(baseAtk),
                 cost: Math.min(3000, Math.floor(cost)),
@@ -369,31 +593,31 @@
     // 生成 120 種怪獸敵人
     function generateEnemies() {
         const enemyTypes = [
-            { name: '小紅惡魔', icon: '👺', attr: '紅' },
-            { name: '幽靈水母', icon: '👻', attr: '飛' },
-            { name: '邪教天使', icon: '👼', attr: '聖' },
-            { name: '外星毒蛛', icon: '👾', attr: '星' },
-            { name: '腐爛喪屍', icon: '🧟', attr: '屍' },
-            { name: '無名野犬', icon: '🐕', attr: '無' },
-            { name: '赤焰野豬', icon: '🐗', attr: '紅' },
-            { name: '蝙蝠魔王', icon: '🦇', attr: '飛' },
-            { name: '機械守衛', icon: '🤖', attr: '星' },
-            { name: '骷髏戰將', icon: '💀', attr: '屍' },
-            { name: '狂暴巨蜥', icon: '🦎', attr: '紅' },
-            { name: '極地白狼', icon: '🐺', attr: '無' },
-            { name: '虛空魔眼', icon: '👁️', attr: '星' },
-            { name: '天界執刑者', icon: '⚔️', attr: '聖' },
-            { name: '巫毒偶人', icon: '🎎', attr: '屍' },
-            { name: '烈焰巨龍', icon: '🐲', attr: '紅' },
-            { name: '雷霆夜鶯', icon: '🐦', attr: '飛' },
-            { name: '星際異形', icon: '👽', attr: '星' },
-            { name: '墮落大天使', icon: '🦇', attr: '聖' },
-            { name: '不朽屍王', icon: '👑', attr: '屍' },
-            { name: '深淵巨魔', icon: '👹', attr: '紅' },
-            { name: '極光巨鳥', icon: '🦅', attr: '飛' },
-            { name: '機械霸王龍', icon: '🦖', attr: '星' },
-            { name: '亡靈騎士', icon: '🏇', attr: '屍' },
-            { name: '聖殿巨神', icon: '🗿', attr: '聖' }
+            { name: '小紅惡魔', icon: '👺', attr: '紅', motion: 'stomp' },
+            { name: '幽靈水母', icon: '👻', attr: '飛', motion: 'float' },
+            { name: '邪教天使', icon: '👼', attr: '聖', motion: 'flap' },
+            { name: '外星毒蛛', icon: '👾', attr: '星', motion: 'crawl' },
+            { name: '腐爛喪屍', icon: '🧟', attr: '屍', motion: 'crawl' },
+            { name: '無名野犬', icon: '🐕', attr: '無', motion: 'chomp' },
+            { name: '赤焰野豬', icon: '🐗', attr: '紅', motion: 'charge' },
+            { name: '蝙蝠魔王', icon: '🦇', attr: '飛', motion: 'flap' },
+            { name: '機械守衛', icon: '🤖', attr: '星', motion: 'march' },
+            { name: '骷髏戰將', icon: '💀', attr: '屍', motion: 'crawl' },
+            { name: '狂暴巨蜥', icon: '🦎', attr: '紅', motion: 'crawl' },
+            { name: '極地白狼', icon: '🐺', attr: '無', motion: 'chomp' },
+            { name: '虛空魔眼', icon: '👁️', attr: '星', motion: 'float' },
+            { name: '天界執刑者', icon: '⚔️', attr: '聖', motion: 'march' },
+            { name: '巫毒偶人', icon: '🎎', attr: '屍', motion: 'crawl' },
+            { name: '烈焰巨龍', icon: '🐲', attr: '紅', motion: 'flap' },
+            { name: '雷霆夜鶯', icon: '🐦', attr: '飛', motion: 'flap' },
+            { name: '星際異形', icon: '👽', attr: '星', motion: 'float' },
+            { name: '墮落大天使', icon: '🦇', attr: '聖', motion: 'flap' },
+            { name: '不朽屍王', icon: '👑', attr: '屍', motion: 'crawl' },
+            { name: '深淵巨魔', icon: '👹', attr: '紅', motion: 'stomp' },
+            { name: '極光巨鳥', icon: '🦅', attr: '飛', motion: 'flap' },
+            { name: '機械霸王龍', icon: '🦖', attr: '星', motion: 'stomp' },
+            { name: '亡靈騎士', icon: '🏇', attr: '屍', motion: 'charge' },
+            { name: '聖殿巨神', icon: '🗿', attr: '聖', motion: 'stomp' }
         ];
 
         for (let i = 1; i <= 120; i++) {
@@ -406,6 +630,7 @@
                 name: `${base.name} Lv.${i}`,
                 icon: base.icon,
                 attr: base.attr,
+                motion: base.motion,
                 hp: Math.floor(220 * mult),
                 atk: Math.floor(30 * mult),
                 spd: parseFloat((0.8 + (i % 3) * 0.2).toFixed(1)),
@@ -863,20 +1088,21 @@
 
             const allies = battle.units.filter(u => u.side === 'player');
 
-createUnitEntity({
-    side: 'player',
-    icon: c.forms[fIdx],
-    targetAttr: c.targetAttr,
-    isArea: c.isArea,
-    x: 70 + (allies.length % 5) * 13,
-    laneY: Math.random() * 12 - 6,
-    attackType: getAttackType(c.targetAttr, c.isArea),
-    hp: c.hp * mult,
-    max: c.hp * mult,
-    atk: c.atk * mult,
-    spd: c.spd,
-    range: c.range
-});
+            createUnitEntity({
+                side: 'player',
+                icon: c.forms[fIdx],
+                motion: c.motion,
+                targetAttr: c.targetAttr,
+                isArea: c.isArea,
+                x: 70 + (allies.length % 5) * 13,
+                laneY: Math.random() * 12 - 6,
+                attackType: getAttackType(c.targetAttr, c.isArea),
+                hp: c.hp * mult,
+                max: c.hp * mult,
+                atk: c.atk * mult,
+                spd: c.spd,
+                range: c.range
+            });
         } else {
             const stg = STAGES[battle.currentStage];
             const enemyId = stg.ePool[Math.floor(Math.random() * stg.ePool.length)];
@@ -889,125 +1115,134 @@ createUnitEntity({
 
             const enemies = battle.units.filter(u => u.side === 'enemy');
 
-createUnitEntity({
-    side: 'enemy',
-    icon: e.icon,
-    attr: e.attr,
-    x: battle.width - 90 - (enemies.length % 5) * 13,
-    laneY: Math.random() * 12 - 6,
-    attackType: getAttackType(e.attr, false),
-    hp: e.hp,
-    max: e.hp,
-    atk: e.atk,
-    spd: e.spd,
-    range: e.range,
-    reward: e.reward
-});
+            createUnitEntity({
+                side: 'enemy',
+                icon: e.icon,
+                motion: e.motion,
+                attr: e.attr,
+                x: battle.width - 90 - (enemies.length % 5) * 13,
+                laneY: Math.random() * 12 - 6,
+                attackType: getAttackType(e.attr, false),
+                hp: e.hp,
+                max: e.hp,
+                atk: e.atk,
+                spd: e.spd,
+                range: e.range,
+                reward: e.reward
+            });
         }
     }
-// 依角色屬性決定攻擊類型
-function getAttackType(attr, isArea) {
-    const types = {
-        '紅': 'fire',
-        '飛': 'lightning',
-        '聖': 'holy',
-        '星': 'water',
-        '屍': 'dark',
-        '無': isArea ? 'wave' : 'melee'
-    };
 
-    return types[attr] || (isArea ? 'wave' : 'melee');
-}
+    // 依角色屬性決定攻擊類型
+    function getAttackType(attr, isArea) {
+        const types = {
+            '紅': 'fire',
+            '飛': 'lightning',
+            '聖': 'holy',
+            '星': 'water',
+            '屍': 'dark',
+            '無': isArea ? 'wave' : 'melee'
+        };
 
-// 建立飛行攻擊與命中特效
-function playUnitAttack(unit, target) {
-    const stage = document.getElementById('stage');
-    const body = unit.el.querySelector('.unit-body');
+        return types[attr] || (isArea ? 'wave' : 'melee');
+    }
 
-    unit.el.classList.remove('attacking');
-    void unit.el.offsetWidth;
-    unit.el.classList.add('attacking');
+    // 建立飛行攻擊與命中特效
+    function playUnitAttack(unit, target) {
+        const stage = document.getElementById('stage');
 
-    setTimeout(() => {
-        if (unit.el) unit.el.classList.remove('attacking');
-    }, 260);
+        // ★ 播放角色專屬攻擊動作
+        unit.el.classList.remove('attacking');
+        void unit.el.offsetWidth;
+        unit.el.classList.add('attacking');
 
-    const effects = {
-        fire:     { icon: '🔥', color: '#ff5722', hit: '💥' },
-        lightning:{ icon: '⚡', color: '#ffe66d', hit: '🌩️' },
-        holy:     { icon: '✨', color: '#fff2a8', hit: '🌟' },
-        water:    { icon: '💧', color: '#45d9ff', hit: '💦' },
-        dark:     { icon: '🌀', color: '#bd70ff', hit: '💜' },
-        wave:     { icon: '🌊', color: '#55c8ff', hit: '💥' },
-        melee:    { icon: '💥', color: '#ffffff', hit: '💢' }
-    };
+        clearTimeout(unit._atkTimer);
+        unit._atkTimer = setTimeout(() => {
+            if (unit.el) unit.el.classList.remove('attacking');
+        }, 420);
 
-    const fx = effects[unit.attackType] || effects.melee;
+        const effects = {
+            fire:     { icon: '🔥', color: '#ff5722', hit: '💥' },
+            lightning:{ icon: '⚡', color: '#ffe66d', hit: '🌩️' },
+            holy:     { icon: '✨', color: '#fff2a8', hit: '🌟' },
+            water:    { icon: '💧', color: '#45d9ff', hit: '💦' },
+            dark:     { icon: '🌀', color: '#bd70ff', hit: '💜' },
+            wave:     { icon: '🌊', color: '#55c8ff', hit: '💥' },
+            melee:    { icon: '💥', color: '#ffffff', hit: '💢' }
+        };
 
-    const fromX = unit.x + (unit.side === 'player' ? 35 : 5);
-    const fromY = stage.clientHeight - 50 - (unit.laneY || 0) - 22;
+        const fx = effects[unit.attackType] || effects.melee;
 
-    // 近戰：在目標附近產生衝擊波
-    if (unit.attackType === 'melee') {
-        const hitX = target ? target.x + 20 : fromX;
+        const fromX = unit.x + (unit.side === 'player' ? 35 : 5);
+        const fromY = stage.clientHeight - 50 - (unit.laneY || 0) - 22;
+
+        // 近戰：在目標附近產生衝擊波
+        if (unit.attackType === 'melee') {
+            const hitX = target ? target.x + 20 : fromX;
+            const hitY = target
+                ? stage.clientHeight - 50 - (target.laneY || 0) - 8
+                : fromY;
+
+            const wave = document.createElement('div');
+            wave.className = 'battle-shockwave';
+            wave.style.left = hitX + 'px';
+            wave.style.top = hitY + 'px';
+            stage.appendChild(wave);
+            setTimeout(() => wave.remove(), 450);
+            return;
+        }
+
+        const projectile = document.createElement('div');
+        projectile.className = 'battle-projectile';
+        projectile.textContent = fx.icon;
+        projectile.style.color = fx.color;
+        projectile.style.left = fromX + 'px';
+        projectile.style.top = fromY + 'px';
+        stage.appendChild(projectile);
+
+        const hitX = target
+            ? target.x + 20
+            : (unit.side === 'player' ? battle.width - 70 : 70);
+
         const hitY = target
-            ? stage.clientHeight - 50 - (target.laneY || 0) - 8
+            ? stage.clientHeight - 50 - (target.laneY || 0) - 22
             : fromY;
 
-        const wave = document.createElement('div');
-        wave.className = 'battle-shockwave';
-        wave.style.left = hitX + 'px';
-        wave.style.top = hitY + 'px';
-        stage.appendChild(wave);
-        setTimeout(() => wave.remove(), 450);
-        return;
+        requestAnimationFrame(() => {
+            projectile.classList.add('fly');
+            projectile.style.left = hitX + 'px';
+            projectile.style.top = hitY + 'px';
+
+            if (unit.attackType === 'lightning') {
+                projectile.style.transform = 'scale(1.7) rotate(20deg)';
+            }
+        });
+
+        setTimeout(() => {
+            projectile.remove();
+
+            const hit = document.createElement('div');
+            hit.className = 'battle-hit';
+            hit.textContent = fx.hit;
+            hit.style.color = fx.color;
+            hit.style.left = hitX + 'px';
+            hit.style.top = hitY + 'px';
+            stage.appendChild(hit);
+
+            setTimeout(() => hit.remove(), 450);
+        }, 350);
     }
 
-    const projectile = document.createElement('div');
-    projectile.className = 'battle-projectile';
-    projectile.textContent = fx.icon;
-    projectile.style.color = fx.color;
-    projectile.style.left = fromX + 'px';
-    projectile.style.top = fromY + 'px';
-    stage.appendChild(projectile);
-
-    const hitX = target
-        ? target.x + 20
-        : (unit.side === 'player' ? battle.width - 70 : 70);
-
-    const hitY = target
-        ? stage.clientHeight - 50 - (target.laneY || 0) - 22
-        : fromY;
-
-    requestAnimationFrame(() => {
-        projectile.classList.add('fly');
-        projectile.style.left = hitX + 'px';
-        projectile.style.top = hitY + 'px';
-
-        if (unit.attackType === 'lightning') {
-            projectile.style.transform = 'scale(1.7) rotate(20deg)';
-        }
-    });
-
-    setTimeout(() => {
-        projectile.remove();
-
-        const hit = document.createElement('div');
-        hit.className = 'battle-hit';
-        hit.textContent = fx.hit;
-        hit.style.color = fx.color;
-        hit.style.left = hitX + 'px';
-        hit.style.top = hitY + 'px';
-        stage.appendChild(hit);
-
-        setTimeout(() => hit.remove(), 450);
-    }, 350);
-}
     function createUnitEntity(cfg) {
         const el = document.createElement('div');
-        el.className = 'unit';
+        el.className = 'unit spawning';
+        el.dataset.motion = cfg.motion || 'march';
+        el.dataset.side = cfg.side;
+        el.style.left = cfg.x + 'px';
+        el.style.setProperty('--lane-y', (cfg.laneY || 0) + 'px');
         el.innerHTML = `<div class="hp-bar"><div class="hp-inner"></div></div><div class="unit-body">${cfg.icon}</div>`;
         document.getElementById('stage').appendChild(el);
+        setTimeout(() => el.classList.remove('spawning'), 320);
         battle.units.push({ ...cfg, el, atkTimer: 0 });
     }
 
@@ -1039,6 +1274,8 @@ function playUnitAttack(unit, target) {
             const baseDist = isP ? (battle.width - 70 - u.x) : (u.x - 70);
 
             if (targets.length > 0 || baseDist <= u.range) {
+                // ★ 停下 → 關閉行走動作
+                u.el.classList.remove('moving');
                 u.atkTimer++;
                 if (u.atkTimer > 30) {
                     u.atkTimer = 0;
@@ -1046,8 +1283,8 @@ function playUnitAttack(unit, target) {
                     // 執行攻擊
                     if (targets.length > 0) {
                         const hitTargets = u.isArea ? targets : [targets[0]];
-                        // 每次攻擊都播放角色專屬動畫
-playUnitAttack(u, hitTargets[0]);
+                        // 播放角色專屬攻擊動作
+                        playUnitAttack(u, hitTargets[0]);
                         hitTargets.forEach(target => {
                             let damage = u.atk;
                             // 屬性克制加成：玩家對特攻屬性傷害 x1.8
@@ -1056,12 +1293,14 @@ playUnitAttack(u, hitTargets[0]);
                         });
                     } else {
                         // 攻擊敵方城堡
+                        playUnitAttack(u, null);
                         if (isP) battle.eHP -= u.atk; 
                         else battle.pHP -= u.atk;
                     }
                 }
             } else {
-                // 前進
+                // ★ 前進 → 播放行走動作
+                u.el.classList.add('moving');
                 u.x += isP ? u.spd : -u.spd;
                 u.el.style.left = u.x + 'px';
             }
