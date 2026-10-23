@@ -21,7 +21,6 @@
     display: block;
     touch-action: none;
   }
-
   #overlay {
     position: fixed; inset: 0;
     background: rgba(0,0,0,0.88);
@@ -39,23 +38,9 @@
     max-width: 90vw;
   }
   .panel.hidden { display: none; }
-  .panel h1 {
-    margin: 0 0 8px;
-    font-size: 40px;
-    color: #ffd35c;
-    letter-spacing: 2px;
-  }
-  .panel h2 {
-    margin: 0 0 20px;
-    font-size: 25px;
-    color: #eee;
-  }
-  .panel p {
-    margin: 0 0 22px;
-    font-size: 15px;
-    color: #9a9aac;
-    min-height: 22px;
-  }
+  .panel h1 { margin: 0 0 8px; font-size: 40px; color: #ffd35c; letter-spacing: 2px; }
+  .panel h2 { margin: 0 0 20px; font-size: 25px; color: #eee; }
+  .panel p { margin: 0 0 22px; font-size: 15px; color: #9a9aac; min-height: 22px; }
   .panel button {
     display: block;
     width: 280px;
@@ -142,8 +127,8 @@ const HOOP_R = { x: 890, y: HOOP_Y, r: 22, side: 'right' };
 const THREE_DIST = 280;
 
 // 遠距離命中率懲罰（二次曲線）
-const ACC_NEAR = 130;          // 此距離內不罰
-const ACC_FAR = 740;           // 此距離外懲罰最大
+const ACC_NEAR = 130;
+const ACC_FAR = 740;
 const ACC_MAX_PENALTY = 0.62;
 
 // ======================================================
@@ -251,13 +236,12 @@ function calcAccuracy(shooterX, hoopX, powerVal, moving, defenderDist) {
 
   let base;
   if (powerVal >= 0.6 && powerVal <= 0.85) {
-    base = 0.90;                              // 完美蓄力
+    base = 0.90;
   } else {
     const off = powerVal < 0.6 ? 0.6 - powerVal : powerVal - 0.85;
-    base = 0.72 - off * 0.7;                  // 蓄力偏差扣分
+    base = 0.72 - off * 0.7;
   }
 
-  // 距離懲罰：ACC_NEAR 內為 0，ACC_FAR 外為最大，中間用二次曲線
   const t = clamp((distX - ACC_NEAR) / (ACC_FAR - ACC_NEAR), 0, 1);
   const distPenalty = t * t * ACC_MAX_PENALTY;
 
@@ -377,7 +361,7 @@ function resolveShot() {
 }
 
 // ======================================================
-// 本地玩家（單機 / Host）
+// 本地玩家
 // ======================================================
 function updatePlayer(dt) {
   let dir = 0;
@@ -702,11 +686,17 @@ function update(dt) {
 
 // ======================================================
 // Guest 端本地更新
+// ★ 修復：inputRef 保底重建 + 50ms 發送
 // ======================================================
 function updateGuestLocal(dt) {
   if (state.phase === 'ended') return;
 
-  // 本地蓄力（僅 UI 與送出用）
+  // 保險：如果 inputRef 不知為何丟了，這裡自己重建
+  if (!net.inputRef && net.roomId && db) {
+    net.inputRef = db.ref('rooms/' + net.roomId + '/guestInput');
+  }
+
+  // 本地蓄力（僅 UI 顯示，實際值會送到 Host）
   if (input.action) {
     if (!charging) { charging = true; power = 0; powerDir = 1; }
     power += powerDir * 1.6 * dt;
@@ -727,10 +717,10 @@ function updateGuestLocal(dt) {
   ball.x += (ball.targetX - ball.x) * 0.5;
   ball.y += (ball.targetY - ball.y) * 0.5;
 
-  // 送出輸入（12Hz + 動作邊緣立即送）
+  // 送出輸入（20Hz + 動作邊緣立即送）
   const actionChanged = input.action !== net.lastSentAction;
   net.inputTimer += dt;
-  if (net.inputTimer >= 0.08 || actionChanged) {
+  if (net.inputTimer >= 0.05 || actionChanged) {
     net.inputTimer = 0;
     net.lastSentAction = input.action;
     if (net.inputRef) {
@@ -758,7 +748,6 @@ function endGame() {
   input.left = false;
   input.right = false;
 
-  // Host 寫入最終 state，讓 Guest 同步結束
   if (net.mode === 'host' && net.roomId && db) {
     db.ref('rooms/' + net.roomId + '/state').set(serializeState()).catch(() => {});
   }
@@ -1408,7 +1397,6 @@ function startMatchmaking() {
     candidates.sort((a, b) => (a[1].ts || 0) - (b[1].ts || 0));
     if (candidates.length === 0) return;
     const oppId = candidates[0][0];
-    // 字典序小者發起，避免雙方同時建房間
     if (net.myId < oppId) createRoom(oppId);
   }, err => {
     matchStatusEl.textContent = '讀取配對池失敗：' + (err.message || '權限不足');
@@ -1461,6 +1449,10 @@ function onMatched() {
     });
   } else {
     resetGame();
+
+    // ★★★ 修復關鍵：Guest 也必須建立 inputRef 才能把操作送給 Host ★★★
+    net.inputRef = db.ref('rooms/' + net.roomId + '/guestInput');
+
     net.stateRef = db.ref('rooms/' + net.roomId + '/state');
     net.stateRef.on('value', snap => {
       if (!snap.exists()) {
