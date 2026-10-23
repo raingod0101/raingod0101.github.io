@@ -129,6 +129,35 @@
   .ad-error { color: #cc0000; font-weight: 900; font-size: .8rem; text-align: center; min-height: 1em; }
   .ad-close-btn { background: linear-gradient(180deg,#c0c0b0,#8a8a7a); border: 2px solid #5a5a4a; border-radius: 8px; padding: 5px 14px; color: #2a2a1a; font-weight: 800; font-size: .75rem; cursor: pointer; }
 
+  /* 測試模式觸發按鈕 (手機版) */
+  #testTriggerBtn {
+    position: absolute; left: 0; bottom: 180px; width: 36px; height: 56px;
+    background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); border-left: none;
+    border-radius: 0 10px 10px 0; display: flex; align-items: center; justify-content: center;
+    z-index: 150; pointer-events: auto; color: #fff; font-size: 1.2rem; cursor: pointer;
+    opacity: 0.6; transition: opacity 0.2s;
+  }
+  #testTriggerBtn:hover { opacity: 1; }
+
+  /* 測試面板 */
+  .test-panel {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: rgba(30, 40, 30, 0.98); border: 3px solid #e0b040; border-radius: 12px;
+    padding: 16px; z-index: 350; display: none; flex-direction: column; gap: 12px;
+    width: 90%; max-width: 360px; box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+  }
+  .test-panel.open { display: flex; }
+  .test-header { display: flex; justify-content: space-between; align-items: center; color: #ffe080; }
+  .test-header h2 { font-size: 1.1rem; font-weight: 900; }
+  .test-header button { background: #8a2a2a; color: #fff; border: none; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-weight: bold; }
+  .test-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .test-row label { color: #fff; font-weight: 800; font-size: 0.8rem; width: 50px; flex-shrink: 0; }
+  .test-row input, .test-row select { flex: 1; min-width: 100px; padding: 6px 10px; border: 2px solid #8a7a5a; border-radius: 6px; background: #fff; color: #3a2a1a; font-weight: 800; font-size: 0.85rem; outline: none; }
+  .test-row button { background: linear-gradient(180deg,#a0d8a0,#80c080); border: 2px solid #4a8a4a; border-radius: 6px; padding: 6px 10px; color: #0a3a0a; font-weight: 900; cursor: pointer; white-space: nowrap; }
+  .test-row button:active { transform: translateY(2px); }
+  .test-btn-red { background: linear-gradient(180deg,#e8a0a0,#d08080); border-color: #aa4a4a; color: #4a0a0a; }
+  .test-btn-blue { background: linear-gradient(180deg,#a0d8f0,#80b0d8); border-color: #4a7aaa; color: #0a2a4a; }
+
   @media (pointer:fine){
     .joystick-zone{display:none}
     .pet-panel{bottom:20px}
@@ -216,6 +245,39 @@
       <div id="edgeLabel" style="font-size:.65rem; font-weight:900; color:#ffe080; text-shadow:0 0 4px #000; white-space:nowrap;">🏠 基地</div>
     </div>
     <div class="tut-arrow" id="tutArrow"><div class="tut-arrow-icon" id="tutArrowIcon">➡️</div><div class="tut-arrow-text" id="tutArrowText"></div></div>
+    
+    <!-- 手機測試模式觸發按鈕 -->
+    <div id="testTriggerBtn">⚙️</div>
+
+    <!-- 測試面板 -->
+    <div class="test-panel" id="testPanel">
+      <div class="test-header">
+        <h2>🛠️ 測試模式</h2>
+        <button id="btnCloseTest">✕</button>
+      </div>
+      <div class="test-row">
+        <label>💰 金錢:</label>
+        <input type="number" id="testCashInput" placeholder="輸入金額...">
+        <button id="btnSetCash">設定</button>
+      </div>
+      <div class="test-row">
+        <label>⚡ 速度:</label>
+        <input type="number" id="testSpeedInput" placeholder="輸入速度...">
+        <button id="btnSetSpeed">設定</button>
+      </div>
+      <div class="test-row">
+        <label>🐾 寵物:</label>
+        <select id="testPetSelect"></select>
+      </div>
+      <div class="test-row" style="justify-content:space-between;">
+        <button id="btnAddPetBag" class="test-btn-blue" style="flex:1;">放背包</button>
+        <button id="btnAddPetFarm" style="flex:1;">放農場</button>
+      </div>
+      <div class="test-row" style="margin-top:4px;">
+        <button id="btnUnlockAll" class="test-btn-red" style="width:100%;">📖 解鎖全圖鑑</button>
+      </div>
+    </div>
+
     <div class="ad-modal" id="adModal">
       <div class="ad-modal-content">
         <div class="ad-modal-title" id="adTitle">🎬 觀看廣告解鎖 2× 跑步機速度</div>
@@ -317,14 +379,12 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
 
   const BASE_XS = [300, 750, 1200, 1650, 2100];
   
-  // ✅ 修改：農場擴充到 30 個槽位（3 欄 x 10 列），確保上限再高也放得下
   const FARM_OFFSETS = [];
   for(let row=0; row<10; row++){
     for(let col=0; col<3; col++){
       FARM_OFFSETS.push({x: -35 + col*35, y: -40 + row*45});
     }
   }
-  // ✅ 修改：孵化槽擴充到 10 個
   const HATCH_OFFSETS = [
     {x:-30,y:-120},{x:30,y:-120},{x:-30,y:120},{x:30,y:120},
     {x:0,y:-120},{x:0,y:120},
@@ -384,20 +444,16 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
   function loadGame(){
     try{
       let raw=localStorage.getItem(SAVE_KEY);
-      
-      // ✅ 修復：自動讀取並遷移舊版 v14 存檔，保證資料不丟失
       if(!raw){
         const oldRaw = localStorage.getItem(SAVE_KEY_OLD);
         if(oldRaw){
           const d = JSON.parse(oldRaw);
           if(d && d.version === 14){
-            // 舊版索引映射到新版（因為中間插入了冰河、神界、混沌）
             const biomeMap = {0:0, 1:1, 2:2, 3:3, 4:5, 5:6, 6:7, 7:10};
             if(d.pets) d.pets.forEach(p => { if(biomeMap[p.biomeIdx] !== undefined) p.biomeIdx = biomeMap[p.biomeIdx]; });
             if(d.bag) d.bag.forEach(p => { if(biomeMap[p.biomeIdx] !== undefined) p.biomeIdx = biomeMap[p.biomeIdx]; });
             if(d.hatchery) d.hatchery.forEach(h => { if(biomeMap[h.biomeIdx] !== undefined) h.biomeIdx = biomeMap[h.biomeIdx]; });
             if(biomeMap[d.biomeIdx] !== undefined) d.biomeIdx = biomeMap[d.biomeIdx];
-            
             const newDisc = [];
             if(Array.isArray(d.discovered)){
               d.discovered.forEach(k => {
@@ -406,7 +462,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
               });
             }
             d.discovered = newDisc;
-            
             const newClaimed = [];
             if(Array.isArray(d.claimed)){
               d.claimed.forEach(k => {
@@ -415,20 +470,16 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
               });
             }
             d.claimed = newClaimed;
-            
             d.version = 15;
             localStorage.setItem(SAVE_KEY, JSON.stringify(d));
             localStorage.removeItem(SAVE_KEY_OLD);
             raw = localStorage.getItem(SAVE_KEY);
-            console.log('Successfully migrated v14 save to v15');
           }
         }
       }
-      
       if(!raw)return false;
       const d=JSON.parse(raw);
       if(!d||d.version!==15)return false;
-      
       S.player.displaySpeed=d.displaySpeed||10;
       S.player.tsLv=d.tsLv||1;
       const basePos = getBasePos(S.myBaseIdx);
@@ -536,6 +587,102 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
   }
 
   function getSpeedMultiplier(){ if(S.quadSpeed) return 4; if(S.doubleSpeed) return 2; return 1; }
+
+  // ============ 測試模式 ============
+  function activateTestMode() {
+    document.getElementById('testPanel').classList.add('open');
+    showToast('🛠️ 已進入測試模式！', '#8a3a8a', '#5a1a5a');
+    const sel = document.getElementById('testPetSelect');
+    sel.innerHTML = '';
+    WORLD.biomes.forEach((b, bi) => {
+      for (let pi = 0; pi < 8; pi++) {
+        const opt = document.createElement('option');
+        opt.value = bi + '_' + pi;
+        opt.textContent = `[${b.name}] ${b.petNames[pi]}`;
+        sel.appendChild(opt);
+      }
+    });
+  }
+
+  document.getElementById('testTriggerBtn').addEventListener('click', () => {
+    const pwd = prompt("請輸入管理員密碼：");
+    if (pwd && (pwd.toLowerCase() === 'rain' || pwd.toLowerCase() === 'r+a+i+n+ctrl')) {
+      activateTestMode();
+    } else if(pwd) {
+      showToast('❌ 密碼錯誤', '#8a2a2a', '#5a0a0a');
+    }
+  });
+
+  document.getElementById('btnCloseTest').addEventListener('click', () => {
+    document.getElementById('testPanel').classList.remove('open');
+  });
+
+  document.getElementById('btnSetCash').addEventListener('click', () => {
+    const val = parseFloat(document.getElementById('testCashInput').value);
+    if (!isNaN(val) && val >= 0) {
+      S.cash = val;
+      updateUI(); saveGame(true);
+      showToast('💰 金錢已設定為 ' + fmt(val), '#3a8a3a', '#2a6a2a');
+    }
+  });
+
+  document.getElementById('btnSetSpeed').addEventListener('click', () => {
+    const val = parseFloat(document.getElementById('testSpeedInput').value);
+    if (!isNaN(val) && val >= 10) {
+      S.player.displaySpeed = val;
+      updateUI(); saveGame(true);
+      showToast('⚡ 速度已設定為 ' + fmt(val), '#3a8a3a', '#2a6a2a');
+    }
+  });
+
+  document.getElementById('btnAddPetBag').addEventListener('click', () => {
+    const val = document.getElementById('testPetSelect').value;
+    if (!val) return;
+    const [biStr, piStr] = val.split('_');
+    const bi = parseInt(biStr), pi = parseInt(piStr);
+    const b = WORLD.biomes[bi];
+    const inc = WORLD.petIncome[bi][pi];
+    const rar = WORLD.petRarity[bi][pi];
+    
+    const petData = { id: Math.random().toString(36).slice(2), name: b.petNames[pi], inc, rar, biomeIdx: bi, petIdx: pi, size: 'normal' };
+    S.bag.push(petData);
+    discoverPet(bi, pi);
+    buildBagUI(); updateUI(); saveGame(true);
+    showToast(`🎒 已獲得 ${b.petNames[pi]}（放背包）`, '#3a8a3a', '#2a6a2a');
+  });
+
+  document.getElementById('btnAddPetFarm').addEventListener('click', () => {
+    const val = document.getElementById('testPetSelect').value;
+    if (!val) return;
+    if (S.pets.length >= S.petCap) { showToast('⚠️ 農場已滿，請先擴充或放背包', '#8a2a2a', '#5a0a0a'); return; }
+    const [biStr, piStr] = val.split('_');
+    const bi = parseInt(biStr), pi = parseInt(piStr);
+    const b = WORLD.biomes[bi];
+    const inc = WORLD.petIncome[bi][pi];
+    const rar = WORLD.petRarity[bi][pi];
+    
+    const usedSlots = new Set(S.pets.map(p => p.slot));
+    let slot = -1;
+    for (let j = 0; j < FARM_OFFSETS.length; j++) { if (!usedSlots.has(j)) { slot = j; break; } }
+    
+    if (slot !== -1) {
+      const basePos = getBasePos(S.myBaseIdx);
+      const mx = basePos.x + rnd(-35, 35), my = basePos.y + rnd(-40, 365);
+      S.pets.push({ id: Math.random().toString(36).slice(2), name: b.petNames[pi], inc, rar, biomeIdx: bi, petIdx: pi, size: 'normal',
+        x: mx, y: my, wanderTargetX: mx, wanderTargetY: my, wanderTimer: 0, selected: false, slot, state: 'farm' });
+      S.cps = S.pets.reduce((s, pt) => s + pt.inc, 0);
+      discoverPet(bi, pi);
+      updateUI(); saveGame(true);
+      showToast(`✅ 已獲得 ${b.petNames[pi]}（放農場）`, '#3a8a3a', '#2a6a2a');
+    }
+  });
+
+  document.getElementById('btnUnlockAll').addEventListener('click', () => {
+    WORLD.biomes.forEach((b, bi) => { for (let pi = 0; pi < 8; pi++) IndexData.discovered.add(bi + '_' + pi); });
+    buildIndexUI(); checkStickUnlock(); updateUI(); saveGame(true);
+    showToast('📖 已解鎖全圖鑑！', '#3a8a3a', '#2a6a2a');
+  });
+  // ==========================================
 
   function updateTutorial(){
     if(!S.tutorialActive) return;
@@ -647,7 +794,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     {body:'#7a3a9a',belly:'#b070d0',eye:'#3a0a4a',accent:'#c040ff',dark:'#4a1a6a',light:'#a060c0'},
     {body:'#7a5aa0',belly:'#b090d0',eye:'#2a0a4a',accent:'#d040ff',dark:'#4a2a70',light:'#a080d0'},
   ];
-  // ✅ 修改：每個區域的第 6 個寵物（倒數第二強）改為守衛的造型（'guardian_bi'）
   const PET_SHAPES=[
     ['chicken','dog','bird','owl','raccoon','fox','guardian_0','crystal'],
     ['lizard','frog','cow','iguana','chili','hound','guardian_1','dragon'],
@@ -663,7 +809,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
   ];
 
   function drawPetShape(g,shape,pal,s,time,rc){
-    // ✅ 新增：如果名字是 guardian_X，直接呼叫該區守衛的繪製函數
     if(shape.startsWith('guardian_')){
       const gIdx = parseInt(shape.split('_')[1]);
       const anim = GUARD_ANIMALS[gIdx] || GUARD_ANIMALS[0];
@@ -1181,7 +1326,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       const nx = fixedXs[i];
       const sr=Math.random();let size='normal',mul=1,r=12;
       if(sr>0.92){size='giant';mul=4;r=22}else if(sr>0.7){size='huge';mul=2.2;r=16}
-      // ✅ 修改：普通蛋只出 0~5，不包含守衛(6)與最強(7)
       const petIdx=Math.floor(Math.random()*6);
       S.eggs.push({x:nx,y:b.nestsY+rnd(-15,15),r,size,mul,petIdx,biomeIdx:bi,collected:false,float:Math.random()*10,origX:nx,origY:b.nestsY});
     }
@@ -1226,7 +1370,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       if(spawned.length >= 1) break;
       if(Math.random() < 0.015){
         const b=WORLD.biomes[bi];
-        const pi = Math.random()<0.5?6:7; // ✅ 秘密蛋專屬出 6 或 7
+        const pi = Math.random()<0.5?6:7;
         let nx, attempts = 0;
         do { nx = (Math.random() * 0.6 + 0.2) * WORLD_W; attempts++; } while (usedPositions.some(p => Math.abs(p - nx) < 80) && attempts < 10);
         usedPositions.push(nx);
@@ -1379,8 +1523,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       g.y = clamp(g.y, MIN_Y, MAX_Y);
     }
 
-    // ✅ 修改：刪除了自動碰撞偷蛋的邏輯，改為點擊蛋觸發
-
     if(p.carry&&p.y>S.safeLineY){
       const egg=p.carry;
       const b=WORLD.biomes[egg.biomeIdx];
@@ -1503,48 +1645,48 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
         const yy = (worldY - S.camera.y)*S.zoom + H/2;
         if(yy < y2 - 40 || yy > y1 + 40) continue;
 
-        if(bi===0){ // 森林
+        if(bi===0){
           const sz=(20+((i*53)%25))*S.zoom;
           ctx.fillStyle='#4a8a2a';
           ctx.beginPath();ctx.moveTo(xx,yy-sz);ctx.lineTo(xx-sz*0.7,yy);ctx.lineTo(xx+sz*0.7,yy);ctx.closePath();ctx.fill();
           ctx.fillStyle='#6a3a1a';
           ctx.fillRect(xx-sz*0.15,yy,sz*0.3,sz*0.5);
-        } else if(bi===1){ // 火山
+        } else if(bi===1){
           const s2=40*S.zoom;
           ctx.strokeStyle='#ff6020';ctx.lineWidth=4*S.zoom;
           ctx.beginPath();ctx.moveTo(xx,yy);ctx.lineTo(xx+s2,yy+s2*0.75);ctx.lineTo(xx+s2*0.4,yy+s2*1.75);ctx.stroke();
-        } else if(bi===2){ // 深淵
+        } else if(bi===2){
           const sz=(6+((i*31)%20))*S.zoom;
           ctx.strokeStyle='#80c0ff';ctx.lineWidth=2*S.zoom;
           ctx.beginPath();ctx.arc(xx,yy,sz,0,7);ctx.stroke();
-        } else if(bi===3){ // 史前
+        } else if(bi===3){
           const sz=15*S.zoom;
           ctx.fillStyle='#8a7a3a';
           ctx.beginPath();ctx.ellipse(xx,yy,sz*0.66,sz,0.3,0,7);ctx.fill();
-        } else if(bi===4){ // 冰河
+        } else if(bi===4){
           ctx.fillStyle='#ffffff';
           ctx.beginPath();ctx.arc(xx,yy,3*S.zoom,0,7);ctx.fill();
           const sz=22*S.zoom;
           ctx.fillStyle='#c0e8ff';
           ctx.beginPath();ctx.moveTo(xx-sz*0.3,yy);ctx.lineTo(xx,yy-sz);ctx.lineTo(xx+sz*0.3,yy);ctx.closePath();ctx.fill();
-        } else if(bi===5){ // 宇宙
+        } else if(bi===5){
           ctx.fillStyle='#ffffff';
           ctx.beginPath();ctx.arc(xx,yy,2.5*S.zoom,0,7);ctx.fill();
-        } else if(bi===6){ // 櫻花
+        } else if(bi===6){
           const sz=9*S.zoom;
           ctx.fillStyle='#ffb0e0';
           ctx.beginPath();ctx.ellipse(xx,yy,sz*0.55,sz,0.5,0,7);ctx.fill();
-        } else if(bi===7){ // 泰坦
+        } else if(bi===7){
           const w2=16*S.zoom,h2=50*S.zoom;
           ctx.fillStyle='#8a8aa0';
           ctx.fillRect(xx,yy,w2,h2);
-        } else if(bi===8){ // 神界
+        } else if(bi===8){
           const w2=14*S.zoom,h2=60*S.zoom;
           ctx.fillStyle='#ffe080';
           ctx.fillRect(xx,yy,w2,h2);
           ctx.fillStyle='#ffffff';
           ctx.fillRect(xx-3*S.zoom,yy-4*S.zoom,w2+6*S.zoom,4*S.zoom);
-        } else if(bi===9){ // 混沌
+        } else if(bi===9){
           ctx.strokeStyle='#a040d0';ctx.lineWidth=2.5*S.zoom;
           ctx.beginPath();
           let first=true;
@@ -1554,7 +1696,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
             if(first){ctx.moveTo(px,py);first=false;} else ctx.lineTo(px,py);
           }
           ctx.stroke();
-        } else { // 虛空
+        } else {
           ctx.strokeStyle='#6a4a8a';ctx.lineWidth=3*S.zoom;
           ctx.beginPath();
           let first=true;
@@ -1693,8 +1835,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     const sc=S.zoom;
     ctx.save(); ctx.translate(sp.x, sp.y); ctx.scale(sc, sc);
     drawEggShape(ctx, {...e, rar}, e.r, S.time, rc);
-    
-    // ✅ 新增：靠近時顯示點擊提示
     if(!S.player.carry && dist(S.player.x, S.player.y, e.x, e.y) < 120) {
       ctx.fillStyle = '#fff';
       ctx.font = 'bold 14px "Segoe UI"';
@@ -1877,16 +2017,34 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     updateUI(); saveGame(true);
   }
 
+  // ============ 測試模式鍵盤觸發 ============
+  let konamiIndex = 0;
+  const konamiCode = ['r', 'a', 'i', 'n', 'control'];
+
   window.addEventListener('keydown',e=>{
     const tag = e.target.tagName;
     if(tag === 'INPUT' || tag === 'TEXTAREA') return;
-    const k=e.key.toLowerCase();keys[k]=true;
+    const k=e.key.toLowerCase();
+    
+    // Konami code 檢查
+    if (k === konamiCode[konamiIndex]) {
+      konamiIndex++;
+      if (konamiIndex === konamiCode.length) {
+        activateTestMode();
+        konamiIndex = 0;
+      }
+    } else {
+      konamiIndex = (k === 'r') ? 1 : 0;
+    }
+
+    keys[k]=true;
     if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(k))e.preventDefault();
     if(k==='escape'){
       if(S.panelOpen)closePetPanel();
       if(S.indexOpen){S.indexOpen=false;document.getElementById('indexPanel').classList.remove('open')}
       if(S.bagOpen){S.bagOpen=false;document.getElementById('bagPanel').classList.remove('open')}
       if(S.adPlaying)closeAdModal();
+      document.getElementById('testPanel').classList.remove('open');
     }
     if(k==='f'){attackNearest();}
     if(k==='r'&&!S.player.carry){
@@ -1938,7 +2096,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     const sy=(e.clientY-rect.top)*(H/rect.height);
     const w=screenToWorld(sx,sy);
     
-    // ✅ 優先處理點擊偷蛋
     if(!S.player.carry){
       for(const egg of S.eggs){
         if(egg.collected) continue;
@@ -1960,11 +2117,9 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       }
     }
     
-    // 處理孵化蛋
     for(const h of S.hatchery){
       if(h.finished && dist(w.x,w.y,h.x,h.y) < 40){ openHatchedEgg(h); return; }
     }
-    // 處理寵物點擊
     for(const pt of S.pets){
       if(dist(w.x,w.y,pt.x,pt.y)<30){ openPetPanel(pt); return; }
     }
