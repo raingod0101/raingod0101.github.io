@@ -4,8 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>🥚 Steal Eggs | Raingod</title>
-<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7889068650968296"
-     crossorigin="anonymous"></script>
 <style>
   *{margin:0;padding:0;box-sizing:border-box;user-select:none;-webkit-tap-highlight-color:transparent}
   html,body{width:100%;height:100%;overflow:hidden;background:#1a2a1a;font-family:'Segoe UI',system-ui,sans-serif;touch-action:none}
@@ -107,7 +105,6 @@
   .edge-indicator .label { font-size: .6rem; color: #fff; font-weight: 900; text-shadow: 0 0 4px #000; }
   @keyframes bounce { 0% { transform: scale(1); } 100% { transform: scale(1.2); } }
 
-  /* 新手教學箭頭 */
   .tut-arrow {
     position: fixed;
     display: none;
@@ -182,6 +179,12 @@
     padding: 22px 14px;
     text-align: center;
     box-shadow: inset 0 0 30px rgba(255,255,255,0.6), 0 6px 0 #aa6600;
+    transition: background 0.5s ease, border-color 0.5s ease, box-shadow 0.5s ease;
+  }
+  .ad-url-display.hidden-url {
+    background: linear-gradient(135deg,#b8b8b8,#909090);
+    border-color: #606060;
+    box-shadow: inset 0 0 30px rgba(255,255,255,0.3), 0 6px 0 #505050;
   }
   .ad-url-text {
     font-size: 2.4rem;
@@ -192,6 +195,12 @@
     font-family: 'Courier New', monospace;
     word-break: break-all;
     line-height: 1.15;
+    transition: opacity 0.5s ease, transform 0.5s ease;
+    min-height: 1.2em;
+  }
+  .ad-url-display.hidden-url .ad-url-text {
+    opacity: 0;
+    transform: scale(0.6);
   }
   .ad-url-hint {
     margin-top: 10px;
@@ -199,6 +208,10 @@
     color: #6a3a00;
     font-weight: 900;
     line-height: 1.4;
+    transition: color 0.5s ease;
+  }
+  .ad-url-display.hidden-url .ad-url-hint {
+    color: #fff;
   }
   .ad-countdown {
     font-size: 1.8rem;
@@ -372,13 +385,13 @@
     <div class="ad-modal" id="adModal">
       <div class="ad-modal-content">
         <div class="ad-modal-title" id="adTitle">🎬 觀看廣告解鎖 2× 跑步機速度</div>
-        <div class="ad-url-display">
-          <div class="ad-url-text">is.gd/raingod</div>
-          <div class="ad-url-hint">📺 看完廣告後請輸入上方黃色網址</div>
+        <div class="ad-url-display" id="adUrlDisplay">
+          <div class="ad-url-text" id="adUrlText">is.gd/raingod</div>
+          <div class="ad-url-hint" id="adUrlHint">📺 看完廣告後請輸入上方黃色網址</div>
         </div>
         <div class="ad-countdown" id="adCountdown">5</div>
         <div class="ad-input-wrap" id="adInputWrap">
-          <input type="text" id="adInput" placeholder="輸入上方網址..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+          <input type="text" id="adInput" placeholder="輸入剛剛背下來的網址..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
           <button class="ad-claim-btn" id="adClaimBtn">✅ 領取獎勵</button>
           <div class="ad-error" id="adError"></div>
         </div>
@@ -802,6 +815,10 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     S.adPlaying = true;
     S.adType = type;
 
+    // ✅ 清空按鍵狀態，避免玩家按著 WASD 時角色亂跑
+    for(const k in keys) keys[k] = false;
+    S.input.x = 0; S.input.y = 0;
+
     const modal = document.getElementById('adModal');
     const title = document.getElementById('adTitle');
     const cdEl = document.getElementById('adCountdown');
@@ -809,7 +826,12 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     const errEl = document.getElementById('adError');
     const claimBtn = document.getElementById('adClaimBtn');
     const input = document.getElementById('adInput');
+    const urlDisplay = document.getElementById('adUrlDisplay');
+    const urlHint = document.getElementById('adUrlHint');
 
+    // ✅ 重置：顯示大字
+    urlDisplay.classList.remove('hidden-url');
+    urlHint.textContent = '📺 看完廣告後請輸入上方黃色網址';
     title.textContent = type === '4x' ? '🎬 觀看廣告解鎖 4× 跑步機速度' : '🎬 觀看廣告解鎖 2× 跑步機速度';
     modal.classList.add('open');
     inputWrap.style.display = 'none';
@@ -827,6 +849,9 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
         clearInterval(adInterval);
         adInterval = null;
         cdEl.textContent = '✓';
+        // ✅ 隱藏大字，讓玩家憑記憶輸入
+        urlDisplay.classList.add('hidden-url');
+        urlHint.textContent = '🧠 請憑記憶輸入剛剛看到的網址！';
         inputWrap.style.display = 'flex';
         setTimeout(() => { try{ input.focus(); }catch(e){} }, 50);
       }
@@ -835,7 +860,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     claimBtn.onclick = () => {
       const normalized = normalizeUrl(input.value);
       if(normalized !== AD_URL){
-        errEl.textContent = '❌ 網址不正確，請仔細看上方黃色大字';
+        errEl.textContent = '❌ 網址不正確，請仔細回想剛剛的黃色大字';
         return;
       }
       if(type === '2x'){
@@ -2324,7 +2349,11 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     updateUI(); saveGame(true);
   }
 
+  // ✅ 修復：焦點在輸入框時不攔截 WASD
   window.addEventListener('keydown',e=>{
+    const tag = e.target.tagName;
+    if(tag === 'INPUT' || tag === 'TEXTAREA') return;
+
     const k=e.key.toLowerCase();keys[k]=true;
     if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(k))e.preventDefault();
     if(k==='escape'){
@@ -2339,7 +2368,11 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       S.player.x=bPos.x; S.player.y=2850; S.player.vx=0; S.player.vy=0;
     }
   });
-  window.addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false});
+  window.addEventListener('keyup',e=>{
+    const tag = e.target.tagName;
+    if(tag === 'INPUT' || tag === 'TEXTAREA') return;
+    keys[e.key.toLowerCase()]=false;
+  });
 
   const joyZone=document.getElementById('joystickZone');
   const joyKnob=document.getElementById('joystickKnob');
@@ -2414,7 +2447,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     document.getElementById('capCostTxt').textContent = '$' + fmt(capCost);
     document.getElementById('btnUpgradeCap').disabled = S.cash < capCost;
     
-    // ✅ 廣告按鈕顯示條件
     const adBtn = document.getElementById('btnAd');
     const adBtn4x = document.getElementById('btnAd4x');
     adBtn.style.display = (p.displaySpeed >= AD_SPEED_2X && !S.doubleSpeed && !S.adPlaying) ? 'flex' : 'none';
@@ -2552,13 +2584,17 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
   document.getElementById('btnPickupPanel').addEventListener('click',()=>{ if(S.selectedPet) togglePickupPet(S.selectedPet); });
   document.getElementById('btnSave').addEventListener('click',()=>saveGame(false));
 
-  // ✅ 廣告 Modal
+  // ✅ 廣告 Modal：關閉按鈕 + 輸入框 Enter/Escape
   document.getElementById('adCloseBtn').addEventListener('click',closeAdModal);
   document.getElementById('adInput').addEventListener('keydown', (e) => {
     if(e.key === 'Enter'){
       e.preventDefault();
       const btn = document.getElementById('adClaimBtn');
       if(btn) btn.click();
+    }
+    if(e.key === 'Escape'){
+      e.preventDefault();
+      closeAdModal();
     }
   });
 
