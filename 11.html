@@ -15,12 +15,7 @@
     touch-action: none; overscroll-behavior: none;
   }
   body { display: flex; align-items: center; justify-content: center; }
-  canvas {
-    max-width: 100vw; max-height: 100vh;
-    width: auto; height: auto;
-    display: block;
-    touch-action: none;
-  }
+  canvas { max-width: 100vw; max-height: 100vh; width: auto; height: auto; display: block; touch-action: none; }
   #overlay {
     position: fixed; inset: 0;
     background: rgba(0,0,0,0.88);
@@ -30,11 +25,8 @@
   }
   #overlay.hidden { display: none; }
   .panel {
-    background: #181826;
-    padding: 38px 46px;
-    border-radius: 22px;
-    text-align: center;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.06);
+    background: #181826; padding: 38px 46px; border-radius: 22px;
+    text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.06);
     max-width: 90vw;
   }
   .panel.hidden { display: none; }
@@ -42,30 +34,16 @@
   .panel h2 { margin: 0 0 20px; font-size: 25px; color: #eee; }
   .panel p { margin: 0 0 22px; font-size: 15px; color: #9a9aac; min-height: 22px; }
   .panel button {
-    display: block;
-    width: 280px;
-    margin: 13px auto;
-    padding: 15px;
-    font-size: 19px;
-    font-weight: 600;
-    border: none;
-    border-radius: 13px;
-    background: linear-gradient(135deg, #4a9eff, #2a6edb);
-    color: #fff;
-    cursor: pointer;
-    transition: transform 0.08s, filter 0.15s;
-    font-family: inherit;
+    display: block; width: 280px; margin: 13px auto; padding: 15px;
+    font-size: 19px; font-weight: 600; border: none; border-radius: 13px;
+    background: linear-gradient(135deg, #4a9eff, #2a6edb); color: #fff;
+    cursor: pointer; transition: transform 0.08s, filter 0.15s; font-family: inherit;
   }
   .panel button:hover { filter: brightness(1.12); }
   .panel button:active { transform: scale(0.97); }
   #btnOnline { background: linear-gradient(135deg, #ff8a1e, #d96a12); }
   #btnCancel { background: #444452; }
-  .panel .subtitle {
-    font-size: 12px;
-    color: #6a6a7a;
-    margin-top: 22px;
-    line-height: 1.8;
-  }
+  .panel .subtitle { font-size: 12px; color: #6a6a7a; margin-top: 22px; line-height: 1.8; }
 </style>
 </head>
 <body>
@@ -126,7 +104,6 @@ const HOOP_L = { x: 110, y: HOOP_Y, r: 22, side: 'left' };
 const HOOP_R = { x: 890, y: HOOP_Y, r: 22, side: 'right' };
 const THREE_DIST = 280;
 
-// 遠距離命中率懲罰（二次曲線）
 const ACC_NEAR = 130;
 const ACC_FAR = 740;
 const ACC_MAX_PENALTY = 0.62;
@@ -189,10 +166,11 @@ const net = {
   matchListener: null,
   lastSentAction: false,
   leaving: false,
-
-  // ★ 修復用新欄位
   connected: false,
-  emptyCount: 0
+  lastStateTime: 0,
+  lastHostLogTime: 0,
+  lastGuestLogTime: 0,
+  sendCount: 0
 };
 
 // ======================================================
@@ -233,32 +211,27 @@ function resetPossession(who) {
 }
 
 // ======================================================
-// 命中率：距離越遠越低（二次曲線）
+// 命中率
 // ======================================================
 function calcAccuracy(shooterX, hoopX, powerVal, moving, defenderDist) {
   const distX = Math.abs(shooterX - hoopX);
-
   let base;
-  if (powerVal >= 0.6 && powerVal <= 0.85) {
-    base = 0.90;
-  } else {
+  if (powerVal >= 0.6 && powerVal <= 0.85) base = 0.90;
+  else {
     const off = powerVal < 0.6 ? 0.6 - powerVal : powerVal - 0.85;
     base = 0.72 - off * 0.7;
   }
-
   const t = clamp((distX - ACC_NEAR) / (ACC_FAR - ACC_NEAR), 0, 1);
   const distPenalty = t * t * ACC_MAX_PENALTY;
-
   let acc = base - distPenalty;
-
   if (moving) acc -= 0.08;
   if (defenderDist < 60) acc -= 0.12;
-
   return clamp(acc, 0.04, 0.96);
 }
 
 // ======================================================
 // 投籃 / 灌籃
+// ★ 修復：未進球時終點偏離籃框（打鐵彈開）
 // ======================================================
 function attemptShot(who, powerVal) {
   const shooter = who === 'player' ? player : cpu;
@@ -290,12 +263,20 @@ function attemptShot(who, powerVal) {
   ball.shooter = who;
   ball.startX = shooter.x;
   ball.startY = shooter.y - 15;
-  ball.endX = hoop.x;
-  ball.endY = hoop.y;
   ball.t = 0;
   ball.dur = 0.5 + distX / 1000;
   ball.willScore = Math.random() < acc;
   ball.points = points;
+
+  // ★ 修復：沒進的球終點偏離籃框，視覺上才像「打鐵」
+  if (ball.willScore) {
+    ball.endX = hoop.x;
+    ball.endY = hoop.y;
+  } else {
+    const missSide = Math.random() < 0.5 ? -1 : 1;
+    ball.endX = hoop.x + missSide * (35 + Math.random() * 45);
+    ball.endY = hoop.y + (Math.random() - 0.5) * 50 - 10;
+  }
 
   if (points === 3) showMsg('三分出手！');
 }
@@ -346,20 +327,16 @@ function resolveShot() {
   if (ball.willScore) {
     state.score[scorer] += ball.points;
     showMsg('進球 +' + ball.points);
-
-    if (state.phase === 'sudden' || state.timeLeft <= 0) {
-      endGame();
-      return;
-    }
+    if (state.phase === 'sudden' || state.timeLeft <= 0) { endGame(); return; }
     resetPossession(scorer === 'player' ? 'cpu' : 'player');
   } else {
     ball.state = 'loose';
     ball.owner = null;
     ball.shooter = null;
-    ball.x = hoop.x + (Math.random() - 0.5) * 60;
-    ball.y = hoop.y + 30;
-    ball.vx = (Math.random() - 0.5) * 350;
-    ball.vy = -250 - Math.random() * 150;
+    ball.x = clamp(ball.endX, COURT.x + 20, COURT.x + COURT.w - 20);
+    ball.y = Math.max(ball.endY + 20, HOOP_Y + 30);
+    ball.vx = (ball.endX > hoop.x ? 1 : -1) * (60 + Math.random() * 120);
+    ball.vy = -150 - Math.random() * 150;
     ball.pickupCD = 0.2;
   }
 }
@@ -371,7 +348,6 @@ function updatePlayer(dt) {
   let dir = 0;
   if (input.left) dir -= 1;
   if (input.right) dir += 1;
-
   player.x += dir * 380 * dt;
   player.moving = dir !== 0;
   if (dir !== 0) player.facing = dir;
@@ -379,30 +355,18 @@ function updatePlayer(dt) {
   player.vy += GRAVITY * dt;
   player.y += player.vy * dt;
   const standY = GROUND_Y - player.r;
-  if (player.y >= standY) {
-    player.y = standY;
-    player.vy = 0;
-    player.onGround = true;
-  } else {
-    player.onGround = false;
-  }
+  if (player.y >= standY) { player.y = standY; player.vy = 0; player.onGround = true; }
+  else player.onGround = false;
   player.x = clamp(player.x, COURT.x + player.r, COURT.x + COURT.w - player.r);
 }
 
 function updatePlayerAction(dt) {
   const hasBall = ball.owner === 'player' && ball.state === 'held';
-
   if (charging && !hasBall) { charging = false; power = 0; }
 
   if (input.action && !prevAction) {
-    if (hasBall) {
-      charging = true;
-      power = 0;
-      powerDir = 1;
-    } else if (player.onGround) {
-      player.vy = JUMP_V;
-      player.onGround = false;
-    }
+    if (hasBall) { charging = true; power = 0; powerDir = 1; }
+    else if (player.onGround) { player.vy = JUMP_V; player.onGround = false; }
   }
 
   if (input.action && charging && hasBall) {
@@ -435,7 +399,7 @@ function updatePlayerAction(dt) {
 }
 
 // ======================================================
-// 電腦 AI（單機）
+// CPU AI
 // ======================================================
 function updateCPU(dt) {
   if (state.phase === 'ended') return;
@@ -448,39 +412,29 @@ function updateCPU(dt) {
   if (hasBall) {
     const hoop = HOOP_L;
     const distX = Math.abs(cpu.x - hoop.x);
-
     if (distX > 140) {
       moveDir = cpu.x > hoop.x ? -1 : 1;
       if (Math.random() < 0.008) moveDir *= -1;
     }
-
     if (cpu.shootCD <= 0) {
       const defDist = Math.abs(cpu.x - player.x);
       const openEnough = defDist > 75;
-
       if (distX < 130 && cpu.onGround && Math.random() < 0.02) {
-        attemptDunk('cpu');
-        cpu.shootCD = 1.6;
-        return;
+        attemptDunk('cpu'); cpu.shootCD = 1.6; return;
       }
       if (distX < 500 && (Math.random() < 0.012 || (openEnough && Math.random() < 0.025))) {
         const pw = 0.55 + Math.random() * 0.35;
-        attemptShot('cpu', pw);
-        cpu.shootCD = 1.6;
-        return;
+        attemptShot('cpu', pw); cpu.shootCD = 1.6; return;
       }
     }
   } else {
     const hoop = HOOP_R;
     const targetX = (player.x + hoop.x) / 2 + (Math.random() - 0.5) * 30;
-    if (Math.abs(cpu.x - targetX) > 40) {
-      moveDir = cpu.x < targetX ? 1 : -1;
-    }
+    if (Math.abs(cpu.x - targetX) > 40) moveDir = cpu.x < targetX ? 1 : -1;
 
     if (ball.owner === 'player' && (charging || ball.state === 'shot')) {
       if (Math.abs(cpu.x - player.x) < 75 && cpu.onGround && Math.random() < 0.045) {
-        cpu.vy = JUMP_V;
-        cpu.onGround = false;
+        cpu.vy = JUMP_V; cpu.onGround = false;
       }
     }
 
@@ -488,10 +442,7 @@ function updateCPU(dt) {
         Math.abs(cpu.x - player.x) < 48 && cpu.stealCD <= 0) {
       cpu.stealCD = 1.5;
       if (Math.random() < 0.28) {
-        giveBall('cpu');
-        showMsg('抄球成功！');
-        charging = false;
-        power = 0;
+        giveBall('cpu'); showMsg('抄球成功！'); charging = false; power = 0;
       }
     }
   }
@@ -503,18 +454,13 @@ function updateCPU(dt) {
   cpu.vy += GRAVITY * dt;
   cpu.y += cpu.vy * dt;
   const standY = GROUND_Y - cpu.r;
-  if (cpu.y >= standY) {
-    cpu.y = standY;
-    cpu.vy = 0;
-    cpu.onGround = true;
-  } else {
-    cpu.onGround = false;
-  }
+  if (cpu.y >= standY) { cpu.y = standY; cpu.vy = 0; cpu.onGround = true; }
+  else cpu.onGround = false;
   cpu.x = clamp(cpu.x, COURT.x + cpu.r, COURT.x + COURT.w - cpu.r);
 }
 
 // ======================================================
-// 遠端玩家（Host 端驅動 cpu）
+// 遠端玩家
 // ======================================================
 function updateRemote(dt) {
   const inp = net.remoteInput;
@@ -530,25 +476,15 @@ function updateRemote(dt) {
   cpu.vy += GRAVITY * dt;
   cpu.y += cpu.vy * dt;
   const standY = GROUND_Y - cpu.r;
-  if (cpu.y >= standY) {
-    cpu.y = standY;
-    cpu.vy = 0;
-    cpu.onGround = true;
-  } else {
-    cpu.onGround = false;
-  }
+  if (cpu.y >= standY) { cpu.y = standY; cpu.vy = 0; cpu.onGround = true; }
+  else cpu.onGround = false;
   cpu.x = clamp(cpu.x, COURT.x + cpu.r, COURT.x + COURT.w - cpu.r);
 
   const hasBall = ball.owner === 'cpu' && ball.state === 'held';
 
   if (inp.action && !net.prevRemoteAction) {
-    if (hasBall) {
-      net.cpuCharging = true;
-      net.cpuPower = 0;
-    } else if (cpu.onGround) {
-      cpu.vy = JUMP_V;
-      cpu.onGround = false;
-    }
+    if (hasBall) { net.cpuCharging = true; net.cpuPower = 0; }
+    else if (cpu.onGround) { cpu.vy = JUMP_V; cpu.onGround = false; }
   }
 
   if (!inp.action && net.prevRemoteAction) {
@@ -567,16 +503,11 @@ function updateRemote(dt) {
   if (inp.steal && cpu.stealCD <= 0 && ball.owner === 'player' && ball.state === 'held') {
     cpu.stealCD = 1.0;
     if (Math.abs(player.x - cpu.x) < 55 && Math.random() < 0.32) {
-      giveBall('cpu');
-      showMsg('抄球成功！');
-      charging = false;
-      power = 0;
+      giveBall('cpu'); showMsg('抄球成功！'); charging = false; power = 0;
     }
   }
 
-  if (net.cpuCharging) {
-    net.cpuPower = Math.min(1, net.cpuPower + 1.6 * dt);
-  }
+  if (net.cpuCharging) net.cpuPower = Math.min(1, net.cpuPower + 1.6 * dt);
 }
 
 // ======================================================
@@ -615,19 +546,14 @@ function updateBall(dt) {
     }
     if (ball.x < COURT.x + ball.r) { ball.x = COURT.x + ball.r; ball.vx *= -0.6; }
     if (ball.x > COURT.x + COURT.w - ball.r) { ball.x = COURT.x + COURT.w - ball.r; ball.vx *= -0.6; }
-
     if (ball.pickupCD > 0) ball.pickupCD -= dt;
   }
 }
 
 // ======================================================
-// ★ 修復：完全移除球員間碰撞（街機穿模）
-// 原本會把兩人互相推開，導致「過不了」和「推對手」
+// 碰撞（已完全移除球員互推）
 // ======================================================
-function resolveCollision() {
-  // 不做任何碰撞 —— 玩家可以自由穿過對手
-  // 跳躍功能仍保留，用於封蓋/灌籃
-}
+function resolveCollision() {}
 
 function tryPickup() {
   if (ball.state !== 'loose' || ball.pickupCD > 0) return;
@@ -638,21 +564,16 @@ function tryPickup() {
   const R = 45;
 
   if (dP < R && dC < R) {
-    if (dP <= dC) giveBall('player');
-    else giveBall('cpu');
-  } else if (dP < R) {
-    giveBall('player');
-  } else if (dC < R) {
-    giveBall('cpu');
-  }
+    if (dP <= dC) giveBall('player'); else giveBall('cpu');
+  } else if (dP < R) giveBall('player');
+  else if (dC < R) giveBall('cpu');
 }
 
 // ======================================================
-// 主更新（單機 / Host）
+// 主更新
 // ======================================================
 function update(dt) {
   if (state.phase === 'ended') return;
-
   if (state.msgTimer > 0) state.msgTimer -= dt;
 
   if (state.phase === 'playing') {
@@ -662,37 +583,29 @@ function update(dt) {
       if (state.score.player === state.score.cpu) {
         state.phase = 'sudden';
         showMsg('延長賽！先得分者勝');
-      } else {
-        endGame();
-        return;
-      }
+      } else { endGame(); return; }
     }
   }
 
   updatePlayer(dt);
   updatePlayerAction(dt);
-
   if (net.mode === 'host') updateRemote(dt);
   else updateCPU(dt);
-
   updateBall(dt);
   resolveCollision();
   tryPickup();
 }
 
 // ======================================================
-// ★ 修復：Guest 端本地更新
-// 不再依賴 state.phase，只看 net.connected
+// Guest 本地更新（加詳細日誌）
 // ======================================================
 function updateGuestLocal(dt) {
   if (!net.connected) return;
 
-  // 保險：inputRef 若丟失則重建
   if (!net.inputRef && net.roomId && db) {
     net.inputRef = db.ref('rooms/' + net.roomId + '/guestInput');
   }
 
-  // 蓄力（無條件，不受 state 影響）
   if (input.action) {
     if (!charging) { charging = true; power = 0; powerDir = 1; }
     power += powerDir * 1.6 * dt;
@@ -704,24 +617,40 @@ function updateGuestLocal(dt) {
 
   if (state.msgTimer > 0) state.msgTimer -= dt;
 
-  // 球平滑追
   ball.x += (ball.targetX - ball.x) * 0.5;
   ball.y += (ball.targetY - ball.y) * 0.5;
 
-  // 無條件發送輸入（20Hz + 動作邊緣立即送）
   if (net.inputRef) {
     const actionChanged = input.action !== net.lastSentAction;
     net.inputTimer += dt;
     if (net.inputTimer >= 0.05 || actionChanged) {
       net.inputTimer = 0;
       net.lastSentAction = input.action;
-      net.inputRef.set({
-        left: input.left,
-        right: input.right,
-        action: input.action,
-        steal: input.steal,
+      net.sendCount++;
+      const payload = {
+        left: input.left, right: input.right,
+        action: input.action, steal: input.steal,
         power: power
-      }).catch(() => {});
+      };
+      net.inputRef.set(payload)
+        .then(() => {
+          // 每 2 秒印一次狀態，避免刷屏
+          const now = Date.now();
+          if (now - net.lastGuestLogTime > 2000 && (input.left || input.right || input.action || input.steal)) {
+            console.log('[Guest] ✅ 寫入成功 次數=' + net.sendCount, payload);
+            net.lastGuestLogTime = now;
+          }
+        })
+        .catch(err => {
+          console.error('[Guest] ❌ 寫入失敗:', err.message || err);
+        });
+    }
+  } else {
+    // 每 2 秒提醒一次
+    const now = Date.now();
+    if (now - net.lastGuestLogTime > 2000) {
+      console.warn('[Guest] ⚠️ inputRef 為 null，無法發送輸入');
+      net.lastGuestLogTime = now;
     }
   }
 }
@@ -738,14 +667,13 @@ function endGame() {
   input.steal = false;
   input.left = false;
   input.right = false;
-
   if (net.mode === 'host' && net.roomId && db) {
     db.ref('rooms/' + net.roomId + '/state').set(serializeState()).catch(() => {});
   }
 }
 
 // ======================================================
-// 序列化 / 套用遠端狀態
+// 序列化
 // ======================================================
 function serializeState() {
   return {
@@ -753,13 +681,9 @@ function serializeState() {
     p2: { x: cpu.x, y: cpu.y, facing: cpu.facing, onGround: cpu.onGround, moving: cpu.moving },
     ball: {
       x: ball.x, y: ball.y,
-      state: ball.state,
-      owner: ball.owner,
-      shooter: ball.shooter,
-      points: ball.points,
-      t: ball.t, dur: ball.dur,
-      startX: ball.startX, startY: ball.startY,
-      endX: ball.endX, endY: ball.endY
+      state: ball.state, owner: ball.owner, shooter: ball.shooter,
+      points: ball.points, t: ball.t, dur: ball.dur,
+      startX: ball.startX, startY: ball.startY, endX: ball.endX, endY: ball.endY
     },
     score: { p1: state.score.player, p2: state.score.cpu },
     timeLeft: state.timeLeft,
@@ -774,39 +698,24 @@ function applyRemoteState(rs) {
   if (!rs || net.isHost) return;
 
   if (rs.p2) {
-    player.x = rs.p2.x;
-    player.y = rs.p2.y;
-    player.facing = rs.p2.facing;
-    player.onGround = rs.p2.onGround;
-    player.moving = rs.p2.moving;
+    player.x = rs.p2.x; player.y = rs.p2.y;
+    player.facing = rs.p2.facing; player.onGround = rs.p2.onGround; player.moving = rs.p2.moving;
   }
   if (rs.p1) {
-    cpu.x = rs.p1.x;
-    cpu.y = rs.p1.y;
-    cpu.facing = rs.p1.facing;
-    cpu.onGround = rs.p1.onGround;
-    cpu.moving = rs.p1.moving;
+    cpu.x = rs.p1.x; cpu.y = rs.p1.y;
+    cpu.facing = rs.p1.facing; cpu.onGround = rs.p1.onGround; cpu.moving = rs.p1.moving;
   }
 
   if (rs.ball) {
     ball.state = rs.ball.state;
-    ball.owner = rs.ball.owner === 'player' ? 'cpu'
-               : rs.ball.owner === 'cpu' ? 'player' : null;
-    ball.shooter = rs.ball.shooter === 'player' ? 'cpu'
-                 : rs.ball.shooter === 'cpu' ? 'player' : null;
+    ball.owner = rs.ball.owner === 'player' ? 'cpu' : rs.ball.owner === 'cpu' ? 'player' : null;
+    ball.shooter = rs.ball.shooter === 'player' ? 'cpu' : rs.ball.shooter === 'cpu' ? 'player' : null;
     ball.points = rs.ball.points;
-    ball.t = rs.ball.t;
-    ball.dur = rs.ball.dur;
-    ball.startX = rs.ball.startX;
-    ball.startY = rs.ball.startY;
-    ball.endX = rs.ball.endX;
-    ball.endY = rs.ball.endY;
-    ball.targetX = rs.ball.x;
-    ball.targetY = rs.ball.y;
-    if (Math.abs(ball.x - ball.targetX) > 250) {
-      ball.x = ball.targetX;
-      ball.y = ball.targetY;
-    }
+    ball.t = rs.ball.t; ball.dur = rs.ball.dur;
+    ball.startX = rs.ball.startX; ball.startY = rs.ball.startY;
+    ball.endX = rs.ball.endX; ball.endY = rs.ball.endY;
+    ball.targetX = rs.ball.x; ball.targetY = rs.ball.y;
+    if (Math.abs(ball.x - ball.targetX) > 250) { ball.x = ball.targetX; ball.y = ball.targetY; }
   }
 
   if (rs.score) {
@@ -824,11 +733,8 @@ function applyRemoteState(rs) {
 // ======================================================
 function drawCourt() {
   const bg = ctx.createLinearGradient(0, 0, 0, GROUND_Y);
-  bg.addColorStop(0, '#0b0b14');
-  bg.addColorStop(0.7, '#161623');
-  bg.addColorStop(1, '#1d1d2b');
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, W, GROUND_Y);
+  bg.addColorStop(0, '#0b0b14'); bg.addColorStop(0.7, '#161623'); bg.addColorStop(1, '#1d1d2b');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, GROUND_Y);
 
   for (let row = 0; row < 6; row++) {
     const alpha = 0.05 - row * 0.005;
@@ -843,12 +749,8 @@ function drawCourt() {
   const adTop = GROUND_Y - 110;
   ctx.fillStyle = 'rgba(255,255,255,0.045)';
   ctx.fillRect(0, adTop, W, 110);
-  ctx.strokeStyle = 'rgba(255,255,255,0.10)';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(0, adTop);
-  ctx.lineTo(W, adTop);
-  ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.10)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(0, adTop); ctx.lineTo(W, adTop); ctx.stroke();
 
   const adColors = ['#2b4a7a', '#7a2b3a', '#2b7a5a', '#6a5a22', '#4a2b7a'];
   for (let i = 0; i < 6; i++) {
@@ -859,59 +761,33 @@ function drawCourt() {
   }
 
   const wood = ctx.createLinearGradient(0, FLOOR_Y, 0, H);
-  wood.addColorStop(0, '#c8873f');
-  wood.addColorStop(0.35, '#b57a35');
-  wood.addColorStop(1, '#8a5a25');
-  ctx.fillStyle = wood;
-  ctx.fillRect(0, FLOOR_Y, W, H - FLOOR_Y);
+  wood.addColorStop(0, '#c8873f'); wood.addColorStop(0.35, '#b57a35'); wood.addColorStop(1, '#8a5a25');
+  ctx.fillStyle = wood; ctx.fillRect(0, FLOOR_Y, W, H - FLOOR_Y);
 
-  ctx.strokeStyle = 'rgba(0,0,0,0.13)';
-  ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(0,0,0,0.13)'; ctx.lineWidth = 1;
   for (let y = FLOOR_Y + 12; y < H; y += 14) {
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(W, y);
-    ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
   }
   for (let x = 30; x < W; x += 88) {
-    ctx.beginPath();
-    ctx.moveTo(x, FLOOR_Y + 6);
-    ctx.lineTo(x, H);
-    ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x, FLOOR_Y + 6); ctx.lineTo(x, H); ctx.stroke();
   }
 
-  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(0, FLOOR_Y);
-  ctx.lineTo(W, FLOOR_Y);
-  ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(0, FLOOR_Y); ctx.lineTo(W, FLOOR_Y); ctx.stroke();
 
-  ctx.strokeStyle = 'rgba(255,255,255,0.45)';
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(W / 2, FLOOR_Y + 10);
-  ctx.lineTo(W / 2, H - 8);
-  ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(W / 2, FLOOR_Y + 10); ctx.lineTo(W / 2, H - 8); ctx.stroke();
 
   const threeL = HOOP_L.x + THREE_DIST;
   const threeR = HOOP_R.x - THREE_DIST;
   ctx.setLineDash([10, 7]);
-  ctx.strokeStyle = 'rgba(255,255,255,0.32)';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(threeL, FLOOR_Y + 8);
-  ctx.lineTo(threeL, H - 6);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(threeR, FLOOR_Y + 8);
-  ctx.lineTo(threeR, H - 6);
-  ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.32)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(threeL, FLOOR_Y + 8); ctx.lineTo(threeL, H - 6); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(threeR, FLOOR_Y + 8); ctx.lineTo(threeR, H - 6); ctx.stroke();
   ctx.setLineDash([]);
 
   ctx.fillStyle = 'rgba(255,255,255,0.16)';
-  ctx.font = 'bold 30px system-ui, sans-serif';
-  ctx.textAlign = 'center';
+  ctx.font = 'bold 30px system-ui, sans-serif'; ctx.textAlign = 'center';
   ctx.fillText('3', threeL + 32, H - 20);
   ctx.fillText('3', threeR - 32, H - 20);
 }
@@ -920,57 +796,38 @@ function drawHoop(hoop) {
   const isRight = hoop.side === 'right';
   const off = 60;
   const boardX = isRight ? hoop.x + off : hoop.x - off;
-  const bw = 12;
-  const by = hoop.y - 110;
-  const bh = 220;
+  const bw = 12, by = hoop.y - 110, bh = 220;
 
-  ctx.strokeStyle = 'rgba(120,120,140,0.8)';
-  ctx.lineWidth = 6;
-  ctx.beginPath();
-  ctx.moveTo(boardX, by);
-  ctx.lineTo(boardX, 0);
-  ctx.stroke();
+  ctx.strokeStyle = 'rgba(120,120,140,0.8)'; ctx.lineWidth = 6;
+  ctx.beginPath(); ctx.moveTo(boardX, by); ctx.lineTo(boardX, 0); ctx.stroke();
 
   ctx.fillStyle = 'rgba(235,235,245,0.9)';
   ctx.fillRect(boardX - bw / 2, by, bw, bh);
-  ctx.strokeStyle = '#555';
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#555'; ctx.lineWidth = 2;
   ctx.strokeRect(boardX - bw / 2, by, bw, bh);
 
-  ctx.strokeStyle = '#ff5533';
-  ctx.lineWidth = 3;
+  ctx.strokeStyle = '#ff5533'; ctx.lineWidth = 3;
   ctx.strokeRect(boardX - bw / 2, hoop.y - 45, bw, 90);
 
   const rimSide = isRight ? hoop.x + hoop.r : hoop.x - hoop.r;
-  ctx.strokeStyle = '#555';
-  ctx.lineWidth = 5;
-  ctx.beginPath();
-  ctx.moveTo(boardX, hoop.y);
-  ctx.lineTo(rimSide, hoop.y);
-  ctx.stroke();
+  ctx.strokeStyle = '#555'; ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.moveTo(boardX, hoop.y); ctx.lineTo(rimSide, hoop.y); ctx.stroke();
 
-  ctx.strokeStyle = '#ff6633';
-  ctx.lineWidth = 6;
-  ctx.beginPath();
-  ctx.arc(hoop.x, hoop.y, hoop.r, 0, Math.PI * 2);
-  ctx.stroke();
+  ctx.strokeStyle = '#ff6633'; ctx.lineWidth = 6;
+  ctx.beginPath(); ctx.arc(hoop.x, hoop.y, hoop.r, 0, Math.PI * 2); ctx.stroke();
 
-  ctx.strokeStyle = 'rgba(240,240,240,0.55)';
-  ctx.lineWidth = 1.5;
-  const nb = hoop.y + 50;
-  const nw = hoop.r * 0.45;
+  ctx.strokeStyle = 'rgba(240,240,240,0.55)'; ctx.lineWidth = 1.5;
+  const nb = hoop.y + 50, nw = hoop.r * 0.45;
   for (let i = 0; i < 6; i++) {
     const a = (i / 6) * Math.PI * 2;
     const x1 = hoop.x + Math.cos(a) * hoop.r;
     const y1 = hoop.y + Math.sin(a) * hoop.r;
     const x2 = hoop.x + (i % 2 === 0 ? -1 : 1) * nw;
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, nb);
-    ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, nb); ctx.stroke();
   }
 }
 
+// ★ 修復：Guest 端顏色反轉
 function drawPlayerEntity(ent, isLocal) {
   const { x, y, r } = ent;
 
@@ -982,36 +839,35 @@ function drawPlayerEntity(ent, isLocal) {
   const isHolding = (isLocal && ball.owner === 'player' && ball.state === 'held') ||
                     (!isLocal && ball.owner === 'cpu' && ball.state === 'held');
   if (isHolding) {
-    ctx.strokeStyle = 'rgba(255,215,80,0.75)';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(x, y, r + 7, 0, Math.PI * 2);
-    ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,215,80,0.75)'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(x, y, r + 7, 0, Math.PI * 2); ctx.stroke();
   }
 
-  const g = ctx.createRadialGradient(x - r * 0.35, y - r * 0.35, r * 0.1, x, y, r);
-  g.addColorStop(0, isLocal ? '#8cc8ff' : '#ff9999');
-  g.addColorStop(1, isLocal ? '#4a9eff' : '#ff5a5a');
-  ctx.fillStyle = g;
-  ctx.beginPath();
-  ctx.arc(x, y, r, 0, Math.PI * 2);
-  ctx.fill();
+  // Guest: player 是紅方（本地），cpu 是藍方（遠端）→ 顏色反轉
+  // Host: player 是藍方（本地），cpu 是紅方（遠端）→ 正常
+  let isBlue;
+  if (net.mode === 'guest') isBlue = !isLocal;
+  else isBlue = isLocal;
 
-  ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-  ctx.lineWidth = 2.5;
-  ctx.stroke();
+  const mainColor  = isBlue ? '#4a9eff' : '#ff5a5a';
+  const lightColor = isBlue ? '#8cc8ff' : '#ff9999';
+
+  const g = ctx.createRadialGradient(x - r * 0.35, y - r * 0.35, r * 0.1, x, y, r);
+  g.addColorStop(0, lightColor);
+  g.addColorStop(1, mainColor);
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 2.5; ctx.stroke();
 
   ctx.fillStyle = '#fff';
   const ex = x + ent.facing * r * 0.32;
   const ey = y - r * 0.22;
-  ctx.beginPath();
-  ctx.arc(ex, ey, 3.5, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.beginPath(); ctx.arc(ex, ey, 3.5, 0, Math.PI * 2); ctx.fill();
 }
 
 function drawBallEntity() {
   const { x, y, r } = ball;
-
   const t = clamp((GROUND_Y - y) / 320, 0, 1);
   ctx.globalAlpha = 0.25 * (1 - t * 0.6);
   ctx.fillStyle = '#000';
@@ -1021,16 +877,11 @@ function drawBallEntity() {
   ctx.globalAlpha = 1;
 
   const g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.1, x, y, r);
-  g.addColorStop(0, '#ffc07a');
-  g.addColorStop(1, '#dd7414');
+  g.addColorStop(0, '#ffc07a'); g.addColorStop(1, '#dd7414');
   ctx.fillStyle = g;
-  ctx.beginPath();
-  ctx.arc(x, y, r, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
 
-  ctx.strokeStyle = '#6d3204';
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
+  ctx.strokeStyle = '#6d3204'; ctx.lineWidth = 1.5; ctx.stroke();
   ctx.beginPath();
   ctx.moveTo(x - r, y); ctx.lineTo(x + r, y);
   ctx.moveTo(x, y - r); ctx.lineTo(x, y + r);
@@ -1043,9 +894,7 @@ function drawPowerBar() {
   const bx = player.x - bw / 2;
   const by = player.y - 65;
 
-  ctx.fillStyle = 'rgba(0,0,0,0.65)';
-  ctx.fillRect(bx, by, bw, bh);
-
+  ctx.fillStyle = 'rgba(0,0,0,0.65)'; ctx.fillRect(bx, by, bw, bh);
   ctx.fillStyle = 'rgba(90,255,130,0.45)';
   ctx.fillRect(bx + bw * 0.6, by, bw * 0.25, bh);
 
@@ -1053,10 +902,8 @@ function drawPowerBar() {
   ctx.fillStyle = (power >= 0.6 && power <= 0.85) ? '#6dff9e' : '#ffb43c';
   ctx.fillRect(bx, by, fillW, bh);
 
-  ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 2;
   ctx.strokeRect(bx, by, bw, bh);
-
   ctx.fillStyle = '#fff';
   ctx.fillRect(bx + fillW - 2, by - 4, 4, bh + 8);
 }
@@ -1064,29 +911,27 @@ function drawPowerBar() {
 function drawRemotePowerBar() {
   if (net.mode !== 'host' || !net.cpuCharging) return;
   const bw = 110, bh = 14;
-  const bx = cpu.x - bw / 2;
-  const by = cpu.y - 65;
-
-  ctx.fillStyle = 'rgba(0,0,0,0.55)';
-  ctx.fillRect(bx, by, bw, bh);
-  ctx.fillStyle = '#ffb43c';
-  ctx.fillRect(bx, by, bw * net.cpuPower, bh);
-  ctx.strokeStyle = 'rgba(255,255,255,0.7)';
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(bx, by, bw, bh);
+  const bx = cpu.x - bw / 2, by = cpu.y - 65;
+  ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(bx, by, bw, bh);
+  ctx.fillStyle = '#ffb43c'; ctx.fillRect(bx, by, bw * net.cpuPower, bh);
+  ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 1.5; ctx.strokeRect(bx, by, bw, bh);
 }
 
+// ★ 修復：Guest 端比分顏色
 function drawUI() {
-  ctx.textAlign = 'left';
   ctx.font = 'bold 34px system-ui, sans-serif';
 
   if (net.mode === 'guest') {
-    ctx.fillStyle = '#ff5a5a';
+    // Guest：左邊是對手藍方，右邊是你紅方
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#4a9eff';
     ctx.fillText('對手 ' + state.score.cpu, 40, 62);
     ctx.textAlign = 'right';
-    ctx.fillStyle = '#4a9eff';
+    ctx.fillStyle = '#ff5a5a';
     ctx.fillText(state.score.player + ' 你', W - 40, 62);
   } else {
+    // Host / Solo：左邊是你藍方，右邊是對手/電腦紅方
+    ctx.textAlign = 'left';
     ctx.fillStyle = '#4a9eff';
     ctx.fillText('你 ' + state.score.player, 40, 62);
     ctx.textAlign = 'right';
@@ -1112,8 +957,7 @@ function drawUI() {
     ctx.globalAlpha = Math.min(1, state.msgTimer / 0.4);
     ctx.font = 'bold 42px system-ui, sans-serif';
     ctx.fillStyle = '#ffe27a';
-    ctx.shadowColor = 'rgba(0,0,0,0.9)';
-    ctx.shadowBlur = 16;
+    ctx.shadowColor = 'rgba(0,0,0,0.9)'; ctx.shadowBlur = 16;
     ctx.textAlign = 'center';
     ctx.fillText(state.msg, W / 2, 200);
     ctx.restore();
@@ -1133,12 +977,10 @@ function drawUI() {
     ctx.fillStyle = won ? '#6dff9e' : (tied ? '#ffd35c' : '#ff6b6b');
     ctx.fillText(won ? '你贏了！' : (tied ? '平手' : '你輸了'), W / 2, H / 2 - 40);
 
-    ctx.font = '32px system-ui, sans-serif';
-    ctx.fillStyle = '#ddd';
+    ctx.font = '32px system-ui, sans-serif'; ctx.fillStyle = '#ddd';
     ctx.fillText(`${myScore} : ${oppScore}`, W / 2, H / 2 + 30);
 
-    ctx.font = '20px system-ui, sans-serif';
-    ctx.fillStyle = '#aaa';
+    ctx.font = '20px system-ui, sans-serif'; ctx.fillStyle = '#aaa';
     ctx.fillText(isTouch ? '點擊畫面返回主選單' : '按 R 返回主選單', W / 2, H / 2 + 110);
   }
 }
@@ -1163,29 +1005,18 @@ function render() {
 const JOY_R = 65;
 const ACTION_BTN = { x: W - 120, y: H - 130, r: 70 };
 const STEAL_BTN  = { x: W - 275, y: H - 75, r: 50 };
-const touch = {
-  joy: { id: null, cx: 0, cy: 0, dx: 0, dy: 0 },
-  action: null,
-  steal: null
-};
+const touch = { joy: { id: null, cx: 0, cy: 0, dx: 0, dy: 0 }, action: null, steal: null };
 
 function toCanvas(clientX, clientY) {
   const r = canvas.getBoundingClientRect();
-  return {
-    x: (clientX - r.left) * (W / r.width),
-    y: (clientY - r.top) * (H / r.height)
-  };
+  return { x: (clientX - r.left) * (W / r.width), y: (clientY - r.top) * (H / r.height) };
 }
 function hitBtn(p, b) { return Math.hypot(p.x - b.x, p.y - b.y) < b.r * 1.15; }
 
 function clearTouch() {
-  touch.joy.id = null;
-  touch.joy.dx = touch.joy.dy = 0;
-  touch.action = null;
-  touch.steal = null;
-  input.left = input.right = false;
-  input.action = false;
-  input.steal = false;
+  touch.joy.id = null; touch.joy.dx = touch.joy.dy = 0;
+  touch.action = null; touch.steal = null;
+  input.left = input.right = false; input.action = false; input.steal = false;
   net.lastSentAction = false;
 }
 
@@ -1197,20 +1028,12 @@ canvas.addEventListener('pointerdown', e => {
   }
   e.preventDefault();
   const p = toCanvas(e.clientX, e.clientY);
-
   if (isTouch) {
-    if (touch.action === null && hitBtn(p, ACTION_BTN)) {
-      touch.action = e.pointerId; input.action = true; return;
-    }
-    if (touch.steal === null && hitBtn(p, STEAL_BTN)) {
-      touch.steal = e.pointerId; input.steal = true; return;
-    }
+    if (touch.action === null && hitBtn(p, ACTION_BTN)) { touch.action = e.pointerId; input.action = true; return; }
+    if (touch.steal === null && hitBtn(p, STEAL_BTN)) { touch.steal = e.pointerId; input.steal = true; return; }
     if (touch.joy.id === null && p.x < W * 0.55 && p.y > H * 0.4) {
-      touch.joy.id = e.pointerId;
-      touch.joy.cx = p.x;
-      touch.joy.cy = Math.min(p.y, H - 100);
-      touch.joy.dx = touch.joy.dy = 0;
-      return;
+      touch.joy.id = e.pointerId; touch.joy.cx = p.x; touch.joy.cy = Math.min(p.y, H - 100);
+      touch.joy.dx = touch.joy.dy = 0; return;
     }
   }
 }, { passive: false });
@@ -1219,8 +1042,7 @@ canvas.addEventListener('pointermove', e => {
   if (e.pointerId !== touch.joy.id) return;
   e.preventDefault();
   const p = toCanvas(e.clientX, e.clientY);
-  let dx = p.x - touch.joy.cx;
-  let dy = p.y - touch.joy.cy;
+  let dx = p.x - touch.joy.cx, dy = p.y - touch.joy.cy;
   const d = Math.hypot(dx, dy);
   const max = JOY_R;
   if (d > max) { dx = dx / d * max; dy = dy / d * max; }
@@ -1233,8 +1055,7 @@ canvas.addEventListener('pointermove', e => {
 
 function endPointer(e) {
   if (e.pointerId === touch.joy.id) {
-    touch.joy.id = null;
-    touch.joy.dx = touch.joy.dy = 0;
+    touch.joy.id = null; touch.joy.dx = touch.joy.dy = 0;
     input.left = input.right = false;
   }
   if (e.pointerId === touch.action) { touch.action = null; input.action = false; }
@@ -1246,35 +1067,20 @@ canvas.addEventListener('contextmenu', e => e.preventDefault());
 
 function drawTouchControls() {
   if (!isTouch) return;
-
   if (touch.joy.id !== null) {
     ctx.save();
-    ctx.globalAlpha = 0.18;
-    ctx.fillStyle = '#fff';
-    ctx.beginPath();
-    ctx.arc(touch.joy.cx, touch.joy.cy, JOY_R, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 0.35;
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 3;
-    ctx.stroke();
+    ctx.globalAlpha = 0.18; ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(touch.joy.cx, touch.joy.cy, JOY_R, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 0.35; ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke();
     ctx.globalAlpha = 0.7;
-    ctx.beginPath();
-    ctx.arc(touch.joy.cx + touch.joy.dx, touch.joy.cy + touch.joy.dy, 32, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.beginPath(); ctx.arc(touch.joy.cx + touch.joy.dx, touch.joy.cy + touch.joy.dy, 32, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
   } else {
     ctx.save();
-    ctx.globalAlpha = 0.1;
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([6, 8]);
-    ctx.beginPath();
-    ctx.arc(160, H - 140, JOY_R, 0, Math.PI * 2);
-    ctx.stroke();
+    ctx.globalAlpha = 0.1; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.setLineDash([6, 8]);
+    ctx.beginPath(); ctx.arc(160, H - 140, JOY_R, 0, Math.PI * 2); ctx.stroke();
     ctx.restore();
   }
-
   drawBtn(ACTION_BTN, '投', touch.action !== null, '#ff8a1e');
   drawBtn(STEAL_BTN, '搶', touch.steal !== null, '#3f8bff');
 }
@@ -1283,21 +1089,13 @@ function drawBtn(b, label, active, color) {
   ctx.save();
   ctx.globalAlpha = active ? 0.9 : 0.42;
   ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.globalAlpha = active ? 1 : 0.6;
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 3;
-  ctx.stroke();
-  ctx.globalAlpha = 0.95;
-  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = active ? 1 : 0.6; ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke();
+  ctx.globalAlpha = 0.95; ctx.fillStyle = '#fff';
   ctx.font = 'bold ' + Math.round(b.r * 0.7) + 'px system-ui, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText(label, b.x, b.y + 1);
-  ctx.restore();
-  ctx.textBaseline = 'alphabetic';
+  ctx.restore(); ctx.textBaseline = 'alphabetic';
 }
 
 // ======================================================
@@ -1337,10 +1135,7 @@ document.getElementById('btnSolo').onclick = () => {
 };
 
 document.getElementById('btnOnline').onclick = () => {
-  if (!db) {
-    alert('無法連線 Firebase，請確認網路與資料庫規則');
-    return;
-  }
+  if (!db) { alert('無法連線 Firebase，請確認網路與資料庫規則'); return; }
   startMatchmaking();
 };
 
@@ -1364,6 +1159,7 @@ function startMatchmaking() {
     .then(() => { matchStatusEl.textContent = '搜尋對手中…'; })
     .catch(err => {
       matchStatusEl.textContent = '連線失敗：' + (err.message || '權限不足？');
+      console.error('[Match] 寫入配對失敗:', err);
     });
 
   net.matchRef.child('room').on('value', snap => {
@@ -1391,6 +1187,7 @@ function startMatchmaking() {
     if (net.myId < oppId) createRoom(oppId);
   }, err => {
     matchStatusEl.textContent = '讀取配對池失敗：' + (err.message || '權限不足');
+    console.error('[Match] 讀取配對池失敗:', err);
   });
 }
 
@@ -1406,9 +1203,7 @@ function createRoom(oppId) {
   resetGame();
 
   db.ref('rooms/' + rid).set({
-    host: net.myId,
-    guest: oppId,
-    createdAt: Date.now(),
+    host: net.myId, guest: oppId, createdAt: Date.now(),
     state: serializeState(),
     guestInput: { left: false, right: false, action: false, steal: false, power: 0 }
   }).then(() => {
@@ -1416,7 +1211,7 @@ function createRoom(oppId) {
     net.matchRef.update({ status: 'matched', room: rid }).catch(() => {});
     onMatched();
   }).catch(err => {
-    console.error('建立房間失敗', err);
+    console.error('[Host] 建立房間失敗:', err);
     matchStatusEl.textContent = '建立房間失敗';
     setTimeout(cancelMatchmaking, 1500);
   });
@@ -1437,35 +1232,36 @@ function onMatched() {
     net.inputRef = db.ref('rooms/' + net.roomId + '/guestInput');
     net.inputRef.on('value', snap => {
       const val = snap.val();
-      if (val) net.remoteInput = val;
+      if (val) {
+        net.remoteInput = val;
+        const now = Date.now();
+        if (now - net.lastHostLogTime > 2000 && (val.left || val.right || val.action || val.steal)) {
+          console.log('[Host] ✅ 收到 Guest 輸入:', val);
+          net.lastHostLogTime = now;
+        }
+      }
+    }, err => {
+      console.error('[Host] ❌ 監聽 guestInput 失敗:', err);
     });
   } else {
-    // ★★★ Guest 修復：立即建立 inputRef 並發送初始值 ★★★
     resetGame();
     net.connected = true;
-    net.emptyCount = 0;
+    net.lastStateTime = performance.now();
+    net.sendCount = 0;
 
     net.inputRef = db.ref('rooms/' + net.roomId + '/guestInput');
-    net.inputRef.set({
-      left: false, right: false, action: false, steal: false, power: 0
-    }).catch(() => {});
+    net.inputRef.set({ left: false, right: false, action: false, steal: false, power: 0 })
+      .then(() => console.log('[Guest] 初始輸入已送出'))
+      .catch(err => console.error('[Guest] ❌ 初始輸入失敗:', err));
 
     net.stateRef = db.ref('rooms/' + net.roomId + '/state');
     net.stateRef.on('value', snap => {
-      if (!snap.exists()) {
-        net.emptyCount++;
-        if (net.emptyCount > 3) {
-          if (net.connected) {
-            showMsg('對手已離開');
-            state.phase = 'ended';
-            net.connected = false;
-          }
-        }
-        return;
-      }
-      net.emptyCount = 0;
+      if (!snap.exists()) return;
+      net.lastStateTime = performance.now();
       net.connected = true;
       applyRemoteState(snap.val());
+    }, err => {
+      console.error('[Guest] ❌ 監聽 state 失敗:', err);
     });
 
     net.roomRef = db.ref('rooms/' + net.roomId);
@@ -1494,7 +1290,6 @@ function cancelMatchmaking() {
 function leaveRoomAndReturn() {
   if (net.leaving) return;
   net.leaving = true;
-
   net.connected = false;
 
   if (net.inputRef) { net.inputRef.off(); net.inputRef = null; }
@@ -1504,24 +1299,18 @@ function leaveRoomAndReturn() {
 
   const oldRoomId = net.roomId;
   const wasHost = net.isHost;
-
   if (db) {
     if (oldRoomId && wasHost) db.ref('rooms/' + oldRoomId).remove().catch(() => {});
     db.ref('matchmaking/' + net.myId).remove().catch(() => {});
   }
 
-  net.roomId = null;
-  net.isHost = false;
-  net.mode = 'solo';
-  net.remoteInput = null;
-  net.prevRemoteAction = false;
-  net.cpuCharging = false;
-  net.cpuPower = 0;
+  net.roomId = null; net.isHost = false; net.mode = 'solo';
+  net.remoteInput = null; net.prevRemoteAction = false;
+  net.cpuCharging = false; net.cpuPower = 0;
 
   overlay.classList.remove('hidden');
   menuPanel.classList.remove('hidden');
   matchingPanel.classList.add('hidden');
-
   setTimeout(() => { net.leaving = false; }, 300);
 }
 
@@ -1538,6 +1327,11 @@ function loop(ts) {
 
   if (net.mode === 'guest') {
     updateGuestLocal(dt);
+    // 3 秒沒收到 Host state 就判定斷線
+    if (net.connected && net.lastStateTime > 0 && performance.now() - net.lastStateTime > 3000) {
+      showMsg('連線中斷');
+      net.connected = false;
+    }
   } else {
     update(dt);
     if (net.mode === 'host' && net.roomId && state.phase !== 'ended' && db) {
@@ -1557,21 +1351,15 @@ function resetGame() {
   state.score = { player: 0, cpu: 0 };
   state.timeLeft = 60;
   state.phase = 'playing';
-  state.msg = '';
-  state.msgTimer = 0;
-  charging = false;
-  power = 0;
-  prevAction = false;
-  stealCD = 0;
-  cpu.shootCD = 0;
-  cpu.stealCD = 0;
-  net.cpuCharging = false;
-  net.cpuPower = 0;
+  state.msg = ''; state.msgTimer = 0;
+  charging = false; power = 0;
+  prevAction = false; stealCD = 0;
+  cpu.shootCD = 0; cpu.stealCD = 0;
+  net.cpuCharging = false; net.cpuPower = 0;
   net.prevRemoteAction = false;
-  net.stateTimer = 0;
-  net.inputTimer = 0;
+  net.stateTimer = 0; net.inputTimer = 0;
   net.lastSentAction = false;
-  net.emptyCount = 0;
+  net.lastStateTime = performance.now();
   clearTouch();
   resetPossession('player');
   lastTime = 0;
@@ -1583,9 +1371,9 @@ resetGame();
 requestAnimationFrame(loop);
 
 if (!db) {
-  console.warn('Firebase 未載入，線上配對不可用。');
+  console.warn('Firebase 未載入');
 } else {
-  console.log('Firebase 已連線。若配對失敗，請把 Realtime Database 規則設為 .read/.write = true');
+  console.log('Firebase 已連線。若配對失敗，請把 Realtime Database Rules 設為 .read/.write = true');
 }
 </script>
 </body>
