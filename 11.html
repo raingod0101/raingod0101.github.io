@@ -188,7 +188,11 @@ const net = {
   stateTimer: 0,
   matchListener: null,
   lastSentAction: false,
-  leaving: false
+  leaving: false,
+
+  // ★ 修復用新欄位
+  connected: false,
+  emptyCount: 0
 };
 
 // ======================================================
@@ -617,20 +621,12 @@ function updateBall(dt) {
 }
 
 // ======================================================
-// 碰撞 / 撿球
+// ★ 修復：完全移除球員間碰撞（街機穿模）
+// 原本會把兩人互相推開，導致「過不了」和「推對手」
 // ======================================================
 function resolveCollision() {
-  const dx = player.x - cpu.x;
-  const d = Math.abs(dx);
-  const minD = player.r + cpu.r;
-  if (d < minD && d > 0.01) {
-    const push = (minD - d) / 2 + 0.5;
-    const s = dx >= 0 ? 1 : -1;
-    player.x += s * push;
-    cpu.x -= s * push;
-    player.x = clamp(player.x, COURT.x + player.r, COURT.x + COURT.w - player.r);
-    cpu.x = clamp(cpu.x, COURT.x + cpu.r, COURT.x + COURT.w - cpu.r);
-  }
+  // 不做任何碰撞 —— 玩家可以自由穿過對手
+  // 跳躍功能仍保留，用於封蓋/灌籃
 }
 
 function tryPickup() {
@@ -685,18 +681,18 @@ function update(dt) {
 }
 
 // ======================================================
-// Guest 端本地更新
-// ★ 修復：inputRef 保底重建 + 50ms 發送
+// ★ 修復：Guest 端本地更新
+// 不再依賴 state.phase，只看 net.connected
 // ======================================================
 function updateGuestLocal(dt) {
-  if (state.phase === 'ended') return;
+  if (!net.connected) return;
 
-  // 保險：如果 inputRef 不知為何丟了，這裡自己重建
+  // 保險：inputRef 若丟失則重建
   if (!net.inputRef && net.roomId && db) {
     net.inputRef = db.ref('rooms/' + net.roomId + '/guestInput');
   }
 
-  // 本地蓄力（僅 UI 顯示，實際值會送到 Host）
+  // 蓄力（無條件，不受 state 影響）
   if (input.action) {
     if (!charging) { charging = true; power = 0; powerDir = 1; }
     power += powerDir * 1.6 * dt;
@@ -708,22 +704,17 @@ function updateGuestLocal(dt) {
 
   if (state.msgTimer > 0) state.msgTimer -= dt;
 
-  if (state.phase === 'playing') {
-    state.timeLeft -= dt;
-    if (state.timeLeft < 0) state.timeLeft = 0;
-  }
-
   // 球平滑追
   ball.x += (ball.targetX - ball.x) * 0.5;
   ball.y += (ball.targetY - ball.y) * 0.5;
 
-  // 送出輸入（20Hz + 動作邊緣立即送）
-  const actionChanged = input.action !== net.lastSentAction;
-  net.inputTimer += dt;
-  if (net.inputTimer >= 0.05 || actionChanged) {
-    net.inputTimer = 0;
-    net.lastSentAction = input.action;
-    if (net.inputRef) {
+  // 無條件發送輸入（20Hz + 動作邊緣立即送）
+  if (net.inputRef) {
+    const actionChanged = input.action !== net.lastSentAction;
+    net.inputTimer += dt;
+    if (net.inputTimer >= 0.05 || actionChanged) {
+      net.inputTimer = 0;
+      net.lastSentAction = input.action;
       net.inputRef.set({
         left: input.left,
         right: input.right,
@@ -1437,6 +1428,7 @@ function onMatched() {
 
   if (net.isHost) {
     resetGame();
+    net.connected = true;
     net.remoteInput = null;
     net.prevRemoteAction = false;
     net.cpuCharging = false;
@@ -1448,26 +1440,40 @@ function onMatched() {
       if (val) net.remoteInput = val;
     });
   } else {
+    // ★★★ Guest 修復：立即建立 inputRef 並發送初始值 ★★★
     resetGame();
+    net.connected = true;
+    net.emptyCount = 0;
 
-    // ★★★ 修復關鍵：Guest 也必須建立 inputRef 才能把操作送給 Host ★★★
     net.inputRef = db.ref('rooms/' + net.roomId + '/guestInput');
+    net.inputRef.set({
+      left: false, right: false, action: false, steal: false, power: 0
+    }).catch(() => {});
 
     net.stateRef = db.ref('rooms/' + net.roomId + '/state');
     net.stateRef.on('value', snap => {
       if (!snap.exists()) {
-        showMsg('對手已離開');
-        state.phase = 'ended';
+        net.emptyCount++;
+        if (net.emptyCount > 3) {
+          if (net.connected) {
+            showMsg('對手已離開');
+            state.phase = 'ended';
+            net.connected = false;
+          }
+        }
         return;
       }
+      net.emptyCount = 0;
+      net.connected = true;
       applyRemoteState(snap.val());
     });
 
     net.roomRef = db.ref('rooms/' + net.roomId);
     net.roomRef.on('value', snap => {
-      if (!snap.exists() && net.roomId) {
+      if (!snap.exists() && net.connected) {
         showMsg('對手已離開');
         state.phase = 'ended';
+        net.connected = false;
       }
     });
   }
@@ -1479,6 +1485,7 @@ function cancelMatchmaking() {
   net.roomId = null;
   net.isHost = false;
   net.mode = 'solo';
+  net.connected = false;
   matchingPanel.classList.add('hidden');
   menuPanel.classList.remove('hidden');
   matchStatusEl.textContent = '';
@@ -1487,6 +1494,8 @@ function cancelMatchmaking() {
 function leaveRoomAndReturn() {
   if (net.leaving) return;
   net.leaving = true;
+
+  net.connected = false;
 
   if (net.inputRef) { net.inputRef.off(); net.inputRef = null; }
   if (net.stateRef) { net.stateRef.off(); net.stateRef = null; }
@@ -1562,6 +1571,7 @@ function resetGame() {
   net.stateTimer = 0;
   net.inputTimer = 0;
   net.lastSentAction = false;
+  net.emptyCount = 0;
   clearTouch();
   resetPossession('player');
   lastTime = 0;
