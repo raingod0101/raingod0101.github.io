@@ -1,464 +1,154 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-TW">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
-<title>Level Devil · 心理战</title>
-<style>
-  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; user-select: none; }
-  html, body { margin: 0; height: 100%; background: #07070d; overflow: hidden; font-family: system-ui, -apple-system, sans-serif; display: flex; align-items: center; justify-content: center; }
-  #app { display: flex; flex-direction: column; width: 100%; height: 100%; max-width: 1100px; padding: 8px; gap: 8px; overflow: hidden; }
-  #stage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
-  canvas { display: block; border-radius: 10px; box-shadow: 0 0 60px rgba(90, 70, 180, .25), 0 0 0 1px rgba(255, 255, 255, .06); touch-action: none; }
-  #controls { display: grid; grid-template-columns: 1fr 1fr 1.5fr 1fr; gap: 8px; width: 100%; max-width: 600px; margin: 0 auto; padding: 0 8px env(safe-area-inset-bottom, 8px); }
-  #controls button { width: 100%; height: 56px; border-radius: 12px; border: 2px solid rgba(255, 255, 255, .14); background: rgba(255, 255, 255, .06); color: #fff; font-size: 19px; font-weight: 700; cursor: pointer; touch-action: none; outline: none; transition: background .08s, transform .08s; }
-  #controls button.on { background: rgba(255, 255, 255, .22); transform: scale(.96); }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>看廣告拿永久獎勵</title>
+
+    <!-- 1. Google AdSense 基礎載入腳本 -->
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7889068650968296"
+         crossorigin="anonymous"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #1a1a1a;
+            color: #ffffff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        .card {
+            background-color: #2a2a2a;
+            padding: 30px;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            max-width: 400px;
+            width: 90%;
+        }
+
+        .reward-btn {
+            background-color: #008cba;
+            color: white;
+            border: none;
+            padding: 14px 28px;
+            font-size: 18px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: 0.3s;
+            margin-top: 15px;
+            font-weight: bold;
+        }
+
+        .reward-btn:hover {
+            background-color: #005f7f;
+        }
+
+        /* 已經獲得獎勵時的按鈕樣式 */
+        .reward-btn:disabled {
+            background-color: #4caf50;
+            cursor: not-allowed;
+            opacity: 0.8;
+        }
+
+        .status {
+            margin-top: 20px;
+            font-size: 16px;
+            color: #aaa;
+        }
+
+        .ad-container {
+            margin-top: 25px;
+            padding: 10px;
+            background: #333;
+            border-radius: 8px;
+            min-height: 100px;
+        }
+    </style>
 </head>
 <body>
-<div id="app">
-  <div id="stage"><canvas id="game" width="960" height="540"></canvas></div>
-  <div id="controls">
-    <button data-k="ArrowLeft">◀</button>
-    <button data-k="ArrowRight">▶</button>
-    <button data-k="Space">跳</button>
-    <button data-k="KeyR">重来</button>
-  </div>
-</div>
 
-<script>
-window.addEventListener('contextmenu', e => e.preventDefault());
-let lastTouchEnd = 0;
-document.addEventListener('touchend', e => { const now = new Date().getTime(); if (now - lastTouchEnd <= 300) e.preventDefault(); lastTouchEnd = now; }, false);
+    <div class="card">
+        <h1>🏆 永久稱號解鎖</h1>
+        <p>點擊下方按鈕並完成觀看廣告，即可永久獲得「👑 高級 VIP」稱號！</p>
 
-(() => {
-'use strict';
-const canvas = document.getElementById('game');
-const ctx = canvas.getContext('2d');
-const W = canvas.width, H = canvas.height;
-const stage = document.getElementById('stage');
+        <!-- 觀看廣告按鈕 -->
+        <button id="adBtn" class="reward-btn" onclick="startWatchAd()">🎥 觀看廣告領取獎勵</button>
 
-const GRAV = 1900, MOVE = 320, JUMP_V = -700;
-const keys = Object.create(null);
+        <!-- 顯示當前狀態 -->
+        <div id="statusText" class="status">目前狀態：尚未獲得獎勵</div>
 
-/* ===================== 关卡数据（纯心理战） ===================== */
-const LEVELS = [
-  // 1. 假坑（其实有隐形地板，乱跳反而会撞到隐形天花板）
-  {
-    name: '第 1 关 · 深渊',
-    hint: '坑太宽了，冲刺跳过去！',
-    realHint: '直接走过去，坑中间有隐形地板。跳跃反而会撞头。',
-    spawn: { x: 60, y: 420 },
-    platforms: [
-      { x: 0, y: 480, w: 320, h: 60 },
-      { x: 320, y: 480, w: 200, h: 60, invisible: true }, // 隐形地板
-      { x: 520, y: 480, w: 440, h: 60 },
-      // 坑上方隐形天花板，如果玩家跳起来就会撞到并掉下去
-      { x: 320, y: 320, w: 200, h: 160, invisible: true, killOnTouch: true },
-    ],
-    doors: [{ x: 880, y: 424, w: 44, h: 56, real: true }],
-  },
-  // 2. 回头路（门在出生点左边）
-  {
-    name: '第 2 关 · 方向',
-    hint: '一路向右，寻找传送门。',
-    realHint: '门在出生点后面。你被耍了。',
-    spawn: { x: 500, y: 420 },
-    platforms: [{ x: 0, y: 480, w: 960, h: 60 }],
-    doors: [{ x: 100, y: 424, w: 44, h: 56, real: true }],
-  },
-  // 3. 假尖刺（踩上去没事，跳起来反而死）
-  {
-    name: '第 3 关 · 穿过红区',
-    hint: '地板上的尖刺是致命的，必须用三段跳越过！',
-    realHint: '尖刺是贴图，直接踩过去。一旦起跳，会触发真天花板砸落。',
-    spawn: { x: 60, y: 420 },
-    platforms: [{ x: 0, y: 480, w: 960, h: 60 }],
-    spikes: [{ x: 250, y: 480, w: 450, h: 70, fake: true }], // 假尖刺
-    crashers: [{ x: 400, y: -100, w: 150, h: 580, trigger: 0, delay: 0, onJumpOnly: true }], // 只有跳跃才会砸落
-    doors: [{ x: 880, y: 424, w: 44, h: 56, real: true }],
-  },
-  // 4. 原地不动（动一下就死，门会来找你）
-  {
-    name: '第 4 关 · 别动',
-    hint: '门会逃跑，全速追上去！',
-    realHint: '你一动就会触发地板塌陷。站在原地等3秒，门会自己跑过来。',
-    spawn: { x: 480, y: 420 },
-    platforms: [{ x: 0, y: 480, w: 960, h: 60, punishMove: true }],
-    doors: [{ x: 880, y: 424, w: 44, h: 56, real: true, flee: true, fleeMax: 880, speed: 0, waitAndSeek: true }],
-  },
-  // 5. 薛定谔的按钮（按按钮会死，门在上方）
-  {
-    name: '第 5 关 · 致命按钮',
-    hint: '去按中间的按钮开门！',
-    realHint: '按钮带自毁陷阱。直接跳到天花板上方即可。',
-    spawn: { x: 60, y: 420 },
-    platforms: [
-      { x: 0, y: 480, w: 960, h: 60 },
-      { x: 380, y: 380, w: 200, h: 40, isKillButton: true },
-      { x: 420, y: 260, w: 120, h: 20, invisible: true }, // 隐形台阶
-    ],
-    doors: [{ x: 458, y: 204, w: 44, h: 56, real: true }],
-  }
-];
+        <!-- 2. 廣告顯示區塊 -->
+        <div class="ad-container">
+            <ins class="adsbygoogle"
+                 style="display:block"
+                 data-ad-client="ca-pub-7889068650968296"
+                 data-ad-slot="1234567890"
+                 data-ad-format="auto"
+                 data-full-width-responsive="true"></ins>
+            <script>
+                 (adsbygoogle = window.adsbygoogle || []).push({});
+            </script>
+        </div>
+    </div>
 
-/* ===================== 状态 ===================== */
-const player = { x: 0, y: 0, w: 24, h: 28, vx: 0, vy: 0, onGround: false, coyote: 0, jumpHeld: false, dead: false, deadT: 0 };
-const state = { levelIndex: 0, level: null, time: 0, deaths: 0, shake: 0, hint: '', realHint: '', hintT: 0, won: false, transition: 0, particles: [] };
+    <script>
+        // 當網頁載入完成時，檢查之前是否已經拿過永久獎勵
+        window.onload = function() {
+            checkStatus();
+        };
 
-function overlap(a, b) { return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y; }
+        // 檢查永久獎勵紀錄 (使用 localStorage)
+        function checkStatus() {
+            const isUnlocked = localStorage.getItem('isVIPUnlocked');
 
-function burst(x, y, n, color) {
-  for (let i = 0; i < n; i++) {
-    const a = Math.random() * Math.PI * 2, s = 60 + Math.random() * 260;
-    state.particles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 160, size: 2 + Math.random() * 4, life: 0.45 + Math.random() * 0.5, maxLife: 0.95, color });
-  }
-}
+            if (isUnlocked === 'true') {
+                const btn = document.getElementById('adBtn');
+                const status = document.getElementById('statusText');
 
-function updateParticles(dt) {
-  for (let i = state.particles.length - 1; i >= 0; i--) {
-    const p = state.particles[i];
-    p.vy += 1300 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt;
-    if (p.life <= 0) state.particles.splice(i, 1);
-  }
-}
+                btn.disabled = true;
+                btn.innerText = '✅ 已永久獲得 👑 高級 VIP';
+                status.innerText = '目前狀態：已擁有永久 VIP 權限！';
+                status.style.color = '#4caf50';
+            }
+        }
 
-function roundRect(x, y, w, h, r) {
-  ctx.beginPath(); ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
-}
+        // 點擊看廣告觸發事件
+        function startWatchAd() {
+            alert("請點擊下方廣告區塊，完成互動後返回網頁即可獲得永久獎勵！");
 
-/* ===================== 关卡逻辑 ===================== */
-function loadLevel(i) {
-  const def = LEVELS[i];
-  state.levelIndex = i; state.time = 0;
-  state.hint = def.hint; state.realHint = def.realHint;
-  state.hintT = 3.2; state.particles.length = 0; state.transition = 0; state.shake = 0;
+            let userLeftPage = false;
 
-  state.level = {
-    name: def.name, spawn: { ...def.spawn },
-    platforms: (def.platforms || []).map(p => ({ ...p, baseX: p.x, baseY: p.y, gone: false })),
-    spikes: (def.spikes || []).map(s => ({ ...s })),
-    crashers: (def.crashers || []).map(c => ({ ...c, y0: c.y, active: false, done: false, t: 0, vy: 0 })),
-    doors: (def.doors || []).map(d => ({ ...d, baseX: d.x, fleeing: false })),
-  };
-  respawn();
-}
+            // 監聽使用者是否離開網頁（點擊了廣告）
+            window.onblur = function() {
+                userLeftPage = true;
+            };
 
-function respawn() {
-  const L = state.level;
-  player.x = L.spawn.x; player.y = L.spawn.y; player.vx = 0; player.vy = 0;
-  player.dead = false; player.deadT = 0; player.onGround = false; player.coyote = 0;
-  player.jumpHeld = true;
+            // 當使用者看完廣告回到網頁時發放獎勵
+            window.onfocus = function() {
+                if (userLeftPage) {
+                    grantReward();
+                    window.onblur = null;
+                    window.onfocus = null;
+                }
+            };
+        }
 
-  for (const p of L.platforms) { p.gone = false; p.x = p.baseX; p.y = p.baseY; }
-  for (const c of L.crashers) { c.active = false; c.done = false; c.t = 0; c.vy = 0; c.y = c.y0; }
-  for (const d of L.doors) { d.x = d.baseX; d.fleeing = false; }
-  state.particles.length = 0; state.time = 0;
-}
+        // 發放永久獎勵
+        function grantReward() {
+            // 寫入 localStorage 達到永久保存（重開瀏覽器依然有效）
+            localStorage.setItem('isVIPUnlocked', 'true');
+            
+            alert("🎉 恭喜你！成功解鎖永久 VIP 獎勵！");
+            
+            // 更新畫面狀態
+            checkStatus();
+        }
+    </script>
 
-function restart() {
-  if (state.won) { state.won = false; state.deaths = 0; loadLevel(0); }
-  else loadLevel(state.levelIndex);
-}
-
-function killPlayer() {
-  if (player.dead || state.won || state.transition > 0) return;
-  player.dead = true; player.deadT = 0.7; state.deaths++; state.shake = 12;
-  burst(player.x + player.w / 2, player.y + player.h / 2, 24, '#ff4d6d');
-}
-
-function winLevel() {
-  if (state.transition > 0 || state.won) return;
-  state.transition = 0.4;
-  const d = state.level.doors.find(x => x.real);
-  burst(d.x + 22, d.y + 28, 28, '#4ade80');
-}
-
-/* ===================== 物理更新 ===================== */
-function update(dt) {
-  const L = state.level;
-  if (!L) return;
-  if (state.hintT > 0) state.hintT -= dt;
-  if (state.shake > 0) state.shake = Math.max(0, state.shake - dt * 45);
-  updateParticles(dt);
-  if (state.won) return;
-
-  if (state.transition > 0) {
-    state.transition -= dt;
-    if (state.transition <= 0) {
-      if (state.levelIndex + 1 >= LEVELS.length) state.won = true;
-      else loadLevel(state.levelIndex + 1);
-    }
-    return;
-  }
-
-  if (player.dead) {
-    player.deadT -= dt;
-    player.vy = Math.min(player.vy + GRAV * dt, 1150);
-    player.y += player.vy * dt;
-    if (player.deadT <= 0) respawn();
-    return;
-  }
-
-  state.time += dt;
-
-  // 输入
-  let dir = 0;
-  if (keys['ArrowLeft'] || keys['KeyA']) dir -= 1;
-  if (keys['ArrowRight'] || keys['KeyD']) dir += 1;
-  player.vx = dir * MOVE;
-
-  const jumpKey = !!(keys['Space'] || keys['ArrowUp'] || keys['KeyW']);
-  const isJumping = jumpKey && !player.jumpHeld && (player.onGround || player.coyote > 0);
-
-  // 第4关特殊逻辑：动一下就塌，等3秒门自己来
-  if (L.name.includes('别动')) {
-    if (dir !== 0 || isJumping) {
-      L.platforms[0].gone = true;
-    }
-    const d = L.doors[0];
-    if (state.time > 2.5) {
-      d.x -= 400 * dt;
-    }
-    if (d.x < player.x + 100) {
-      winLevel(); return;
-    }
-  }
-
-  // 第3关特殊逻辑：跳跃触发天花板
-  if (L.name.includes('红区')) {
-    const c = L.crashers[0];
-    if (isJumping || !player.onGround) {
-      if (!c.active) c.active = true;
-    }
-  }
-
-  // 跳跃
-  if (isJumping) {
-    player.vy = JUMP_V; player.onGround = false; player.coyote = 0; player.jumpHeld = true;
-  }
-  if (!jumpKey) {
-    player.jumpHeld = false;
-    if (player.vy < 0) player.vy += GRAV * 1.6 * dt;
-  }
-
-  // 水平移动
-  player.x += player.vx * dt;
-  for (const p of L.platforms) {
-    if (p.gone) continue;
-    if (overlap(player, p)) {
-      if (player.vx > 0) player.x = p.x - player.w;
-      else if (player.vx < 0) player.x = p.x + p.w;
-    }
-  }
-  if (player.x < 0) player.x = 0;
-  if (player.x + player.w > W) player.x = W - player.w;
-
-  // 垂直移动
-  player.vy = Math.min(player.vy + GRAV * dt, 1150);
-  player.y += player.vy * dt;
-  player.onGround = false;
-
-  for (const p of L.platforms) {
-    if (p.gone) continue;
-    if (overlap(player, p)) {
-      if (p.killOnTouch) { killPlayer(); return; }
-      if (p.isKillButton) { killPlayer(); return; }
-
-      if (player.vy > 0) {
-        player.y = p.y - player.h; player.vy = 0; player.onGround = true;
-      } else if (player.vy < 0) {
-        player.y = p.y + p.h; player.vy = 0;
-      }
-    }
-  }
-
-  player.coyote = player.onGround ? 0.1 : Math.max(0, player.coyote - dt);
-
-  // 假尖刺（贴图）
-  for (const s of L.spikes) {
-    if (!s.fake) {
-      if (overlap(player, { x: s.x, y: s.y - s.h, w: s.w, h: s.h })) { killPlayer(); return; }
-    }
-  }
-
-  // 天花板砸落
-  for (const c of L.crashers) {
-    if (!c.active || c.done) continue;
-    c.t += dt;
-    if (c.t > c.delay) {
-      c.vy += 2600 * dt; c.y += c.vy * dt;
-      if (c.y + c.h >= 480) { c.y = 480 - c.h; c.done = true; }
-    }
-    if (overlap(player, { x: c.x, y: c.y, w: c.w, h: c.h })) { killPlayer(); return; }
-  }
-
-  // 逃跑门
-  for (const d of L.doors) {
-    if (d.flee && d.real && !d.waitAndSeek) {
-      if (!d.fleeing && player.x + player.w > d.x - 280) d.fleeing = true;
-      if (d.fleeing && d.x < d.fleeMax) d.x = Math.min(d.fleeMax, d.x + d.speed * dt);
-    }
-    if (d.real && overlap(player, d)) { winLevel(); return; }
-  }
-
-  if (player.y > H + 150) killPlayer();
-}
-
-/* ===================== 渲染 ===================== */
-function render() {
-  const L = state.level;
-  ctx.save();
-  if (state.shake > 0.4) ctx.translate((Math.random() - 0.5) * state.shake, (Math.random() - 0.5) * state.shake);
-
-  const bg = ctx.createLinearGradient(0, 0, 0, H);
-  bg.addColorStop(0, '#141426'); bg.addColorStop(0.6, '#0d0d18'); bg.addColorStop(1, '#07070d');
-  ctx.fillStyle = bg; ctx.fillRect(-60, -60, W + 120, H + 120);
-
-  ctx.strokeStyle = 'rgba(255,255,255,0.025)'; ctx.lineWidth = 1;
-  for (let x = 0; x <= W; x += 48) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
-  for (let y = 0; y <= H; y += 48) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
-
-  if (L) {
-    for (const p of L.platforms) {
-      if (p.gone || p.invisible) continue;
-      ctx.fillStyle = '#232338'; ctx.fillRect(p.x, p.y, p.w, p.h);
-      ctx.fillStyle = '#3d3d63'; ctx.fillRect(p.x, p.y, p.w, 3);
-
-      if (p.isKillButton) {
-        ctx.fillStyle = 'rgba(255,100,100,0.8)';
-        ctx.font = '700 20px system-ui,sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('按我开门', p.x + p.w / 2, p.y + 26);
-      }
-    }
-
-    for (const s of L.spikes) {
-      if (s.progress <= 0.01) continue;
-      const hh = s.h * (s.progress || 1);
-      const count = Math.max(1, Math.round(s.w / 18)), step = s.w / count;
-      ctx.fillStyle = '#ff4d6d';
-      for (let i = 0; i < count; i++) {
-        const x = s.x + i * step;
-        ctx.beginPath(); ctx.moveTo(x, s.y); ctx.lineTo(x + step / 2, s.y - hh);
-        ctx.lineTo(x + step, s.y); ctx.closePath(); ctx.fill();
-      }
-    }
-
-    for (const c of L.crashers) {
-      if (!c.active) continue;
-      ctx.fillStyle = '#5a2530'; ctx.fillRect(c.x, c.y, c.w, c.h);
-      ctx.fillStyle = '#8b3a4a'; ctx.fillRect(c.x, c.y, c.w, 6);
-    }
-
-    for (const d of L.doors) {
-      const color = d.real ? '#4ade80' : '#8b8bff';
-      ctx.save(); ctx.shadowColor = color; ctx.shadowBlur = 20; ctx.fillStyle = color;
-      ctx.fillRect(d.x, d.y, d.w, d.h); ctx.restore();
-      ctx.fillStyle = '#0d0d17'; ctx.fillRect(d.x + 5, d.y + 5, d.w - 10, d.h - 10);
-      ctx.fillStyle = color; ctx.fillRect(d.x + d.w - 14, d.y + d.h / 2 - 3, 6, 6);
-    }
-
-    if (!player.dead) {
-      const cx = player.x + player.w / 2, cy = player.y + player.h / 2;
-      ctx.save(); ctx.translate(cx, cy);
-      ctx.fillStyle = '#f0f0fa';
-      roundRect(-player.w / 2, -player.h / 2, player.w, player.h, 5); ctx.fill();
-      ctx.fillStyle = '#14141f';
-      const look = player.vx > 0 ? 2 : player.vx < 0 ? -2 : 0;
-      ctx.fillRect(-7 + look, -7, 4, 7); ctx.fillRect(3 + look, -7, 4, 7);
-      ctx.restore();
-    }
-
-    for (const p of state.particles) {
-      ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
-      ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, p.size, p.size);
-    }
-    ctx.globalAlpha = 1;
-  }
-  ctx.restore();
-
-  if (L) {
-    ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.font = '600 16px ui-monospace,monospace';
-    ctx.fillText(L.name, 20, 32);
-    ctx.textAlign = 'right'; ctx.fillText('死亡 ' + state.deaths, W - 20, 32);
-
-    if (state.hintT > 0 && !state.won) {
-      const t = state.hintT, showFake = t > 1.5;
-      ctx.globalAlpha = Math.min(1, t * 1.2);
-      ctx.textAlign = 'center'; ctx.font = '700 26px system-ui,sans-serif';
-      if (showFake) {
-        ctx.fillStyle = '#fff'; ctx.fillText(state.hint, W / 2, 96);
-      } else {
-        ctx.fillStyle = '#ff9f6b'; ctx.fillText(state.realHint, W / 2, 96);
-      }
-      ctx.globalAlpha = 1;
-    }
-  }
-
-  if (state.won) {
-    ctx.fillStyle = 'rgba(5,5,10,0.88)'; ctx.fillRect(0, 0, W, H);
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#4ade80'; ctx.font = '800 54px system-ui,sans-serif';
-    ctx.fillText('你识破了所有骗局', W / 2, H / 2 - 40);
-    ctx.fillStyle = '#fff'; ctx.font = '400 22px system-ui,sans-serif';
-    ctx.fillText('总死亡次数：' + state.deaths, W / 2, H / 2 + 26);
-    ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.font = '400 18px system-ui,sans-serif';
-    ctx.fillText('按 R 或点「重来」再被耍一次', W / 2, H / 2 + 76);
-  }
-}
-
-/* ===================== 输入与循环 ===================== */
-window.addEventListener('keydown', e => {
-  if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Space'].includes(e.code)) e.preventDefault();
-  keys[e.code] = true;
-  if (e.code === 'KeyR') restart();
-});
-window.addEventListener('keyup', e => { keys[e.code] = false; });
-window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
-
-document.querySelectorAll('#controls button').forEach(b => {
-  const k = b.dataset.k;
-  const down = e => {
-    e.preventDefault();
-    if (k === 'KeyR') { restart(); return; }
-    keys[k] = true; b.classList.add('on');
-    try { b.setPointerCapture(e.pointerId); } catch (_) {}
-  };
-  const up = (e) => {
-    if (e) e.preventDefault();
-    if (k !== 'KeyR') { keys[k] = false; b.classList.remove('on'); }
-  };
-  b.addEventListener('pointerdown', down);
-  b.addEventListener('pointerup', up);
-  b.addEventListener('pointercancel', up);
-  b.addEventListener('lostpointercapture', up);
-  b.addEventListener('contextmenu', e => e.preventDefault());
-});
-
-function fitCanvas() {
-  const r = stage.getBoundingClientRect();
-  if (r.width <= 0 || r.height <= 0) return;
-  const s = Math.min(r.width / W, r.height / H);
-  canvas.style.width = Math.floor(W * s) + 'px';
-  canvas.style.height = Math.floor(H * s) + 'px';
-}
-window.addEventListener('resize', fitCanvas);
-window.addEventListener('orientationchange', () => setTimeout(fitCanvas, 120));
-
-let last = performance.now();
-function loop(now) {
-  let dt = (now - last) / 1000; last = now;
-  if (dt > 0.05) dt = 0.05;
-  update(dt); render(); requestAnimationFrame(loop);
-}
-
-loadLevel(0); fitCanvas();
-requestAnimationFrame(() => { fitCanvas(); last = performance.now(); requestAnimationFrame(loop); });
-})();
-</script>
 </body>
 </html>
