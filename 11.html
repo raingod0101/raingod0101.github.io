@@ -8,13 +8,9 @@
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{margin:0;height:100%;background:#07070d;overflow:hidden}
   body{font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;display:flex;align-items:center;justify-content:center}
-  
-  /* 修复：整个应用严格限制在屏幕内，不允许溢出 */
   #app{display:flex;flex-direction:column;width:100%;height:100%;max-width:1100px;padding:8px;gap:8px;overflow:hidden}
   #stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center}
   canvas{display:block;border-radius:10px;box-shadow:0 0 60px rgba(90,70,180,.25),0 0 0 1px rgba(255,255,255,.06);touch-action:none}
-  
-  /* 修复：底部按钮使用 Grid 布局，确保在任何手机屏幕上都不会超出边缘 */
   #controls{
     display:grid;
     grid-template-columns:1fr 1fr 1.5fr 1fr;
@@ -75,7 +71,8 @@ const LEVELS = [
       { x: 320, y: 480, w: 240, h: 60, fake: true },
       { x: 560, y: 480, w: 400, h: 60 },
     ],
-    spikes: [{ x: 320, y: 540, w: 240, h: 80 }],
+    // 修复：高度从 80 改为 60，尖刺顶部与假地板表面齐平，玩家站上去不会被秒杀
+    spikes: [{ x: 320, y: 540, w: 240, h: 60 }],
     doors: [{ x: 880, y: 424, w: 44, h: 56, real: true }],
   },
   // 2. 假按钮、假门
@@ -160,8 +157,8 @@ const LEVELS = [
       { x: 220, y: 480, w: 140, h: 60, fake: true },
       { x: 360, y: 480, w: 600, h: 60 },
     ],
-    spikes: [{ x: 480, y: 480, w: 80, h: 60, trigger: 100, delay: 0.25 }],
-    crashers: [{ x: 720, y: -100, w: 70, h: 110, trigger: 120, delay: 0.15 }],
+    spikes: [{ x: 480, y: 480, w: 80, h: 60, trigger: 100, delay: 0.35 }],
+    crashers: [{ x: 720, y: -100, w: 70, h: 110, trigger: 120, delay: 0.25 }],
     zones: [{ x: 560, y: 0, w: 100, h: 540, teleportTo: { x: 40, y: 90 }, color: '#9b6bff' }],
     doors: [{ x: 880, y: 424, w: 44, h: 56, real: true, flee: true, fleeMax: 880, speed: 220 }],
   },
@@ -280,10 +277,10 @@ function respawn() {
   player.deadT = 0;
   player.onGround = false;
   player.coyote = 0;
-  
-  // 修复死循环：强制把跳跃状态设为“已按住”，玩家必须松开按键才能再次跳跃
-  player.jumpHeld = true; 
-  
+
+  // 修复：只有玩家当前仍按着跳跃键时才锁定，避免重生后第一次跳跃失灵
+  player.jumpHeld = !!(keys['Space'] || keys['ArrowUp'] || keys['KeyW']);
+
   player.reversing = false;
 
   for (const p of L.platforms) {
@@ -302,6 +299,8 @@ function respawn() {
     d.vanished = false;
     d.vanishT = 0;
     d.fleeing = false;
+    // 修复：重生后重置假门 used，避免第 7 关碰到假门死亡后假门永久失效
+    d.used = false;
   }
 
   state.particles.length = 0;
@@ -312,7 +311,6 @@ function restart() {
   if (state.won) {
     state.won = false;
     state.deaths = 0;
-    for (const d of LEVELS.flatMap(l => l.doors || [])) d.used = false;
     loadLevel(0);
   } else {
     loadLevel(state.levelIndex);
@@ -332,7 +330,7 @@ function winLevel() {
   if (state.transition > 0 || state.won) return;
   state.transition = 0.45;
   const d = state.level.doors.find(x => x.real);
-  burst(d.x + 22, d.y + 28, 28, '#4ade80');
+  if (d) burst(d.x + 22, d.y + 28, 28, '#4ade80');
 }
 
 /* ===================== 更新 ===================== */
@@ -458,7 +456,8 @@ function update(dt) {
     if (!p.fake || p.gone) continue;
     if (p.contact) {
       p.shake += dt;
-      if (p.shake > 0.4) {
+      // 修复：假地板消失时间从 0.4 秒放宽到 0.6 秒，移动端也来得及二次起跳
+      if (p.shake > 0.6) {
         p.gone = true;
         burst(p.x + p.w / 2, p.y + 8, 20, '#3a3a5c');
         state.shake = 8;
@@ -473,11 +472,10 @@ function update(dt) {
 
   for (const s of L.spikes) {
     if (s.periodic) {
+      // 修复：尖刺改为平滑升起/降下，不再在 0.5 周期处瞬间归零
       const ph = ((state.time / s.cycle) + s.phase) % 1;
-      let t;
-      if (ph < 0.5) t = Math.sin(ph * Math.PI * 2) * 0.5 + 0.5;
-      else t = 0;
-      s.progress = Math.max(0, Math.min(1, t));
+      const raw = Math.sin(ph * Math.PI * 2);
+      s.progress = Math.max(0, Math.min(1, raw > 0 ? raw : 0));
     } else if (s.trigger != null) {
       if (!s.active) {
         if (player.x + player.w > s.x - s.trigger) s.active = true;
@@ -577,21 +575,26 @@ function drawDoor(d) {
     if (d.vanished) return;
   }
 
+  ctx.save();
+  // 修复：真门短暂消失时半透明，让玩家能看出它当前不可进入
+  if (d.real && d.vanishT > 0) ctx.globalAlpha = 0.25;
+
   const glow = d.real ? (d.breathe ? 14 + breathe * 16 : 20) : 10;
   const color = d.real ? '#4ade80' : '#8b8bff';
 
-  ctx.save();
   ctx.shadowColor = color;
   ctx.shadowBlur = glow;
   ctx.fillStyle = color;
   ctx.fillRect(d.x, d.y, d.w, d.h);
-  ctx.restore();
 
+  ctx.shadowBlur = 0;
   ctx.fillStyle = '#0d0d17';
   ctx.fillRect(d.x + 5, d.y + 5, d.w - 10, d.h - 10);
 
   ctx.fillStyle = color;
   ctx.fillRect(d.x + d.w - 14, d.y + d.h / 2 - 3, 6, 6);
+
+  ctx.restore();
 }
 
 function render() {
@@ -641,7 +644,7 @@ function render() {
       if (p.gone || p.vanishT > 0) continue;
       let ox = 0, oy = 0;
       if (p.fake && p.shake > 0.01) {
-        const k = Math.min(p.shake / 0.4, 1);
+        const k = Math.min(p.shake / 0.6, 1);
         ox = (Math.random() - 0.5) * 6 * k;
         oy = (Math.random() - 0.5) * 4 * k;
       }
