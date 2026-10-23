@@ -65,7 +65,7 @@
   .index-tabs{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px}
   .index-tab{padding:5px 10px;border-radius:7px;background:#3a4a3a;border:2px solid #5a6a5a;color:#c0d0c0;font-weight:800;font-size:.65rem;cursor:pointer;transition:all 0.15s}
   .index-tab.active{background:linear-gradient(180deg,#f0f0e0,#d8d0b8);color:#3a2a1a;border-color:#e0b040}
-  .toast{position:fixed;top:50px;left:50%;transform:translateX(-50%);background:linear-gradient(180deg,#f5f0e0,#e8dcc8);border:3px solid #8a7a5a;border-radius:10px;padding:8px 18px;color:#3a2a1a;font-weight:900;font-size:.8rem;z-index:200;pointer-events:none;box-shadow:0 6px 30px rgba(0,0,0,0.6);max-width:90vw;text-align:center}
+  .toast{position:fixed;left:50%;background:linear-gradient(180deg,#f5f0e0,#e8dcc8);border:3px solid #8a7a5a;border-radius:10px;padding:8px 18px;color:#3a2a1a;font-weight:900;font-size:.8rem;z-index:200;pointer-events:none;box-shadow:0 6px 30px rgba(0,0,0,0.6);max-width:90vw;text-align:center;transition:all 0.3s ease;transform:translateX(-50%)}
   .knockback-flash{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(255,50,50,0.35);pointer-events:none;z-index:150;animation:flash 0.5s ease-out}
   @keyframes flash{0%{opacity:0.9}100%{opacity:0}}
   .tension-vignette{position:fixed;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:5;box-shadow:inset 0 0 150px rgba(255,30,30,0.7);animation:tensionPulse 0.8s ease-in-out infinite}
@@ -348,15 +348,21 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       if(!d||d.version!==14)return false;
       S.player.displaySpeed=d.displaySpeed||10;
       S.player.tsLv=d.tsLv||1;
-      S.player.x=d.px||S.myBaseIdx;
-      S.player.y=d.py||2900;
+      // ✅ 修正：座標 fallback 用基地實際位置
+      const basePos = getBasePos(S.myBaseIdx);
+      S.player.x = (typeof d.px === 'number' && d.px > 0) ? d.px : basePos.x;
+      S.player.y = (typeof d.py === 'number' && d.py > 0) ? d.py : 2900;
       S.cash=d.cash||0;
       S.biomeIdx=d.biomeIdx||0;
       S.petCap=d.petCap||3;
       S.myBaseIdx=d.myBaseIdx!==undefined?d.myBaseIdx:0;
       S.pets=[];
       if(Array.isArray(d.pets)){
+        const usedSlots = new Set();
         for(const p of d.pets){
+          if (typeof p.slot !== 'number' || p.slot < 0 || p.slot >= FARM_OFFSETS.length) continue;
+          if (usedSlots.has(p.slot)) continue;
+          usedSlots.add(p.slot);
           const pod = getFarmPod(S.myBaseIdx, p.slot);
           S.pets.push({
             id:Math.random().toString(36).slice(2),
@@ -394,11 +400,48 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       return true;
     }catch(e){console.error(e);return false}
   }
+
+  // ========== Toast 堆疊系統 ==========
+  let toastStack = [];
   function showToast(msg,bg1,bg2){
-    const t=document.createElement('div');t.className='toast';
-    if(bg1)t.style.background=`linear-gradient(180deg,${bg1},${bg2||bg1})`;
-    t.textContent=msg;document.body.appendChild(t);
-    setTimeout(()=>{t.style.opacity='0';t.style.transition='opacity 0.4s';setTimeout(()=>t.remove(),400)},1800);
+    const t = document.createElement('div');
+    t.className = 'toast';
+    if(bg1) t.style.background = `linear-gradient(180deg,${bg1},${bg2||bg1})`;
+    t.textContent = msg;
+    t.style.bottom = '20px';
+    document.body.appendChild(t);
+    
+    toastStack.push(t);
+    layoutToasts();
+    
+    setTimeout(() => {
+      t.style.opacity = '0';
+      t.style.transform = 'translateX(-50%) translateY(20px)';
+      setTimeout(() => {
+        t.remove();
+        toastStack = toastStack.filter(x => x !== t);
+        layoutToasts();
+      }, 400);
+    }, 2200);
+  }
+  function layoutToasts(){
+    const maxShow = 5;
+    const visible = toastStack.slice(-maxShow);
+    visible.forEach((t, i) => {
+      const fromBottom = (visible.length - 1 - i) * 54;
+      t.style.bottom = (20 + fromBottom) + 'px';
+      t.style.zIndex = 200 + i;
+      const age = visible.length > 1 ? i / (visible.length - 1) : 1;
+      t.style.opacity = (0.65 + 0.35 * age).toString();
+      t.style.transform = `translateX(-50%) scale(${0.88 + 0.12 * age})`;
+    });
+    toastStack.slice(0, -maxShow).forEach(t => {
+      t.style.opacity = '0';
+      setTimeout(() => {
+        t.remove();
+        toastStack = toastStack.filter(x => x !== t);
+      }, 300);
+    });
   }
 
   function getBasePos(baseIdx, offsetX=0, offsetY=0){
@@ -835,7 +878,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     const pet = S.bag[idx];
     if (!pet) return;
 
-    // 找空位
     const usedSlots = new Set(S.pets.map(p => p.slot));
     let slot = -1;
     for (let j = 0; j < FARM_OFFSETS.length; j++) {
@@ -1076,12 +1118,23 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       trySpawnSecretEgg();
     }
   }
+
+  // ✅ 修正：秘密蛋生成位置分散、提示合併
   function trySpawnSecretEgg(){
+    const spawned = [];
+    const usedPositions = [];
     for(let bi=0;bi<WORLD.biomes.length;bi++){
       if(Math.random() < 0.08){
         const b=WORLD.biomes[bi];
         const pi = Math.random()<0.5?6:7;
-        const nx = (Math.random() * 0.6 + 0.2) * WORLD_W;
+        // 位置分散：避開附近已用的位置
+        let nx, attempts = 0;
+        do {
+          nx = (Math.random() * 0.6 + 0.2) * WORLD_W;
+          attempts++;
+        } while (usedPositions.some(p => Math.abs(p - nx) < 80) && attempts < 10);
+        usedPositions.push(nx);
+        
         const egg = {
           x:nx,y:b.nestsY+rnd(-20,20),
           r:22,size:'secret',mul:10,petIdx:pi,biomeIdx:bi,
@@ -1089,10 +1142,13 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
           secret:true,
         };
         S.eggs.push(egg);
-        const petName=b.petNames[pi];
-        showToast(`✨ ${petName} 在 ${b.name} 生成了！`, '#6a3a8a', '#4a1a6a');
-        setTimeout(()=>{ showToast(`🌟 稀有！${petName} 出現了！`, '#8a3a8a', '#6a1a6a'); }, 600);
+        spawned.push(`${b.icon}${b.petNames[pi]}`);
       }
+    }
+    if (spawned.length === 1) {
+      showToast(`✨ 稀有！${spawned[0]} 出現了！`, '#8a3a8a', '#6a1a6a');
+    } else if (spawned.length > 1) {
+      showToast(`✨ 稀有！${spawned.join('、')} 出現了！`, '#8a3a8a', '#6a1a6a');
     }
   }
 
@@ -1333,13 +1389,16 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       if(S.biomeIdx<i&&p.displaySpeed>=WORLD.biomes[i].reqDisplay){S.biomeIdx=i;updateUI();break}
     }
 
+    // ✅ 修正：寵物 clamp 以基地為中心
+    const myBase = getBasePos(S.myBaseIdx);
     for(const pt of S.pets){
       pt.x+=pt.vx*dt*3;pt.y+=pt.vy*dt*3;
       const pod=getFarmPod(S.myBaseIdx, pt.slot);
       if(dist(pt.x,pt.y,pod.x,pod.y)>45){
         pt.vx=(pod.x-pt.x)*0.02;pt.vy=(pod.y-pt.y)*0.02;
       }
-      pt.x=clamp(pt.x,80,WORLD_W-80);pt.y=clamp(pt.y,2700,3150);
+      pt.x=clamp(pt.x, myBase.x - 150, myBase.x + 150);
+      pt.y=clamp(pt.y, myBase.y - 150, myBase.y + 150);
     }
 
     S.camera.x+=(p.x-S.camera.x)*0.08;
@@ -1733,6 +1792,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     }
   }
 
+  // ✅ 修正：孵化蛋大小依 size 對應，與偷的蛋一致
   function drawHatchery(h){
     const sp=worldToScreen(h.x,h.y);
     if(sp.y<-30||sp.y>H+30)return;
@@ -1743,12 +1803,13 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     ctx.beginPath(); ctx.ellipse(0, 18, 16, 6, 0, 0, 7); ctx.fill();
 
     const rar=h.rar;const rc=WORLD.rarities[rar].c;
+    const sizeR = h.size === 'giant' ? 22 : (h.size === 'huge' ? 16 : (h.size === 'secret' ? 22 : 12));
 
     if (h.finished) {
       const jump = Math.sin(S.time * 8) * 3;
       ctx.save();
       ctx.translate(0, jump - 5);
-      drawEggShape(ctx, h, 18, S.time, rc);
+      drawEggShape(ctx, h, sizeR, S.time, rc);
       ctx.restore();
       
       ctx.font='900 12px "Segoe UI"'; ctx.fillStyle='#ffe040';
@@ -1758,7 +1819,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     } else {
       ctx.save();
       ctx.globalAlpha = 0.8;
-      drawEggShape(ctx, h, 18, S.time, rc);
+      drawEggShape(ctx, h, sizeR, S.time, rc);
       ctx.restore();
 
       const progress=1-Math.max(0,h.timer)/h.total;
@@ -1784,10 +1845,8 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     const idx = S.hatchery.indexOf(h);
     if (idx === -1) return;
 
-    // 移除蛋
     S.hatchery.splice(idx, 1);
 
-    // 判斷農場是否有空位
     let slot = -1;
     if (S.pets.length < S.petCap) {
       const usedSlots = new Set(S.pets.map(pt => pt.slot));
@@ -1803,7 +1862,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     };
 
     if (slot !== -1) {
-      // 農場有空位，直接上陣
       const pod = getFarmPod(S.myBaseIdx, slot);
       S.pets.push({
         ...petData,
@@ -1813,14 +1871,12 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       S.cps = S.pets.reduce((s, pt) => s + pt.inc, 0);
       showToast(`🎉 獲得了 ${h.name}！已自動上陣。`, '#3a8a3a', '#2a6a2a');
     } else {
-      // 農場滿了，進背包
       S.bag.push(petData);
       showToast(`🎒 獲得了 ${h.name}！已放入背包。`, '#6a3a8a', '#4a1a6a');
     }
     
     discoverPet(h.biomeIdx, h.petIdx);
     
-    // 播放特效
     const hp = worldToScreen(h.x, h.y);
     const burst = document.createElement('div');
     burst.className = 'hatch-burst';
@@ -1912,7 +1968,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
   });
   c.addEventListener('wheel',e=>{e.preventDefault();S.zoom=clamp(S.zoom*(e.deltaY>0?0.92:1.08),0.4,2.5)},{passive:false});
 
-      function updateUI(){
+  function updateUI(){
     const p=S.player;
     document.getElementById('uiSpeed').textContent=fmt(p.displaySpeed);
     document.getElementById('uiCash').textContent=fmt(S.cash);
@@ -1937,7 +1993,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     document.getElementById('btnUp').disabled=S.cash<treadmillCost(p.tsLv);
     document.getElementById('btnSellSelected').disabled=!S.selectedPet;
     
-    // 返回按鈕顯示邏輯 (沒有拿蛋且在安全區外)
     const btnReturn = document.getElementById('btnReturn');
     if (!p.carry && p.y < S.safeLineY) {
       btnReturn.style.display = 'flex';
@@ -1945,17 +2000,14 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       btnReturn.style.display = 'none';
     }
 
-    // ===== 邊緣基地指示器 =====
     const edge = document.getElementById('edgeIndicator');
     const arrow = document.getElementById('edgeArrow');
     const label = document.getElementById('edgeLabel');
 
     const basePos = getBasePos(S.myBaseIdx);
-    // 取得基地在螢幕上的座標
     const sp = worldToScreen(basePos.x, basePos.y);
     
-    const margin = 50; // 距離邊緣的像素距離
-    // 判斷基地是否在畫面安全範圍內
+    const margin = 50;
     const isInside = sp.x > margin && sp.x < W - margin && sp.y > margin && sp.y < H - margin;
 
     if (isInside) {
@@ -1963,25 +2015,20 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     } else {
       edge.style.display = 'flex';
 
-      // 計算中心點到基地的向量
       const cx = W / 2;
       const cy = H / 2;
       const dx = sp.x - cx;
       const dy = sp.y - cy;
       
-      // 計算指示器應該在的邊緣位置 (夾在畫面內)
       let ex = clamp(sp.x, margin, W - margin);
       let ey = clamp(sp.y, margin, H - margin);
       
-      // 讓箭頭指向基地
       const angle = Math.atan2(dy, dx) * 180 / Math.PI;
       arrow.style.transform = `rotate(${angle}deg)`;
 
-      // 更新指示器位置
       edge.style.left = ex + 'px';
       edge.style.top = ey + 'px';
 
-      // 顯示距離
       const distToBase = Math.round(dist(p.x, p.y, basePos.x, basePos.y));
       label.textContent = `🏠 基地 (${distToBase}m)`;
     }
