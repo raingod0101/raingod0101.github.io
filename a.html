@@ -282,9 +282,10 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
   const SIZE_MUL = { normal: 1, huge: 2.2, giant: 4, secret: 10 };
 
   const BASE_XS = [300, 750, 1200, 1650, 2100];
+  // ✅ 修改：重新分佈，覆蓋整個基地矩形 2700~3200，不再全擠頂端
   const FARM_OFFSETS = [
-    {x:-30,y:-70},{x:30,y:-70},{x:-30,y:70},{x:30,y:70},{x:0,y:0},
-    {x:-60,y:0},{x:60,y:0},{x:-50,y:-40},{x:50,y:-40},{x:-50,y:40},{x:50,y:40}
+    {x:-30,y:-70},{x:30,y:-70},{x:-30,y:30},{x:30,y:30},{x:0,y:-20},
+    {x:-55,y:120},{x:55,y:120},{x:-30,y:210},{x:30,y:210},{x:-30,y:310},{x:30,y:310}
   ];
   const HATCH_OFFSETS = [
     {x:-30,y:-120},{x:30,y:-120},{x:-30,y:120},{x:30,y:120},
@@ -327,7 +328,8 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
         cash:S.cash,
         pets:S.pets.map(p=>({name:p.name,inc:p.inc,rar:p.rar,biomeIdx:p.biomeIdx,petIdx:p.petIdx,slot:p.slot,size:p.size,state:p.state})),
         bag:S.bag.map(p=>({name:p.name,inc:p.inc,rar:p.rar,biomeIdx:p.biomeIdx,petIdx:p.petIdx,size:p.size})),
-        hatchery:S.hatchery.map(h=>({name:h.name,inc:h.inc,rar:h.rar,biomeIdx:h.biomeIdx,petIdx:h.petIdx,size:h.size,timer:h.timer,total:h.total,finished:h.finished})),
+        // ✅ 修改：孵化器保存 secret
+        hatchery:S.hatchery.map(h=>({name:h.name,inc:h.inc,rar:h.rar,biomeIdx:h.biomeIdx,petIdx:h.petIdx,size:h.size,timer:h.timer,total:h.total,finished:h.finished,secret:!!h.secret})),
         biomeIdx:S.biomeIdx,
         discovered:[...IndexData.discovered],
         claimed:[...IndexData.claimed],
@@ -363,8 +365,8 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
           if (usedSlots.has(p.slot)) continue;
           usedSlots.add(p.slot);
           const pod = getFarmPod(S.myBaseIdx, p.slot);
-          const mx = basePos.x + rnd(-70, 70);
-          const my = basePos.y + rnd(-40, 90);
+          const mx = basePos.x + rnd(-55, 55);
+          const my = basePos.y + rnd(-40, 380);
           S.pets.push({
             id:Math.random().toString(36).slice(2),
             name:p.name,inc:p.inc,rar:p.rar,biomeIdx:p.biomeIdx,petIdx:p.petIdx,size:p.size||'normal',
@@ -392,6 +394,8 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
             id:Math.random().toString(36).slice(2),
             name:h.name,inc:h.inc,rar:h.rar,biomeIdx:h.biomeIdx,petIdx:h.petIdx,size:h.size,
             timer:h.timer,total:h.total,finished:!!h.finished,
+            // ✅ 修改：讀取 secret
+            secret:!!h.secret,
             x:hp.x,y:hp.y,
           });
         }
@@ -901,8 +905,8 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
 
     const pod = getFarmPod(S.myBaseIdx, slot);
     const basePos = getBasePos(S.myBaseIdx);
-    const mx = basePos.x + rnd(-70, 70);
-    const my = basePos.y + rnd(-40, 90);
+    const mx = basePos.x + rnd(-55, 55);
+    const my = basePos.y + rnd(-40, 380);
     S.bag.splice(idx, 1);
     S.pets.push({
       id: Math.random().toString(36).slice(2),
@@ -980,8 +984,8 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     const basePos = getBasePos(S.myBaseIdx);
     if(pet.state === 'follow'){
       pet.state = 'farm';
-      const mx = basePos.x + rnd(-70, 70);
-      const my = basePos.y + rnd(-40, 90);
+      const mx = basePos.x + rnd(-55, 55);
+      const my = basePos.y + rnd(-40, 380);
       pet.x = mx; pet.y = my;
       pet.wanderTargetX = mx; pet.wanderTargetY = my; pet.wanderTimer = 0;
       showToast(`📍 ${pet.name} 已放回基地`, '#3a6a8a', '#1a3a5a');
@@ -989,8 +993,8 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       for(const other of S.pets){
         if(other !== pet && other.state === 'follow'){
           other.state = 'farm';
-          const mx = basePos.x + rnd(-70, 70);
-          const my = basePos.y + rnd(-40, 90);
+          const mx = basePos.x + rnd(-55, 55);
+          const my = basePos.y + rnd(-40, 380);
           other.x = mx; other.y = my;
           other.wanderTargetX = mx; other.wanderTargetY = my; other.wanderTimer = 0;
         }
@@ -1177,7 +1181,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     }
   }
 
-  // ✅ 秘密蛋逐條顯示（每條間隔 0.6 秒，走 toast 堆疊）
   function trySpawnSecretEgg(){
     const spawned = [];
     const usedPositions = [];
@@ -1202,7 +1205,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
         spawned.push(`🌟 ${b.petNames[pi]} 出生在 ${b.icon}${b.name}（秘密）`);
       }
     }
-    // ✅ 逐條依序彈出，每條間隔 0.6 秒，交給 toast 堆疊系統處理
     spawned.forEach((msg, i) => {
       setTimeout(() => showToast(msg, '#8a3a8a', '#6a1a6a'), i * 600);
     });
@@ -1389,6 +1391,8 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
         id:Math.random().toString(36).slice(2),
         name:b.petNames[egg.petIdx],inc,rar,
         biomeIdx:egg.biomeIdx,petIdx:egg.petIdx,size:egg.size,
+        // ✅ 修改：保留 secret 標記，讓孵化時也有彩虹光芒
+        secret:!!egg.secret,
         timer:hatchTime,total:hatchTime,finished:false,
         x:hp.x,y:hp.y,
       });
@@ -1449,18 +1453,17 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     const myBase = getBasePos(S.myBaseIdx);
     for(const pt of S.pets){
       if(pt.state === 'follow'){
-        // 跟隨玩家：平滑跟隨到玩家右下方
         const targetX = p.x + 28;
         const targetY = p.y - 12;
         pt.x += (targetX - pt.x) * 0.18;
         pt.y += (targetY - pt.y) * 0.18;
       } else {
-        // 農場漫遊
+        // ✅ 修改：漫遊範圍對齊基地矩形（Y 從 2700 到 3170，不再全擠頂端）
         pt.wanderTimer -= dt;
         const distToTarget = dist(pt.x, pt.y, pt.wanderTargetX, pt.wanderTargetY);
         if(pt.wanderTimer <= 0 || distToTarget < 8){
-          pt.wanderTargetX = myBase.x + rnd(-90, 90);
-          pt.wanderTargetY = myBase.y + rnd(-70, 90);
+          pt.wanderTargetX = myBase.x + rnd(-55, 55);
+          pt.wanderTargetY = myBase.y + rnd(-40, 380);
           pt.wanderTimer = rnd(1.5, 4.5);
         }
         const ddx = pt.wanderTargetX - pt.x;
@@ -1471,9 +1474,9 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
           pt.x += (ddx/dlen) * spd * dt;
           pt.y += (ddy/dlen) * spd * dt;
         }
-        // 限制在基地範圍
-        pt.x = clamp(pt.x, myBase.x - 110, myBase.x + 110);
-        pt.y = clamp(pt.y, myBase.y - 90, myBase.y + 120);
+        // ✅ 修改：限制在整個基地範圍
+        pt.x = clamp(pt.x, myBase.x - 60, myBase.x + 60);
+        pt.y = clamp(pt.y, myBase.y - 50, myBase.y + 420);
       }
     }
 
@@ -1608,7 +1611,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     drawBases();
     drawPlayer();
     drawRemotePlayers();
-    // 先畫農場寵物（在玩家下方），再畫跟隨寵物（在玩家上方）
     for(const pt of S.pets)if(pt.state !== 'follow')drawFarmPet(pt);
     for(const pt of S.pets)if(pt.state === 'follow')drawFarmPet(pt);
     for(const h of S.hatchery)drawHatchery(h);
@@ -1672,7 +1674,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     }
   }
 
-  // ✅ 移除農場圓圈，只保留孵化台底圈（較淡）
   function drawBases(){
     for (let i = 0; i < BASE_XS.length; i++) {
       const basePos = getBasePos(i);
@@ -1704,9 +1705,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       ctx.fillText('🏃 跑步機', tm.x, tm.y + 3);
       ctx.restore();
 
-      // ✅ 農場圓圈已移除（原本 FARM_OFFSETS 的圓圈繪製刪除）
-
-      // 孵化台（保留但降低透明度）
       for (let j = 0; j < HATCH_OFFSETS.length; j++) {
         const pod = getHatchPod(i, j);
         const sp = worldToScreen(pod.x, pod.y);
@@ -1841,7 +1839,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     const sizeMul=pt.size==='giant'?1.5:(pt.size==='huge'?1.25:(pt.size==='secret'?1.6:1));
     drawPetShape(ctx,shape,pal,22*sizeMul,S.time,rc);
     ctx.restore();
-    // 標籤：跟隨時只顯示名字，不顯示收入（避免雜亂）
     if(sc>0.6){
       ctx.font='800 11px "Segoe UI"';ctx.textAlign='center';
       ctx.fillStyle='#fff';ctx.shadowBlur=6;ctx.shadowColor='#000';
@@ -1878,8 +1875,8 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       ctx.fillText('✨ 點擊打開', 0, -30);
       ctx.shadowBlur=0;
     } else {
+      // ✅ 修改：移除 0.8 透明度，讓秘密蛋的光芒完整顯示
       ctx.save();
-      ctx.globalAlpha = 0.8;
       drawEggShape(ctx, h, sizeR, S.time, rc);
       ctx.restore();
 
@@ -1924,8 +1921,8 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
 
     if (slot !== -1) {
       const basePos = getBasePos(S.myBaseIdx);
-      const mx = basePos.x + rnd(-70, 70);
-      const my = basePos.y + rnd(-40, 90);
+      const mx = basePos.x + rnd(-55, 55);
+      const my = basePos.y + rnd(-40, 380);
       S.pets.push({
         ...petData,
         x: mx, y: my,
@@ -2114,17 +2111,14 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     }
   });
   document.getElementById('btnBest').addEventListener('click',()=>{
-  // 1. 農場 + 背包 全部一起拿來比
   const allPets = [...S.pets, ...S.bag];
   if(allPets.length === 0){
     showToast('⚠️ 沒有寵物可以放置', '#8a2a2a', '#5a0a0a');
     return;
   }
 
-  // 2. 有開著的寵物面板先關掉，避免 selectedPet 指向被移走的寵物
   if(S.panelOpen) closePetPanel();
 
-  // 3. 收益高 → 低
   allPets.sort((a,b)=>b.inc-a.inc);
 
   const myBase = getBasePos(S.myBaseIdx);
@@ -2133,12 +2127,10 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
   const usedSlots = new Set();
 
   for(const pet of allPets){
-    // 農場滿了，剩下的全丟背包
     if(newFarm.length >= S.petCap){
       newBag.push(stripToBagPet(pet));
       continue;
     }
-    // 找一個空位
     let slot = -1;
     for(let j=0;j<FARM_OFFSETS.length;j++){
       if(!usedSlots.has(j)){ slot = j; break; }
@@ -2149,10 +2141,11 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     if(!pet.id) pet.id = Math.random().toString(36).slice(2);
 
     pet.slot = slot;
-    pet.state = 'farm';          // 一律收回農場（連手上拿著的也放下）
+    pet.state = 'farm';
     pet.selected = false;
-    const mx = myBase.x + rnd(-90, 90);
-    const my = myBase.y + rnd(-70, 90);
+    // ✅ 修改：位置隨機分布在整個基地
+    const mx = myBase.x + rnd(-55, 55);
+    const my = myBase.y + rnd(-40, 380);
     pet.x = mx; pet.y = my;
     pet.wanderTargetX = mx; pet.wanderTargetY = my; pet.wanderTimer = 0;
     newFarm.push(pet);
