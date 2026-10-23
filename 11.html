@@ -3,638 +3,889 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>2D 籃球 1v1 · 手機版</title>
+<title>2D 籃球單挑</title>
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
     margin: 0; height: 100%; overflow: hidden;
-    background: radial-gradient(circle at 50% 0%, #262633, #0d0d12 70%);
+    background: #08080c;
     font-family: system-ui, -apple-system, "Noto Sans TC", sans-serif;
-    color: #ddd;
+    color: #eee;
     user-select: none; -webkit-user-select: none;
     touch-action: none; overscroll-behavior: none;
   }
   body { display: flex; align-items: center; justify-content: center; }
   canvas {
-    width: auto; height: auto;
     max-width: 100vw; max-height: 100vh;
+    width: auto; height: auto;
     display: block;
-    border-radius: 10px;
-    box-shadow: 0 20px 60px rgba(0,0,0,.7), 0 0 0 1px rgba(255,255,255,.06);
     touch-action: none;
-  }
-  #tip {
-    position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
-    font-size: 12px; padding: 5px 14px; border-radius: 999px;
-    background: rgba(255,255,255,.10); color: #ffd35c;
-    display: none; pointer-events: none; white-space: nowrap;
-  }
-  @media (orientation: portrait) and (pointer: coarse) {
-    #tip { display: block; }
   }
 </style>
 </head>
 <body>
-<canvas id="c" width="900" height="700"></canvas>
-<div id="tip">建議橫屏遊玩 📱↻</div>
+<canvas id="game" width="1000" height="700"></canvas>
 <script>
-// ================== 常數設定 ==================
-const cvs = document.getElementById('c');
-const ctx = cvs.getContext('2d');
-const W = 900, H = 700;
+'use strict';
 
-const COURT  = { x: 60, y: 60, w: 780, h: 580 };
-const HOOP   = { x: W / 2, y: COURT.y + 55, r: 20 };
-const THREE_R = 235;
-const WIN_SCORE = 11;
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const W = 1000, H = 700;
 
-const PERFECT_MIN = 0.62, PERFECT_MAX = 0.85, CHARGE_SPEED = 1.5;
+// ===== 場地常數 =====
+const COURT = { x: 30, y: 40, w: 940, h: 580 };
+const GROUND_Y = 620;
+const HOOP_Y = 340;
+const GRAVITY = 2600;
+const JUMP_V = -1250;
 
-// ================== 遊戲狀態 ==================
-const player = { x: 450, y: 520, r: 16, speed: 270, color: '#4a9eff', moving: false };
-const cpu    = { x: 450, y: 340, r: 16, speed: 245, color: '#ff5a5a', moving: false };
+const HOOP_L = { x: 110, y: HOOP_Y, r: 22, side: 'left' };
+const HOOP_R = { x: 890, y: HOOP_Y, r: 22, side: 'right' };
+const THREE_DIST = 280;
 
+// ===== 球員 =====
+const player = { x: 600, y: GROUND_Y - 22, r: 22, vy: 0, onGround: true, facing: 1, moving: false };
+const cpu    = { x: 720, y: GROUND_Y - 22, r: 22, vy: 0, onGround: true, facing: -1, moving: false,
+                 shootCD: 0, stealCD: 0 };
+
+// ===== 球 =====
 const ball = {
-  x: 450, y: 520, z: 0, r: 9,
-  vx: 0, vy: 0, vz: 0,
-  state: 'held', owner: 'player',
-  sx: 0, sy: 0, tx: 0, ty: 0, t: 0, dur: .55,
-  willScore: false, shooter: null, points: 2,
-  pickupDelay: 0
+  x: 600, y: GROUND_Y - 40, r: 10,
+  vx: 0, vy: 0,
+  state: 'held',        // held | shot | loose
+  owner: 'player',      // player | cpu | null
+  shooter: null,
+  startX: 0, startY: 0, endX: 0, endY: 0,
+  t: 0, dur: 0.7,
+  willScore: false,
+  points: 2,
+  pickupCD: 0
 };
 
-let score = { player: 0, cpu: 0 };
-let state = 'play';
-let message = '', messageTimer = 0;
+// ===== 遊戲狀態 =====
+const state = {
+  score: { player: 0, cpu: 0 },
+  timeLeft: 60,
+  phase: 'playing',     // playing | sudden | ended
+  msg: '', msgTimer: 0
+};
 
-const keys = {};
+// ===== 輸入 =====
+const input = {
+  left: false, right: false,
+  action: false, steal: false
+};
+
 let charging = false, power = 0, powerDir = 1;
-let stealCooldown = 0, stealGrace = 0;
-let cpuShootTimer = 0, cpuStealTimer = 0;
-let gameTime = 0, lastTime = 0;
+let prevAction = false;
+let stealCD = 0;
 
-// ================== 觸控虛擬按鍵 ==================
-const isTouchDevice = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 
-const BTN_SHOT  = { x: W - 115, y: H - 150, r: 66 };
-const BTN_STEAL = { x: W - 258, y: H - 78,  r: 50 };
-const JOY_R = 62, JOY_MAX = 70;
+// ===== 工具 =====
+function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+function showMsg(t) { state.msg = t; state.msgTimer = 1.5; }
 
-const touch = {
-  joyId: null, joyCX: 0, joyCY: 0,
-  joyX: 0, joyY: 0, joyHX: 0, joyHY: 0,
-  shotId: null, stealId: null
-};
-
-function toCanvas(e) {
-  const r = cvs.getBoundingClientRect();
-  return {
-    x: (e.clientX - r.left) * (W / r.width),
-    y: (e.clientY - r.top)  * (H / r.height)
-  };
-}
-
-function hit(p, b) {
-  return Math.hypot(p.x - b.x, p.y - b.y) < b.r * 1.15;
-}
-
-function updateJoy(p) {
-  let dx = p.x - touch.joyCX;
-  let dy = p.y - touch.joyCY;
-  const d = Math.hypot(dx, dy);
-  if (d > JOY_MAX) { dx = dx / d * JOY_MAX; dy = dy / d * JOY_MAX; }
-  if (d < 8) { dx = 0; dy = 0; }
-  touch.joyHX = dx;
-  touch.joyHY = dy;
-  touch.joyX = dx / JOY_MAX;
-  touch.joyY = dy / JOY_MAX;
-}
-
-function clearTouch() {
-  touch.joyId = null;
-  touch.joyX = touch.joyY = touch.joyHX = touch.joyHY = 0;
-  touch.shotId = null;
-  touch.stealId = null;
-}
-
-cvs.addEventListener('pointerdown', e => {
-  e.preventDefault();
-  if (state === 'gameover') { resetGame(); return; }
-
-  cvs.setPointerCapture(e.pointerId);
-  const p = toCanvas(e);
-
-  // 按鈕優先判定
-  if (touch.shotId === null && hit(p, BTN_SHOT))  { touch.shotId  = e.pointerId; return; }
-  if (touch.stealId === null && hit(p, BTN_STEAL)) { touch.stealId = e.pointerId; return; }
-
-  // 左下區域 → 生成浮動搖桿
-  if (touch.joyId === null && p.x < W * 0.58 && p.y > H * 0.42) {
-    touch.joyId = e.pointerId;
-    touch.joyCX = p.x;
-    touch.joyCY = Math.min(p.y, H - 90);
-    updateJoy(p);
-  }
-}, { passive: false });
-
-cvs.addEventListener('pointermove', e => {
-  if (e.pointerId !== touch.joyId) return;
-  e.preventDefault();
-  updateJoy(toCanvas(e));
-}, { passive: false });
-
-function onPointerEnd(e) {
-  if (e.pointerId === touch.joyId) {
-    touch.joyId = null;
-    touch.joyX = touch.joyY = touch.joyHX = touch.joyHY = 0;
-  }
-  if (e.pointerId === touch.shotId)  touch.shotId  = null;
-  if (e.pointerId === touch.stealId) touch.stealId = null;
-}
-cvs.addEventListener('pointerup', onPointerEnd);
-cvs.addEventListener('pointercancel', onPointerEnd);
-cvs.addEventListener('contextmenu', e => e.preventDefault());
-
-// ================== 鍵盤（桌機相容） ==================
-addEventListener('keydown', e => {
-  const k = e.key.toLowerCase();
-  keys[k] = true;
-  if (k === ' ') e.preventDefault();
-  if (k === 'r' && state === 'gameover') resetGame();
-});
-addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
-
-// ================== 工具函式 ==================
-const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
-const lerp = (a, b, t) => a + (b - a) * t;
-
-function clampEntity(e) {
-  e.x = Math.max(COURT.x + e.r, Math.min(COURT.x + COURT.w - e.r, e.x));
-  e.y = Math.max(COURT.y + e.r, Math.min(COURT.y + COURT.h - e.r, e.y));
-}
-
-function showMessage(t) { message = t; messageTimer = 1.4; }
-
-function moveTowards(e, tx, ty, dt) {
-  const dx = tx - e.x, dy = ty - e.y;
-  const d = Math.hypot(dx, dy);
-  if (d > 3) {
-    const step = Math.min(e.speed * dt, d);
-    e.x += (dx / d) * step;
-    e.y += (dy / d) * step;
-  }
-  clampEntity(e);
-}
-
-function baseAccuracy(d) {
-  if (d < 90)  return 0.90;
-  if (d < 170) return 0.72;
-  if (d < 260) return 0.50;
-  return 0.32;
-}
-
-// ================== 球權 / 投籃 ==================
+// ===== 球權 =====
 function giveBall(who) {
   ball.state = 'held';
   ball.owner = who;
-  ball.z = 0;
-  ball.vx = ball.vy = ball.vz = 0;
-  ball.pickupDelay = 0;
-  stealGrace = 0.6;
-  charging = false;
-  power = 0;
+  ball.shooter = null;
+  ball.vx = ball.vy = 0;
+  ball.pickupCD = 0;
 }
 
 function resetPossession(who) {
-  const off = who === 'player' ? player : cpu;
-  const def = who === 'player' ? cpu : player;
-
-  off.x = HOOP.x + (Math.random() - 0.5) * 280;
-  off.y = COURT.y + COURT.h - 130;
-  def.x = HOOP.x + (Math.random() - 0.5) * 180;
-  def.y = COURT.y + 200;
-
-  giveBall(who);
-  stealGrace = 0.9;
-}
-
-function launchShot(who, acc, distToHoop) {
-  const s = who === 'player' ? player : cpu;
-  ball.state = 'shot';
-  ball.owner = null;
-  ball.sx = s.x; ball.sy = s.y - 10;
-  ball.tx = HOOP.x; ball.ty = HOOP.y;
-  ball.t = 0;
-  ball.dur = 0.5 + distToHoop / 1200;
-  ball.willScore = Math.random() < acc;
-  ball.shooter = who;
-  ball.points = distToHoop > THREE_R ? 3 : 2;
-  ball.z = 0;
-}
-
-function playerShoot() {
-  const d = dist(player, HOOP);
-  let acc = baseAccuracy(d);
-
-  let powerMul;
-  if (power >= PERFECT_MIN && power <= PERFECT_MAX) {
-    powerMul = 1.2;
+  if (who === 'player') {
+    player.x = 600; cpu.x = 750;
+    player.facing = 1; cpu.facing = -1;
   } else {
-    const off = power < PERFECT_MIN ? PERFECT_MIN - power : power - PERFECT_MAX;
-    powerMul = Math.max(0.2, 1 - off * 2.5);
+    player.x = 250; cpu.x = 400;
+    player.facing = 1; cpu.facing = -1;
   }
-  acc *= powerMul;
-
-  if (player.moving) acc *= 0.88;
-  if (dist(player, cpu) < 70) acc *= 0.6;
-
-  launchShot('player', Math.min(0.98, acc), d);
-
-  if (powerMul >= 1.2) showMessage('完美出手！');
-  else if (powerMul < 0.5) showMessage('力道不佳…');
+  player.y = GROUND_Y - player.r;
+  cpu.y = GROUND_Y - cpu.r;
+  player.vy = cpu.vy = 0;
+  player.onGround = cpu.onGround = true;
+  giveBall(who);
+  charging = false;
+  power = 0;
+  stealCD = 0;
 }
 
-function cpuDoShoot() {
-  const d = dist(cpu, HOOP);
-  let acc = baseAccuracy(d) * 0.85;
-  if (dist(player, cpu) < 70) acc *= 0.6;
-  launchShot('cpu', acc, d);
-}
+// ===== 投籃 / 灌籃 =====
+function attemptShot(who, powerVal) {
+  const shooter = who === 'player' ? player : cpu;
+  const defender = who === 'player' ? cpu : player;
+  const hoop = who === 'player' ? HOOP_R : HOOP_L;
 
-function resolveShot() {
-  if (ball.willScore) {
-    score[ball.shooter] += ball.points;
-    showMessage((ball.shooter === 'player' ? '你' : '電腦') + ' 投進了！ +' + ball.points);
-
-    if (score.player >= WIN_SCORE || score.cpu >= WIN_SCORE) {
-      state = 'gameover';
-      clearTouch();
+  // 封蓋判定
+  if (!defender.onGround && Math.abs(defender.x - shooter.x) < 100) {
+    if (Math.random() < 0.5) {
+      ball.state = 'loose';
+      ball.owner = null;
+      ball.shooter = null;
+      ball.x = shooter.x;
+      ball.y = shooter.y - 25;
+      ball.vx = (Math.random() - 0.5) * 350;
+      ball.vy = -350 - Math.random() * 200;
+      ball.pickupCD = 0.35;
+      showMsg('封蓋！');
       return;
     }
-    resetPossession(ball.shooter === 'player' ? 'cpu' : 'player');
+  }
+
+  // 命中率
+  const distX = Math.abs(shooter.x - hoop.x);
+  let acc = 0.55;
+  if (powerVal >= 0.6 && powerVal <= 0.85) acc += 0.35;
+  else {
+    const off = powerVal < 0.6 ? 0.6 - powerVal : powerVal - 0.85;
+    acc -= off * 0.8;
+  }
+  if (distX > 350) acc -= 0.2;
+  else if (distX > 250) acc -= 0.1;
+  if (shooter.moving) acc -= 0.1;
+  const defDist = Math.abs(shooter.x - defender.x);
+  if (defDist < 60) acc -= 0.15;
+  acc = clamp(acc, 0.05, 0.95);
+
+  const points = distX > THREE_DIST ? 3 : 2;
+
+  ball.state = 'shot';
+  ball.owner = null;
+  ball.shooter = who;
+  ball.startX = shooter.x;
+  ball.startY = shooter.y - 15;
+  ball.endX = hoop.x;
+  ball.endY = hoop.y;
+  ball.t = 0;
+  ball.dur = 0.5 + distX / 1000;
+  ball.willScore = Math.random() < acc;
+  ball.points = points;
+
+  if (who === 'player' && points === 3) showMsg('三分出手！');
+}
+
+function attemptDunk(who) {
+  const shooter = who === 'player' ? player : cpu;
+  const defender = who === 'player' ? cpu : player;
+  const hoop = who === 'player' ? HOOP_R : HOOP_L;
+
+  // 封蓋判定
+  if (!defender.onGround && Math.abs(defender.x - hoop.x) < 100) {
+    if (Math.random() < 0.4) {
+      ball.state = 'loose';
+      ball.owner = null;
+      ball.shooter = null;
+      ball.x = shooter.x;
+      ball.y = shooter.y - 30;
+      ball.vx = (Math.random() - 0.5) * 400;
+      ball.vy = -400;
+      ball.pickupCD = 0.35;
+      showMsg('封蓋！');
+      return;
+    }
+  }
+
+  if (shooter.onGround) {
+    shooter.vy = JUMP_V;
+    shooter.onGround = false;
+  }
+
+  ball.state = 'shot';
+  ball.owner = null;
+  ball.shooter = who;
+  ball.startX = shooter.x;
+  ball.startY = shooter.y - 20;
+  ball.endX = hoop.x;
+  ball.endY = hoop.y;
+  ball.t = 0;
+  ball.dur = 0.4;
+  ball.willScore = true;
+  ball.points = 2;
+  showMsg('灌籃！');
+}
+
+// ===== 投籃結算 =====
+function resolveShot() {
+  const scorer = ball.shooter;
+  const hoop = scorer === 'player' ? HOOP_R : HOOP_L;
+
+  if (ball.willScore) {
+    state.score[scorer] += ball.points;
+    showMsg((scorer === 'player' ? '你' : '電腦') + ' 得分 +' + ball.points);
+
+    if (state.phase === 'sudden' || state.timeLeft <= 0) {
+      endGame();
+      return;
+    }
+    resetPossession(scorer === 'player' ? 'cpu' : 'player');
   } else {
     ball.state = 'loose';
-    ball.x = HOOP.x + (Math.random() - 0.5) * 100;
-    ball.y = HOOP.y + 40 + Math.random() * 90;
-    ball.z = 10;
-    ball.vx = (Math.random() - 0.5) * 260;
-    ball.vy = 60 + Math.random() * 140;
-    ball.vz = 120;
-    ball.pickupDelay = 0.25;
     ball.owner = null;
+    ball.shooter = null;
+    ball.x = hoop.x + (Math.random() - 0.5) * 60;
+    ball.y = hoop.y + 30;
+    ball.vx = (Math.random() - 0.5) * 350;
+    ball.vy = -250 - Math.random() * 150;
+    ball.pickupCD = 0.2;
+    if (scorer === 'player') showMsg('沒進！');
   }
 }
 
-// ================== 更新 ==================
+// ===== 玩家更新 =====
 function updatePlayer(dt) {
-  let mx = 0, my = 0;
-  if (keys['w'] || keys['arrowup'])    my -= 1;
-  if (keys['s'] || keys['arrowdown'])  my += 1;
-  if (keys['a'] || keys['arrowleft'])  mx -= 1;
-  if (keys['d'] || keys['arrowright']) mx += 1;
+  let dir = 0;
+  if (input.left) dir -= 1;
+  if (input.right) dir += 1;
 
-  if (touch.joyId !== null) { mx += touch.joyX; my += touch.joyY; }
+  player.x += dir * 380 * dt;
+  player.moving = dir !== 0;
+  if (dir !== 0) player.facing = dir;
 
-  const len = Math.hypot(mx, my);
-  player.moving = len > 0.35;
-  if (len > 0.05) {
-    const s = len > 1 ? 1 / len : 1;
-    player.x += mx * s * player.speed * dt;
-    player.y += my * s * player.speed * dt;
+  player.vy += GRAVITY * dt;
+  player.y += player.vy * dt;
+  const standY = GROUND_Y - player.r;
+  if (player.y >= standY) {
+    player.y = standY;
+    player.vy = 0;
+    player.onGround = true;
+  } else {
+    player.onGround = false;
   }
-  clampEntity(player);
+  player.x = clamp(player.x, COURT.x + player.r, COURT.x + COURT.w - player.r);
+}
 
-  const shootHeld = keys[' '] || touch.shotId !== null;
+function updatePlayerAction(dt) {
+  const hasBall = ball.owner === 'player' && ball.state === 'held';
 
-  if (ball.owner === 'player' && ball.state === 'held') {
-    if (shootHeld) {
-      if (!charging) { charging = true; power = 0; powerDir = 1; }
-      power += powerDir * CHARGE_SPEED * dt;
-      if (power >= 1) { power = 1; powerDir = -1; }
-      if (power <= 0) { power = 0; powerDir = 1; }
-    } else if (charging) {
+  if (charging && !hasBall) { charging = false; power = 0; }
+
+  if (input.action && !prevAction) {
+    if (hasBall) {
+      charging = true;
+      power = 0;
+      powerDir = 1;
+    } else if (player.onGround) {
+      player.vy = JUMP_V;
+      player.onGround = false;
+    }
+  }
+
+  if (input.action && charging && hasBall) {
+    power += powerDir * 1.6 * dt;
+    if (power >= 1) { power = 1; powerDir = -1; }
+    if (power <= 0) { power = 0; powerDir = 1; }
+  }
+
+  if (!input.action && prevAction) {
+    if (charging && hasBall) {
       charging = false;
-      playerShoot();
+      const distX = Math.abs(player.x - HOOP_R.x);
+      if (distX < 110) attemptDunk('player');
+      else attemptShot('player', power);
+      power = 0;
+    }
+  }
+  prevAction = input.action;
+
+  // 抄球
+  if (stealCD > 0) stealCD -= dt;
+  if (input.steal && stealCD <= 0 && ball.owner === 'cpu' && ball.state === 'held') {
+    stealCD = 1.0;
+    if (Math.abs(player.x - cpu.x) < 55 && Math.random() < 0.32) {
+      giveBall('player');
+      showMsg('抄球成功！');
+      charging = false;
+      power = 0;
+    }
+  }
+}
+
+// ===== CPU 更新 =====
+function updateCPU(dt) {
+  if (state.phase === 'ended') return;
+  if (cpu.shootCD > 0) cpu.shootCD -= dt;
+  if (cpu.stealCD > 0) cpu.stealCD -= dt;
+
+  const hasBall = ball.owner === 'cpu' && ball.state === 'held';
+  let moveDir = 0;
+
+  if (hasBall) {
+    const hoop = HOOP_L;
+    const distX = Math.abs(cpu.x - hoop.x);
+
+    if (distX > 140) {
+      moveDir = cpu.x > hoop.x ? -1 : 1;
+      if (Math.random() < 0.008) moveDir *= -1;
+    }
+
+    if (cpu.shootCD <= 0) {
+      const defDist = Math.abs(cpu.x - player.x);
+      const openEnough = defDist > 75;
+
+      if (distX < 130 && cpu.onGround && Math.random() < 0.02) {
+        attemptDunk('cpu');
+        cpu.shootCD = 1.6;
+        return;
+      }
+      if (distX < 500 && (Math.random() < 0.012 || (openEnough && Math.random() < 0.025))) {
+        const pw = 0.55 + Math.random() * 0.35;
+        attemptShot('cpu', pw);
+        cpu.shootCD = 1.6;
+        return;
+      }
     }
   } else {
-    charging = false;
-  }
-
-  const stealHeld = keys['shift'] || touch.stealId !== null;
-  if (stealHeld && stealCooldown <= 0 &&
-      ball.owner === 'cpu' && ball.state === 'held' && stealGrace <= 0) {
-    stealCooldown = 0.9;
-    if (dist(player, cpu) < 55 && Math.random() < 0.35) {
-      giveBall('player');
-      showMessage('搶斷成功！');
+    const hoop = HOOP_R;
+    const targetX = (player.x + hoop.x) / 2 + (Math.random() - 0.5) * 30;
+    if (Math.abs(cpu.x - targetX) > 40) {
+      moveDir = cpu.x < targetX ? 1 : -1;
     }
-  }
-}
 
-function updateCPU(dt) {
-  if (cpuShootTimer > 0) cpuShootTimer -= dt;
-  if (cpuStealTimer > 0) cpuStealTimer -= dt;
-
-  let tx = cpu.x, ty = cpu.y;
-
-  if (ball.state === 'held' && ball.owner === 'cpu') {
-    const d = dist(cpu, HOOP);
-    if (d > 175) {
-      tx = HOOP.x + Math.sin(gameTime * 1.3) * 60;
-      ty = HOOP.y + 150;
-      if (dist(cpu, player) < 100) {
-        tx += (cpu.x - player.x) * 0.8;
-        ty += (cpu.y - player.y) * 0.3;
+    if (ball.owner === 'player' && (charging || ball.state === 'shot')) {
+      if (Math.abs(cpu.x - player.x) < 75 && cpu.onGround && Math.random() < 0.045) {
+        cpu.vy = JUMP_V;
+        cpu.onGround = false;
       }
-    } else {
-      if (cpuShootTimer <= 0) {
-        cpuShootTimer = 0.6 + Math.random() * 0.8;
-        if (dist(cpu, player) > 65 || Math.random() < 0.5) cpuDoShoot();
-      }
-      tx = cpu.x + Math.cos(gameTime * 2) * 30;
-      ty = cpu.y + Math.sin(gameTime * 2) * 30;
     }
-  } else if (ball.state === 'held' && ball.owner === 'player') {
-    tx = player.x * 0.6 + HOOP.x * 0.4;
-    ty = player.y * 0.6 + (HOOP.y + 60) * 0.4;
 
-    if (dist(cpu, player) < 50 && stealGrace <= 0 && cpuStealTimer <= 0) {
-      cpuStealTimer = 1.2;
+    if (ball.owner === 'player' && ball.state === 'held' &&
+        Math.abs(cpu.x - player.x) < 48 && cpu.stealCD <= 0) {
+      cpu.stealCD = 1.5;
       if (Math.random() < 0.28) {
         giveBall('cpu');
-        showMessage('電腦搶斷！');
+        showMsg('電腦抄球！');
+        charging = false;
+        power = 0;
       }
     }
-  } else if (ball.state === 'loose') {
-    tx = ball.x; ty = ball.y;
-  } else {
-    tx = (ball.x + HOOP.x) / 2;
-    ty = (ball.y + HOOP.y) / 2;
   }
 
-  moveTowards(cpu, tx, ty, dt);
+  cpu.x += moveDir * 300 * dt;
+  cpu.moving = moveDir !== 0;
+  if (moveDir !== 0) cpu.facing = moveDir;
+
+  cpu.vy += GRAVITY * dt;
+  cpu.y += cpu.vy * dt;
+  const standY = GROUND_Y - cpu.r;
+  if (cpu.y >= standY) {
+    cpu.y = standY;
+    cpu.vy = 0;
+    cpu.onGround = true;
+  } else {
+    cpu.onGround = false;
+  }
+  cpu.x = clamp(cpu.x, COURT.x + cpu.r, COURT.x + COURT.w - cpu.r);
 }
 
+// ===== 球更新 =====
 function updateBall(dt) {
   if (ball.state === 'held') {
-    const h = ball.owner === 'player' ? player : cpu;
-    ball.x = h.x + h.r * 0.9;
-    ball.y = h.y - 2;
-    ball.z = 0;
+    const holder = ball.owner === 'player' ? player : cpu;
+    ball.x = holder.x + holder.facing * 22;
+    ball.y = holder.y + 8;
+    ball.vx = ball.vy = 0;
 
   } else if (ball.state === 'shot') {
     ball.t += dt;
-    let p = Math.min(1, ball.t / ball.dur);
-    ball.x = lerp(ball.sx, ball.tx, p);
-    ball.y = lerp(ball.sy, ball.ty, p);
-    const arcH = 60 + dist({ x: ball.sx, y: ball.sy }, HOOP) * 0.25;
-    ball.z = Math.sin(p * Math.PI) * arcH;
+    const p = Math.min(1, ball.t / ball.dur);
+    const inv = 1 - p;
+    const distX = Math.abs(ball.endX - ball.startX);
+    const arcH = 70 + distX * 0.35;
+    const midX = (ball.startX + ball.endX) / 2;
+    const midY = Math.min(ball.startY, ball.endY) - arcH;
+
+    ball.x = inv * inv * ball.startX + 2 * inv * p * midX + p * p * ball.endX;
+    ball.y = inv * inv * ball.startY + 2 * inv * p * midY + p * p * ball.endY;
+
     if (p >= 1) resolveShot();
 
   } else if (ball.state === 'loose') {
+    ball.vy += GRAVITY * dt;
     ball.x += ball.vx * dt;
     ball.y += ball.vy * dt;
 
-    const fr = Math.pow(0.08, dt);
-    ball.vx *= fr;
-    ball.vy *= fr;
-
-    ball.z += ball.vz * dt;
-    ball.vz -= 800 * dt;
-    if (ball.z < 0) {
-      ball.z = 0;
-      ball.vz *= -0.5;
-      if (Math.abs(ball.vz) < 50) ball.vz = 0;
+    const floor = GROUND_Y - ball.r;
+    if (ball.y > floor) {
+      ball.y = floor;
+      ball.vy *= -0.5;
+      ball.vx *= 0.82;
+      if (Math.abs(ball.vy) < 90) ball.vy = 0;
     }
+    if (ball.x < COURT.x + ball.r) { ball.x = COURT.x + ball.r; ball.vx *= -0.6; }
+    if (ball.x > COURT.x + COURT.w - ball.r) { ball.x = COURT.x + COURT.w - ball.r; ball.vx *= -0.6; }
 
-    const m = ball.r;
-    if (ball.x < COURT.x + m) { ball.x = COURT.x + m; ball.vx *= -0.6; }
-    if (ball.x > COURT.x + COURT.w - m) { ball.x = COURT.x + COURT.w - m; ball.vx *= -0.6; }
-    if (ball.y < COURT.y + m) { ball.y = COURT.y + m; ball.vy *= -0.6; }
-    if (ball.y > COURT.y + COURT.h - m) { ball.y = COURT.y + COURT.h - m; ball.vy *= -0.6; }
+    if (ball.pickupCD > 0) ball.pickupCD -= dt;
   }
 }
 
-function checkPickup() {
-  if (ball.state !== 'loose' || ball.pickupDelay > 0) return;
-  if (ball.z > 25) return;
-  for (const [name, e] of [['player', player], ['cpu', cpu]]) {
-    if (dist(ball, e) < e.r + ball.r + 8) { giveBall(name); return; }
-  }
-}
-
-function resolveCollisions() {
-  const dx = player.x - cpu.x, dy = player.y - cpu.y;
-  const d = Math.hypot(dx, dy);
+// ===== 碰撞 & 撿球 =====
+function resolveCollision() {
+  const dx = player.x - cpu.x;
+  const d = Math.abs(dx);
   const minD = player.r + cpu.r;
-  if (d < minD && d > 0.001) {
-    const push = (minD - d) / 2;
-    const nx = dx / d, ny = dy / d;
-    player.x += nx * push;  player.y += ny * push;
-    cpu.x    -= nx * push;  cpu.y    -= ny * push;
-    clampEntity(player);
-    clampEntity(cpu);
+  if (d < minD && d > 0.01) {
+    const push = (minD - d) / 2 + 0.5;
+    const s = dx >= 0 ? 1 : -1;
+    player.x += s * push;
+    cpu.x -= s * push;
+    player.x = clamp(player.x, COURT.x + player.r, COURT.x + COURT.w - player.r);
+    cpu.x = clamp(cpu.x, COURT.x + cpu.r, COURT.x + COURT.w - cpu.r);
   }
 }
 
-function update(dt) {
-  if (state !== 'play') return;
+function tryPickup() {
+  if (ball.state !== 'loose' || ball.pickupCD > 0) return;
+  if (ball.y < GROUND_Y - 70) return;
 
-  if (stealCooldown > 0) stealCooldown -= dt;
-  if (stealGrace > 0)    stealGrace -= dt;
-  if (messageTimer > 0)  messageTimer -= dt;
-  if (ball.pickupDelay > 0) ball.pickupDelay -= dt;
+  const dP = Math.hypot(ball.x - player.x, ball.y - player.y);
+  const dC = Math.hypot(ball.x - cpu.x, ball.y - cpu.y);
+  const R = 45;
+
+  if (dP < R && dC < R) {
+    if (dP <= dC) giveBall('player');
+    else giveBall('cpu');
+  } else if (dP < R) {
+    giveBall('player');
+  } else if (dC < R) {
+    giveBall('cpu');
+  }
+}
+
+// ===== 主更新 =====
+function update(dt) {
+  if (state.phase === 'ended') return;
+
+  if (state.msgTimer > 0) state.msgTimer -= dt;
+
+  if (state.phase === 'playing') {
+    state.timeLeft -= dt;
+    if (state.timeLeft <= 0) {
+      state.timeLeft = 0;
+      if (state.score.player === state.score.cpu) {
+        state.phase = 'sudden';
+        showMsg('延長賽！先得分者勝');
+      } else {
+        endGame();
+        return;
+      }
+    }
+  }
 
   updatePlayer(dt);
+  updatePlayerAction(dt);
   updateCPU(dt);
   updateBall(dt);
-  resolveCollisions();
-  checkPickup();
+  resolveCollision();
+  tryPickup();
 }
 
-// ================== 繪製 ==================
+// ===== 結束 =====
+function endGame() {
+  state.phase = 'ended';
+  state.msgTimer = 0;
+  charging = false;
+  power = 0;
+  input.action = false;
+  input.steal = false;
+  input.left = false;
+  input.right = false;
+}
+
+// ===== 繪製 =====
 function drawCourt() {
-  const g = ctx.createLinearGradient(0, COURT.y, 0, COURT.y + COURT.h);
-  g.addColorStop(0, '#c98a4b');
-  g.addColorStop(1, '#a86f37');
-  ctx.fillStyle = g;
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#16161f');
+  bg.addColorStop(1, '#09090d');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  const wood = ctx.createLinearGradient(0, COURT.y, 0, COURT.y + COURT.h);
+  wood.addColorStop(0, '#cd8f4f');
+  wood.addColorStop(0.5, '#b87838');
+  wood.addColorStop(1, '#9d6428');
+  ctx.fillStyle = wood;
   ctx.fillRect(COURT.x, COURT.y, COURT.w, COURT.h);
 
-  ctx.strokeStyle = 'rgba(0,0,0,0.05)';
+  ctx.strokeStyle = 'rgba(0,0,0,0.06)';
   ctx.lineWidth = 1;
-  for (let y = COURT.y; y < COURT.y + COURT.h; y += 26) {
+  for (let y = COURT.y; y < COURT.y + COURT.h; y += 28) {
     ctx.beginPath();
     ctx.moveTo(COURT.x, y);
     ctx.lineTo(COURT.x + COURT.w, y);
     ctx.stroke();
   }
 
-  ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)';
   ctx.lineWidth = 3;
   ctx.strokeRect(COURT.x, COURT.y, COURT.w, COURT.h);
-  ctx.strokeRect(HOOP.x - 130, COURT.y, 260, 190);
 
+  // 中線
   ctx.beginPath();
-  ctx.arc(HOOP.x, COURT.y + 190, 60, 0, Math.PI);
+  ctx.moveTo(W / 2, COURT.y);
+  ctx.lineTo(W / 2, COURT.y + COURT.h);
   ctx.stroke();
 
+  // 中圈
   ctx.beginPath();
-  ctx.moveTo(HOOP.x - THREE_R, COURT.y);
-  ctx.lineTo(HOOP.x - THREE_R, HOOP.y);
-  ctx.arc(HOOP.x, HOOP.y, THREE_R, Math.PI, 0, false);
-  ctx.lineTo(HOOP.x + THREE_R, COURT.y);
+  ctx.arc(W / 2, COURT.y + COURT.h / 2, 60, 0, Math.PI * 2);
   ctx.stroke();
 
-  ctx.strokeStyle = 'rgba(240,240,240,0.95)';
-  ctx.lineWidth = 6;
+  // 三分線
+  ctx.setLineDash([10, 8]);
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = 'rgba(255,255,255,0.5)';
   ctx.beginPath();
-  ctx.moveTo(HOOP.x - 85, COURT.y + 10);
-  ctx.lineTo(HOOP.x + 85, COURT.y + 10);
+  ctx.moveTo(HOOP_R.x - THREE_DIST, COURT.y);
+  ctx.lineTo(HOOP_R.x - THREE_DIST, COURT.y + COURT.h);
   ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(HOOP_L.x + THREE_DIST, COURT.y);
+  ctx.lineTo(HOOP_L.x + THREE_DIST, COURT.y + COURT.h);
+  ctx.stroke();
+  ctx.setLineDash([]);
 
-  ctx.strokeStyle = '#ff6b1a';
-  ctx.lineWidth = 5;
-  ctx.beginPath();
-  ctx.arc(HOOP.x, HOOP.y, HOOP.r, 0, Math.PI * 2);
-  ctx.stroke();
+  // 3 標記
+  ctx.fillStyle = 'rgba(255,255,255,0.16)';
+  ctx.font = 'bold 44px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('3', HOOP_R.x - THREE_DIST - 40, COURT.y + 70);
+  ctx.fillText('3', HOOP_L.x + THREE_DIST + 40, COURT.y + 70);
 }
 
-function drawEntity(e, color, isPlayer) {
-  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+function drawHoop(hoop) {
+  const isRight = hoop.side === 'right';
+  const off = 60;
+  const boardX = isRight ? hoop.x + off : hoop.x - off;
+  const bw = 12;
+  const by = hoop.y - 110;
+  const bh = 220;
+
+  // 籃板
+  ctx.fillStyle = 'rgba(235,235,245,0.9)';
+  ctx.fillRect(boardX - bw / 2, by, bw, bh);
+  ctx.strokeStyle = '#555';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(boardX - bw / 2, by, bw, bh);
+
+  // 內框
+  ctx.strokeStyle = '#ff5533';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(boardX - bw / 2, hoop.y - 45, bw, 90);
+
+  // 支架
+  const rimSide = isRight ? hoop.x + hoop.r : hoop.x - hoop.r;
+  ctx.strokeStyle = '#555';
+  ctx.lineWidth = 5;
   ctx.beginPath();
-  ctx.ellipse(e.x, e.y + e.r * 0.65, e.r * 0.95, e.r * 0.42, 0, 0, Math.PI * 2);
+  ctx.moveTo(boardX, hoop.y);
+  ctx.lineTo(rimSide, hoop.y);
+  ctx.stroke();
+
+  // 籃圈
+  ctx.strokeStyle = '#ff6633';
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.arc(hoop.x, hoop.y, hoop.r, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // 網
+  ctx.strokeStyle = 'rgba(240,240,240,0.55)';
+  ctx.lineWidth = 1.5;
+  const nb = hoop.y + 50;
+  const nw = hoop.r * 0.45;
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    const x1 = hoop.x + Math.cos(a) * hoop.r;
+    const y1 = hoop.y + Math.sin(a) * hoop.r;
+    const x2 = hoop.x + (i % 2 === 0 ? -1 : 1) * nw;
+    const y2 = nb;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+  }
+}
+
+function drawPlayer(ent, color, isPlayer) {
+  const { x, y, r } = ent;
+
+  // 影
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(x, GROUND_Y - 3, r * 0.95, r * 0.3, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  const holding = ball.state === 'held' && ball.owner === (isPlayer ? 'player' : 'cpu');
-  if (holding) {
-    ctx.strokeStyle = 'rgba(255,215,80,0.85)';
+  // 持球光環
+  if (ball.owner === (isPlayer ? 'player' : 'cpu') && ball.state === 'held') {
+    ctx.strokeStyle = 'rgba(255,215,80,0.75)';
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.arc(e.x, e.y, e.r + 6, 0, Math.PI * 2);
+    ctx.arc(x, y, r + 7, 0, Math.PI * 2);
     ctx.stroke();
   }
 
-  const grd = ctx.createRadialGradient(
-    e.x - e.r * 0.35, e.y - e.r * 0.35, e.r * 0.15,
-    e.x, e.y, e.r
-  );
-  grd.addColorStop(0, isPlayer ? '#8cc4ff' : '#ff9a9a');
-  grd.addColorStop(1, color);
-  ctx.fillStyle = grd;
+  // 身體
+  const g = ctx.createRadialGradient(x - r * 0.35, y - r * 0.35, r * 0.1, x, y, r);
+  g.addColorStop(0, isPlayer ? '#8cc8ff' : '#ff9999');
+  g.addColorStop(1, color);
+  ctx.fillStyle = g;
   ctx.beginPath();
-  ctx.arc(e.x, e.y, e.r, 0, Math.PI * 2);
+  ctx.arc(x, y, r, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+  ctx.lineWidth = 2.5;
   ctx.stroke();
+
+  // 眼睛
+  ctx.fillStyle = '#fff';
+  const ex = x + ent.facing * r * 0.32;
+  const ey = y - r * 0.22;
+  ctx.beginPath();
+  ctx.arc(ex, ey, 3.5, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 function drawBall() {
-  ctx.fillStyle = 'rgba(0,0,0,0.25)';
-  ctx.beginPath();
-  ctx.ellipse(ball.x, ball.y + 4, ball.r * 0.9, ball.r * 0.4, 0, 0, Math.PI * 2);
-  ctx.fill();
+  const { x, y, r } = ball;
 
-  const by = ball.y - ball.z;
-  ctx.save();
-  ctx.translate(ball.x, by);
+  // 影
+  if (y < GROUND_Y - 30) {
+    const t = clamp((GROUND_Y - y) / 300, 0, 1);
+    ctx.globalAlpha = 0.25 * (1 - t * 0.6);
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.ellipse(x, GROUND_Y - 3, r * 0.9 * (1 - t * 0.3), r * 0.3, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
 
-  const g = ctx.createRadialGradient(-3, -3, 1, 0, 0, ball.r);
+  const g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.1, x, y, r);
   g.addColorStop(0, '#ffc07a');
   g.addColorStop(1, '#dd7414');
   ctx.fillStyle = g;
   ctx.beginPath();
-  ctx.arc(0, 0, ball.r, 0, Math.PI * 2);
+  ctx.arc(x, y, r, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.strokeStyle = '#6d3204';
-  ctx.lineWidth = 1.3;
+  ctx.lineWidth = 1.5;
   ctx.stroke();
   ctx.beginPath();
-  ctx.moveTo(-ball.r, 0); ctx.lineTo(ball.r, 0);
-  ctx.moveTo(0, -ball.r); ctx.lineTo(0, ball.r);
+  ctx.moveTo(x - r, y); ctx.lineTo(x + r, y);
+  ctx.moveTo(x, y - r); ctx.lineTo(x, y + r);
   ctx.stroke();
-
-  ctx.restore();
 }
 
 function drawPowerBar() {
   if (!charging) return;
-  const bw = 84, bh = 10;
+  const bw = 110, bh = 14;
   const bx = player.x - bw / 2;
-  const by = player.y - 46;
+  const by = player.y - 65;
 
-  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.fillStyle = 'rgba(0,0,0,0.65)';
   ctx.fillRect(bx, by, bw, bh);
 
+  // 完美區
   ctx.fillStyle = 'rgba(90,255,130,0.45)';
-  ctx.fillRect(bx + bw * PERFECT_MIN, by, bw * (PERFECT_MAX - PERFECT_MIN), bh);
+  ctx.fillRect(bx + bw * 0.6, by, bw * 0.25, bh);
 
-  ctx.fillStyle = '#fff';
-  ctx.fillRect(bx + bw * power - 2, by - 3, 4, bh + 6);
+  const fillW = bw * power;
+  ctx.fillStyle = (power >= 0.6 && power <= 0.85) ? '#6dff9e' : '#ffb43c';
+  ctx.fillRect(bx, by, fillW, bh);
 
   ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-  ctx.lineWidth = 1.5;
+  ctx.lineWidth = 2;
   ctx.strokeRect(bx, by, bw, bh);
+
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(bx + fillW - 2, by - 4, 4, bh + 8);
 }
 
-function drawTouchControls() {
-  if (!isTouchDevice) return;
+function drawUI() {
+  // 比分
+  ctx.textAlign = 'left';
+  ctx.font = 'bold 34px system-ui, sans-serif';
+  ctx.fillStyle = '#4a9eff';
+  ctx.fillText('你 ' + state.score.player, 40, 62);
 
-  // ---- 搖桿 ----
-  if (touch.joyId !== null) {
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#ff5a5a';
+  ctx.fillText(state.score.cpu + ' 電腦', W - 40, 62);
+
+  // 計時
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 30px system-ui, sans-serif';
+  const t = Math.max(0, Math.ceil(state.timeLeft));
+  ctx.fillStyle = t <= 10 ? '#ff4444' : (state.phase === 'sudden' ? '#ffd35c' : '#fff');
+  ctx.fillText((state.phase === 'sudden' ? 'OT ' : '') + '0:' + (t < 10 ? '0' + t : t), W / 2, 58);
+
+  // 訊息
+  if (state.msgTimer > 0) {
     ctx.save();
-    ctx.globalAlpha = 0.22;
+    ctx.globalAlpha = Math.min(1, state.msgTimer / 0.4);
+    ctx.font = 'bold 42px system-ui, sans-serif';
+    ctx.fillStyle = '#ffe27a';
+    ctx.shadowColor = 'rgba(0,0,0,0.9)';
+    ctx.shadowBlur = 16;
+    ctx.textAlign = 'center';
+    ctx.fillText(state.msg, W / 2, 200);
+    ctx.restore();
+  }
+
+  // 結束
+  if (state.phase === 'ended') {
+    ctx.fillStyle = 'rgba(0,0,0,0.85)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.textAlign = 'center';
+
+    const won = state.score.player > state.score.cpu;
+    const tied = state.score.player === state.score.cpu;
+
+    ctx.font = 'bold 80px system-ui, sans-serif';
+    ctx.fillStyle = won ? '#6dff9e' : (tied ? '#ffd35c' : '#ff6b6b');
+    ctx.fillText(won ? '你贏了！' : (tied ? '平手' : '電腦贏了'), W / 2, H / 2 - 40);
+
+    ctx.font = '32px system-ui, sans-serif';
+    ctx.fillStyle = '#ddd';
+    ctx.fillText(`${state.score.player} : ${state.score.cpu}`, W / 2, H / 2 + 30);
+
+    ctx.font = '20px system-ui, sans-serif';
+    ctx.fillStyle = '#aaa';
+    ctx.fillText(isTouch ? '點擊畫面重新開始' : '按 R 重新開始', W / 2, H / 2 + 110);
+  }
+}
+
+// ===== 手機觸控 =====
+const JOY_R = 65;
+const ACTION_BTN = { x: W - 120, y: H - 130, r: 70 };
+const STEAL_BTN  = { x: W - 275, y: H - 75, r: 50 };
+const touch = {
+  joy: { id: null, cx: 0, cy: 0, dx: 0, dy: 0 },
+  action: null,
+  steal: null
+};
+
+function toCanvas(clientX, clientY) {
+  const r = canvas.getBoundingClientRect();
+  return {
+    x: (clientX - r.left) * (W / r.width),
+    y: (clientY - r.top) * (H / r.height)
+  };
+}
+function hitBtn(p, b) { return Math.hypot(p.x - b.x, p.y - b.y) < b.r * 1.15; }
+
+function clearTouch() {
+  touch.joy.id = null;
+  touch.joy.dx = touch.joy.dy = 0;
+  touch.action = null;
+  touch.steal = null;
+  input.left = input.right = false;
+}
+
+canvas.addEventListener('pointerdown', e => {
+  if (state.phase === 'ended') { resetGame(); return; }
+  e.preventDefault();
+  const p = toCanvas(e.clientX, e.clientY);
+
+  if (isTouch) {
+    if (touch.action === null && hitBtn(p, ACTION_BTN)) {
+      touch.action = e.pointerId; input.action = true; return;
+    }
+    if (touch.steal === null && hitBtn(p, STEAL_BTN)) {
+      touch.steal = e.pointerId; input.steal = true; return;
+    }
+    if (touch.joy.id === null && p.x < W * 0.55 && p.y > H * 0.4) {
+      touch.joy.id = e.pointerId;
+      touch.joy.cx = p.x;
+      touch.joy.cy = Math.min(p.y, H - 100);
+      touch.joy.dx = touch.joy.dy = 0;
+      return;
+    }
+  }
+}, { passive: false });
+
+canvas.addEventListener('pointermove', e => {
+  if (e.pointerId !== touch.joy.id) return;
+  e.preventDefault();
+  const p = toCanvas(e.clientX, e.clientY);
+  let dx = p.x - touch.joy.cx;
+  let dy = p.y - touch.joy.cy;
+  const d = Math.hypot(dx, dy);
+  const max = JOY_R;
+  if (d > max) { dx = dx / d * max; dy = dy / d * max; }
+  touch.joy.dx = dx; touch.joy.dy = dy;
+  const nx = dx / max;
+  if (nx < -0.25) { input.left = true; input.right = false; }
+  else if (nx > 0.25) { input.right = true; input.left = false; }
+  else { input.left = input.right = false; }
+}, { passive: false });
+
+function endPointer(e) {
+  if (e.pointerId === touch.joy.id) {
+    touch.joy.id = null;
+    touch.joy.dx = touch.joy.dy = 0;
+    input.left = input.right = false;
+  }
+  if (e.pointerId === touch.action) { touch.action = null; input.action = false; }
+  if (e.pointerId === touch.steal)  { touch.steal = null;  input.steal = false; }
+}
+canvas.addEventListener('pointerup', endPointer);
+canvas.addEventListener('pointercancel', endPointer);
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+function drawTouchControls() {
+  if (!isTouch) return;
+
+  // 搖桿
+  if (touch.joy.id !== null) {
+    ctx.save();
+    ctx.globalAlpha = 0.18;
     ctx.fillStyle = '#fff';
     ctx.beginPath();
-    ctx.arc(touch.joyCX, touch.joyCY, JOY_R, 0, Math.PI * 2);
+    ctx.arc(touch.joy.cx, touch.joy.cy, JOY_R, 0, Math.PI * 2);
     ctx.fill();
-
-    ctx.globalAlpha = 0.30;
+    ctx.globalAlpha = 0.35;
     ctx.strokeStyle = '#fff';
     ctx.lineWidth = 3;
     ctx.stroke();
 
-    const hx = touch.joyCX + touch.joyHX;
-    const hy = touch.joyCY + touch.joyHY;
-    ctx.globalAlpha = 0.65;
+    ctx.globalAlpha = 0.7;
     ctx.beginPath();
-    ctx.arc(hx, hy, 30, 0, Math.PI * 2);
+    ctx.arc(touch.joy.cx + touch.joy.dx, touch.joy.cy + touch.joy.dy, 32, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   } else {
-    // 提示圈
     ctx.save();
-    ctx.globalAlpha = 0.10;
+    ctx.globalAlpha = 0.1;
     ctx.strokeStyle = '#fff';
     ctx.lineWidth = 2;
     ctx.setLineDash([6, 8]);
     ctx.beginPath();
-    ctx.arc(150, H - 140, JOY_R, 0, Math.PI * 2);
+    ctx.arc(160, H - 140, JOY_R, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
   }
 
-  // ---- 投籃鈕 ----
-  drawRoundButton(BTN_SHOT, '投', touch.shotId !== null, '#ff8a1e');
-  // ---- 搶斷鈕 ----
-  drawRoundButton(BTN_STEAL, '搶', touch.stealId !== null, '#3f8bff');
+  drawBtn(ACTION_BTN, '投', touch.action !== null, '#ff8a1e');
+  drawBtn(STEAL_BTN, '搶', touch.steal !== null, '#3f8bff');
 }
 
-function drawRoundButton(b, label, active, color) {
+function drawBtn(b, label, active, color) {
   ctx.save();
   ctx.globalAlpha = active ? 0.9 : 0.42;
   ctx.fillStyle = color;
   ctx.beginPath();
   ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
   ctx.fill();
-
-  ctx.globalAlpha = active ? 0.95 : 0.55;
+  ctx.globalAlpha = active ? 1 : 0.6;
   ctx.strokeStyle = '#fff';
   ctx.lineWidth = 3;
   ctx.stroke();
-
   ctx.globalAlpha = 0.95;
   ctx.fillStyle = '#fff';
   ctx.font = 'bold ' + Math.round(b.r * 0.7) + 'px system-ui, sans-serif';
@@ -645,84 +896,62 @@ function drawRoundButton(b, label, active, color) {
   ctx.textBaseline = 'alphabetic';
 }
 
-function drawUI() {
-  ctx.textAlign = 'left';
-  ctx.font = 'bold 30px system-ui, sans-serif';
-  ctx.fillStyle = '#4a9eff';
-  ctx.fillText('你 ' + score.player, 34, 42);
-
-  ctx.textAlign = 'right';
-  ctx.fillStyle = '#ff5a5a';
-  ctx.fillText(score.cpu + ' 電腦', W - 34, 42);
-
-  ctx.textAlign = 'center';
-  ctx.font = '13px system-ui, sans-serif';
-  ctx.fillStyle = 'rgba(255,255,255,0.35)';
-  ctx.fillText('先得 ' + WIN_SCORE + ' 分', W / 2, 40);
-
-  if (messageTimer > 0) {
-    ctx.save();
-    ctx.globalAlpha = Math.min(1, messageTimer / 0.4);
-    ctx.font = 'bold 26px system-ui, sans-serif';
-    ctx.fillStyle = '#ffe27a';
-    ctx.shadowColor = 'rgba(0,0,0,0.8)';
-    ctx.shadowBlur = 12;
-    ctx.fillText(message, W / 2, 330);
-    ctx.restore();
-  }
-
-  if (state === 'gameover') {
-    ctx.fillStyle = 'rgba(0,0,0,0.80)';
-    ctx.fillRect(0, 0, W, H);
-
-    ctx.textAlign = 'center';
-    ctx.font = 'bold 58px system-ui, sans-serif';
-    const win = score.player > score.cpu;
-    ctx.fillStyle = win ? '#6dff9e' : '#ff6b6b';
-    ctx.fillText(win ? '你贏了！' : '電腦贏了', W / 2, 320);
-
-    ctx.font = '22px system-ui, sans-serif';
-    ctx.fillStyle = '#ddd';
-    ctx.fillText(isTouchDevice ? '點擊畫面重新開始' : '按 R 重新開始', W / 2, 380);
-  }
-}
-
+// ===== 渲染 =====
 function render() {
   ctx.clearRect(0, 0, W, H);
-  ctx.fillStyle = '#12121a';
-  ctx.fillRect(0, 0, W, H);
-
   drawCourt();
-  drawEntity(player, player.color, true);
-  drawEntity(cpu, cpu.color, false);
+  drawHoop(HOOP_L);
+  drawHoop(HOOP_R);
+  drawPlayer(player, '#4a9eff', true);
+  drawPlayer(cpu, '#ff5a5a', false);
   drawBall();
   drawPowerBar();
   drawTouchControls();
   drawUI();
 }
 
-// ================== 主迴圈 ==================
+// ===== 鍵盤 =====
+document.addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if (k === 'a' || k === 'arrowleft') input.left = true;
+  if (k === 'd' || k === 'arrowright') input.right = true;
+  if (k === ' ') { input.action = true; e.preventDefault(); }
+  if (k === 'e' || k === 'shift') input.steal = true;
+  if (k === 'r' && state.phase === 'ended') resetGame();
+});
+document.addEventListener('keyup', e => {
+  const k = e.key.toLowerCase();
+  if (k === 'a' || k === 'arrowleft') input.left = false;
+  if (k === 'd' || k === 'arrowright') input.right = false;
+  if (k === ' ') input.action = false;
+  if (k === 'e' || k === 'shift') input.steal = false;
+});
+
+// ===== 主迴圈 =====
+let lastTime = 0;
+
 function loop(ts) {
   if (!lastTime) lastTime = ts;
   let dt = (ts - lastTime) / 1000;
   lastTime = ts;
   dt = Math.min(dt, 0.05);
-  gameTime += dt;
 
   update(dt);
   render();
+
   requestAnimationFrame(loop);
 }
 
 function resetGame() {
-  score = { player: 0, cpu: 0 };
-  state = 'play';
-  messageTimer = 0;
-  stealCooldown = 0;
-  cpuShootTimer = 0;
-  cpuStealTimer = 0;
-  charging = false;
-  power = 0;
+  state.score = { player: 0, cpu: 0 };
+  state.timeLeft = 60;
+  state.phase = 'playing';
+  state.msg = '';
+  state.msgTimer = 0;
+  charging = false; power = 0;
+  prevAction = false;
+  stealCD = 0;
+  cpu.shootCD = 0; cpu.stealCD = 0;
   clearTouch();
   resetPossession('player');
   lastTime = 0;
