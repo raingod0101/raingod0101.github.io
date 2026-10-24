@@ -701,14 +701,14 @@
 
 // ========== 以下為遊戲主程式 ==========
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, set, onValue, onDisconnect, serverTimestamp }
+import { getDatabase, ref, set, onValue, onDisconnect, serverTimestamp, remove }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
 const firebaseApp = initializeApp({
   databaseURL: "https://game-24b43-default-rtdb.firebaseio.com/"
 }, "gameApp");
 const db = getDatabase(firebaseApp);
-window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
+window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove };
 
 (function(){
   const c=document.getElementById('c');
@@ -2409,9 +2409,10 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
   }
 
   function initMultiplayer(){
-    const { db, ref, set, onValue, onDisconnect, serverTimestamp } = window.__FB;
+    const { db, ref, set, onValue, onDisconnect, serverTimestamp, remove } = window.__FB;
     if(!db){ console.warn('Firebase 未初始化'); return; }
     const meRef = ref(db, 'players/' + PLAYER_ID);
+
     const pushMe = ()=>{
       set(meRef, { name: S.playerName, baseIdx: S.myBaseIdx, x: Math.round(S.player.x), y: Math.round(S.player.y),
         displaySpeed: S.player.displaySpeed, biomeIdx: S.biomeIdx, cash: S.cash,
@@ -2423,11 +2424,34 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     };
     pushMe();
     onDisconnect(meRef).update({ online:false });
+    // 玩家關閉分頁/切走/斷網 → 60 秒後由其他線上玩家清理
     setInterval(pushMe, 1500);
+
+    // 取得伺服器時間偏移（用於判斷 lastSeen 是否超時）
+    let serverOffset = 0;
+    onValue(ref(db, '.info/serverTimeOffset'), snap => {
+      serverOffset = snap.val() || 0;
+    });
+
+    // 心跳超時（毫秒）：1 分鐘無心跳即視為離線
+    const HEARTBEAT_TIMEOUT = 60 * 1000;
+
+    // 暫存原始 players 資料（含 offline），用於清理
+    let rawPlayersCache = {};
 
     onValue(ref(db, 'players'), snap=>{
       const data = snap.val() || {};
-      S.remotePlayers = Object.entries(data).filter(([id,p]) => id !== PLAYER_ID && p && p.online).map(([id,p]) => ({ id, ...p }));
+      rawPlayersCache = data;
+      const now = Date.now() + serverOffset;
+      // 只保留：線上 且 60 秒內有心跳 的玩家
+      S.remotePlayers = Object.entries(data).filter(([id,p]) => {
+        if (id === PLAYER_ID) return false;
+        if (!p) return false;
+        if (!p.online) return false;
+        if (typeof p.lastSeen === 'number' && now - p.lastSeen > HEARTBEAT_TIMEOUT) return false;
+        return true;
+      }).map(([id,p]) => ({ id, ...p }));
+
       const oc=document.getElementById('onlineCount'); if(oc) oc.textContent='👥 '+(S.remotePlayers.length+1);
       
       const testPanel = document.getElementById('testPanel');
@@ -2444,6 +2468,28 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
         targetSel.value = currentVal;
       }
     });
+
+    // 定期清理：把超過 1 分鐘沒心跳的玩家從伺服器移除，釋放基地空間
+    setInterval(() => {
+      const now = Date.now() + serverOffset;
+      for (const [id, p] of Object.entries(rawPlayersCache)) {
+        if (id === PLAYER_ID) continue;
+        if (!p) continue;
+        if (typeof p.lastSeen !== 'number') continue;
+        if (now - p.lastSeen <= HEARTBEAT_TIMEOUT) continue;
+        // 二次確認，避免競態誤刪（例如他剛好在這一瞬間回來）
+        const playerRef = ref(db, 'players/' + id);
+        playerRef.once('value').then(s => {
+          const cur = s.val();
+          if (!cur) return;
+          const curNow = Date.now() + serverOffset;
+          if (typeof cur.lastSeen === 'number' && curNow - cur.lastSeen > HEARTBEAT_TIMEOUT) {
+            console.log('🧹 清理超時玩家:', id, cur.name);
+            remove(playerRef);
+          }
+        });
+      }
+    }, 30 * 1000);
 
     onValue(ref(db, 'admin/' + PLAYER_ID), snap=>{
       const v = snap.val();
