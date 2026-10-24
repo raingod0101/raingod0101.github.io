@@ -211,7 +211,7 @@
       </div>
     </div>
     <div class="btns-right">
-      <button class="btn-right" id="btnUp">⬆️<span id="lvTxt">1</span><span id="costTxt" style="color:#aa6600">$50</span></button>
+      <button class="btn-right" id="btnUp">⬆️<span id="lvTxt">1</span><span id="costTxt" style="color:#aa6600">$40</span></button>
       <button class="btn-right trail" id="btnTrail">✨ 軌跡</button>
       <button class="btn-right ad" id="btnAd" style="display:none;">🎬 2× (0/3)</button>
       <button class="btn-right ad4x" id="btnAd4x" style="display:none;">🎬 4× (0/3)</button>
@@ -706,7 +706,8 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
   const MIN_Y = -43000;
   const MAX_Y = 3300;
 
-  const DAY_MS = 5 * 60 * 1000;
+  // ===== 白天 / 夜晚 =====
+  const DAY_MS = 5 * 60 * 1000; // 5 分鐘一個循環（4:50 白天 + 0:10 夜晚）
   const NIGHT_MS = 10 * 1000;
   const FULL_CYCLE = DAY_MS + NIGHT_MS;
 
@@ -804,19 +805,16 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     }
     return 25+Math.log10(display/1e15)*1.5;
   }
-
-  // ===== 跑步機升級（強化有感） =====
-  // 費用：50 * 2.2^(lv-1)
-  // 每級訓練增益：3 + lv*2.5（原本只有 0.7，現在大幅提高）
-  function treadmillCost(lv){return Math.floor(50*Math.pow(2.2,lv-1))}
+  function treadmillCost(lv){return Math.floor(40*Math.pow(1.8,lv-1))}
   function petCapCost(lv){return Math.floor(500*Math.pow(10,lv-1))}
 
+  // ==== 廣告門檻 ====
   const AD_SPEED_2X = 10000;
   const AD_SPEED_4X = 1000000;
   const AD_URL = 'is.gd/raingod';
   const AD_STEPS_TOTAL = 3;
 
-  // ===== 軌跡（視覺重新設計，後期華麗精緻） =====
+  // ==== 軌跡系統 ====
   const TRAIL_DEFS = [
     { id:'trail_basic', name:'初心之光', mult:1.5, price:0, type:'glow', colors:['#ffffff','#a0e0ff'] },
     { id:'trail_fire', name:'烈焰之徑', mult:1.8, price:8000, type:'fire', colors:['#ffdd40','#ff6a00','#aa1a00'] },
@@ -984,7 +982,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     equippedTrail:'trail_basic',
     night:false,
     lastNightCheck:0,
-    tutorialTarget:null, tutorialText:'',
   };
   const keys={};
   const rnd=(a,b)=>Math.random()*(b-a)+a;
@@ -1203,6 +1200,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       grid.innerHTML = '<div style="color:#fff;grid-column:1/-1;text-align:center;padding:20px;">還沒有任何棒子，先去解鎖圖鑑吧！</div>';
       return;
     }
+    // 空手選項
     const bareCard = document.createElement('div');
     bareCard.className = 'index-card unlocked';
     bareCard.style.borderColor = '#8a8a7a';
@@ -1213,7 +1211,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     bctx.fillText('👊',0,0);
     bareCard.appendChild(bareCv);
     const bareName = document.createElement('div'); bareName.className='name'; bareName.textContent='空手'; bareCard.appendChild(bareName);
-    const barePow = document.createElement('div'); barePow.className='biome-label'; barePow.textContent='攻擊力 60'; bareCard.appendChild(barePow);
+    const barePow = document.createElement('div'); barePow.className='biome-label'; barePow.textContent='攻擊力 0'; bareCard.appendChild(barePow);
     const bareBtn = document.createElement('button'); bareBtn.className='reward-btn';
     if (!equipped) { bareBtn.textContent='✓ 使用中'; bareBtn.disabled=true; bareBtn.classList.add('claimed'); }
     else { bareBtn.textContent='裝備'; bareBtn.onclick=()=>{ S.equippedStick=null; showToast('👊 已卸下棒子（空手）','#5a5a5a','#3a3a3a'); saveGame(true); updateUI(); buildStickUI(); }; }
@@ -1262,247 +1260,111 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     });
   }
 
-  // ===== 軌跡繪製（重新設計：後期華麗精緻） =====
-  // 共用輔助：畫星形
-  function starPath(g, x, y, outer, inner, points, rot) {
-    g.beginPath();
-    for (let k = 0; k < points * 2; k++) {
-      const r = k % 2 === 0 ? outer : inner;
-      const a = rot + k * Math.PI / points;
-      const px = x + Math.cos(a) * r;
-      const py = y + Math.sin(a) * r;
-      if (k === 0) g.moveTo(px, py); else g.lineTo(px, py);
-    }
-    g.closePath();
-  }
-
-  // 預覽繪製（面板用）
+  // ===== 軌跡繪製 =====
   function drawTrailPreview(g, def, s, time) {
     const type = def.type;
     const cols = def.colors;
     g.save();
-    const rot = time * 1.5;
-
-    if (type === 'glow') {
-      // 柔和光暈粒子
-      for (let i = 0; i < 10; i++) {
-        const t = i / 10;
-        const a = rot + t * Math.PI * 2;
-        const r = s * (0.2 + t * 0.8);
-        const x = Math.cos(a) * r, y = Math.sin(a) * r;
-        const glow = g.createRadialGradient(x, y, 0, x, y, s * 0.25);
-        glow.addColorStop(0, cols[i % 2]); glow.addColorStop(1, 'rgba(255,255,255,0)');
-        g.globalAlpha = 1 - t * 0.7;
-        g.fillStyle = glow;
-        g.beginPath(); g.arc(x, y, s * 0.25, 0, 7); g.fill();
-      }
-    } else if (type === 'fire') {
-      // 火焰向上飄 + 核心
-      for (let i = 0; i < 14; i++) {
-        const t = i / 14;
-        const a = rot + t * Math.PI * 2;
-        const r = s * (0.2 + t * 0.9);
-        const x = Math.cos(a) * r, y = Math.sin(a) * r - t * s * 0.4;
-        const sz = s * (0.22 - t * 0.12);
-        const glow = g.createRadialGradient(x, y, 0, x, y, sz * 2);
-        glow.addColorStop(0, cols[i % 3]); glow.addColorStop(1, 'rgba(255,80,0,0)');
-        g.globalAlpha = 1 - t * 0.5;
-        g.fillStyle = glow;
-        g.beginPath(); g.arc(x, y, sz * 2, 0, 7); g.fill();
-      }
-      const core = g.createRadialGradient(0, 0, 0, 0, 0, s * 0.5);
-      core.addColorStop(0, '#fff8e0'); core.addColorStop(1, 'rgba(255,100,0,0)');
-      g.globalAlpha = 0.9; g.fillStyle = core;
-      g.beginPath(); g.arc(0, 0, s * 0.5, 0, 7); g.fill();
-    } else if (type === 'rainbow') {
-      // 多層彩虹弧
-      for (let layer = 0; layer < 5; layer++) {
-        g.strokeStyle = cols[layer]; g.lineWidth = s * 0.1;
-        g.globalAlpha = 0.85 - layer * 0.05;
+    for (let i = 0; i < 12; i++) {
+      const t = i / 12;
+      const a = t * Math.PI * 2 + time * 2;
+      const r = s * (0.3 + t * 0.7);
+      const x = Math.cos(a) * r;
+      const y = Math.sin(a) * r;
+      const alpha = 1 - t * 0.7;
+      if (type === 'glow') {
+        g.fillStyle = cols[i % 2]; g.globalAlpha = alpha * 0.7;
+        g.beginPath(); g.arc(x, y, s * 0.15 * (1 - t * 0.5), 0, 7); g.fill();
+      } else if (type === 'fire') {
+        g.fillStyle = cols[i % 3]; g.globalAlpha = alpha;
+        g.beginPath(); g.arc(x, y - t * s * 0.3, s * 0.18 * (1 - t * 0.4), 0, 7); g.fill();
+      } else if (type === 'rainbow') {
+        g.strokeStyle = cols[i % 5]; g.lineWidth = s * 0.12; g.globalAlpha = alpha;
+        g.beginPath(); g.arc(0, 0, r, a - 0.3, a + 0.3); g.stroke();
+      } else if (type === 'star') {
+        g.fillStyle = cols[i % 3]; g.globalAlpha = alpha;
+        const starR = s * 0.18 * (1 - t * 0.5);
+        g.save(); g.translate(x, y); g.rotate(time + i);
         g.beginPath();
-        g.arc(0, 0, s * (0.4 + layer * 0.13), rot + layer * 0.3, rot + layer * 0.3 + Math.PI * 1.4);
-        g.stroke();
-      }
-      // 中心光
-      const core = g.createRadialGradient(0, 0, 0, 0, 0, s * 0.35);
-      core.addColorStop(0, '#ffffff'); core.addColorStop(1, 'rgba(255,255,255,0)');
-      g.globalAlpha = 0.8; g.fillStyle = core;
-      g.beginPath(); g.arc(0, 0, s * 0.35, 0, 7); g.fill();
-    } else if (type === 'star') {
-      // 五角星 + 閃爍
-      for (let i = 0; i < 6; i++) {
-        const a = rot + i * Math.PI * 2 / 6;
-        const r = s * 0.7;
-        const x = Math.cos(a) * r, y = Math.sin(a) * r;
-        const sz = s * (0.15 + 0.06 * Math.sin(time * 4 + i));
-        g.fillStyle = cols[i % 3];
-        g.globalAlpha = 0.85;
-        starPath(g, x, y, sz, sz * 0.45, 5, a + time * 2);
-        g.fill();
-      }
-      const core = g.createRadialGradient(0, 0, 0, 0, 0, s * 0.4);
-      core.addColorStop(0, '#ffffff'); core.addColorStop(1, 'rgba(200,230,255,0)');
-      g.globalAlpha = 0.9; g.fillStyle = core;
-      g.beginPath(); g.arc(0, 0, s * 0.4, 0, 7); g.fill();
-    } else if (type === 'petal') {
-      // 花瓣旋轉 + 柔和光
-      const glow = g.createRadialGradient(0, 0, 0, 0, 0, s * 0.9);
-      glow.addColorStop(0, 'rgba(255,200,230,0.5)'); glow.addColorStop(1, 'rgba(255,200,230,0)');
-      g.fillStyle = glow; g.beginPath(); g.arc(0, 0, s * 0.9, 0, 7); g.fill();
-      for (let i = 0; i < 8; i++) {
-        const a = rot + i * Math.PI * 2 / 8;
-        const r = s * 0.55;
-        const x = Math.cos(a) * r, y = Math.sin(a) * r;
-        g.save();
-        g.translate(x, y); g.rotate(a + time * 2);
-        g.fillStyle = cols[i % 3]; g.globalAlpha = 0.85;
-        g.beginPath(); g.ellipse(0, 0, s * 0.22, s * 0.1, 0, 0, 7); g.fill();
-        g.restore();
-      }
-    } else if (type === 'ice') {
-      // 冰晶六角 + 冷光
-      const glow = g.createRadialGradient(0, 0, 0, 0, 0, s);
-      glow.addColorStop(0, 'rgba(200,240,255,0.5)'); glow.addColorStop(1, 'rgba(200,240,255,0)');
-      g.fillStyle = glow; g.beginPath(); g.arc(0, 0, s, 0, 7); g.fill();
-      for (let i = 0; i < 6; i++) {
-        const a = rot + i * Math.PI / 3;
-        const x = Math.cos(a) * s * 0.55, y = Math.sin(a) * s * 0.55;
-        g.save();
-        g.translate(x, y); g.rotate(a);
-        g.strokeStyle = cols[i % 3]; g.lineWidth = s * 0.06; g.globalAlpha = 0.9;
-        g.beginPath();
-        g.moveTo(-s * 0.2, 0); g.lineTo(s * 0.2, 0);
-        g.moveTo(0, -s * 0.2); g.lineTo(0, s * 0.2);
-        g.moveTo(-s * 0.14, -s * 0.14); g.lineTo(s * 0.14, s * 0.14);
-        g.moveTo(-s * 0.14, s * 0.14); g.lineTo(s * 0.14, -s * 0.14);
-        g.stroke();
-        g.restore();
-      }
-    } else if (type === 'void') {
-      // 黑洞漩渦 + 紫色光環
-      const bg = g.createRadialGradient(0, 0, s * 0.1, 0, 0, s * 1.1);
-      bg.addColorStop(0, '#0a0010'); bg.addColorStop(0.5, 'rgba(60,20,90,0.9)'); bg.addColorStop(1, 'rgba(80,40,255,0)');
-      g.fillStyle = bg; g.beginPath(); g.arc(0, 0, s * 1.1, 0, 7); g.fill();
-      // 漩渦臂
-      for (let arm = 0; arm < 3; arm++) {
-        g.beginPath();
-        g.strokeStyle = cols[arm % 4]; g.lineWidth = s * 0.06; g.globalAlpha = 0.8;
-        for (let t = 0; t < 1; t += 0.05) {
-          const a = rot + arm * Math.PI * 2 / 3 + t * Math.PI * 3;
-          const r = s * (0.1 + t * 0.9);
-          const x = Math.cos(a) * r, y = Math.sin(a) * r;
-          if (t === 0) g.moveTo(x, y); else g.lineTo(x, y);
+        for (let k = 0; k < 5; k++) {
+          const ang = k * Math.PI * 2 / 5 - Math.PI / 2;
+          const sx = Math.cos(ang) * starR, sy = Math.sin(ang) * starR;
+          if (k === 0) g.moveTo(sx, sy); else g.lineTo(sx, sy);
+          const ang2 = ang + Math.PI / 5;
+          g.lineTo(Math.cos(ang2) * starR * 0.4, Math.sin(ang2) * starR * 0.4);
         }
-        g.stroke();
-      }
-      // 中心紫光
-      const core = g.createRadialGradient(0, 0, 0, 0, 0, s * 0.3);
-      core.addColorStop(0, '#ff88ff'); core.addColorStop(1, 'rgba(120,40,255,0)');
-      g.globalAlpha = 0.9; g.fillStyle = core;
-      g.beginPath(); g.arc(0, 0, s * 0.3, 0, 7); g.fill();
-    } else if (type === 'gold') {
-      // 金色光芒 + 閃爍金塊
-      const glow = g.createRadialGradient(0, 0, 0, 0, 0, s * 1.1);
-      glow.addColorStop(0, 'rgba(255,240,150,0.7)'); glow.addColorStop(1, 'rgba(255,200,0,0)');
-      g.fillStyle = glow; g.beginPath(); g.arc(0, 0, s * 1.1, 0, 7); g.fill();
-      // 放射光芒
-      for (let i = 0; i < 8; i++) {
-        const a = rot * 0.7 + i * Math.PI / 4;
-        g.save(); g.rotate(a);
-        const lg = g.createLinearGradient(0, 0, s, 0);
-        lg.addColorStop(0, 'rgba(255,240,150,0.9)'); lg.addColorStop(1, 'rgba(255,200,0,0)');
-        g.fillStyle = lg;
-        g.beginPath(); g.moveTo(0, -s * 0.04); g.lineTo(s, 0); g.lineTo(0, s * 0.04); g.closePath(); g.fill();
-        g.restore();
-      }
-      // 中心金塊
-      for (let i = 0; i < 4; i++) {
-        const a = rot + i * Math.PI / 2;
-        const x = Math.cos(a) * s * 0.35, y = Math.sin(a) * s * 0.35;
+        g.closePath(); g.fill(); g.restore();
+      } else if (type === 'petal') {
+        g.fillStyle = cols[i % 3]; g.globalAlpha = alpha * 0.8;
         g.save(); g.translate(x, y); g.rotate(a + time);
-        g.fillStyle = cols[i % 4];
-        g.fillRect(-s * 0.12, -s * 0.12, s * 0.24, s * 0.24);
+        g.beginPath(); g.ellipse(0, 0, s * 0.15 * (1 - t * 0.4), s * 0.08 * (1 - t * 0.4), 0, 0, 7); g.fill();
         g.restore();
+      } else if (type === 'ice') {
+        g.strokeStyle = cols[i % 3]; g.lineWidth = s * 0.08; g.globalAlpha = alpha;
+        g.save(); g.translate(x, y); g.rotate(a);
+        g.beginPath(); g.moveTo(-s * 0.15, 0); g.lineTo(s * 0.15, 0);
+        g.moveTo(0, -s * 0.15); g.lineTo(0, s * 0.15); g.stroke();
+        g.restore();
+      } else if (type === 'void') {
+        g.fillStyle = cols[i % 4]; g.globalAlpha = alpha * 0.9;
+        g.beginPath(); g.arc(x, y, s * 0.2 * (1 - t * 0.6), 0, 7); g.fill();
+        g.strokeStyle = '#ff00aa'; g.lineWidth = 1; g.globalAlpha = alpha * 0.5;
+        g.beginPath(); g.arc(x, y, s * 0.25 * (1 - t * 0.5), 0, 7); g.stroke();
+      } else if (type === 'gold') {
+        g.fillStyle = cols[i % 4]; g.globalAlpha = alpha;
+        g.save(); g.translate(x, y); g.rotate(-a);
+        g.fillRect(-s * 0.1 * (1 - t * 0.5), -s * 0.1 * (1 - t * 0.5), s * 0.2 * (1 - t * 0.5), s * 0.2 * (1 - t * 0.5));
+        g.restore();
+      } else if (type === 'galaxy') {
+        g.fillStyle = cols[i % 4]; g.globalAlpha = alpha * 0.8;
+        g.beginPath(); g.arc(x, y, s * (0.05 + 0.12 * (1 - t * 0.6)), 0, 7); g.fill();
+        if (i % 3 === 0) { g.fillStyle = '#fff'; g.globalAlpha = alpha; g.beginPath(); g.arc(x, y, s * 0.04, 0, 7); g.fill(); }
       }
-    } else if (type === 'galaxy') {
-      // 螺旋星系 + 多色星點 + 核心光暈
-      const bg = g.createRadialGradient(0, 0, 0, 0, 0, s * 1.2);
-      bg.addColorStop(0, 'rgba(255,255,255,0.15)'); bg.addColorStop(0.5, 'rgba(120,80,255,0.15)'); bg.addColorStop(1, 'rgba(0,0,32,0)');
-      g.fillStyle = bg; g.beginPath(); g.arc(0, 0, s * 1.2, 0, 7); g.fill();
-      // 兩條螺旋臂
-      for (let arm = 0; arm < 2; arm++) {
-        g.beginPath();
-        g.strokeStyle = cols[arm + 1] || '#8080ff'; g.lineWidth = s * 0.08; g.globalAlpha = 0.7;
-        for (let t = 0; t < 1; t += 0.04) {
-          const a = rot + arm * Math.PI + t * Math.PI * 2.5;
-          const r = s * (0.1 + t * 1.0);
-          const x = Math.cos(a) * r, y = Math.sin(a) * r;
-          if (t === 0) g.moveTo(x, y); else g.lineTo(x, y);
-        }
-        g.stroke();
-      }
-      // 星點
-      for (let i = 0; i < 16; i++) {
-        const a = rot + i * 2.399963; // 黃金角
-        const r = s * (0.2 + (i / 16) * 0.9);
-        const x = Math.cos(a) * r, y = Math.sin(a) * r;
-        g.fillStyle = cols[i % cols.length];
-        g.globalAlpha = 0.7 + 0.3 * Math.sin(time * 3 + i);
-        g.beginPath(); g.arc(x, y, s * 0.05, 0, 7); g.fill();
-        if (i % 4 === 0) {
-          g.globalAlpha = 0.9; g.fillStyle = '#ffffff';
-          starPath(g, x, y, s * 0.09, s * 0.03, 4, a); g.fill();
-        }
-      }
-      // 核心
-      const core = g.createRadialGradient(0, 0, 0, 0, 0, s * 0.5);
-      core.addColorStop(0, '#ffffff'); core.addColorStop(0.5, 'rgba(200,160,255,0.8)'); core.addColorStop(1, 'rgba(120,80,255,0)');
-      g.globalAlpha = 1; g.fillStyle = core;
-      g.beginPath(); g.arc(0, 0, s * 0.5, 0, 7); g.fill();
     }
     g.globalAlpha = 1;
     g.restore();
   }
 
-  // 玩家身上軌跡（簡化版但保留辨識度）
   function drawTrailOnPlayer(g, player, trailDef, time) {
     if (!trailDef) return;
     const type = trailDef.type;
     const cols = trailDef.colors;
-    const rot = time * 2;
+    const t = time;
     g.save();
     for (let i = 0; i < 6; i++) {
-      const t = i / 6;
-      const a = rot + i * 1.1;
-      const r = 10 + t * 18;
-      const x = -Math.cos(a) * r;
-      const y = -Math.sin(a) * r + t * 12;
-      const alpha = (1 - t) * 0.65;
-      const sz = 3 + (1 - t) * 4;
-      if (type === 'fire') {
-        const glow = g.createRadialGradient(x, y, 0, x, y, sz * 2);
-        glow.addColorStop(0, cols[i % 3]); glow.addColorStop(1, 'rgba(255,80,0,0)');
-        g.globalAlpha = alpha; g.fillStyle = glow;
-        g.beginPath(); g.arc(x, y, sz * 2, 0, 7); g.fill();
+      const t2 = i / 6;
+      const angle = t * 3 + i * 1.2;
+      const x = -Math.cos(angle) * (10 + t2 * 20);
+      const y = -Math.sin(angle) * (10 + t2 * 20) + t2 * 15;
+      const alpha = (1 - t2) * 0.6;
+      const sz = 3 + (1 - t2) * 4;
+      if (type === 'fire' || type === 'void' || type === 'glow') {
+        g.fillStyle = cols[i % cols.length]; g.globalAlpha = alpha;
+        g.beginPath(); g.arc(x, y, sz, 0, 7); g.fill();
       } else if (type === 'star' || type === 'galaxy') {
         g.fillStyle = cols[i % cols.length]; g.globalAlpha = alpha;
-        starPath(g, x, y, sz, sz * 0.4, 5, a); g.fill();
+        g.save(); g.translate(x, y); g.rotate(angle);
+        g.beginPath();
+        for (let k = 0; k < 5; k++) {
+          const ang = k * Math.PI * 2 / 5 - Math.PI / 2;
+          const sx = Math.cos(ang) * sz, sy = Math.sin(ang) * sz;
+          if (k === 0) g.moveTo(sx, sy); else g.lineTo(sx, sy);
+          g.lineTo(Math.cos(ang + Math.PI / 5) * sz * 0.4, Math.sin(ang + Math.PI / 5) * sz * 0.4);
+        }
+        g.closePath(); g.fill(); g.restore();
       } else if (type === 'rainbow') {
         g.strokeStyle = cols[i % cols.length]; g.lineWidth = sz * 0.6; g.globalAlpha = alpha;
-        g.beginPath(); g.arc(0, 0, r, a - 0.4, a + 0.4); g.stroke();
+        g.beginPath(); g.arc(0, 0, 10 + t2 * 25, angle - 0.4, angle + 0.4); g.stroke();
       } else if (type === 'petal') {
-        g.save(); g.translate(x, y); g.rotate(a); g.fillStyle = cols[i % cols.length]; g.globalAlpha = alpha;
-        g.beginPath(); g.ellipse(0, 0, sz, sz * 0.5, 0, 0, 7); g.fill(); g.restore();
+        g.fillStyle = cols[i % cols.length]; g.globalAlpha = alpha;
+        g.save(); g.translate(x, y); g.rotate(angle);
+        g.beginPath(); g.ellipse(0, 0, sz, sz * 0.5, 0, 0, 7); g.fill();
+        g.restore();
       } else if (type === 'ice') {
         g.strokeStyle = cols[i % cols.length]; g.lineWidth = sz * 0.4; g.globalAlpha = alpha;
-        g.save(); g.translate(x, y); g.rotate(a);
+        g.save(); g.translate(x, y); g.rotate(angle);
         g.beginPath(); g.moveTo(-sz, 0); g.lineTo(sz, 0); g.moveTo(0, -sz); g.lineTo(0, sz); g.stroke();
         g.restore();
-      } else if (type === 'void') {
-        const glow = g.createRadialGradient(x, y, 0, x, y, sz * 2);
-        glow.addColorStop(0, '#8040ff'); glow.addColorStop(1, 'rgba(40,0,80,0)');
-        g.globalAlpha = alpha; g.fillStyle = glow;
-        g.beginPath(); g.arc(x, y, sz * 2, 0, 7); g.fill();
       } else if (type === 'gold') {
         g.fillStyle = cols[i % cols.length]; g.globalAlpha = alpha;
         g.fillRect(x - sz, y - sz, sz * 2, sz * 2);
@@ -1719,16 +1581,25 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       for(const e of S.eggs){ if(e.collected) continue; const d = dist(p.x, p.y, e.x, e.y); if(d < nd){ nd = d; nearest = e; } }
       if(nearest){ target = {x: nearest.x, y: nearest.y}; text = '🥚 偷一顆蛋！'; }
     }
+    drawTutorialArrowLine(target, text);
+  }
+
+  function drawTutorialArrowLine(target, text){
+    const arrowDiv = document.getElementById('tutArrow');
+    if(!target){ arrowDiv.style.display = 'none'; return; }
+    arrowDiv.style.display = 'none'; // 隱藏原本的 div，改用 canvas 繪製
+    // 記錄在 S 中供 draw() 使用
     S.tutorialTarget = target;
     S.tutorialText = text;
-    const arrowDiv = document.getElementById('tutArrow');
-    if (!target) { arrowDiv.style.display = 'none'; return; }
+    // 同時更新文字提示的位置
     const sp = worldToScreen(target.x, target.y);
+    const icon = document.getElementById('tutArrowIcon');
+    const txt = document.getElementById('tutArrowText');
     arrowDiv.style.display = 'flex';
     arrowDiv.style.left = clamp(sp.x, 80, W-80) + 'px';
     arrowDiv.style.top = clamp(sp.y - 80, 60, H-60) + 'px';
-    document.getElementById('tutArrowText').textContent = text;
-    document.getElementById('tutArrowIcon').style.transform = 'rotate(90deg)';
+    txt.textContent = text;
+    icon.style.transform = 'rotate(90deg)';
   }
 
   function finishTutorial(){
@@ -1767,7 +1638,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     urlHint.textContent = '📺 看完廣告後請輸入上方黃色網址';
 
     const mult = type === '2x' ? 2 : 4;
-    const rewardLabels = ['跑步機速度', '金錢收益', '軌跡強化'];
+    const rewardLabels = ['跑步機速度', '金錢收益', '軌跡強化']; // 第三步改為軌跡強化
     const reward = rewardLabels[step];
     title.textContent = `🎬 ${type === '2x' ? '2×' : '4×'} 第 ${step+1}/${AD_STEPS_TOTAL} 步`;
     sub.textContent = `本次獎勵：${mult}× ${reward}`;
@@ -2560,6 +2431,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     const p=S.player;
     S.time+=dt;
 
+    // 白天夜晚判斷
     const cyclePos = Date.now() % FULL_CYCLE;
     const isNightNow = cyclePos >= DAY_MS;
     if (isNightNow !== S.night) {
@@ -2602,8 +2474,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       p.trainTickTimer+=dt;
       while(p.trainTickTimer>=0.25){
         p.trainTickTimer-=0.25;
-        // 強化訓練增益：每級大幅增加
-        let gain=3 + p.tsLv*2.5 + Math.sqrt(p.displaySpeed)*0.08;
+        let gain=0.8+p.tsLv*0.7+Math.sqrt(p.displaySpeed)*0.08;
         const mul = getSpeedMultiplier();
         if(mul > 1) gain *= mul;
         p.displaySpeed+=gain;
@@ -2630,6 +2501,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       p.walkPhase += dt * 2;
     }
 
+    // 孵蛋（離線也套用，由 lastHatchTime 補算）
     const hatchSpeedMul = getHatchMultiplier();
     for(let i=S.hatchery.length-1;i>=0;i--){
       const h=S.hatchery[i];
@@ -2648,6 +2520,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       }
     }
 
+    // 守衛 AI（夜晚不追擊）
     for(const g of S.guards){
       if(g.stun>0){g.stun-=dt;continue}
       if(g.wakeTimer>0){
@@ -2718,6 +2591,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       g.y = clamp(g.y, MIN_Y, MAX_Y);
     }
 
+    // 攜帶蛋回到安全區 -> 孵化
     if(p.carry&&p.y>S.safeLineY){
       const egg=p.carry;
       const b=WORLD.biomes[egg.biomeIdx];
@@ -2736,6 +2610,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       updateUI();saveGame(true);
     }
 
+    // 守衛碰撞
     if (!S.night) {
       for(const g of S.guards){
         if(g.stun>0||g.sleeping||g.wakeTimer>0||g.returning)continue;
@@ -2922,6 +2797,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       }
     }
 
+    // 夜晚遮罩
     if (S.night) {
       ctx.save();
       ctx.fillStyle = 'rgba(10, 10, 40, 0.45)';
@@ -2943,6 +2819,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       ctx.restore();
     }
 
+    // 夜晚屏障（安全線以上）
     if (S.night) {
       const barrierY = Math.max(0, sy);
       if (barrierY < H) {
@@ -2980,6 +2857,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     const startY = from.y + ny * 22;
     const endX = to.x - nx * 30;
     const endY = to.y - ny * 30;
+    // 虛線箭頭線
     ctx.save();
     ctx.strokeStyle = '#ffdd40';
     ctx.lineWidth = 4;
@@ -2990,6 +2868,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     ctx.moveTo(startX, startY);
     ctx.lineTo(endX, endY);
     ctx.stroke();
+    // 箭頭頭部
     const angle = Math.atan2(dy, dx);
     ctx.setLineDash([]);
     ctx.fillStyle = '#ffdd40';
@@ -3013,6 +2892,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     for(const pt of S.pets)if(pt.state === 'follow')drawFarmPet(pt);
     for(const h of S.hatchery)drawHatchery(h);
 
+    // 教學箭頭線
     drawTutorialArrowLineOnCanvas();
 
     if(S.tensionActive && S.player.carry){
@@ -3051,6 +2931,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       if(sp.y < -50 || sp.y > H+50) return;
       ctx.save(); ctx.translate(sp.x, sp.y); ctx.scale(S.zoom, S.zoom);
       ctx.globalAlpha = 0.85;
+      // 遠端玩家火柴人
       drawStickFigure(ctx, 0, 0, 15, S.time, rp.facing || 1, 0);
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
       if (rp.carry) {
@@ -3069,6 +2950,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
           ctx.restore();
         }
       }
+      // 遠端軌跡
       const rpTrail = TRAIL_DEFS.find(t => t.id === (rp.equippedTrail || 'trail_basic'));
       if (rpTrail) drawTrailOnPlayer(ctx, rp, rpTrail, S.time);
       ctx.fillStyle = '#fff'; ctx.font = 'bold 11px "Segoe UI"'; ctx.textAlign = 'center';
@@ -3181,6 +3063,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     ctx.restore();
   }
 
+  // ===== 火柴人繪製 =====
   function drawStickFigure(g, cx, cy, r, time, facing, walkPhase, swingPhase) {
     const scale = r / 15;
     const bodyColor = '#1a1a2a';
@@ -3201,18 +3084,22 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     g.lineWidth = 2.5 * scale;
     g.lineCap = 'round';
     g.lineJoin = 'round';
+    // 頭
     g.fillStyle = '#ffe0c0';
     g.beginPath();
     g.arc(0, -14 * scale, headR, 0, 7);
     g.fill();
     g.stroke();
+    // 眼睛
     g.fillStyle = '#1a1a2a';
     g.beginPath(); g.arc(-2 * scale, -15 * scale, 1 * scale, 0, 7); g.fill();
     g.beginPath(); g.arc(2 * scale, -15 * scale, 1 * scale, 0, 7); g.fill();
+    // 身體
     g.beginPath();
     g.moveTo(0, -8 * scale);
     g.lineTo(0, hipY);
     g.stroke();
+    // 手臂
     if (swingPhase !== undefined && swingPhase > 0) {
       const swingAngle = Math.PI * 0.5 - Math.sin(swingPhase * Math.PI) * Math.PI * 0.7;
       const ax = Math.cos(swingAngle) * armSpread * 1.5;
@@ -3235,6 +3122,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       g.lineTo(armSpread + armSwing, armY + armSpread * 0.5);
       g.stroke();
     }
+    // 腿
     g.beginPath();
     g.moveTo(0, hipY);
     g.lineTo(-legSpread + legSwing, hipY + 8 * scale);
@@ -3264,10 +3152,12 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     gl.addColorStop(0,'rgba(100,180,255,0.4)');gl.addColorStop(1,'rgba(100,180,255,0)');
     ctx.fillStyle=gl;ctx.beginPath();ctx.arc(0,0,p.r*2.5,0,7);ctx.fill();
     ctx.shadowBlur=8;ctx.shadowColor='#0008';
+    // 火柴人本體
     const walkPhase = p.walkPhase || 0;
     const swing = S.stickSwingAnim > 0 ? (1 - S.stickSwingAnim / 0.25) : -1;
     drawStickFigure(ctx, 0, 0, p.r, S.time, p.facing || 1, walkPhase, swing);
     ctx.shadowBlur = 0;
+    // 手持棒子（以火柴人手部為基準）
     const stick = getEquippedStick();
     if (stick) {
       const handX = p.facing * 10;
@@ -3277,6 +3167,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       drawStickIcon(ctx, stick, 22, swing > 0 ? swing : 0);
       ctx.restore();
     }
+    // 攜帶的蛋
     if(p.carry){
       ctx.shadowBlur=20;ctx.shadowColor='#ffaa00';
       const rar = WORLD.petRarity[p.carry.biomeIdx][p.carry.petIdx];
@@ -3537,6 +3428,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     document.getElementById('capCostTxt').textContent = '$' + fmt(capCost);
     document.getElementById('btnUpgradeCap').disabled = S.cash < capCost;
 
+    // 夜晚狀態
     const nightStat = document.getElementById('uiNightStat');
     const nightTxt = document.getElementById('uiNight');
     if (S.night) {
@@ -3551,9 +3443,11 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       nightTxt.style.color = '#5a4a1a';
     }
 
+    // 軌跡顯示
     const trailDef = TRAIL_DEFS.find(t => t.id === S.equippedTrail);
     document.getElementById('uiTrail').textContent = trailDef ? trailDef.name : '無';
 
+    // 廣告按鈕顯示邏輯
     const adBtn = document.getElementById('btnAd');
     const adBtn4x = document.getElementById('btnAd4x');
     const show2 = (p.displaySpeed >= AD_SPEED_2X) && (S.ad2Step < AD_STEPS_TOTAL);
@@ -3784,6 +3678,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       try { applyLoadedData(data); } catch (e) { console.warn('應用存檔失敗', e); }
     }
 
+    // 離線孵蛋（套用從存檔時間到現在的孵化進度）
     if (data && data.lastHatchTime) {
       const now = Date.now();
       const offlineMs = now - data.lastHatchTime;
