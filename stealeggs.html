@@ -53,7 +53,7 @@
   .pet-panel .pickup-btn{background:linear-gradient(180deg,#a0d8f0,#80b0d8);border-color:#4a7aaa;color:#0a2a4a;box-shadow:0 2px 0 #2a4a6a}
   .pet-panel .pickup-btn.following{background:linear-gradient(180deg,#f0c060,#d8a040);border-color:#aa7a20;color:#4a2a00;box-shadow:0 2px 0 #6a4a0a}
   .pet-panel .close-btn{background:#8a8a7a;border-color:#5a5a4a;font-size:.65rem;padding:3px 8px}
-  .index-panel{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(30,40,30,0.97);backdrop-filter:blur(10px);z-index:100;display:none;flex-direction:column;padding:10px;overflow-y:auto}
+  .index-panel{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(30,40,30,0.97);backdrop-filter:blur(10px);z-index:100;display:none;flex-direction:column;padding:70px 10px 10px;overflow-y:auto}
   .index-panel.open{display:flex}
   .index-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:6px}
   .index-header h2{color:#ffe080;font-size:1.1rem;font-weight:900;text-shadow:0 2px 8px rgba(0,0,0,0.5)}
@@ -84,7 +84,7 @@
   .hatch-text { position: fixed; pointer-events: none; z-index: 170; color: #ffe040; font-weight: 900; font-size: 1.2rem; text-shadow: 0 0 10px #ffaa00; animation: textUp 1s ease-out forwards; }
   @keyframes textUp { 0% { transform: translateY(0); opacity: 1; } 100% { transform: translateY(-50px); opacity: 0; } }
 
-  .bag-panel { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(30,40,30,0.95); backdrop-filter: blur(10px); z-index: 100; display: none; flex-direction: column; padding: 10px; overflow-y: auto; }
+  .bag-panel { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(30,40,30,0.95); backdrop-filter: blur(10px); z-index: 100; display: none; flex-direction: column; padding: 70px 10px 10px; overflow-y: auto; }
   .bag-panel.open { display: flex; }
   .bag-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
   .bag-header h2 { color: #d0a0ff; font-size: 1.1rem; font-weight: 900; text-shadow: 0 2px 8px rgba(0,0,0,0.5); }
@@ -153,7 +153,7 @@
   .pi-row { color: #fff; font-weight: 800; font-size: 0.9rem; display: flex; justify-content: space-between; }
   .pi-row span { color: #a0e0a0; }
 
-  .stick-panel { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(30,40,30,0.97); backdrop-filter: blur(10px); z-index: 100; display: none; flex-direction: column; padding: 10px; overflow-y: auto; }
+  .stick-panel { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(30,40,30,0.97); backdrop-filter: blur(10px); z-index: 100; display: none; flex-direction: column; padding: 70px 10px 10px; overflow-y: auto; }
   .stick-panel.open { display: flex; }
   .stick-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
   .stick-header h2 { color: #ffc040; font-size: 1.1rem; font-weight: 900; text-shadow: 0 2px 8px rgba(0,0,0,0.5); }
@@ -551,6 +551,29 @@
 
     initSystem();
 
+    // ==== 登入後自動重新載入一次 ====
+    (function setupLoginReload() {
+      const KEY = 'raingod_login_reload_done';
+      let firstCallback = true;
+      let lastUser = null;
+      firebase.auth().onAuthStateChanged(user => {
+        if (firstCallback) {
+          firstCallback = false;
+          lastUser = user;
+          // 初始就已登入 → 不需要重載，標記完成
+          if (user) sessionStorage.setItem(KEY, '1');
+          return;
+        }
+        // 從「未登入」變成「已登入」且尚未重載過 → 重載一次
+        if (!lastUser && user && sessionStorage.getItem(KEY) !== '1') {
+          sessionStorage.setItem(KEY, '1');
+          location.reload();
+          return;
+        }
+        lastUser = user;
+      });
+    })();
+
     window.raingodOnAuthStateChanged = function(callback) { return firebase.auth().onAuthStateChanged(callback); };
     
     window.raingodSave = async function(gameId, gameData) {
@@ -759,7 +782,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
 
   const SAVE_KEY='steal_an_egg_v16';
 
-  // ==== 修復版 saveGame：同時寫 localStorage 與雲端 account_data ====
   function saveGame(silent){
     try{
       const data={
@@ -982,7 +1004,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     buildStickUI();
   }
 
-  // ==== 畫棒子圖示 ====
   function drawStickIcon(g, def, s, swingPhase) {
     g.save();
     g.rotate(-Math.PI / 4 + swingPhase * Math.PI * 1.6);
@@ -1938,7 +1959,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       }
     });
 
-    // ==== 處理被攻擊 / 被搶蛋 ====
     onValue(ref(db, 'hits/' + PLAYER_ID), snap=>{
       const v = snap.val();
       if(!v || Date.now()-(v.t||0) > 3000) return;
@@ -1947,7 +1967,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
         triggerKnockback(v.fx||400, v.fy||-400);
       }
 
-      // 被搶蛋：蛋從身上掉到地上
       if(v.stealEgg && S.player.carry){
         const drop = S.player.carry;
         S.player.carry = null;
@@ -1970,7 +1989,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     });
   }
 
-  // ==== 攻擊：優先打有蛋的玩家，並搶走他的蛋 ====
   function attackNearest(){
     if(S.player.y >= S.safeLineY){ showToast('❌ 安全區內無法使用棒子！','#8a2a2a','#5a0a0a'); return; }
     const stick = getEquippedStick();
@@ -2107,7 +2125,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     const p=S.player;
     S.time+=dt;
 
-    // 棒子冷卻與動畫
     if (S.stickCooldown > 0) S.stickCooldown = Math.max(0, S.stickCooldown - dt);
     if (S.stickSwingAnim > 0) S.stickSwingAnim = Math.max(0, S.stickSwingAnim - dt);
 
@@ -2369,52 +2386,52 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
         const yy = (worldY - S.camera.y)*S.zoom + H/2;
         if(yy < y2 - 40 || yy > y1 + 40) continue;
 
-        if(bi===0){ // 森林
+        if(bi===0){
           const sz=(20+((i*53)%25))*S.zoom;
           ctx.fillStyle='#4a8a2a';
           ctx.beginPath();ctx.moveTo(xx,yy-sz);ctx.lineTo(xx-sz*0.7,yy);ctx.lineTo(xx+sz*0.7,yy);ctx.closePath();ctx.fill();
           ctx.fillStyle='#6a3a1a';
           ctx.fillRect(xx-sz*0.15,yy,sz*0.3,sz*0.5);
-        } else if(bi===1){ // 火山
+        } else if(bi===1){
           const s2=40*S.zoom;
           ctx.strokeStyle='#ff6020';ctx.lineWidth=4*S.zoom;
           ctx.beginPath();ctx.moveTo(xx,yy);ctx.lineTo(xx+s2,yy+s2*0.75);ctx.lineTo(xx+s2*0.4,yy+s2*1.75);ctx.stroke();
-        } else if(bi===2){ // 深淵
+        } else if(bi===2){
           const sz=(6+((i*31)%20))*S.zoom;
           ctx.strokeStyle='#80c0ff';ctx.lineWidth=2*S.zoom;
           ctx.beginPath();ctx.arc(xx,yy,sz,0,7);ctx.stroke();
-        } else if(bi===3){ // 史前
+        } else if(bi===3){
           const sz=15*S.zoom;
           ctx.fillStyle='#8a7a3a';
           ctx.beginPath();ctx.ellipse(xx,yy,sz*0.66,sz,0.3,0,7);ctx.fill();
-        } else if(bi===4){ // 冰河
+        } else if(bi===4){
           ctx.fillStyle='#ffffff';
           ctx.beginPath();ctx.arc(xx,yy,3*S.zoom,0,7);ctx.fill();
           const sz=22*S.zoom;
           ctx.fillStyle='#c0e8ff';
           ctx.beginPath();ctx.moveTo(xx-sz*0.3,yy);ctx.lineTo(xx,yy-sz);ctx.lineTo(xx+sz*0.3,yy);ctx.closePath();ctx.fill();
-        } else if(bi===5){ // 宇宙
+        } else if(bi===5){
           ctx.fillStyle='#ffffff';
           ctx.beginPath();ctx.arc(xx,yy,2.5*S.zoom,0,7);ctx.fill();
-        } else if(bi===6){ // 櫻花
+        } else if(bi===6){
           const sz=9*S.zoom;
           ctx.fillStyle='#ffb0e0';
           ctx.beginPath();ctx.ellipse(xx,yy,sz*0.55,sz,0.5,0,7);ctx.fill();
-        } else if(bi===7){ // 泰坦
+        } else if(bi===7){
           const w2=16*S.zoom,h2=50*S.zoom;
           ctx.fillStyle='#8a8aa0';
           ctx.fillRect(xx,yy,w2,h2);
-        } else if(bi===8){ // 神界
+        } else if(bi===8){
           const w2=14*S.zoom,h2=60*S.zoom;
           ctx.fillStyle='#ffe080';
           ctx.fillRect(xx,yy,w2,h2);
           ctx.fillStyle='#ffffff';
           ctx.fillRect(xx-3*S.zoom,yy-4*S.zoom,w2+6*S.zoom,4*S.zoom);
-        } else if(bi===9){ // 暗影
+        } else if(bi===9){
           const sz=10*S.zoom;
           ctx.fillStyle='#8040ff';
           ctx.beginPath();ctx.moveTo(xx,yy-sz);ctx.lineTo(xx-sz*0.7,yy+sz*0.7);ctx.lineTo(xx+sz*0.7,yy+sz*0.7);ctx.closePath();ctx.fill();
-        } else if(bi===10){ // 混沌
+        } else if(bi===10){
           ctx.strokeStyle='#a040d0';ctx.lineWidth=2.5*S.zoom;
           ctx.beginPath();
           let first=true;
@@ -2424,7 +2441,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
             if(first){ctx.moveTo(px,py);first=false;} else ctx.lineTo(px,py);
           }
           ctx.stroke();
-        } else { // 虛空
+        } else {
           ctx.strokeStyle='#6a4a8a';ctx.lineWidth=3*S.zoom;
           ctx.beginPath();
           let first=true;
@@ -2667,7 +2684,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       drawEggShape(ctx, {...p.carry, rar}, p.carry.r, S.time, rc);
       ctx.restore();
     }
-    // 畫出玩家手上的棒子
     const stick = getEquippedStick();
     if (stick) {
       const swingProgress = S.stickSwingAnim > 0 ? (1 - S.stickSwingAnim / 0.25) : 0;
@@ -2930,7 +2946,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     if (!p.carry && p.y < S.safeLineY) btnReturn.style.display = 'flex';
     else btnReturn.style.display = 'none';
 
-    // 攻擊按鈕顯示冷卻
     const atkBtn = document.getElementById('btnStick');
     if (atkBtn) {
       const stick = getEquippedStick();
@@ -3073,7 +3088,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
   resizeCanvas();
   window.addEventListener('resize',resizeCanvas);
 
-  // ============ 修復版載入流程：等待真正的 auth 狀態，並直接讀雲端 ============
+  // ============ 載入流程：等待真正的 auth 狀態，並直接讀雲端 ============
   async function loadStealEggsSave() {
     await window.raingodFirebaseReady;
     const user = await new Promise(resolve => {
