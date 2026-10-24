@@ -37,6 +37,9 @@
   .btn-right.trail{background:linear-gradient(180deg,#a0f0e0,#60c0a0);border-color:#2a8a6a;color:#003a2a}
   .btn-right.ad{background:linear-gradient(180deg,#ffd060,#ffa020);border-color:#cc7700;color:#4a2200;animation:adPulse 1.6s ease-in-out infinite}
   .btn-right.ad4x{background:linear-gradient(180deg,#ffb0ff,#c060ff);border-color:#8a2aaa;color:#3a003a;animation:adPulse4 1.4s ease-in-out infinite}
+  .btn-right.ad8x{background:linear-gradient(180deg,#ff90ff,#c040ff);border-color:#8a2aaa;color:#3a003a;animation:adPulse4 1.4s ease-in-out infinite}
+  .btn-right.ad16x{background:linear-gradient(180deg,#90ffff,#40c0ff);border-color:#2a8aaa;color:#003a4a;animation:adPulse4 1.4s ease-in-out infinite}
+  .btn-right.ad32x{background:linear-gradient(180deg,#ffe060,#ffaa00);border-color:#aa7700;color:#4a2200;animation:adPulse 1.2s ease-in-out infinite}
   @keyframes adPulse{0%,100%{box-shadow:0 3px 0 #5a4a2a,0 0 0 rgba(255,170,0,0)}50%{box-shadow:0 3px 0 #5a4a2a,0 0 14px rgba(255,170,0,0.8)}}
   @keyframes adPulse4{0%,100%{box-shadow:0 3px 0 #5a4a2a,0 0 0 rgba(200,80,255,0)}50%{box-shadow:0 3px 0 #5a4a2a,0 0 16px rgba(200,80,255,0.9)}}
   
@@ -215,6 +218,9 @@
       <button class="btn-right trail" id="btnTrail">✨ 軌跡</button>
       <button class="btn-right ad" id="btnAd" style="display:none;">🎬 2× (0/3)</button>
       <button class="btn-right ad4x" id="btnAd4x" style="display:none;">🎬 4× (0/3)</button>
+      <button class="btn-right ad8x" id="btnAd8x" style="display:none;">🎬 8× (0/3)</button>
+      <button class="btn-right ad16x" id="btnAd16x" style="display:none;">🎬 16× (0/3)</button>
+      <button class="btn-right ad32x" id="btnAd32x" style="display:none;">🎬 32× (0/3)</button>
       <button class="btn-right upg" id="btnUpgradeCap"><div>🐾 擴充</div><span id="capCostTxt">$500</span></button>
       <button class="btn-right bag" id="btnBag">🎒 背包</button>
       <button class="btn-right best" id="btnBest">✨ 一鍵最佳</button>
@@ -815,13 +821,15 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     }
     return 25+Math.log10(display/1e15)*1.5;
   }
-    // 原本是 1.45，改成 1.8。這樣 10 級後會變超貴，逼你必須去抓寵物賺錢才能升級。
   function treadmillCost(lv){return Math.floor(40*Math.pow(1.15,lv-1))}
   function petCapCost(lv){return Math.floor(500*Math.pow(10,lv-1))}
 
   // ==== 廣告門檻 ====
   const AD_SPEED_2X = 10000;
   const AD_SPEED_4X = 1000000;
+  const AD_SPEED_8X  = 10000000;        // 10m
+  const AD_SPEED_16X = 1000000000;      // 1b
+  const AD_SPEED_32X = 100000000000;    // 100b
   const AD_URL = 'is.gd/raingod';
   const AD_STEPS_TOTAL = 3;
 
@@ -836,6 +844,12 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     { id:'trail_shadow', name:'暗影虛空', mult:4.0, price:30000000000, type:'void', colors:['#3a1a5a','#8040ff','#ff00aa','#1a0a2a'] },
     { id:'trail_gold', name:'黃金神域', mult:4.5, price:1000000000000, type:'gold', colors:['#fff0a0','#ffe040','#ffaa00','#aa6600'] },
     { id:'trail_galaxy', name:'銀河創世', mult:5.0, price:50000000000000, type:'galaxy', colors:['#ffffff','#c080ff','#4040ff','#000020'] },
+    { id:'trail_aurora', name:'極光之境', mult:5.5, price:5e13, type:'rainbow', colors:['#40ff80','#40ffff','#8040ff','#ff40ff'] },
+    { id:'trail_phoenix', name:'鳳凰烈焰', mult:6.0, price:1e14, type:'fire', colors:['#ff2000','#ff8800','#ffcc00','#ffff80'] },
+    { id:'trail_void_storm', name:'虛空風暴', mult:7.0, price:1e15, type:'void', colors:['#2a0a4a','#a040ff','#ff40c0','#ffffff'] },
+    { id:'trail_eternal', name:'永恆聖光', mult:8.0, price:1e16, type:'star', colors:['#ffffff','#fff0a0','#ffe040','#ffaa00'] },
+    { id:'trail_divine', name:'神域聖輝', mult:9.0, price:1e17, type:'gold', colors:['#ffffff','#ffe880','#ffaa00','#ff40ff'] },
+    { id:'trail_origin', name:'創世之光', mult:10.0, price:1e18, type:'origin', colors:['#ff0000','#ffff00','#00ff00','#00ffff','#0000ff','#ff00ff','#ffffff'] },
   ];
 
   const IndexData={discovered:new Set(),claimed:new Set()};
@@ -856,6 +870,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
         sticks:S.sticks, petCap:S.petCap, myBaseIdx:S.myBaseIdx,
         equippedStick:S.equippedStick || null,
         ad2Step:S.ad2Step, ad4Step:S.ad4Step,
+        ad8Step:S.ad8Step, ad16Step:S.ad16Step, ad32Step:S.ad32Step,
         doubleSpeed:!!S.doubleSpeed, quadSpeed:!!S.quadSpeed,
         trails:S.trails, equippedTrail:S.equippedTrail,
         lastHatchTime:Date.now(), ts:Date.now(),
@@ -899,6 +914,9 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     S.doubleSpeed=!!d.doubleSpeed; S.quadSpeed=!!d.quadSpeed;
     S.ad2Step = typeof d.ad2Step === 'number' ? d.ad2Step : (d.doubleSpeed ? 3 : 0);
     S.ad4Step = typeof d.ad4Step === 'number' ? d.ad4Step : (d.quadSpeed ? 3 : 0);
+    S.ad8Step  = typeof d.ad8Step  === 'number' ? d.ad8Step  : 0;
+    S.ad16Step = typeof d.ad16Step === 'number' ? d.ad16Step : 0;
+    S.ad32Step = typeof d.ad32Step === 'number' ? d.ad32Step : 0;
     S.equippedStick=d.equippedStick || null;
     S.trails = d.trails || {};
     S.equippedTrail = d.equippedTrail || null;
@@ -990,6 +1008,9 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     stickSwingAnim:0,
     ad2Step:0,
     ad4Step:0,
+    ad8Step:0,
+    ad16Step:0,
+    ad32Step:0,
     trails:{},
     equippedTrail:null,
     night:false,
@@ -1006,6 +1027,10 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
   function shade(hex,amt){const n=parseInt(hex.slice(1),16);let r=clamp((n>>16)+amt,0,255),g=clamp(((n>>8)&0xff)+amt,0,255),b=clamp((n&0xff)+amt,0,255);return '#'+((r<<16)|(g<<8)|b).toString(16).padStart(6,'0')}
   function hexA(hex,a){const n=parseInt(hex.slice(1),16);return `rgba(${n>>16},${(n>>8)&255},${n&255},${a})`}
   function fmt(n){
+    if(n>=1e24)return (n/1e24).toFixed(2)+'Sp';
+    if(n>=1e21)return (n/1e21).toFixed(2)+'Sx';
+    if(n>=1e18)return (n/1e18).toFixed(2)+'Qi';
+    if(n>=1e15)return (n/1e15).toFixed(2)+'Qa';
     if(n>=1e12)return (n/1e12).toFixed(2)+'T';
     if(n>=1e9)return (n/1e9).toFixed(2)+'B';
     if(n>=1e6)return (n/1e6).toFixed(2)+'M';
@@ -1015,14 +1040,20 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
 
   function getSpeedMultiplier(){
     let m = 1;
-    if (S.ad2Step >= 1) m *= 2;
-    if (S.ad4Step >= 1) m *= 4;
+    if (S.ad2Step  >= 1) m *= 2;
+    if (S.ad4Step  >= 1) m *= 4;
+    if (S.ad8Step  >= 1) m *= 8;
+    if (S.ad16Step >= 1) m *= 16;
+    if (S.ad32Step >= 1) m *= 32;
     return m;
   }
   function getCashMultiplier(){
     let m = 1;
-    if (S.ad2Step >= 2) m *= 2;
-    if (S.ad4Step >= 2) m *= 4;
+    if (S.ad2Step  >= 2) m *= 2;
+    if (S.ad4Step  >= 2) m *= 4;
+    if (S.ad8Step  >= 2) m *= 8;
+    if (S.ad16Step >= 2) m *= 16;
+    if (S.ad32Step >= 2) m *= 32;
     return m;
   }
   function getHatchMultiplier(){
@@ -1030,6 +1061,11 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     const trail = TRAIL_DEFS.find(t => t.id === S.equippedTrail);
     if (trail) m *= trail.mult;
     if (S.night) m *= 10;
+    if (S.ad2Step  >= 3) m *= 2;
+    if (S.ad4Step  >= 3) m *= 4;
+    if (S.ad8Step  >= 3) m *= 8;
+    if (S.ad16Step >= 3) m *= 16;
+    if (S.ad32Step >= 3) m *= 32;
     return m;
   }
   function getTrailMult() {
@@ -1333,6 +1369,13 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
         g.fillStyle = cols[i % 4]; g.globalAlpha = alpha * 0.8;
         g.beginPath(); g.arc(x, y, s * (0.05 + 0.12 * (1 - t * 0.6)), 0, 7); g.fill();
         if (i % 3 === 0) { g.fillStyle = '#fff'; g.globalAlpha = alpha; g.beginPath(); g.arc(x, y, s * 0.04, 0, 7); g.fill(); }
+      } else if (type === 'origin') {
+        g.save(); g.translate(x, y); g.rotate(time * 3 + i);
+        g.fillStyle = cols[i % cols.length]; g.globalAlpha = alpha;
+        g.beginPath(); g.arc(0, 0, s * 0.14 * (1 - t * 0.4), 0, 7); g.fill();
+        g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.globalAlpha = alpha * 0.9;
+        g.beginPath(); g.arc(0, 0, s * 0.22 * (1 - t * 0.4), 0, 7); g.stroke();
+        g.restore();
       }
     }
     g.globalAlpha = 1;
@@ -1423,6 +1466,13 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
         g.save(); g.translate(x, y); g.rotate(angle);
         g.fillRect(-sz, -sz, sz * 2, sz * 2);
         g.restore();
+      } else if (type === 'origin') {
+        g.fillStyle = col;
+        g.save(); g.translate(x, y); g.rotate(t * 3 + i);
+        g.beginPath(); g.arc(0, 0, sz * 0.75, 0, 7); g.fill();
+        g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.globalAlpha = alpha * 0.9;
+        g.beginPath(); g.arc(0, 0, sz * 1.3, 0, 7); g.stroke();
+        g.restore();
       }
     }
 
@@ -1506,6 +1556,12 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       } else if (type === 'gold') {
         ctx.save(); ctx.rotate(time + i);
         ctx.fillRect(-sz*0.7, -sz*0.7, sz*1.4, sz*1.4);
+        ctx.restore();
+      } else if (type === 'origin') {
+        ctx.save(); ctx.rotate(time * 4 + i);
+        ctx.beginPath(); ctx.arc(0, 0, sz * 0.75, 0, 7); ctx.fill();
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(0, 0, sz * 1.3, 0, 7); ctx.stroke();
         ctx.restore();
       }
       ctx.restore();
@@ -1790,9 +1846,17 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
   function normalizeUrl(s){ return s.trim().toLowerCase().replace(/^https?:\/\//,'').replace(/^www\./,'').replace(/\/+$/,''); }
   function showAdModal(type){
     if(S.adPlaying) return;
-    const step = type === '2x' ? S.ad2Step : S.ad4Step;
+
+    let step, mult, multLabel;
+    if (type === '2x')  { step = S.ad2Step;  mult = 2;  multLabel = '2×'; }
+    else if (type === '4x')  { step = S.ad4Step;  mult = 4;  multLabel = '4×'; }
+    else if (type === '8x')  { step = S.ad8Step;  mult = 8;  multLabel = '8×'; }
+    else if (type === '16x') { step = S.ad16Step; mult = 16; multLabel = '16×'; }
+    else if (type === '32x') { step = S.ad32Step; mult = 32; multLabel = '32×'; }
+    else return;
+
     if(step >= AD_STEPS_TOTAL){
-      showToast(type === '2x' ? '✅ 你已完成所有 2× 獎勵！' : '✅ 你已完成所有 4× 獎勵！', '#3a8a3a', '#2a6a2a');
+      showToast(`✅ 你已完成所有 ${multLabel} 獎勵！`, '#3a8a3a', '#2a6a2a');
       return;
     }
     S.adPlaying = true; S.adType = type;
@@ -1811,10 +1875,9 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     urlDisplay.classList.remove('hidden-url');
     urlHint.textContent = '📺 看完廣告後請輸入上方黃色網址';
 
-    const mult = type === '2x' ? 2 : 4;
     const rewardLabels = ['跑步機速度', '金錢收益', '孵蛋速度'];
     const reward = rewardLabels[step];
-    title.textContent = `🎬 ${type === '2x' ? '2×' : '4×'} 第 ${step+1}/${AD_STEPS_TOTAL} 步`;
+    title.textContent = `🎬 ${multLabel} 第 ${step+1}/${AD_STEPS_TOTAL} 步`;
     sub.textContent = `本次獎勵：${mult}× ${reward}`;
 
     modal.classList.add('open'); inputWrap.style.display = 'none';
@@ -1838,16 +1901,13 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       const normalized = normalizeUrl(input.value);
       if(normalized !== AD_URL){ errEl.textContent = '❌ 網址不正確，請仔細回想剛剛的黃色大字'; return; }
 
-      if (type === '2x') {
-        if (S.ad2Step < AD_STEPS_TOTAL) S.ad2Step++;
-        if (S.ad2Step >= AD_STEPS_TOTAL) S.doubleSpeed = true;
-      } else {
-        if (S.ad4Step < AD_STEPS_TOTAL) S.ad4Step++;
-        if (S.ad4Step >= AD_STEPS_TOTAL) S.quadSpeed = true;
-      }
+      if (type === '2x')       { if (S.ad2Step  < AD_STEPS_TOTAL) S.ad2Step++;  if (S.ad2Step  >= AD_STEPS_TOTAL) S.doubleSpeed = true; }
+      else if (type === '4x')  { if (S.ad4Step  < AD_STEPS_TOTAL) S.ad4Step++;  if (S.ad4Step  >= AD_STEPS_TOTAL) S.quadSpeed   = true; }
+      else if (type === '8x')  { if (S.ad8Step  < AD_STEPS_TOTAL) S.ad8Step++;  }
+      else if (type === '16x') { if (S.ad16Step < AD_STEPS_TOTAL) S.ad16Step++; }
+      else if (type === '32x') { if (S.ad32Step < AD_STEPS_TOTAL) S.ad32Step++; }
 
-      const rewardText = `${mult}× ${reward}`;
-      showToast(`🎉 已獲得【${rewardText}】！`, '#3a8a3a', '#2a6a2a');
+      showToast(`🎉 已獲得【${mult}× ${reward}】！`, '#3a8a3a', '#2a6a2a');
 
       S.adPlaying = false; modal.classList.remove('open'); updateUI(); saveGame(true);
     };
@@ -2528,6 +2588,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     S.stickCooldown=0;
     S.stickSwingAnim=0;
     S.ad2Step=0; S.ad4Step=0;
+    S.ad8Step=0; S.ad16Step=0; S.ad32Step=0;
     S.doubleSpeed=false; S.quadSpeed=false;
     S.trails = {};
     S.equippedTrail = null;
@@ -2657,7 +2718,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       while(p.trainTickTimer>=0.25){
         p.trainTickTimer-=0.25;
         
-        // 基礎收益調低，不點升級的話，掛機就像烏龜爬
         let baseGain = 5 + p.tsLv * 5;
         let gain = Math.pow(baseGain, 1.1);
         
@@ -3636,22 +3696,23 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     const trailDef = TRAIL_DEFS.find(t => t.id === S.equippedTrail);
     document.getElementById('uiTrail').textContent = trailDef ? trailDef.name : '無';
 
-    const adBtn = document.getElementById('btnAd');
+    const adBtn   = document.getElementById('btnAd');
     const adBtn4x = document.getElementById('btnAd4x');
-    const show2 = (p.displaySpeed >= AD_SPEED_2X) && (S.ad2Step < AD_STEPS_TOTAL);
-    const show4 = (p.displaySpeed >= AD_SPEED_4X) && (S.ad4Step < AD_STEPS_TOTAL);
-    if (show2) {
-      adBtn.style.display = 'flex';
-      adBtn.textContent = `🎬 2× (${S.ad2Step}/3)`;
-    } else {
-      adBtn.style.display = 'none';
-    }
-    if (show4) {
-      adBtn4x.style.display = 'flex';
-      adBtn4x.textContent = `🎬 4× (${S.ad4Step}/3)`;
-    } else {
-      adBtn4x.style.display = 'none';
-    }
+    const adBtn8x = document.getElementById('btnAd8x');
+    const adBtn16x= document.getElementById('btnAd16x');
+    const adBtn32x= document.getElementById('btnAd32x');
+
+    const show2  = (p.displaySpeed >= AD_SPEED_2X)  && (S.ad2Step  < AD_STEPS_TOTAL);
+    const show4  = (p.displaySpeed >= AD_SPEED_4X)  && (S.ad4Step  < AD_STEPS_TOTAL);
+    const show8  = (p.displaySpeed >= AD_SPEED_8X)  && (S.ad8Step  < AD_STEPS_TOTAL);
+    const show16 = (p.displaySpeed >= AD_SPEED_16X) && (S.ad16Step < AD_STEPS_TOTAL);
+    const show32 = (p.displaySpeed >= AD_SPEED_32X) && (S.ad32Step < AD_STEPS_TOTAL);
+
+    if (show2)  { adBtn.style.display   = 'flex'; adBtn.textContent   = `🎬 2× (${S.ad2Step}/3)`;  } else { adBtn.style.display   = 'none'; }
+    if (show4)  { adBtn4x.style.display = 'flex'; adBtn4x.textContent = `🎬 4× (${S.ad4Step}/3)`;  } else { adBtn4x.style.display = 'none'; }
+    if (show8)  { adBtn8x.style.display = 'flex'; adBtn8x.textContent = `🎬 8× (${S.ad8Step}/3)`;  } else { adBtn8x.style.display = 'none'; }
+    if (show16) { adBtn16x.style.display= 'flex'; adBtn16x.textContent= `🎬 16× (${S.ad16Step}/3)`; } else { adBtn16x.style.display= 'none'; }
+    if (show32) { adBtn32x.style.display= 'flex'; adBtn32x.textContent= `🎬 32× (${S.ad32Step}/3)`; } else { adBtn32x.style.display= 'none'; }
 
     const remain=Math.max(0,300-((Date.now()%(5*60*1000))/1000));
     const min=Math.floor(remain/60); const sec=Math.floor(remain%60);
@@ -3708,6 +3769,9 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
   });
   document.getElementById('btnAd').addEventListener('click',()=>showAdModal('2x'));
   document.getElementById('btnAd4x').addEventListener('click',()=>showAdModal('4x'));
+  document.getElementById('btnAd8x').addEventListener('click',()=>showAdModal('8x'));
+  document.getElementById('btnAd16x').addEventListener('click',()=>showAdModal('16x'));
+  document.getElementById('btnAd32x').addEventListener('click',()=>showAdModal('32x'));
   document.getElementById('btnUpgradeCap').addEventListener('click',()=>{
     const cost=petCapCost(S.petCap-2);
     if(S.cash>=cost){ S.cash-=cost; S.petCap++; showToast(`🐾 寵物上限提升至 ${S.petCap}！`, '#3a8a3a', '#2a6a2a'); updateUI();saveGame(true); }
