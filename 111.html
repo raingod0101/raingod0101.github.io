@@ -155,6 +155,19 @@
   .test-row button:active { transform: translateY(2px); }
   .test-btn-red { background: linear-gradient(180deg,#e8a0a0,#d08080); border-color: #aa4a4a; color: #4a0a0a; }
   .test-btn-blue { background: linear-gradient(180deg,#a0d8f0,#80b0d8); border-color: #4a7aaa; color: #0a2a4a; }
+  
+  .player-info-panel {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: rgba(30, 40, 30, 0.98); border: 3px solid #e0b040; border-radius: 12px;
+    padding: 16px; z-index: 350; display: none; flex-direction: column; gap: 12px;
+    width: 90%; max-width: 300px; box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+  }
+  .player-info-panel.open { display: flex; }
+  .pi-header { display: flex; justify-content: space-between; align-items: center; color: #ffe080; }
+  .pi-header h2 { font-size: 1.1rem; font-weight: 900; }
+  .pi-header button { background: #8a2a2a; color: #fff; border: none; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-weight: bold; }
+  .pi-row { color: #fff; font-weight: 800; font-size: 0.9rem; display: flex; justify-content: space-between; }
+  .pi-row span { color: #a0e0a0; }
 
   @media (pointer:fine){
     .joystick-zone{display:none}
@@ -194,7 +207,7 @@
         <div class="stat speed">⚡ <b id="uiSpeed">10</b></div>
         <div class="stat">💰 <b id="uiCash">0</b></div>
         <div class="stat">🥚 <b id="uiEgg">0</b></div>
-        <div class="stat pet">📖 <b id="uiIndex">0/88</b></div>
+        <div class="stat pet">📖 <b id="uiIndex">0/96</b></div>
         <div class="stat timer">⏳ <b id="uiTimer">5:00</b></div>
         <div class="stat">🏏 <b id="uiSticks">0</b></div>
         <div class="stat">🐾 <b id="uiPetCap">3/3</b></div>
@@ -216,6 +229,7 @@
     <div class="hud-bottom">
       <span id="trainStatus">🚶 未在訓練</span>
       <span id="biomeName">🌲 森林</span>
+      <span id="myNameDisplay" style="cursor:pointer; text-decoration:underline;" title="點擊修改名稱">👤 玩家</span>
       <span id="onlineCount">👥 1</span>
     </div>
     <div class="joystick-zone" id="joystickZone">
@@ -252,6 +266,12 @@
         <button id="btnCloseTest">✕</button>
       </div>
       <div class="test-row">
+        <label>🎯 對象:</label>
+        <select id="testTargetSelect">
+          <option value="self">自己</option>
+        </select>
+      </div>
+      <div class="test-row">
         <label>💰 金錢:</label>
         <input type="number" id="testCashInput" placeholder="輸入金額...">
         <button id="btnSetCash">設定</button>
@@ -270,7 +290,23 @@
         <button id="btnAddPetFarm" style="flex:1;">放農場</button>
       </div>
       <div class="test-row" style="margin-top:4px;">
-        <button id="btnUnlockAll" class="test-btn-red" style="width:100%;">📖 解鎖全圖鑑</button>
+        <button id="btnGiveStick" class="test-btn-blue" style="width:100%;">🏏 給全能棒子</button>
+      </div>
+      <div class="test-row" style="margin-top:4px;">
+        <button id="btnUnlockAll" class="test-btn-red" style="width:100%;">📖 解鎖全圖鑑 (自己)</button>
+      </div>
+    </div>
+
+    <div class="player-info-panel" id="playerInfoPanel">
+      <div class="pi-header">
+        <h2 id="piTitle">👤 玩家資料</h2>
+        <button id="btnClosePI">✕</button>
+      </div>
+      <div class="pi-row">💰 金錢: <span id="piCash">0</span></div>
+      <div class="pi-row">⚡ 速度: <span id="piSpeed">10</span></div>
+      <div class="pi-row" style="flex-direction:column; gap:4px;">
+        <div>🐾 寵物:</div>
+        <div id="piPets" style="font-size:0.8rem; color:#c0d0c0; max-height:80px; overflow-y:auto; font-weight:normal;"></div>
       </div>
     </div>
 
@@ -334,16 +370,17 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     safeY:2500,
     biomes:[
       {name:'森林',icon:'🌲',yMin:1000,yMax:2500,reqDisplay:0,color:'#7ab85a',accent:'#4a8a2a',guardian:'雞',nestsY:1750,petNames:['雞','狗','鳥','穴鴞','浣熊','狐狸','巨型公雞','Brr Brr Patapim'],hatchTime:30},
-      {name:'火山',icon:'🌋',yMin:-500,yMax:1000,reqDisplay:1000,color:'#d86a4a',accent:'#a83a2a',guardian:'地獄犬',nestsY:250,petNames:['熔岩壁虎','熔岩蛙','烈焰牛','熔岩鬣蜥','Chillin Chilli','地獄犬','地獄犬王','熔岩龍'],hatchTime:45},
-      {name:'深淵',icon:'🌊',yMin:-2500,yMax:-500,reqDisplay:10000,color:'#5a9ad8',accent:'#2a6aaa',guardian:'白鯨',nestsY:-1500,petNames:['鸚鵡魚','劍魚','鯊魚','虎鯨','鯨鯊','白鯨','巨白鯨','El Maja'],hatchTime:60},
-      {name:'史前',icon:'🦕',yMin:-5000,yMax:-2500,reqDisplay:100000,color:'#b8a86a',accent:'#8a7a3a',guardian:'暴龍',nestsY:-3750,petNames:['渡渡鳥','翼龍','甲龍','三角龍','雷龍','暴龍','暴龍王','滄龍'],hatchTime:90},
-      {name:'冰河',icon:'❄️',yMin:-8000,yMax:-5000,reqDisplay:1000000,color:'#a0d8f0',accent:'#5a9ad8',guardian:'雪怪',nestsY:-6500,petNames:['雪兔','企鵝','雪梟','冰狐','雪鹿','霜龍','雪怪','冰河巨獸'],hatchTime:110},
-      {name:'宇宙',icon:'🌌',yMin:-12000,yMax:-8000,reqDisplay:10000000,color:'#8a6ad8',accent:'#5a3aaa',guardian:'骷髏王',nestsY:-10000,petNames:['蜈蚣','宇宙壁虎','宇宙猩猩','La Vacca','骷髏王','宇宙龍','骷髏巨王','獨角獸'],hatchTime:120},
-      {name:'櫻花',icon:'🌸',yMin:-16000,yMax:-12000,reqDisplay:100000000,color:'#e8a0d0',accent:'#c86aaa',guardian:'櫻花精靈',nestsY:-14000,petNames:['花瓣精靈','櫻桃鼠','粉蝶','花妖','櫻花鹿','櫻龍','櫻花精靈','櫻花女神'],hatchTime:180},
-      {name:'泰坦',icon:'🏛️',yMin:-22000,yMax:-16000,reqDisplay:1000000000,color:'#a0a0b8',accent:'#6a6a8a',guardian:'泰坦巨神',nestsY:-19000,petNames:['泰坦幼獸','青銅巨像','守護石像','雷電巨人','大地泰坦','天空泰坦','泰坦巨神','泰坦之王'],hatchTime:240},
-      {name:'神界',icon:'⚡',yMin:-28000,yMax:-22000,reqDisplay:10000000000,color:'#ffe8a0',accent:'#c8a000',guardian:'天使',nestsY:-25000,petNames:['天使','獨角獸','獅鷲','鳳凰','雷鳥','奧丁','大天使','神王'],hatchTime:300},
-      {name:'混沌',icon:'🌀',yMin:-34000,yMax:-28000,reqDisplay:100000000000,color:'#7a3a9a',accent:'#4a1a6a',guardian:'混沌之主',nestsY:-31000,petNames:['混沌碎片','虛空幼蟲','次元之眼','時空旅者','深淵之眼','毀滅者','混沌之主','混沌之神'],hatchTime:330},
-      {name:'虛空',icon:'🕳️',yMin:-42000,yMax:-34000,reqDisplay:500000000000,color:'#5a3a7a',accent:'#3a1a5a',guardian:'虛空吞噬者',nestsY:-38000,petNames:['虛空碎片','暗影獸','虛空之眼','混沌行者','深淵領主','虛空巨獸','虛空吞噬者','創世神'],hatchTime:360},
+      {name:'火山',icon:'🌋',yMin:-500,yMax:1000,reqDisplay:700,color:'#d86a4a',accent:'#a83a2a',guardian:'地獄犬',nestsY:250,petNames:['熔岩壁虎','熔岩蛙','烈焰牛','熔岩鬣蜥','Chillin Chilli','地獄犬','地獄犬王','熔岩龍'],hatchTime:45},
+      {name:'深淵',icon:'🌊',yMin:-2500,yMax:-500,reqDisplay:2500,color:'#5a9ad8',accent:'#2a6aaa',guardian:'白鯨',nestsY:-1500,petNames:['鸚鵡魚','劍魚','鯊魚','虎鯨','鯨鯊','白鯨','巨白鯨','El Maja'],hatchTime:60},
+      {name:'史前',icon:'🦕',yMin:-5000,yMax:-2500,reqDisplay:10000,color:'#b8a86a',accent:'#8a7a3a',guardian:'暴龍',nestsY:-3750,petNames:['渡渡鳥','翼龍','甲龍','三角龍','雷龍','暴龍','暴龍王','滄龍'],hatchTime:90},
+      {name:'冰河',icon:'❄️',yMin:-8000,yMax:-5000,reqDisplay:60000,color:'#a0d8f0',accent:'#5a9ad8',guardian:'雪怪',nestsY:-6500,petNames:['雪兔','企鵝','雪梟','冰狐','雪鹿','霜龍','雪怪','冰河巨獸'],hatchTime:110},
+      {name:'宇宙',icon:'🌌',yMin:-12000,yMax:-8000,reqDisplay:400000,color:'#8a6ad8',accent:'#5a3aaa',guardian:'骷髏王',nestsY:-10000,petNames:['蜈蚣','宇宙壁虎','宇宙猩猩','La Vacca','骷髏王','宇宙龍','骷髏巨王','獨角獸'],hatchTime:120},
+      {name:'櫻花',icon:'🌸',yMin:-16000,yMax:-12000,reqDisplay:4000000,color:'#e8a0d0',accent:'#c86aaa',guardian:'櫻花精靈',nestsY:-14000,petNames:['花瓣精靈','櫻桃鼠','粉蝶','花妖','櫻花鹿','櫻龍','櫻花精靈','櫻花女神'],hatchTime:180},
+      {name:'泰坦',icon:'🏛️',yMin:-22000,yMax:-16000,reqDisplay:25000000,color:'#a0a0b8',accent:'#6a6a8a',guardian:'泰坦巨神',nestsY:-19000,petNames:['泰坦幼獸','青銅巨像','守護石像','雷電巨人','大地泰坦','天空泰坦','泰坦巨神','泰坦之王'],hatchTime:240},
+      {name:'神界',icon:'⚡',yMin:-28000,yMax:-22000,reqDisplay:200000000,color:'#ffe8a0',accent:'#c8a000',guardian:'天使',nestsY:-25000,petNames:['天使','獨角獸','獅鷲','鳳凰','雷鳥','奧丁','大天使','神王'],hatchTime:300},
+      {name:'暗影',icon:'🌑',yMin:-34000,yMax:-28000,reqDisplay:2500000000,color:'#3a3a5a',accent:'#1a1a3a',guardian:'暗影領主',nestsY:-31000,petNames:['暗影蝠','虛空狼','夜魔','暗影法師','黑騎士','暗影巨龍','暗影領主','暗影之神'],hatchTime:320},
+      {name:'混沌',icon:'🌀',yMin:-40000,yMax:-34000,reqDisplay:30000000000,color:'#7a3a9a',accent:'#4a1a6a',guardian:'混沌之主',nestsY:-37000,petNames:['混沌碎片','虛空幼蟲','次元之眼','時空旅者','深淵之眼','毀滅者','混沌之主','混沌之神'],hatchTime:350},
+      {name:'虛空',icon:'🕳️',yMin:-46000,yMax:-40000,reqDisplay:500000000000,color:'#5a3a7a',accent:'#3a1a5a',guardian:'虛空吞噬者',nestsY:-43000,petNames:['虛空碎片','暗影獸','虛空之眼','混沌行者','深淵領主','虛空巨獸','虛空吞噬者','創世神'],hatchTime:400},
     ],
     rarities:[
       {n:'Common',c:'#8a9aa8'},{n:'Uncommon',c:'#3a9ae8'},{n:'Rare',c:'#2a5ad8'},
@@ -354,7 +391,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       [0,0,1,2,2,3,3,4], [2,3,4,4,5,7,8,8], [2,3,4,5,6,6,7,8],
       [2,4,5,6,6,7,8,8], [2,4,5,6,7,7,8,8], [2,5,6,6,7,8,8,8],
       [2,4,5,6,6,7,8,8], [2,5,6,7,7,8,8,8], [3,5,6,7,7,8,8,8],
-      [5,6,7,7,8,8,8,8], [6,7,7,8,8,8,8,8],
+      [4,6,7,7,8,8,8,8], [5,6,7,7,8,8,8,8], [6,7,7,8,8,8,8,8],
     ],
     petIncome:[
       [1,2,8,35,45,180,240,1800],
@@ -362,12 +399,13 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       [220,1100,15000,80000,700000,850000,15000000,130000000],
       [280,22000,120000,1200000,1500000,180000000,32000000,180000000],
       [300,30000,200000,3000000,50000000,70000000,300000000,1200000000],
-      [300,500000,5000000,50000000,500000000,1000000000,2000000000,5000000000],
-      [350,1000000,10000000,100000000,1000000000,2000000000,5000000000,10000000000],
-      [400,5000000,50000000,500000000,5000000000,10000000000,20000000000,50000000000],
-      [450,10000000,100000000,1000000000,10000000000,20000000000,50000000000,100000000000],
-      [500,50000000,500000000,5000000000,50000000000,100000000000,200000000000,500000000000],
-      [600,100000000,1000000000,10000000000,100000000000,200000000000,500000000000,1000000000000],
+      [350,500000,5000000,50000000,500000000,1000000000,2000000000,5000000000],
+      [400,1000000,10000000,100000000,1000000000,2000000000,5000000000,10000000000],
+      [450,5000000,50000000,500000000,5000000000,10000000000,20000000000,50000000000],
+      [500,10000000,100000000,1000000000,10000000000,20000000000,50000000000,100000000000],
+      [550,20000000,200000000,2000000000,20000000000,40000000000,100000000000,200000000000],
+      [600,50000000,500000000,5000000000,50000000000,100000000000,200000000000,500000000000],
+      [700,100000000,1000000000,10000000000,100000000000,200000000000,500000000000,1000000000000],
     ],
   };
 
@@ -417,15 +455,16 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
 
   const IndexData={discovered:new Set(),claimed:new Set()};
 
-  const SAVE_KEY='steal_an_egg_v15';
-  const SAVE_KEY_OLD='steal_an_egg_v14';
+  const SAVE_KEY='steal_an_egg_v16';
+  const SAVE_KEY_OLD='steal_an_egg_v15';
   
   function saveGame(silent){
     try{
       const data={
-        version:15,
+        version:16,
         displaySpeed:S.player.displaySpeed, tsLv:S.player.tsLv,
         px:S.player.x,py:S.player.y, cash:S.cash,
+        playerName:S.playerName,
         pets:S.pets.map(p=>({name:p.name,inc:p.inc,rar:p.rar,biomeIdx:p.biomeIdx,petIdx:p.petIdx,slot:p.slot,size:p.size,state:p.state})),
         bag:S.bag.map(p=>({name:p.name,inc:p.inc,rar:p.rar,biomeIdx:p.biomeIdx,petIdx:p.petIdx,size:p.size})),
         hatchery:S.hatchery.map(h=>({name:h.name,inc:h.inc,rar:h.rar,biomeIdx:h.biomeIdx,petIdx:h.petIdx,size:h.size,timer:h.timer,total:h.total,finished:h.finished,secret:!!h.secret})),
@@ -445,8 +484,8 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
         const oldRaw = localStorage.getItem(SAVE_KEY_OLD);
         if(oldRaw){
           const d = JSON.parse(oldRaw);
-          if(d && d.version === 14){
-            const biomeMap = {0:0, 1:1, 2:2, 3:3, 4:5, 5:6, 6:7, 7:10};
+          if(d && d.version === 15){
+            const biomeMap = {0:0, 1:1, 2:2, 3:3, 4:4, 5:5, 6:6, 7:7, 8:8, 9:9, 10:10};
             if(d.pets) d.pets.forEach(p => { if(biomeMap[p.biomeIdx] !== undefined) p.biomeIdx = biomeMap[p.biomeIdx]; });
             if(d.bag) d.bag.forEach(p => { if(biomeMap[p.biomeIdx] !== undefined) p.biomeIdx = biomeMap[p.biomeIdx]; });
             if(d.hatchery) d.hatchery.forEach(h => { if(biomeMap[h.biomeIdx] !== undefined) h.biomeIdx = biomeMap[h.biomeIdx]; });
@@ -467,7 +506,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
               });
             }
             d.claimed = newClaimed;
-            d.version = 15;
+            d.version = 16;
             localStorage.setItem(SAVE_KEY, JSON.stringify(d));
             localStorage.removeItem(SAVE_KEY_OLD);
             raw = localStorage.getItem(SAVE_KEY);
@@ -476,9 +515,10 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       }
       if(!raw)return false;
       const d=JSON.parse(raw);
-      if(!d||d.version!==15)return false;
+      if(!d||d.version!==16)return false;
       S.player.displaySpeed=d.displaySpeed||10;
       S.player.tsLv=d.tsLv||1;
+      S.playerName=d.playerName||PLAYER_NAME;
       const basePos = getBasePos(S.myBaseIdx);
       S.player.x = (typeof d.px === 'number' && d.px > 0) ? d.px : basePos.x;
       S.player.y = (typeof d.py === 'number' && d.py > 0) ? d.py : 2900;
@@ -566,6 +606,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     sticks:{}, petCap:3, myBaseIdx:0, remotePlayers:[],
     doubleSpeed:false, quadSpeed:false, tutorialActive:false, tutorialStep:0,
     adPlaying:false, adType:'2x',
+    playerName:'玩家',
   };
   const keys={};
   const rnd=(a,b)=>Math.random()*(b-a)+a;
@@ -585,9 +626,23 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
 
   function getSpeedMultiplier(){ if(S.quadSpeed) return 4; if(S.doubleSpeed) return 2; return 1; }
 
+  const PLAYER_ID = localStorage.getItem('pid') ||
+    (()=>{ const id='p_'+Math.random().toString(36).slice(2,9); localStorage.setItem('pid',id); return id; })();
+  const PLAYER_NAME = '玩家' + PLAYER_ID.slice(-3);
+
   function activateTestMode() {
     document.getElementById('testPanel').classList.add('open');
     showToast('🛠️ 已進入測試模式！', '#8a3a8a', '#5a1a5a');
+    
+    const targetSel = document.getElementById('testTargetSelect');
+    targetSel.innerHTML = '<option value="self">自己</option>';
+    S.remotePlayers.forEach(rp => {
+      const opt = document.createElement('option');
+      opt.value = rp.id;
+      opt.textContent = rp.name || '玩家';
+      targetSel.appendChild(opt);
+    });
+
     const sel = document.getElementById('testPetSelect');
     sel.innerHTML = '';
     WORLD.biomes.forEach((b, bi) => {
@@ -613,25 +668,44 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     document.getElementById('testPanel').classList.remove('open');
   });
 
+  function getSelectedTarget() {
+    const val = document.getElementById('testTargetSelect').value;
+    if (val === 'self') return { type: 'self', data: S };
+    return { type: 'remote', data: S.remotePlayers.find(p => p.id === val) };
+  }
+
   document.getElementById('btnSetCash').addEventListener('click', () => {
     const val = parseFloat(document.getElementById('testCashInput').value);
-    if (!isNaN(val) && val >= 0) {
+    if (isNaN(val) || val < 0) return;
+    const target = getSelectedTarget();
+    if (target.type === 'self') {
       S.cash = val;
-      updateUI(); saveGame(true);
-      showToast('💰 金錢已設定為 ' + fmt(val), '#3a8a3a', '#2a6a2a');
+      showToast('💰 自己的金錢已設定為 ' + fmt(val), '#3a8a3a', '#2a6a2a');
+    } else if (target.data) {
+      const { db, ref, set } = window.__FB;
+      set(ref(db, 'admin/' + target.data.id), { setCash: val, t: Date.now() });
+      showToast(`💰 已發送指令：設定 ${target.data.name} 金錢為 ${fmt(val)}`, '#3a8a3a', '#2a6a2a');
     }
+    updateUI(); saveGame(true);
   });
 
   document.getElementById('btnSetSpeed').addEventListener('click', () => {
     const val = parseFloat(document.getElementById('testSpeedInput').value);
-    if (!isNaN(val) && val >= 10) {
+    if (isNaN(val) || val < 10) return;
+    const target = getSelectedTarget();
+    if (target.type === 'self') {
       S.player.displaySpeed = val;
-      updateUI(); saveGame(true);
-      showToast('⚡ 速度已設定為 ' + fmt(val), '#3a8a3a', '#2a6a2a');
+      showToast('⚡ 自己的速度已設定為 ' + fmt(val), '#3a8a3a', '#2a6a2a');
+    } else if (target.data) {
+      const { db, ref, set } = window.__FB;
+      set(ref(db, 'admin/' + target.data.id), { setSpeed: val, t: Date.now() });
+      showToast(`⚡ 已發送指令：設定 ${target.data.name} 速度為 ${fmt(val)}`, '#3a8a3a', '#2a6a2a');
     }
+    updateUI(); saveGame(true);
   });
 
   document.getElementById('btnAddPetBag').addEventListener('click', () => {
+    const target = getSelectedTarget();
     const val = document.getElementById('testPetSelect').value;
     if (!val) return;
     const [biStr, piStr] = val.split('_');
@@ -640,36 +714,61 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     const inc = WORLD.petIncome[bi][pi];
     const rar = WORLD.petRarity[bi][pi];
     
-    const petData = { id: Math.random().toString(36).slice(2), name: b.petNames[pi], inc, rar, biomeIdx: bi, petIdx: pi, size: 'normal' };
-    S.bag.push(petData);
-    discoverPet(bi, pi);
-    buildBagUI(); updateUI(); saveGame(true);
-    showToast(`🎒 已獲得 ${b.petNames[pi]}（放背包）`, '#3a8a3a', '#2a6a2a');
+    if (target.type === 'self') {
+      const petData = { id: Math.random().toString(36).slice(2), name: b.petNames[pi], inc, rar, biomeIdx: bi, petIdx: pi, size: 'normal' };
+      S.bag.push(petData);
+      discoverPet(bi, pi);
+      buildBagUI(); updateUI(); saveGame(true);
+      showToast(`🎒 已獲得 ${b.petNames[pi]}（放背包）`, '#3a8a3a', '#2a6a2a');
+    } else if (target.data) {
+      const { db, ref, set } = window.__FB;
+      set(ref(db, 'admin/' + target.data.id), { addPetBag: { bi, pi }, t: Date.now() });
+      showToast(`🎒 已發送指令：給 ${target.data.name} 一隻 ${b.petNames[pi]}（背包）`, '#3a8a3a', '#2a6a2a');
+    }
   });
 
   document.getElementById('btnAddPetFarm').addEventListener('click', () => {
+    const target = getSelectedTarget();
     const val = document.getElementById('testPetSelect').value;
     if (!val) return;
-    if (S.pets.length >= S.petCap) { showToast('⚠️ 農場已滿，請先擴充或放背包', '#8a2a2a', '#5a0a0a'); return; }
     const [biStr, piStr] = val.split('_');
     const bi = parseInt(biStr), pi = parseInt(piStr);
     const b = WORLD.biomes[bi];
     const inc = WORLD.petIncome[bi][pi];
     const rar = WORLD.petRarity[bi][pi];
     
-    const usedSlots = new Set(S.pets.map(p => p.slot));
-    let slot = -1;
-    for (let j = 0; j < FARM_OFFSETS.length; j++) { if (!usedSlots.has(j)) { slot = j; break; } }
-    
-    if (slot !== -1) {
-      const basePos = getBasePos(S.myBaseIdx);
-      const mx = basePos.x + rnd(-35, 35), my = basePos.y + rnd(-40, 365);
-      S.pets.push({ id: Math.random().toString(36).slice(2), name: b.petNames[pi], inc, rar, biomeIdx: bi, petIdx: pi, size: 'normal',
-        x: mx, y: my, wanderTargetX: mx, wanderTargetY: my, wanderTimer: 0, selected: false, slot, state: 'farm' });
-      S.cps = S.pets.reduce((s, pt) => s + pt.inc, 0);
-      discoverPet(bi, pi);
+    if (target.type === 'self') {
+      if (S.pets.length >= S.petCap) { showToast('⚠️ 農場已滿，請先擴充或放背包', '#8a2a2a', '#5a0a0a'); return; }
+      const usedSlots = new Set(S.pets.map(p => p.slot));
+      let slot = -1;
+      for (let j = 0; j < FARM_OFFSETS.length; j++) { if (!usedSlots.has(j)) { slot = j; break; } }
+      if (slot !== -1) {
+        const basePos = getBasePos(S.myBaseIdx);
+        const mx = basePos.x + rnd(-35, 35), my = basePos.y + rnd(-40, 365);
+        S.pets.push({ id: Math.random().toString(36).slice(2), name: b.petNames[pi], inc, rar, biomeIdx: bi, petIdx: pi, size: 'normal',
+          x: mx, y: my, wanderTargetX: mx, wanderTargetY: my, wanderTimer: 0, selected: false, slot, state: 'farm' });
+        S.cps = S.pets.reduce((s, pt) => s + pt.inc, 0);
+        discoverPet(bi, pi);
+        updateUI(); saveGame(true);
+        showToast(`✅ 已獲得 ${b.petNames[pi]}（放農場）`, '#3a8a3a', '#2a6a2a');
+      }
+    } else if (target.data) {
+      const { db, ref, set } = window.__FB;
+      set(ref(db, 'admin/' + target.data.id), { addPetFarm: { bi, pi }, t: Date.now() });
+      showToast(`🐾 已發送指令：給 ${target.data.name} 一隻 ${b.petNames[pi]}（農場）`, '#3a8a3a', '#2a6a2a');
+    }
+  });
+
+  document.getElementById('btnGiveStick').addEventListener('click', () => {
+    const target = getSelectedTarget();
+    if (target.type === 'self') {
+      S.sticks['god_stick'] = true;
       updateUI(); saveGame(true);
-      showToast(`✅ 已獲得 ${b.petNames[pi]}（放農場）`, '#3a8a3a', '#2a6a2a');
+      showToast('🏏 你已獲得全能棒子！', '#3a8a3a', '#2a6a2a');
+    } else if (target.data) {
+      const { db, ref, set } = window.__FB;
+      set(ref(db, 'admin/' + target.data.id), { giveStick: true, t: Date.now() });
+      showToast(`🏏 已發送指令：給 ${target.data.name} 全能棒子`, '#3a8a3a', '#2a6a2a');
     }
   });
 
@@ -786,6 +885,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     {body:'#f0a0d0',belly:'#ffd0e8',eye:'#6a2a4a',accent:'#ff60b0',dark:'#c86a9a',light:'#ffc0e0'},
     {body:'#c0c0d0',belly:'#e8e8f0',eye:'#3a3a4a',accent:'#ffe040',dark:'#8a8a9a',light:'#e0e0f0'},
     {body:'#f0d080',belly:'#fff0c0',eye:'#6a4a00',accent:'#ffe040',dark:'#aa8820',light:'#ffe8b0'},
+    {body:'#3a3a5a',belly:'#6a6a8a',eye:'#1a1a3a',accent:'#8040ff',dark:'#1a1a3a',light:'#5a5a7a'},
     {body:'#7a3a9a',belly:'#b070d0',eye:'#3a0a4a',accent:'#c040ff',dark:'#4a1a6a',light:'#a060c0'},
     {body:'#7a5aa0',belly:'#b090d0',eye:'#2a0a4a',accent:'#d040ff',dark:'#4a2a70',light:'#a080d0'},
   ];
@@ -799,8 +899,9 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     ['petal','mouse','butterfly','flower','deer','sakuradragon','guardian_6','goddess'],
     ['titanbaby','colossus','statue','thunder','earth','sky','guardian_7','king'],
     ['angel','unicorn','griffin','phoenix','thunder','king','guardian_8','creator'],
-    ['shard','worm','eye','chaos','abyss','voidbeast','guardian_9','chaosgod'],
+    ['shard','shadow','eye','chaos','abyss','voidbeast','guardian_9','chaosgod'],
     ['shard','shadow','eye','chaos','abyss','voidbeast','guardian_10','creator'],
+    ['shard','shadow','eye','chaos','abyss','voidbeast','guardian_11','creator'],
   ];
 
   function drawPetShape(g,shape,pal,s,time,rc){
@@ -1013,6 +1114,13 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       g.fillStyle='#fff0c0';g.beginPath();g.ellipse(0,s*0.15,s*0.45,s*0.55,0,0,7);g.fill();
       g.fillStyle='#ffe8a0';g.beginPath();g.arc(0,-s*0.55,s*0.5,0,7);g.fill();
       g.fillStyle='#4a2a00';g.beginPath();g.arc(-s*0.18,-s*0.6,s*0.08,0,7);g.fill();g.beginPath();g.arc(s*0.18,-s*0.6,s*0.08,0,7);g.fill();
+    }},
+    {name:'暗影領主',draw:function(g,s,time,alert){
+      g.fillStyle='#1a1a3a';g.beginPath();g.moveTo(-s*0.7,s*0.05);g.quadraticCurveTo(-s*0.75,s*0.6,-s*0.2,s*0.7);g.quadraticCurveTo(0,s*0.75,s*0.2,s*0.7);g.quadraticCurveTo(s*0.75,s*0.6,s*0.7,s*0.05);g.quadraticCurveTo(s*0.6,-s*0.3,0,-s*0.3);g.quadraticCurveTo(-s*0.6,-s*0.3,-s*0.7,s*0.05);g.closePath();g.fill();g.strokeStyle='#8040ff';g.lineWidth=2.5;g.stroke();
+      g.fillStyle='#3a3a5a';g.beginPath();g.arc(0,-s*0.55,s*0.6,0,7);g.fill();
+      g.fillStyle='#ff2020';g.beginPath();g.arc(-s*0.22,-s*0.6,s*0.15,0,7);g.fill();g.beginPath();g.arc(s*0.22,-s*0.6,s*0.15,0,7);g.fill();
+      g.fillStyle='#000';g.beginPath();g.arc(-s*0.22,-s*0.6,s*0.06,0,7);g.fill();g.beginPath();g.arc(s*0.22,-s*0.6,s*0.06,0,7);g.fill();
+      g.fillStyle='#8040ff';g.beginPath();g.moveTo(-s*0.4,-s*0.95);g.lineTo(-s*0.2,-s*1.0);g.lineTo(0,-s*1.2);g.lineTo(s*0.2,-s*1.0);g.lineTo(s*0.4,-s*0.95);g.closePath();g.fill();
     }},
     {name:'混沌之主',draw:function(g,s,time,alert){
       g.strokeStyle='#c040ff';g.lineWidth=2.5;
@@ -1256,49 +1364,104 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     closePetPanel();saveGame(true);updateUI();
   }
 
-  const PLAYER_ID = localStorage.getItem('pid') ||
-    (()=>{ const id='p_'+Math.random().toString(36).slice(2,9); localStorage.setItem('pid',id); return id; })();
-  const PLAYER_NAME = '玩家' + PLAYER_ID.slice(-3);
-
   function initMultiplayer(){
     const { db, ref, set, onValue, onDisconnect, serverTimestamp } = window.__FB;
     if(!db){ console.warn('Firebase 未初始化'); return; }
     const meRef = ref(db, 'players/' + PLAYER_ID);
     const pushMe = ()=>{
-      set(meRef, { name: PLAYER_NAME, baseIdx: S.myBaseIdx, x: Math.round(S.player.x), y: Math.round(S.player.y),
-        displaySpeed: S.player.displaySpeed, biomeIdx: S.biomeIdx,
+      set(meRef, { name: S.playerName, baseIdx: S.myBaseIdx, x: Math.round(S.player.x), y: Math.round(S.player.y),
+        displaySpeed: S.player.displaySpeed, biomeIdx: S.biomeIdx, cash: S.cash,
         pets: S.pets.map(p=>({name:p.name,biomeIdx:p.biomeIdx,petIdx:p.petIdx,size:p.size,rar:p.rar,inc:p.inc})),
         online: true, lastSeen: serverTimestamp() }).catch(e=>console.warn('set fail',e));
     };
     pushMe();
     onDisconnect(meRef).update({ online:false });
     setInterval(pushMe, 1500);
+
     onValue(ref(db, 'players'), snap=>{
       const data = snap.val() || {};
       S.remotePlayers = Object.entries(data).filter(([id,p]) => id !== PLAYER_ID && p && p.online).map(([id,p]) => ({ id, ...p }));
       const oc=document.getElementById('onlineCount'); if(oc) oc.textContent='👥 '+(S.remotePlayers.length+1);
+      
+      const testPanel = document.getElementById('testPanel');
+      if (testPanel && testPanel.classList.contains('open')) {
+        const targetSel = document.getElementById('testTargetSelect');
+        const currentVal = targetSel.value;
+        targetSel.innerHTML = '<option value="self">自己</option>';
+        S.remotePlayers.forEach(rp => {
+          const opt = document.createElement('option');
+          opt.value = rp.id;
+          opt.textContent = rp.name || '玩家';
+          targetSel.appendChild(opt);
+        });
+        targetSel.value = currentVal;
+      }
     });
+
+    onValue(ref(db, 'admin/' + PLAYER_ID), snap=>{
+      const v = snap.val();
+      if(v && Date.now()-(v.t||0) < 5000){
+        if(v.setCash !== undefined) S.cash = v.setCash;
+        if(v.setSpeed !== undefined) S.player.displaySpeed = v.setSpeed;
+        if(v.addPetBag){
+          const { bi, pi } = v.addPetBag;
+          const b = WORLD.biomes[bi];
+          const petData = { id: Math.random().toString(36).slice(2), name: b.petNames[pi], inc: WORLD.petIncome[bi][pi], rar: WORLD.petRarity[bi][pi], biomeIdx: bi, petIdx: pi, size: 'normal' };
+          S.bag.push(petData);
+          buildBagUI();
+        }
+        if(v.addPetFarm){
+          const { bi, pi } = v.addPetFarm;
+          const b = WORLD.biomes[bi];
+          const usedSlots = new Set(S.pets.map(p=>p.slot));
+          let slot = -1;
+          for(let j=0;j<FARM_OFFSETS.length;j++){ if(!usedSlots.has(j)){ slot = j; break; } }
+          if(slot !== -1){
+            const basePos = getBasePos(S.myBaseIdx);
+            const mx = basePos.x + rnd(-35, 35); const my = basePos.y + rnd(-40, 365);
+            S.pets.push({ id: Math.random().toString(36).slice(2), name: b.petNames[pi], inc: WORLD.petIncome[bi][pi], rar: WORLD.petRarity[bi][pi], biomeIdx: bi, petIdx: pi, size: 'normal',
+              x: mx, y: my, wanderTargetX: mx, wanderTargetY: my, wanderTimer: 0, selected: false, slot, state: 'farm' });
+            S.cps = S.pets.reduce((s, pt) => s + pt.inc, 0);
+          } else {
+            S.bag.push({ id: Math.random().toString(36).slice(2), name: b.petNames[pi], inc: WORLD.petIncome[bi][pi], rar: WORLD.petRarity[bi][pi], biomeIdx: bi, petIdx: pi, size: 'normal' });
+          }
+        }
+        if(v.giveStick) S.sticks['god_stick'] = true;
+        
+        updateUI();
+        saveGame(true);
+      }
+    });
+
     onValue(ref(db, 'hits/' + PLAYER_ID), snap=>{
       const v = snap.val();
       if(v && Date.now()-(v.t||0) < 3000){
-        triggerKnockback(v.fx||400, v.fy||-400);
-        showToast(`💥 你被 ${v.by||'玩家'} 打飛了！`, '#8a2a2a', '#5a0a0a');
+        if(v.fx !== undefined || v.fy !== undefined) {
+          triggerKnockback(v.fx||400, v.fy||-400);
+          showToast(`💥 你被 ${v.by||'玩家'} 打飛了！`, '#8a2a2a', '#5a0a0a');
+        }
       }
     });
   }
 
   function attackNearest(){
+    if(S.player.y >= S.safeLineY){ showToast('❌ 安全區內無法使用棒子！','#8a2a2a','#5a0a0a'); return; }
     if(Object.keys(S.sticks).length===0){ showToast('❌ 還沒有棒子，先解鎖圖鑑！','#8a2a2a','#5a0a0a');return; }
-    if(!S.remotePlayers || S.remotePlayers.length===0){ showToast('附近沒有其他玩家','#5a5a5a','#3a3a3a');return; }
+    S.camShake = 0.4; // 空揮也會震動
+    
+    if(!S.remotePlayers || S.remotePlayers.length===0){ showToast('附近沒有其他玩家，揮空了！','#5a5a5a','#3a3a3a');return; }
     let target=null,minD=200;
-    for(const rp of S.remotePlayers){ const d=dist(S.player.x,S.player.y,rp.x,rp.y); if(d<minD){minD=d;target=rp;} }
-    if(!target){showToast('附近沒有玩家','#5a5a5a','#3a3a3a');return;}
+    for(const rp of S.remotePlayers){ 
+      if (rp.y >= S.safeLineY) continue; // 不能打安全區內的人
+      const d=dist(S.player.x,S.player.y,rp.x,rp.y); 
+      if(d<minD){minD=d;target=rp;} 
+    }
+    if(!target){showToast('附近沒有可攻擊的玩家，揮空了！','#5a5a5a','#3a3a3a');return;}
     const power=stickPower();
     const dx=target.x-S.player.x, dy=target.y-S.player.y;
     const len=Math.hypot(dx,dy)||1;
     const { db, ref, set } = window.__FB;
-    set(ref(db, 'hits/' + target.id), { by: PLAYER_NAME, fx: (dx/len)*power, fy: (dy/len)*power, t: Date.now() });
-    S.camShake=0.4;
+    set(ref(db, 'hits/' + target.id), { by: S.playerName, fx: (dx/len)*power, fy: (dy/len)*power, t: Date.now() });
     showToast(`💥 打中了 ${target.name||'玩家'}！`, '#ff8a20', '#aa5a00');
   }
 
@@ -1308,6 +1471,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     S.selectedPet=null;S.camera={x:getBasePos(S.myBaseIdx).x,y:2650};
     S.guardWakeTimer=0;S.guardWakeTarget=null; S.eggRefreshTimer=0;
     S.camShake=0;S.camShakeX=0;S.camShakeY=0; S.tensionActive=false; S.petCap=3;
+    S.playerName = PLAYER_NAME;
     IndexData.discovered.clear();IndexData.claimed.clear();
     S.sticks={};
     for(let bi=0;bi<WORLD.biomes.length;bi++){spawnEggsForBiome(bi);spawnGuardsForBiome(bi)}
@@ -1640,48 +1804,52 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
         const yy = (worldY - S.camera.y)*S.zoom + H/2;
         if(yy < y2 - 40 || yy > y1 + 40) continue;
 
-        if(bi===0){
+        if(bi===0){ // 森林
           const sz=(20+((i*53)%25))*S.zoom;
           ctx.fillStyle='#4a8a2a';
           ctx.beginPath();ctx.moveTo(xx,yy-sz);ctx.lineTo(xx-sz*0.7,yy);ctx.lineTo(xx+sz*0.7,yy);ctx.closePath();ctx.fill();
           ctx.fillStyle='#6a3a1a';
           ctx.fillRect(xx-sz*0.15,yy,sz*0.3,sz*0.5);
-        } else if(bi===1){
+        } else if(bi===1){ // 火山
           const s2=40*S.zoom;
           ctx.strokeStyle='#ff6020';ctx.lineWidth=4*S.zoom;
           ctx.beginPath();ctx.moveTo(xx,yy);ctx.lineTo(xx+s2,yy+s2*0.75);ctx.lineTo(xx+s2*0.4,yy+s2*1.75);ctx.stroke();
-        } else if(bi===2){
+        } else if(bi===2){ // 深淵
           const sz=(6+((i*31)%20))*S.zoom;
           ctx.strokeStyle='#80c0ff';ctx.lineWidth=2*S.zoom;
           ctx.beginPath();ctx.arc(xx,yy,sz,0,7);ctx.stroke();
-        } else if(bi===3){
+        } else if(bi===3){ // 史前
           const sz=15*S.zoom;
           ctx.fillStyle='#8a7a3a';
           ctx.beginPath();ctx.ellipse(xx,yy,sz*0.66,sz,0.3,0,7);ctx.fill();
-        } else if(bi===4){
+        } else if(bi===4){ // 冰河
           ctx.fillStyle='#ffffff';
           ctx.beginPath();ctx.arc(xx,yy,3*S.zoom,0,7);ctx.fill();
           const sz=22*S.zoom;
           ctx.fillStyle='#c0e8ff';
           ctx.beginPath();ctx.moveTo(xx-sz*0.3,yy);ctx.lineTo(xx,yy-sz);ctx.lineTo(xx+sz*0.3,yy);ctx.closePath();ctx.fill();
-        } else if(bi===5){
+        } else if(bi===5){ // 宇宙
           ctx.fillStyle='#ffffff';
           ctx.beginPath();ctx.arc(xx,yy,2.5*S.zoom,0,7);ctx.fill();
-        } else if(bi===6){
+        } else if(bi===6){ // 櫻花
           const sz=9*S.zoom;
           ctx.fillStyle='#ffb0e0';
           ctx.beginPath();ctx.ellipse(xx,yy,sz*0.55,sz,0.5,0,7);ctx.fill();
-        } else if(bi===7){
+        } else if(bi===7){ // 泰坦
           const w2=16*S.zoom,h2=50*S.zoom;
           ctx.fillStyle='#8a8aa0';
           ctx.fillRect(xx,yy,w2,h2);
-        } else if(bi===8){
+        } else if(bi===8){ // 神界
           const w2=14*S.zoom,h2=60*S.zoom;
           ctx.fillStyle='#ffe080';
           ctx.fillRect(xx,yy,w2,h2);
           ctx.fillStyle='#ffffff';
           ctx.fillRect(xx-3*S.zoom,yy-4*S.zoom,w2+6*S.zoom,4*S.zoom);
-        } else if(bi===9){
+        } else if(bi===9){ // 暗影
+          const sz=10*S.zoom;
+          ctx.fillStyle='#8040ff';
+          ctx.beginPath();ctx.moveTo(xx,yy-sz);ctx.lineTo(xx-sz*0.7,yy+sz*0.7);ctx.lineTo(xx+sz*0.7,yy+sz*0.7);ctx.closePath();ctx.fill();
+        } else if(bi===10){ // 混沌
           ctx.strokeStyle='#a040d0';ctx.lineWidth=2.5*S.zoom;
           ctx.beginPath();
           let first=true;
@@ -1691,7 +1859,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
             if(first){ctx.moveTo(px,py);first=false;} else ctx.lineTo(px,py);
           }
           ctx.stroke();
-        } else {
+        } else { // 虛空
           ctx.strokeStyle='#6a4a8a';ctx.lineWidth=3*S.zoom;
           ctx.beginPath();
           let first=true;
@@ -2089,6 +2257,25 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     const sy=(e.clientY-rect.top)*(H/rect.height);
     const w=screenToWorld(sx,sy);
     
+    if(S.remotePlayers){
+      for(const rp of S.remotePlayers){
+        if(dist(w.x, w.y, rp.x, rp.y) < 25){
+          const pi = document.getElementById('playerInfoPanel');
+          pi.classList.add('open');
+          document.getElementById('piTitle').textContent = `👤 ${rp.name || '玩家'}`;
+          document.getElementById('piCash').textContent = '$' + fmt(rp.cash || 0);
+          document.getElementById('piSpeed').textContent = fmt(rp.displaySpeed || 10);
+          const petsDiv = document.getElementById('piPets');
+          if(rp.pets && rp.pets.length > 0){
+             petsDiv.innerHTML = rp.pets.map(p => `• ${p.name} ($${fmt(p.inc)}/s)`).join('<br>');
+          } else {
+             petsDiv.textContent = '無';
+          }
+          return;
+        }
+      }
+    }
+    
     if(!S.player.carry){
       for(const egg of S.eggs){
         if(egg.collected) continue;
@@ -2136,6 +2323,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     document.getElementById('uiIndex').textContent=IndexData.discovered.size+'/'+(WORLD.biomes.length*8);
     document.getElementById('uiSticks').textContent=Object.keys(S.sticks).length;
     document.getElementById('uiPetCap').textContent = S.pets.length + '/' + S.petCap;
+    document.getElementById('myNameDisplay').textContent = '👤 ' + S.playerName;
     const capCost = petCapCost(S.petCap - 2);
     document.getElementById('capCostTxt').textContent = '$' + fmt(capCost);
     document.getElementById('btnUpgradeCap').disabled = S.cash < capCost;
@@ -2228,6 +2416,20 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
   document.getElementById('btnPickupPanel').addEventListener('click',()=>{ if(S.selectedPet) togglePickupPet(S.selectedPet); });
   document.getElementById('btnSave').addEventListener('click',()=>saveGame(false));
   document.getElementById('adCloseBtn').addEventListener('click',closeAdModal);
+  document.getElementById('btnClosePI').addEventListener('click',()=>document.getElementById('playerInfoPanel').classList.remove('open'));
+  
+  document.getElementById('myNameDisplay').addEventListener('click', ()=>{
+    const newName = prompt("請輸入新的玩家名稱 (最多 8 字)：", S.playerName);
+    if(newName && newName.trim().length > 0){
+      S.playerName = newName.trim().slice(0,8);
+      saveGame(true); updateUI();
+      const { db, ref, set } = window.__FB;
+      const meRef = ref(db, 'players/' + PLAYER_ID);
+      // 覆蓋原本玩家資料的 name 屬性
+      set(meRef, { name: S.playerName }).catch(()=>{});
+    }
+  });
+
   document.getElementById('adInput').addEventListener('keydown', (e) => {
     if(e.key === 'Enter'){ e.preventDefault(); const btn = document.getElementById('adClaimBtn'); if(btn) btn.click(); }
     if(e.key === 'Escape'){ e.preventDefault(); closeAdModal(); }
