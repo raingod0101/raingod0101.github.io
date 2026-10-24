@@ -136,13 +136,13 @@
   #testTriggerBtn { position: absolute; left: 0; bottom: 180px; width: 36px; height: 56px; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); border-left: none; border-radius: 0 10px 10px 0; display: flex; align-items: center; justify-content: center; z-index: 150; pointer-events: auto; color: #fff; font-size: 1.2rem; cursor: pointer; opacity: 0.6; transition: opacity 0.2s; }
   #testTriggerBtn:hover { opacity: 1; }
 
-  .test-panel { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(30, 40, 30, 0.98); border: 3px solid #e0b040; border-radius: 12px; padding: 16px; z-index: 350; display: none; flex-direction: column; gap: 12px; width: 90%; max-width: 360px; box-shadow: 0 10px 40px rgba(0,0,0,0.8); }
+  .test-panel { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(30, 40, 30, 0.98); border: 3px solid #e0b040; border-radius: 12px; padding: 16px; z-index: 350; display: none; flex-direction: column; gap: 10px; width: 90%; max-width: 380px; box-shadow: 0 10px 40px rgba(0,0,0,0.8); max-height: 90vh; overflow-y: auto; }
   .test-panel.open { display: flex; }
   .test-header { display: flex; justify-content: space-between; align-items: center; color: #ffe080; }
   .test-header h2 { font-size: 1.1rem; font-weight: 900; }
   .test-header button { background: #8a2a2a; color: #fff; border: none; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-weight: bold; }
   .test-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-  .test-row label { color: #fff; font-weight: 800; font-size: 0.8rem; width: 50px; flex-shrink: 0; }
+  .test-row label { color: #fff; font-weight: 800; font-size: 0.8rem; width: 55px; flex-shrink: 0; }
   .test-row input, .test-row select { flex: 1; min-width: 100px; padding: 6px 10px; border: 2px solid #8a7a5a; border-radius: 6px; background: #fff; color: #3a2a1a; font-weight: 800; font-size: 0.85rem; outline: none; }
   .test-row button { background: linear-gradient(180deg,#a0d8a0,#80c080); border: 2px solid #4a8a4a; border-radius: 6px; padding: 6px 10px; color: #0a3a0a; font-weight: 900; cursor: pointer; white-space: nowrap; }
   .test-row button:active { transform: translateY(2px); }
@@ -289,6 +289,11 @@
         <button id="btnSetSpeed">設定</button>
       </div>
       <div class="test-row">
+        <label>⚡ 跑等:</label>
+        <input type="number" id="testSpeedLvInput" placeholder="輸入跑步機等級...">
+        <button id="btnSetSpeedLv">設定</button>
+      </div>
+      <div class="test-row">
         <label>🐾 寵物:</label>
         <select id="testPetSelect"></select>
       </div>
@@ -296,8 +301,13 @@
         <button id="btnAddPetBag" class="test-btn-blue" style="flex:1;">放背包</button>
         <button id="btnAddPetFarm" style="flex:1;">放農場</button>
       </div>
+      <div class="test-row">
+        <label>✨ 軌跡:</label>
+        <select id="testTrailSelect"></select>
+        <button id="btnGiveTrail" class="test-btn-blue">解鎖/裝備</button>
+      </div>
       <div class="test-row" style="margin-top:4px;">
-        <button id="btnGiveStick" class="test-btn-blue" style="width:100%;">🏏 給全能棒子</button>
+        <button id="btnGiveStick" class="test-btn-blue" style="width:100%;">🏏 解鎖所有棒子</button>
       </div>
       <div class="test-row" style="margin-top:4px;">
         <button id="btnUnlockAll" class="test-btn-red" style="width:100%;">📖 解鎖全圖鑑 (自己)</button>
@@ -707,7 +717,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
   const MAX_Y = 3300;
 
   // ===== 白天 / 夜晚 =====
-  const DAY_MS = 5 * 60 * 1000; // 5 分鐘一個循環（4:50 白天 + 0:10 夜晚）
+  const DAY_MS = 5 * 60 * 1000; 
   const NIGHT_MS = 10 * 1000;
   const FULL_CYCLE = DAY_MS + NIGHT_MS;
 
@@ -805,7 +815,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     }
     return 25+Math.log10(display/1e15)*1.5;
   }
-  function treadmillCost(lv){return Math.floor(40*Math.pow(1.6,lv-1))}
+  function treadmillCost(lv){return Math.floor(40*Math.pow(1.5,lv-1))}
   function petCapCost(lv){return Math.floor(500*Math.pow(10,lv-1))}
 
   // ==== 廣告門檻 ====
@@ -817,14 +827,14 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
   // ==== 軌跡系統 ====
   const TRAIL_DEFS = [
     { id:'trail_basic', name:'初心之光', mult:1.5, price:0, type:'glow', colors:['#ffffff','#a0e0ff'] },
-    { id:'trail_fire', name:'烈焰之徑', mult:1.8, price:8000, type:'fire', colors:['#ffdd40','#ff6a00','#aa1a00'] },
-    { id:'trail_rainbow', name:'彩虹橋', mult:2.2, price:120000, type:'rainbow', colors:['#ff0040','#ffaa00','#40ff40','#00aaff','#cc40ff'] },
-    { id:'trail_star', name:'星光大道', mult:2.8, price:2500000, type:'star', colors:['#ffffff','#80c0ff','#ffe040'] },
-    { id:'trail_flower', name:'櫻花漫舞', mult:3.2, price:60000000, type:'petal', colors:['#ffb0e0','#ff80c0','#ffe0f0'] },
-    { id:'trail_ice', name:'冰晶寒流', mult:3.6, price:1500000000, type:'ice', colors:['#e0f8ff','#80d0ff','#40a0e0'] },
-    { id:'trail_shadow', name:'暗影虛空', mult:4.0, price:50000000000, type:'void', colors:['#3a1a5a','#8040ff','#ff00aa','#1a0a2a'] },
-    { id:'trail_gold', name:'黃金神域', mult:4.5, price:2000000000000, type:'gold', colors:['#fff0a0','#ffe040','#ffaa00','#aa6600'] },
-    { id:'trail_galaxy', name:'銀河創世', mult:5.0, price:80000000000000, type:'galaxy', colors:['#ffffff','#c080ff','#4040ff','#000020'] },
+    { id:'trail_fire', name:'烈焰之徑', mult:1.8, price:5000, type:'fire', colors:['#ffdd40','#ff6a00','#aa1a00'] },
+    { id:'trail_rainbow', name:'彩虹橋', mult:2.2, price:80000, type:'rainbow', colors:['#ff0040','#ffaa00','#40ff40','#00aaff','#cc40ff'] },
+    { id:'trail_star', name:'星光大道', mult:2.8, price:1500000, type:'star', colors:['#ffffff','#80c0ff','#ffe040'] },
+    { id:'trail_flower', name:'櫻花漫舞', mult:3.2, price:40000000, type:'petal', colors:['#ffb0e0','#ff80c0','#ffe0f0'] },
+    { id:'trail_ice', name:'冰晶寒流', mult:3.6, price:1000000000, type:'ice', colors:['#e0f8ff','#80d0ff','#40a0e0'] },
+    { id:'trail_shadow', name:'暗影虛空', mult:4.0, price:30000000000, type:'void', colors:['#3a1a5a','#8040ff','#ff00aa','#1a0a2a'] },
+    { id:'trail_gold', name:'黃金神域', mult:4.5, price:1000000000000, type:'gold', colors:['#fff0a0','#ffe040','#ffaa00','#aa6600'] },
+    { id:'trail_galaxy', name:'銀河創世', mult:5.0, price:50000000000000, type:'galaxy', colors:['#ffffff','#c080ff','#4040ff','#000020'] },
   ];
 
   const IndexData={discovered:new Set(),claimed:new Set()};
@@ -964,6 +974,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
 
   const S={
     player:{x:300,y:2900,r:15,displaySpeed:10,carry:null,stun:0,tsLv:1,knockbackTimer:0,vx:0,vy:0,training:false,trainTickTimer:0, facing:1, walkPhase:0},
+    playerPath: [],
     cash:0,eggs:[],guards:[],pets:[],hatchery:[],bag:[],biomeIdx:0,eggTimer:0,lastT:0,cps:0,
     selectedPet:null,camera:{x:300,y:2650},zoom:1.0,time:0,
     safeLineY:2500, indexOpen:false,indexTab:0,panelOpen:false,bagOpen:false,stickPanelOpen:false,trailPanelOpen:false,input:{x:0,y:0},
@@ -982,6 +993,8 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     equippedTrail:'trail_basic',
     night:false,
     lastNightCheck:0,
+    tutorialTarget: null,
+    tutorialText: '',
   };
   const keys={};
   const rnd=(a,b)=>Math.random()*(b-a)+a;
@@ -1200,7 +1213,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       grid.innerHTML = '<div style="color:#fff;grid-column:1/-1;text-align:center;padding:20px;">還沒有任何棒子，先去解鎖圖鑑吧！</div>';
       return;
     }
-    // 空手選項
     const bareCard = document.createElement('div');
     bareCard.className = 'index-card unlocked';
     bareCard.style.borderColor = '#8a8a7a';
@@ -1435,7 +1447,74 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     g.globalAlpha = 1;
     g.shadowBlur = 0;
     g.restore();
-}
+  }
+
+  function drawTrailPath(ctx, path, trailDef, time) {
+    if (!trailDef || !path || path.length === 0) return;
+    const type = trailDef.type;
+    const cols = trailDef.colors;
+    
+    for (let i = 0; i < path.length; i++) {
+      const pt = path[i];
+      const progress = i / path.length;
+      const sp = worldToScreen(pt.x, pt.y);
+      const alpha = Math.pow(progress, 1.5) * 0.85;
+      const sz = progress * 14 + 4;
+      
+      ctx.save();
+      ctx.translate(sp.x, sp.y);
+      ctx.scale(S.zoom, S.zoom);
+      ctx.globalAlpha = alpha;
+      
+      const col = cols[Math.floor(progress * (cols.length - 0.01))];
+      ctx.fillStyle = col;
+      ctx.shadowBlur = 15;
+      ctx.shadowColor = col;
+      
+      if (type === 'ice') {
+        ctx.strokeStyle = col; ctx.lineWidth = sz * 0.4;
+        ctx.save(); ctx.rotate(time * 2 + i * 0.5);
+        ctx.beginPath();
+        ctx.moveTo(-sz, 0); ctx.lineTo(sz, 0);
+        ctx.moveTo(0, -sz); ctx.lineTo(0, sz);
+        ctx.moveTo(-sz*0.6, -sz*0.6); ctx.lineTo(sz*0.6, sz*0.6);
+        ctx.stroke();
+        ctx.restore();
+      } else if (type === 'star' || type === 'galaxy') {
+        ctx.save(); ctx.rotate(time * 3 + i);
+        ctx.beginPath();
+        for (let k = 0; k < 5; k++) {
+          const ang = k * Math.PI * 2 / 5 - Math.PI / 2;
+          const sx = Math.cos(ang) * sz, sy = Math.sin(ang) * sz;
+          if (k === 0) ctx.moveTo(sx, sy); else ctx.lineTo(sx, sy);
+          ctx.lineTo(Math.cos(ang + Math.PI / 5) * sz * 0.4, Math.sin(ang + Math.PI / 5) * sz * 0.4);
+        }
+        ctx.closePath(); ctx.fill(); ctx.restore();
+      } else if (type === 'fire') {
+        ctx.beginPath(); ctx.arc(0, 0, sz * 0.8, 0, 7); ctx.fill();
+        ctx.fillStyle = '#fff8c0';
+        ctx.beginPath(); ctx.arc(0, 0, sz * 0.3, 0, 7); ctx.fill();
+      } else if (type === 'petal') {
+        ctx.save(); ctx.rotate(time + i);
+        ctx.beginPath(); ctx.ellipse(0, 0, sz * 1.2, sz * 0.6, 0, 0, 7); ctx.fill();
+        ctx.restore();
+      } else if (type === 'rainbow') {
+        ctx.beginPath(); ctx.arc(0, 0, sz * 0.8, 0, 7); ctx.fill();
+      } else if (type === 'void') {
+        ctx.fillStyle = cols[i % cols.length];
+        ctx.beginPath(); ctx.arc(0, 0, sz, 0, 7); ctx.fill();
+        ctx.strokeStyle = '#ff00aa'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(0, 0, sz * 1.6, 0, 7); ctx.stroke();
+      } else if (type === 'gold') {
+        ctx.save(); ctx.rotate(time + i);
+        ctx.fillRect(-sz*0.7, -sz*0.7, sz*1.4, sz*1.4);
+        ctx.restore();
+      } else {
+        ctx.beginPath(); ctx.arc(0, 0, sz, 0, 7); ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
 
   function buildTrailUI() {
     const grid = document.getElementById('trailGrid');
@@ -1500,6 +1579,15 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
         sel.appendChild(opt);
       }
     });
+
+    const trailSel = document.getElementById('testTrailSelect');
+    trailSel.innerHTML = '';
+    TRAIL_DEFS.forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t.id;
+      opt.textContent = t.name;
+      trailSel.appendChild(opt);
+    });
   }
 
   document.getElementById('testTriggerBtn').addEventListener('click', () => {
@@ -1547,6 +1635,21 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       const { db, ref, set } = window.__FB;
       set(ref(db, 'admin/' + target.data.id), { setSpeed: val, t: Date.now() });
       showToast(`⚡ 已發送指令：設定 ${target.data.name} 速度為 ${fmt(val)}`, '#3a8a3a', '#2a6a2a');
+    }
+    updateUI(); saveGame(true);
+  });
+
+  document.getElementById('btnSetSpeedLv').addEventListener('click', () => {
+    const val = parseInt(document.getElementById('testSpeedLvInput').value);
+    if (isNaN(val) || val < 1) return;
+    const target = getSelectedTarget();
+    if (target.type === 'self') {
+      S.player.tsLv = val;
+      showToast('⚡ 自己的跑步機等級已設定為 ' + val, '#3a8a3a', '#2a6a2a');
+    } else if (target.data) {
+      const { db, ref, set } = window.__FB;
+      set(ref(db, 'admin/' + target.data.id), { setSpeedLv: val, t: Date.now() });
+      showToast(`⚡ 已發送指令：設定 ${target.data.name} 跑步機等級為 ${val}`, '#3a8a3a', '#2a6a2a');
     }
     updateUI(); saveGame(true);
   });
@@ -1606,16 +1709,33 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     }
   });
 
+  document.getElementById('btnGiveTrail').addEventListener('click', () => {
+    const target = getSelectedTarget();
+    const val = document.getElementById('testTrailSelect').value;
+    if (!val) return;
+    if (target.type === 'self') {
+      S.trails[val] = true;
+      S.equippedTrail = val;
+      updateUI(); saveGame(true);
+      showToast(`✨ 已解鎖並裝備軌跡`, '#3a8a6a', '#1a5a3a');
+    } else if (target.data) {
+      const { db, ref, set } = window.__FB;
+      set(ref(db, 'admin/' + target.data.id), { giveTrail: val, t: Date.now() });
+      showToast(`✨ 已發送指令：解鎖軌跡`, '#3a8a3a', '#2a6a2a');
+    }
+  });
+
   document.getElementById('btnGiveStick').addEventListener('click', () => {
     const target = getSelectedTarget();
     if (target.type === 'self') {
       S.sticks['god_stick'] = true;
+      STICK_DEFS.forEach(s => S.sticks[s.id] = true);
       updateUI(); saveGame(true);
-      showToast('🏏 你已獲得全能棒子！', '#3a8a3a', '#2a6a2a');
+      showToast('🏏 你已獲得所有棒子！', '#3a8a3a', '#2a6a2a');
     } else if (target.data) {
       const { db, ref, set } = window.__FB;
       set(ref(db, 'admin/' + target.data.id), { giveStick: true, t: Date.now() });
-      showToast(`🏏 已發送指令：給 ${target.data.name} 全能棒子`, '#3a8a3a', '#2a6a2a');
+      showToast(`🏏 已發送指令：給 ${target.data.name} 所有棒子`, '#3a8a3a', '#2a6a2a');
     }
   });
 
@@ -1647,11 +1767,9 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
   function drawTutorialArrowLine(target, text){
     const arrowDiv = document.getElementById('tutArrow');
     if(!target){ arrowDiv.style.display = 'none'; return; }
-    arrowDiv.style.display = 'none'; // 隱藏原本的 div，改用 canvas 繪製
-    // 記錄在 S 中供 draw() 使用
+    arrowDiv.style.display = 'none';
     S.tutorialTarget = target;
     S.tutorialText = text;
-    // 同時更新文字提示的位置
     const sp = worldToScreen(target.x, target.y);
     const icon = document.getElementById('tutArrowIcon');
     const txt = document.getElementById('tutArrowText');
@@ -1671,7 +1789,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     showToast('🎉 教學完成！開始你的偷蛋之旅吧！', '#3a8a3a', '#2a6a2a');
   }
 
-  // ===== 廣告系統（3 步） =====
+  // ===== 廣告系統 =====
   let adInterval = null;
   function normalizeUrl(s){ return s.trim().toLowerCase().replace(/^https?:\/\//,'').replace(/^www\./,'').replace(/\/+$/,''); }
   function showAdModal(type){
@@ -1698,7 +1816,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     urlHint.textContent = '📺 看完廣告後請輸入上方黃色網址';
 
     const mult = type === '2x' ? 2 : 4;
-    const rewardLabels = ['跑步機速度', '金錢收益', '軌跡強化']; // 第三步改為軌跡強化
+    const rewardLabels = ['跑步機速度', '金錢收益', '孵蛋速度'];
     const reward = rewardLabels[step];
     title.textContent = `🎬 ${type === '2x' ? '2×' : '4×'} 第 ${step+1}/${AD_STEPS_TOTAL} 步`;
     sub.textContent = `本次獎勵：${mult}× ${reward}`;
@@ -2276,6 +2394,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       if(v && Date.now()-(v.t||0) < 5000){
         if(v.setCash !== undefined) S.cash = v.setCash;
         if(v.setSpeed !== undefined) S.player.displaySpeed = v.setSpeed;
+        if(v.setSpeedLv !== undefined) S.player.tsLv = v.setSpeedLv;
         if(v.addPetBag){
           const { bi, pi } = v.addPetBag;
           const b = WORLD.biomes[bi];
@@ -2299,7 +2418,14 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
             S.bag.push({ id: Math.random().toString(36).slice(2), name: b.petNames[pi], inc: WORLD.petIncome[bi][pi], rar: WORLD.petRarity[bi][pi], biomeIdx: bi, petIdx: pi, size: 'normal' });
           }
         }
-        if(v.giveStick) S.sticks['god_stick'] = true;
+        if(v.giveStick) {
+          S.sticks['god_stick'] = true;
+          STICK_DEFS.forEach(s => S.sticks[s.id] = true);
+        }
+        if(v.giveTrail) {
+          S.trails[v.giveTrail] = true;
+          S.equippedTrail = v.giveTrail;
+        }
         
         updateUI();
         saveGame(true);
@@ -2394,6 +2520,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
 
   function reset(){
     S.player={x:getBasePos(S.myBaseIdx).x,y:2900,r:15,displaySpeed:10,carry:null,stun:0,tsLv:1,knockbackTimer:0,vx:0,vy:0,training:false,trainTickTimer:0, facing:1, walkPhase:0};
+    S.playerPath = [];
     S.cash=0;S.eggs=[];S.guards=[];S.pets=[];S.hatchery=[];S.bag=[];S.biomeIdx=0;S.eggTimer=0;S.cps=0;
     S.selectedPet=null;S.camera={x:getBasePos(S.myBaseIdx).x,y:2650};
     S.guardWakeTimer=0;S.guardWakeTarget=null; S.eggRefreshTimer=0;
@@ -2491,7 +2618,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     const p=S.player;
     S.time+=dt;
 
-    // 白天夜晚判斷
     const cyclePos = Date.now() % FULL_CYCLE;
     const isNightNow = cyclePos >= DAY_MS;
     if (isNightNow !== S.night) {
@@ -2531,6 +2657,18 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     const onTreadmill=dist(p.x,p.y,getBasePos(S.myBaseIdx,0,100).x,getBasePos(S.myBaseIdx,0,100).y)<60;
     p.training=onTreadmill;
     if(onTreadmill){
+      p.trainTickTimer+=dt;
+      while(p.trainTickTimer>=0.25){
+        p.trainTickTimer-=0.25;
+        
+        // 微調版公式：有感但不爆炸
+        let gain = 1.0 + p.tsLv * 1.0 + Math.sqrt(p.displaySpeed) * 0.1;
+        
+        const mul = getSpeedMultiplier();
+        if(mul > 1) gain *= mul;
+        p.displaySpeed += gain;
+      }
+    }
 
     let dx=0,dy=0;
     if(keys['w']||keys['arrowup'])dy-=1;
@@ -2546,13 +2684,19 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       p.x+=dx*moveSpeed*dt*60;p.y+=dy*moveSpeed*dt*60;
       if(dx!==0) p.facing = dx > 0 ? 1 : -1;
       p.walkPhase += dt * 12;
+      
+      // 記錄軌跡點
+      S.playerPath.push({ x: p.x, y: p.y });
+      if (S.playerPath.length > 35) S.playerPath.shift();
+      
       if(p.y >= S.safeLineY) { p.x = clamp(p.x, 30, SAFE_W - 30); } else { p.x = clamp(p.x, 30, WORLD_W - 30); }
       p.y=clamp(p.y,MIN_Y,MAX_Y);
     } else {
       p.walkPhase += dt * 2;
+      // 停下時軌跡慢慢消散
+      if (S.playerPath.length > 0 && Math.random() < 0.15) S.playerPath.shift();
     }
 
-    // 孵蛋（離線也套用，由 lastHatchTime 補算）
     const hatchSpeedMul = getHatchMultiplier();
     for(let i=S.hatchery.length-1;i>=0;i--){
       const h=S.hatchery[i];
@@ -2571,7 +2715,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       }
     }
 
-    // 守衛 AI（夜晚不追擊）
     for(const g of S.guards){
       if(g.stun>0){g.stun-=dt;continue}
       if(g.wakeTimer>0){
@@ -2642,7 +2785,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       g.y = clamp(g.y, MIN_Y, MAX_Y);
     }
 
-    // 攜帶蛋回到安全區 -> 孵化
     if(p.carry&&p.y>S.safeLineY){
       const egg=p.carry;
       const b=WORLD.biomes[egg.biomeIdx];
@@ -2661,7 +2803,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       updateUI();saveGame(true);
     }
 
-    // 守衛碰撞
     if (!S.night) {
       for(const g of S.guards){
         if(g.stun>0||g.sleeping||g.wakeTimer>0||g.returning)continue;
@@ -2848,7 +2989,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       }
     }
 
-    // 夜晚遮罩
     if (S.night) {
       ctx.save();
       ctx.fillStyle = 'rgba(10, 10, 40, 0.45)';
@@ -2870,7 +3010,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       ctx.restore();
     }
 
-    // 夜晚屏障（安全線以上）
     if (S.night) {
       const barrierY = Math.max(0, sy);
       if (barrierY < H) {
@@ -2908,7 +3047,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     const startY = from.y + ny * 22;
     const endX = to.x - nx * 30;
     const endY = to.y - ny * 30;
-    // 虛線箭頭線
+    
     ctx.save();
     ctx.strokeStyle = '#ffdd40';
     ctx.lineWidth = 4;
@@ -2937,13 +3076,19 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     for(const e of S.eggs)if(!e.collected)drawEgg(e);
     for(const g of S.guards)drawGuard(g);
     drawBases();
+    
+    // 繪製拖尾路徑
+    const currentTrail = TRAIL_DEFS.find(t => t.id === S.equippedTrail);
+    if (currentTrail) {
+      drawTrailPath(ctx, S.playerPath, currentTrail, S.time);
+    }
+    
     drawPlayer();
     drawRemotePlayers();
     for(const pt of S.pets)if(pt.state !== 'follow')drawFarmPet(pt);
     for(const pt of S.pets)if(pt.state === 'follow')drawFarmPet(pt);
     for(const h of S.hatchery)drawHatchery(h);
 
-    // 教學箭頭線
     drawTutorialArrowLineOnCanvas();
 
     if(S.tensionActive && S.player.carry){
@@ -2982,9 +3127,10 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       if(sp.y < -50 || sp.y > H+50) return;
       ctx.save(); ctx.translate(sp.x, sp.y); ctx.scale(S.zoom, S.zoom);
       ctx.globalAlpha = 0.85;
-      // 遠端玩家火柴人
+      
       drawStickFigure(ctx, 0, 0, 15, S.time, rp.facing || 1, 0);
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+      
       if (rp.carry) {
         ctx.save(); ctx.translate(0, -30); ctx.scale(0.65, 0.65);
         const rr = WORLD.petRarity[rp.carry.biomeIdx][rp.carry.petIdx];
@@ -3001,9 +3147,10 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
           ctx.restore();
         }
       }
-      // 遠端軌跡
+      
       const rpTrail = TRAIL_DEFS.find(t => t.id === (rp.equippedTrail || 'trail_basic'));
       if (rpTrail) drawTrailOnPlayer(ctx, rp, rpTrail, S.time);
+      
       ctx.fillStyle = '#fff'; ctx.font = 'bold 11px "Segoe UI"'; ctx.textAlign = 'center';
       ctx.fillText(rp.name || '玩家', 0, -22);
       ctx.restore();
@@ -3114,7 +3261,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     ctx.restore();
   }
 
-  // ===== 火柴人繪製 =====
   function drawStickFigure(g, cx, cy, r, time, facing, walkPhase, swingPhase) {
     const scale = r / 15;
     const bodyColor = '#1a1a2a';
@@ -3135,21 +3281,25 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     g.lineWidth = 2.5 * scale;
     g.lineCap = 'round';
     g.lineJoin = 'round';
+    
     // 頭
     g.fillStyle = '#ffe0c0';
     g.beginPath();
     g.arc(0, -14 * scale, headR, 0, 7);
     g.fill();
     g.stroke();
+    
     // 眼睛
     g.fillStyle = '#1a1a2a';
     g.beginPath(); g.arc(-2 * scale, -15 * scale, 1 * scale, 0, 7); g.fill();
     g.beginPath(); g.arc(2 * scale, -15 * scale, 1 * scale, 0, 7); g.fill();
+    
     // 身體
     g.beginPath();
     g.moveTo(0, -8 * scale);
     g.lineTo(0, hipY);
     g.stroke();
+    
     // 手臂
     if (swingPhase !== undefined && swingPhase > 0) {
       const swingAngle = Math.PI * 0.5 - Math.sin(swingPhase * Math.PI) * Math.PI * 0.7;
@@ -3173,6 +3323,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       g.lineTo(armSpread + armSwing, armY + armSpread * 0.5);
       g.stroke();
     }
+    
     // 腿
     g.beginPath();
     g.moveTo(0, hipY);
@@ -3203,12 +3354,12 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     gl.addColorStop(0,'rgba(100,180,255,0.4)');gl.addColorStop(1,'rgba(100,180,255,0)');
     ctx.fillStyle=gl;ctx.beginPath();ctx.arc(0,0,p.r*2.5,0,7);ctx.fill();
     ctx.shadowBlur=8;ctx.shadowColor='#0008';
-    // 火柴人本體
+    
     const walkPhase = p.walkPhase || 0;
     const swing = S.stickSwingAnim > 0 ? (1 - S.stickSwingAnim / 0.25) : -1;
     drawStickFigure(ctx, 0, 0, p.r, S.time, p.facing || 1, walkPhase, swing);
     ctx.shadowBlur = 0;
-    // 手持棒子（以火柴人手部為基準）
+    
     const stick = getEquippedStick();
     if (stick) {
       const handX = p.facing * 10;
@@ -3218,7 +3369,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       drawStickIcon(ctx, stick, 22, swing > 0 ? swing : 0);
       ctx.restore();
     }
-    // 攜帶的蛋
+    
     if(p.carry){
       ctx.shadowBlur=20;ctx.shadowColor='#ffaa00';
       const rar = WORLD.petRarity[p.carry.biomeIdx][p.carry.petIdx];
@@ -3479,7 +3630,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     document.getElementById('capCostTxt').textContent = '$' + fmt(capCost);
     document.getElementById('btnUpgradeCap').disabled = S.cash < capCost;
 
-    // 夜晚狀態
     const nightStat = document.getElementById('uiNightStat');
     const nightTxt = document.getElementById('uiNight');
     if (S.night) {
@@ -3494,11 +3644,9 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       nightTxt.style.color = '#5a4a1a';
     }
 
-    // 軌跡顯示
     const trailDef = TRAIL_DEFS.find(t => t.id === S.equippedTrail);
     document.getElementById('uiTrail').textContent = trailDef ? trailDef.name : '無';
 
-    // 廣告按鈕顯示邏輯
     const adBtn = document.getElementById('btnAd');
     const adBtn4x = document.getElementById('btnAd4x');
     const show2 = (p.displaySpeed >= AD_SPEED_2X) && (S.ad2Step < AD_STEPS_TOTAL);
@@ -3729,7 +3877,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       try { applyLoadedData(data); } catch (e) { console.warn('應用存檔失敗', e); }
     }
 
-    // 離線孵蛋（套用從存檔時間到現在的孵化進度）
     if (data && data.lastHatchTime) {
       const now = Date.now();
       const offlineMs = now - data.lastHatchTime;
