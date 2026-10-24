@@ -805,7 +805,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     }
     return 25+Math.log10(display/1e15)*1.5;
   }
-  function treadmillCost(lv){return Math.floor(40*Math.pow(1.8,lv-1))}
+  function treadmillCost(lv){return Math.floor(40*Math.pow(1.6,lv-1))}
   function petCapCost(lv){return Math.floor(500*Math.pow(10,lv-1))}
 
   // ==== 廣告門檻 ====
@@ -1331,19 +1331,47 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     const cols = trailDef.colors;
     const t = time;
     g.save();
-    for (let i = 0; i < 6; i++) {
-      const t2 = i / 6;
-      const angle = t * 3 + i * 1.2;
-      const x = -Math.cos(angle) * (10 + t2 * 20);
-      const y = -Math.sin(angle) * (10 + t2 * 20) + t2 * 15;
-      const alpha = (1 - t2) * 0.6;
-      const sz = 3 + (1 - t2) * 4;
-      if (type === 'fire' || type === 'void' || type === 'glow') {
-        g.fillStyle = cols[i % cols.length]; g.globalAlpha = alpha;
-        g.beginPath(); g.arc(x, y, sz, 0, 7); g.fill();
-      } else if (type === 'star' || type === 'galaxy') {
-        g.fillStyle = cols[i % cols.length]; g.globalAlpha = alpha;
-        g.save(); g.translate(x, y); g.rotate(angle);
+
+    // ===== 腳下地面光環（讓軌跡一眼可見）=====
+    const ringR = 24 + Math.sin(t * 3) * 4;
+    const ringGrad = g.createRadialGradient(0, 10, ringR * 0.2, 0, 10, ringR * 1.8);
+    ringGrad.addColorStop(0, hexA(cols[0], 0.65));
+    ringGrad.addColorStop(0.5, hexA(cols[Math.min(1, cols.length - 1)], 0.4));
+    ringGrad.addColorStop(1, hexA(cols[0], 0));
+    g.fillStyle = ringGrad;
+    g.beginPath();
+    g.ellipse(0, 10, ringR * 1.8, ringR * 0.7, 0, 0, 7);
+    g.fill();
+
+    // 地面光環邊緣（實線圈）
+    g.strokeStyle = hexA(cols[0], 0.8);
+    g.lineWidth = 2.5;
+    g.shadowBlur = 12;
+    g.shadowColor = cols[0];
+    g.beginPath();
+    g.ellipse(0, 10, ringR * 1.4, ringR * 0.55, 0, 0, 7);
+    g.stroke();
+    g.shadowBlur = 0;
+
+    // ===== 環繞粒子（加大、加亮、加量）=====
+    const N = 20;
+    for (let i = 0; i < N; i++) {
+      const phase = i / N;
+      const angle = t * 2.2 + i * (Math.PI * 2 / N);
+      const radius = 20 + Math.sin(t * 3 + i * 0.7) * 8 + phase * 6;
+      const x = Math.cos(angle) * radius;
+      const y = Math.sin(angle) * radius * 0.65 - 10 + Math.sin(t * 4 + i * 1.3) * 6;
+      const alpha = 0.55 + 0.45 * Math.sin(t * 5 + i * 1.7);
+      const sz = 5 + Math.sin(t * 4 + i * 1.5) * 2.5 + phase * 2;
+      const col = cols[i % cols.length];
+
+      g.globalAlpha = alpha;
+      g.shadowBlur = 10;
+      g.shadowColor = col;
+
+      if (type === 'star' || type === 'galaxy') {
+        g.fillStyle = col;
+        g.save(); g.translate(x, y); g.rotate(t * 2 + i);
         g.beginPath();
         for (let k = 0; k < 5; k++) {
           const ang = k * Math.PI * 2 / 5 - Math.PI / 2;
@@ -1353,29 +1381,61 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
         }
         g.closePath(); g.fill(); g.restore();
       } else if (type === 'rainbow') {
-        g.strokeStyle = cols[i % cols.length]; g.lineWidth = sz * 0.6; g.globalAlpha = alpha;
-        g.beginPath(); g.arc(0, 0, 10 + t2 * 25, angle - 0.4, angle + 0.4); g.stroke();
+        g.strokeStyle = col; g.lineWidth = sz * 0.7;
+        g.beginPath(); g.arc(0, 0, radius, angle - 0.35, angle + 0.35); g.stroke();
       } else if (type === 'petal') {
-        g.fillStyle = cols[i % cols.length]; g.globalAlpha = alpha;
-        g.save(); g.translate(x, y); g.rotate(angle);
-        g.beginPath(); g.ellipse(0, 0, sz, sz * 0.5, 0, 0, 7); g.fill();
+        g.fillStyle = col;
+        g.save(); g.translate(x, y); g.rotate(angle + t);
+        g.beginPath(); g.ellipse(0, 0, sz * 1.2, sz * 0.6, 0, 0, 7); g.fill();
         g.restore();
       } else if (type === 'ice') {
-        g.strokeStyle = cols[i % cols.length]; g.lineWidth = sz * 0.4; g.globalAlpha = alpha;
-        g.save(); g.translate(x, y); g.rotate(angle);
+        g.strokeStyle = col; g.lineWidth = sz * 0.4;
+        g.save(); g.translate(x, y); g.rotate(angle + t * 0.5);
         g.beginPath(); g.moveTo(-sz, 0); g.lineTo(sz, 0); g.moveTo(0, -sz); g.lineTo(0, sz); g.stroke();
         g.restore();
+      } else if (type === 'fire') {
+        g.fillStyle = col;
+        g.beginPath(); g.arc(x, y - phase * 8, sz * (1 - phase * 0.4), 0, 7); g.fill();
+        // 火焰頂端
+        g.fillStyle = '#fff8c0'; g.globalAlpha = alpha * 0.7;
+        g.beginPath(); g.arc(x, y - phase * 8 - sz * 0.4, sz * 0.35, 0, 7); g.fill();
+      } else if (type === 'void') {
+        g.fillStyle = col;
+        g.beginPath(); g.arc(x, y, sz * 1.1, 0, 7); g.fill();
+        g.strokeStyle = '#ff00aa'; g.lineWidth = 1.5; g.globalAlpha = alpha * 0.6;
+        g.beginPath(); g.arc(x, y, sz * 1.6, 0, 7); g.stroke();
       } else if (type === 'gold') {
-        g.fillStyle = cols[i % cols.length]; g.globalAlpha = alpha;
-        g.fillRect(x - sz, y - sz, sz * 2, sz * 2);
+        g.fillStyle = col;
+        g.save(); g.translate(x, y); g.rotate(angle);
+        g.fillRect(-sz, -sz, sz * 2, sz * 2);
+        g.restore();
+      } else if (type === 'glow') {
+        g.fillStyle = col;
+        g.beginPath(); g.arc(x, y, sz * 1.2, 0, 7); g.fill();
       } else {
-        g.fillStyle = cols[i % cols.length]; g.globalAlpha = alpha;
+        g.fillStyle = col;
         g.beginPath(); g.arc(x, y, sz, 0, 7); g.fill();
       }
     }
+
+    // ===== 頭頂向上飄散的拖尾粒子 =====
+    for (let i = 0; i < 6; i++) {
+      const lifeT = ((t * 1.2 + i * 0.35) % 1);
+      const yy = -20 - lifeT * 30;
+      const xx = Math.sin(t * 4 + i * 2) * 8;
+      const alpha = (1 - lifeT) * 0.7;
+      const sz = 4 * (1 - lifeT * 0.5);
+      g.globalAlpha = alpha;
+      g.fillStyle = cols[i % cols.length];
+      g.shadowBlur = 8;
+      g.shadowColor = cols[i % cols.length];
+      g.beginPath(); g.arc(xx, yy, sz, 0, 7); g.fill();
+    }
+
     g.globalAlpha = 1;
+    g.shadowBlur = 0;
     g.restore();
-  }
+}
 
   function buildTrailUI() {
     const grid = document.getElementById('trailGrid');
@@ -2471,15 +2531,17 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     const onTreadmill=dist(p.x,p.y,getBasePos(S.myBaseIdx,0,100).x,getBasePos(S.myBaseIdx,0,100).y)<60;
     p.training=onTreadmill;
     if(onTreadmill){
-      p.trainTickTimer+=dt;
-      while(p.trainTickTimer>=0.25){
-        p.trainTickTimer-=0.25;
-        let gain=0.8+p.tsLv*0.7+Math.sqrt(p.displaySpeed)*0.08;
-        const mul = getSpeedMultiplier();
-        if(mul > 1) gain *= mul;
-        p.displaySpeed+=gain;
-      }
-    }
+  p.trainTickTimer+=dt;
+  while(p.trainTickTimer>=0.25){
+    p.trainTickTimer-=0.25;
+    // 基礎增益跟當前速度掛鉤 + 等級指數乘數（每級 ×1.6）
+    let baseGain = 0.5 + Math.sqrt(p.displaySpeed) * 0.12;
+    let gain = baseGain * Math.pow(1.6, p.tsLv - 1);
+    const mul = getSpeedMultiplier();
+    if(mul > 1) gain *= mul;
+    p.displaySpeed += gain;
+  }
+}
 
     let dx=0,dy=0;
     if(keys['w']||keys['arrowup'])dy-=1;
