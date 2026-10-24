@@ -815,7 +815,8 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     }
     return 25+Math.log10(display/1e15)*1.5;
   }
-  function treadmillCost(lv){return Math.floor(40*Math.pow(1.5,lv-1))}
+  // 調高跑步機成本，讓後期非常吃力
+  function treadmillCost(lv){return Math.floor(40*Math.pow(1.45,lv-1))}
   function petCapCost(lv){return Math.floor(500*Math.pow(10,lv-1))}
 
   // ==== 廣告門檻 ====
@@ -825,12 +826,13 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
   const AD_STEPS_TOTAL = 3;
 
   // ==== 軌跡系統 ====
+  // 全部軌跡都要買，第一個也要錢。前幾個特效極簡化，後面的極其華麗。
   const TRAIL_DEFS = [
-    { id:'trail_basic', name:'初心之光', mult:1.5, price:0, type:'glow', colors:['#ffffff','#a0e0ff'] },
-    { id:'trail_fire', name:'烈焰之徑', mult:1.8, price:5000, type:'fire', colors:['#ffdd40','#ff6a00','#aa1a00'] },
-    { id:'trail_rainbow', name:'彩虹橋', mult:2.2, price:80000, type:'rainbow', colors:['#ff0040','#ffaa00','#40ff40','#00aaff','#cc40ff'] },
-    { id:'trail_star', name:'星光大道', mult:2.8, price:1500000, type:'star', colors:['#ffffff','#80c0ff','#ffe040'] },
-    { id:'trail_flower', name:'櫻花漫舞', mult:3.2, price:40000000, type:'petal', colors:['#ffb0e0','#ff80c0','#ffe0f0'] },
+    { id:'trail_basic', name:'初心光點', mult:1.5, price:5000, type:'glow', colors:['#ffffff'] },
+    { id:'trail_fire', name:'烈焰之徑', mult:1.8, price:50000, type:'fire', colors:['#ffdd40','#ff6a00'] },
+    { id:'trail_rainbow', name:'彩虹橋', mult:2.2, price:500000, type:'rainbow', colors:['#ff0040','#ffaa00','#40ff40','#00aaff','#cc40ff'] },
+    { id:'trail_star', name:'星光大道', mult:2.8, price:5000000, type:'star', colors:['#ffffff','#80c0ff','#ffe040'] },
+    { id:'trail_flower', name:'櫻花漫舞', mult:3.2, price:50000000, type:'petal', colors:['#ffb0e0','#ff80c0','#ffe0f0'] },
     { id:'trail_ice', name:'冰晶寒流', mult:3.6, price:1000000000, type:'ice', colors:['#e0f8ff','#80d0ff','#40a0e0'] },
     { id:'trail_shadow', name:'暗影虛空', mult:4.0, price:30000000000, type:'void', colors:['#3a1a5a','#8040ff','#ff00aa','#1a0a2a'] },
     { id:'trail_gold', name:'黃金神域', mult:4.5, price:1000000000000, type:'gold', colors:['#fff0a0','#ffe040','#ffaa00','#aa6600'] },
@@ -900,8 +902,8 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     S.ad4Step = typeof d.ad4Step === 'number' ? d.ad4Step : (d.quadSpeed ? 3 : 0);
     S.equippedStick=d.equippedStick || null;
     S.trails = d.trails || {};
-    S.equippedTrail = d.equippedTrail || 'trail_basic';
-    if (!S.trails['trail_basic']) S.trails['trail_basic'] = true;
+    S.equippedTrail = d.equippedTrail || null;
+    
     S.pets=[];
     if(Array.isArray(d.pets)){
       const usedSlots = new Set();
@@ -989,8 +991,8 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     stickSwingAnim:0,
     ad2Step:0,
     ad4Step:0,
-    trails:{'trail_basic':true},
-    equippedTrail:'trail_basic',
+    trails:{},
+    equippedTrail:null,
     night:false,
     lastNightCheck:0,
     tutorialTarget: null,
@@ -1033,7 +1035,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
   }
   function getTrailMult() {
     const trail = TRAIL_DEFS.find(t => t.id === S.equippedTrail);
-    return trail ? trail.mult : 1.5;
+    return trail ? trail.mult : 1.0;
   }
 
   const PLAYER_ID = localStorage.getItem('pid') ||
@@ -1276,19 +1278,20 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
   function drawTrailPreview(g, def, s, time) {
     const type = def.type;
     const cols = def.colors;
+    const isSimple = def.id === 'trail_basic' || def.id === 'trail_fire';
     g.save();
-    for (let i = 0; i < 12; i++) {
-      const t = i / 12;
+    for (let i = 0; i < (isSimple ? 8 : 12); i++) {
+      const t = i / (isSimple ? 8 : 12);
       const a = t * Math.PI * 2 + time * 2;
       const r = s * (0.3 + t * 0.7);
       const x = Math.cos(a) * r;
       const y = Math.sin(a) * r;
       const alpha = 1 - t * 0.7;
       if (type === 'glow') {
-        g.fillStyle = cols[i % 2]; g.globalAlpha = alpha * 0.7;
+        g.fillStyle = cols[0]; g.globalAlpha = alpha * 0.7;
         g.beginPath(); g.arc(x, y, s * 0.15 * (1 - t * 0.5), 0, 7); g.fill();
       } else if (type === 'fire') {
-        g.fillStyle = cols[i % 3]; g.globalAlpha = alpha;
+        g.fillStyle = cols[i % 2]; g.globalAlpha = alpha;
         g.beginPath(); g.arc(x, y - t * s * 0.3, s * 0.18 * (1 - t * 0.4), 0, 7); g.fill();
       } else if (type === 'rainbow') {
         g.strokeStyle = cols[i % 5]; g.lineWidth = s * 0.12; g.globalAlpha = alpha;
@@ -1342,31 +1345,32 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     const type = trailDef.type;
     const cols = trailDef.colors;
     const t = time;
+    const isSimple = trailDef.id === 'trail_basic' || trailDef.id === 'trail_fire';
     g.save();
 
-    // ===== 腳下地面光環（讓軌跡一眼可見）=====
-    const ringR = 24 + Math.sin(t * 3) * 4;
-    const ringGrad = g.createRadialGradient(0, 10, ringR * 0.2, 0, 10, ringR * 1.8);
-    ringGrad.addColorStop(0, hexA(cols[0], 0.65));
-    ringGrad.addColorStop(0.5, hexA(cols[Math.min(1, cols.length - 1)], 0.4));
-    ringGrad.addColorStop(1, hexA(cols[0], 0));
-    g.fillStyle = ringGrad;
-    g.beginPath();
-    g.ellipse(0, 10, ringR * 1.8, ringR * 0.7, 0, 0, 7);
-    g.fill();
+    // 腳下光環 (簡化版沒有光環)
+    if (!isSimple) {
+      const ringR = 24 + Math.sin(t * 3) * 4;
+      const ringGrad = g.createRadialGradient(0, 10, ringR * 0.2, 0, 10, ringR * 1.8);
+      ringGrad.addColorStop(0, hexA(cols[0], 0.65));
+      ringGrad.addColorStop(0.5, hexA(cols[Math.min(1, cols.length - 1)], 0.4));
+      ringGrad.addColorStop(1, hexA(cols[0], 0));
+      g.fillStyle = ringGrad;
+      g.beginPath();
+      g.ellipse(0, 10, ringR * 1.8, ringR * 0.7, 0, 0, 7);
+      g.fill();
 
-    // 地面光環邊緣（實線圈）
-    g.strokeStyle = hexA(cols[0], 0.8);
-    g.lineWidth = 2.5;
-    g.shadowBlur = 12;
-    g.shadowColor = cols[0];
-    g.beginPath();
-    g.ellipse(0, 10, ringR * 1.4, ringR * 0.55, 0, 0, 7);
-    g.stroke();
-    g.shadowBlur = 0;
+      g.strokeStyle = hexA(cols[0], 0.8);
+      g.lineWidth = 2.5;
+      g.shadowBlur = 12;
+      g.shadowColor = cols[0];
+      g.beginPath();
+      g.ellipse(0, 10, ringR * 1.4, ringR * 0.55, 0, 0, 7);
+      g.stroke();
+      g.shadowBlur = 0;
+    }
 
-    // ===== 環繞粒子（加大、加亮、加量）=====
-    const N = 20;
+    const N = isSimple ? 8 : 20;
     for (let i = 0; i < N; i++) {
       const phase = i / N;
       const angle = t * 2.2 + i * (Math.PI * 2 / N);
@@ -1378,10 +1382,16 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       const col = cols[i % cols.length];
 
       g.globalAlpha = alpha;
-      g.shadowBlur = 10;
+      g.shadowBlur = isSimple ? 0 : 10;
       g.shadowColor = col;
 
-      if (type === 'star' || type === 'galaxy') {
+      if (type === 'glow') {
+        g.fillStyle = col;
+        g.beginPath(); g.arc(x, y, sz * 0.6, 0, 7); g.fill(); // 極簡化
+      } else if (type === 'fire') {
+        g.fillStyle = col;
+        g.beginPath(); g.arc(x, y - phase * 8, sz * 0.8, 0, 7); g.fill(); // 極簡化
+      } else if (type === 'star' || type === 'galaxy') {
         g.fillStyle = col;
         g.save(); g.translate(x, y); g.rotate(t * 2 + i);
         g.beginPath();
@@ -1405,12 +1415,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
         g.save(); g.translate(x, y); g.rotate(angle + t * 0.5);
         g.beginPath(); g.moveTo(-sz, 0); g.lineTo(sz, 0); g.moveTo(0, -sz); g.lineTo(0, sz); g.stroke();
         g.restore();
-      } else if (type === 'fire') {
-        g.fillStyle = col;
-        g.beginPath(); g.arc(x, y - phase * 8, sz * (1 - phase * 0.4), 0, 7); g.fill();
-        // 火焰頂端
-        g.fillStyle = '#fff8c0'; g.globalAlpha = alpha * 0.7;
-        g.beginPath(); g.arc(x, y - phase * 8 - sz * 0.4, sz * 0.35, 0, 7); g.fill();
       } else if (type === 'void') {
         g.fillStyle = col;
         g.beginPath(); g.arc(x, y, sz * 1.1, 0, 7); g.fill();
@@ -1421,27 +1425,22 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
         g.save(); g.translate(x, y); g.rotate(angle);
         g.fillRect(-sz, -sz, sz * 2, sz * 2);
         g.restore();
-      } else if (type === 'glow') {
-        g.fillStyle = col;
-        g.beginPath(); g.arc(x, y, sz * 1.2, 0, 7); g.fill();
-      } else {
-        g.fillStyle = col;
-        g.beginPath(); g.arc(x, y, sz, 0, 7); g.fill();
       }
     }
 
-    // ===== 頭頂向上飄散的拖尾粒子 =====
-    for (let i = 0; i < 6; i++) {
-      const lifeT = ((t * 1.2 + i * 0.35) % 1);
-      const yy = -20 - lifeT * 30;
-      const xx = Math.sin(t * 4 + i * 2) * 8;
-      const alpha = (1 - lifeT) * 0.7;
-      const sz = 4 * (1 - lifeT * 0.5);
-      g.globalAlpha = alpha;
-      g.fillStyle = cols[i % cols.length];
-      g.shadowBlur = 8;
-      g.shadowColor = cols[i % cols.length];
-      g.beginPath(); g.arc(xx, yy, sz, 0, 7); g.fill();
+    if (!isSimple) {
+      for (let i = 0; i < 6; i++) {
+        const lifeT = ((t * 1.2 + i * 0.35) % 1);
+        const yy = -20 - lifeT * 30;
+        const xx = Math.sin(t * 4 + i * 2) * 8;
+        const alpha = (1 - lifeT) * 0.7;
+        const sz = 4 * (1 - lifeT * 0.5);
+        g.globalAlpha = alpha;
+        g.fillStyle = cols[i % cols.length];
+        g.shadowBlur = 8;
+        g.shadowColor = cols[i % cols.length];
+        g.beginPath(); g.arc(xx, yy, sz, 0, 7); g.fill();
+      }
     }
 
     g.globalAlpha = 1;
@@ -1453,6 +1452,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     if (!trailDef || !path || path.length === 0) return;
     const type = trailDef.type;
     const cols = trailDef.colors;
+    const isSimple = trailDef.id === 'trail_basic' || trailDef.id === 'trail_fire';
     
     for (let i = 0; i < path.length; i++) {
       const pt = path[i];
@@ -1468,10 +1468,14 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       
       const col = cols[Math.floor(progress * (cols.length - 0.01))];
       ctx.fillStyle = col;
-      ctx.shadowBlur = 15;
+      ctx.shadowBlur = isSimple ? 0 : 15;
       ctx.shadowColor = col;
       
-      if (type === 'ice') {
+      if (type === 'glow') {
+        ctx.beginPath(); ctx.arc(0, 0, sz * 0.5, 0, 7); ctx.fill();
+      } else if (type === 'fire') {
+        ctx.beginPath(); ctx.arc(0, 0, sz * 0.7, 0, 7); ctx.fill();
+      } else if (type === 'ice') {
         ctx.strokeStyle = col; ctx.lineWidth = sz * 0.4;
         ctx.save(); ctx.rotate(time * 2 + i * 0.5);
         ctx.beginPath();
@@ -1490,10 +1494,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
           ctx.lineTo(Math.cos(ang + Math.PI / 5) * sz * 0.4, Math.sin(ang + Math.PI / 5) * sz * 0.4);
         }
         ctx.closePath(); ctx.fill(); ctx.restore();
-      } else if (type === 'fire') {
-        ctx.beginPath(); ctx.arc(0, 0, sz * 0.8, 0, 7); ctx.fill();
-        ctx.fillStyle = '#fff8c0';
-        ctx.beginPath(); ctx.arc(0, 0, sz * 0.3, 0, 7); ctx.fill();
       } else if (type === 'petal') {
         ctx.save(); ctx.rotate(time + i);
         ctx.beginPath(); ctx.ellipse(0, 0, sz * 1.2, sz * 0.6, 0, 0, 7); ctx.fill();
@@ -1509,8 +1509,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
         ctx.save(); ctx.rotate(time + i);
         ctx.fillRect(-sz*0.7, -sz*0.7, sz*1.4, sz*1.4);
         ctx.restore();
-      } else {
-        ctx.beginPath(); ctx.arc(0, 0, sz, 0, 7); ctx.fill();
       }
       ctx.restore();
     }
@@ -1716,7 +1714,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     if (target.type === 'self') {
       S.trails[val] = true;
       S.equippedTrail = val;
-      updateUI(); saveGame(true);
+      updateUI(); saveGame(true); buildTrailUI();
       showToast(`✨ 已解鎖並裝備軌跡`, '#3a8a6a', '#1a5a3a');
     } else if (target.data) {
       const { db, ref, set } = window.__FB;
@@ -1730,7 +1728,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     if (target.type === 'self') {
       S.sticks['god_stick'] = true;
       STICK_DEFS.forEach(s => S.sticks[s.id] = true);
-      updateUI(); saveGame(true);
+      updateUI(); saveGame(true); buildStickUI();
       showToast('🏏 你已獲得所有棒子！', '#3a8a3a', '#2a6a2a');
     } else if (target.data) {
       const { db, ref, set } = window.__FB;
@@ -2533,8 +2531,8 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     S.stickSwingAnim=0;
     S.ad2Step=0; S.ad4Step=0;
     S.doubleSpeed=false; S.quadSpeed=false;
-    S.trails = {'trail_basic':true};
-    S.equippedTrail = 'trail_basic';
+    S.trails = {};
+    S.equippedTrail = null;
     S.night = false;
     S.tutorialTarget = null; S.tutorialText = '';
     for(let bi=0;bi<WORLD.biomes.length;bi++){spawnEggsForBiome(bi);spawnGuardsForBiome(bi)}
@@ -2661,8 +2659,9 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       while(p.trainTickTimer>=0.25){
         p.trainTickTimer-=0.25;
         
-        // 微調版公式：有感但不爆炸
-        let gain = 1.0 + p.tsLv * 1.0 + Math.sqrt(p.displaySpeed) * 0.1;
+        // 後期吃力但前期平滑的公式
+        // 基礎 2，速度的 0.8 次方 * 0.5，再乘上等級
+        let gain = (2 + Math.pow(p.displaySpeed, 0.8) * 0.5) * p.tsLv;
         
         const mul = getSpeedMultiplier();
         if(mul > 1) gain *= mul;
@@ -2685,7 +2684,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       if(dx!==0) p.facing = dx > 0 ? 1 : -1;
       p.walkPhase += dt * 12;
       
-      // 記錄軌跡點
       S.playerPath.push({ x: p.x, y: p.y });
       if (S.playerPath.length > 35) S.playerPath.shift();
       
@@ -2693,7 +2691,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       p.y=clamp(p.y,MIN_Y,MAX_Y);
     } else {
       p.walkPhase += dt * 2;
-      // 停下時軌跡慢慢消散
       if (S.playerPath.length > 0 && Math.random() < 0.15) S.playerPath.shift();
     }
 
@@ -3058,7 +3055,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     ctx.moveTo(startX, startY);
     ctx.lineTo(endX, endY);
     ctx.stroke();
-    // 箭頭頭部
+    
     const angle = Math.atan2(dy, dx);
     ctx.setLineDash([]);
     ctx.fillStyle = '#ffdd40';
@@ -3077,7 +3074,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     for(const g of S.guards)drawGuard(g);
     drawBases();
     
-    // 繪製拖尾路徑
     const currentTrail = TRAIL_DEFS.find(t => t.id === S.equippedTrail);
     if (currentTrail) {
       drawTrailPath(ctx, S.playerPath, currentTrail, S.time);
@@ -3282,25 +3278,21 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
     g.lineCap = 'round';
     g.lineJoin = 'round';
     
-    // 頭
     g.fillStyle = '#ffe0c0';
     g.beginPath();
     g.arc(0, -14 * scale, headR, 0, 7);
     g.fill();
     g.stroke();
     
-    // 眼睛
     g.fillStyle = '#1a1a2a';
     g.beginPath(); g.arc(-2 * scale, -15 * scale, 1 * scale, 0, 7); g.fill();
     g.beginPath(); g.arc(2 * scale, -15 * scale, 1 * scale, 0, 7); g.fill();
     
-    // 身體
     g.beginPath();
     g.moveTo(0, -8 * scale);
     g.lineTo(0, hipY);
     g.stroke();
     
-    // 手臂
     if (swingPhase !== undefined && swingPhase > 0) {
       const swingAngle = Math.PI * 0.5 - Math.sin(swingPhase * Math.PI) * Math.PI * 0.7;
       const ax = Math.cos(swingAngle) * armSpread * 1.5;
@@ -3324,7 +3316,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp };
       g.stroke();
     }
     
-    // 腿
     g.beginPath();
     g.moveTo(0, hipY);
     g.lineTo(-legSpread + legSwing, hipY + 8 * scale);
