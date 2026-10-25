@@ -34,6 +34,36 @@
     const v = new Date().getTime();
     let currentIp = "Unknown_IP"; 
 
+        // --- 節慶主題自動切換 ---
+    (function applyFestivalTheme() {
+        // 👇 測試用開關：想測試什麼節慶，就把這裡改成 'halloween'、'christmas'、'newyear' 等，測完記得改回 null
+        const testTheme = null; 
+        
+        let theme = '';
+
+        if (testTheme) {
+            theme = 'theme-' + testTheme;
+        } else {
+            const now = new Date();
+            const m = now.getMonth() + 1; // 1-12
+            const d = now.getDate();
+            const md = m * 100 + d;
+
+            // 稍微調整了區間，避免 2/10 同時符合新年與情人節
+            if (md >= 1024 && md <= 1101) theme = 'theme-halloween';   // 萬聖節
+            else if (md >= 1218 && md <= 1226) theme = 'theme-christmas'; // 聖誕節
+            else if (md >= 120 && md <= 209) theme = 'theme-newyear';  // 農曆新年
+            else if (md >= 915 && md <= 1005) theme = 'theme-midautumn'; // 中秋
+            else if (md >= 601 && md <= 610) theme = 'theme-dragonboat'; // 端午
+            else if (md >= 210 && md <= 216) theme = 'theme-valentine';  // 情人節
+        }
+
+        // 如果有對應的主題，就加到 body 上
+        if (theme) {
+            document.body.classList.add(theme);
+        }
+    })();
+
     // --- 0. 設定網頁 Icon ---
     function setFavicon() {
         const iconUrl = `${baseUrl}catdragon.png`;
@@ -758,30 +788,8 @@
                 }
             });
 
-            // --- 強制黑色主題 ---
-            const nav = container.querySelector('.glass-nav');
-            if (nav) {
-                nav.style.setProperty('background', '#000000', 'important');
-                nav.style.setProperty('background-color', '#000000', 'important');
-                nav.querySelectorAll('*').forEach(el => {
-                    el.style.setProperty('background-color', '#000000', 'important');
-                    if (!el.classList.contains('login-btn')) {
-                        el.style.setProperty('color', '#ffffff', 'important');
-                        el.style.setProperty('border-color', '#333333', 'important');
-                    }
-                });
-                const style = document.createElement('style');
-                style.innerHTML = `
-                    .glass-nav, .glass-nav *, .dropdown-menu, .nav-menu { 
-                        background-color: #000000 !important; 
-                        color: #ffffff !important; 
-                    }
-                    .glass-nav a:hover {
-                        background-color: #222222 !important; 
-                    }
-                `;
-                document.head.appendChild(style);
-            }
+            // --- 原本的強制黑色主題已經刪除 ---
+            // 顏色現在交由你的 CSS (包含節慶主題) 來控制，選單就不會爆開了！
         });
     }
 })();
