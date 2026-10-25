@@ -530,9 +530,20 @@
         installStorageSync();
         markFirebaseReady();
         let authReadyResolved = false;
+                let loggingOut = false;
         firebase.auth().onAuthStateChanged(async user => {
+            if (loggingOut) return;
             const previousUid = activeAccountUid;
-            if (previousUid && (!user || previousUid !== user.uid)) { activeAccountUid = ''; clearTimeout(accountSaveTimer); clearLocalAccountData(); }
+            if (previousUid && (!user || previousUid !== user.uid)) {
+                loggingOut = true;
+                activeAccountUid = '';
+                clearTimeout(accountSaveTimer);
+                window.raingodCurrentUser = null;
+                clearLocalAccountData();
+                // 登出或切換帳號：重新載入頁面，讓遊戲進度完全重置
+                location.reload();
+                return;
+            }
             window.raingodCurrentUser = user;
             if (user) {
                 activeAccountUid = user.uid;
