@@ -320,7 +320,7 @@
         return firebase.auth().onAuthStateChanged(callback);
     };
 
-    // 【儲存存檔】存入 localStorage 並同步上傳至帳號資料庫
+    // 【儲存存檔】存入 localStorage 並同步上傳至帳號資料庫（加入時間戳防覆蓋）
     window.raingodSave = async function(gameId, gameData) {
         if (!gameId) {
             console.error("raingodSave 錯誤：必須指定 gameId (例如 'game_a')");
@@ -338,7 +338,17 @@
             const username = user.email ? user.email.split('@')[0] : null;
             if (username) {
                 try {
-                    await firebase.database().ref(`users/${username}/games/${gameId}`).set({
+                    const gameRef = firebase.database().ref(`users/${username}/games/${gameId}`);
+                    const snap = await gameRef.once('value');
+                    const cloudData = snap.val();
+                    
+                    // 如果雲端有資料，且雲端更新時間比現在還要新（例如其他裝置剛存過），就放棄覆蓋
+                    if (cloudData && cloudData.updated_at && cloudData.updated_at > Date.now() - 5000) {
+                        console.warn("存檔衝突：雲端版本較新，放棄覆蓋。");
+                        return false;
+                    }
+
+                    await gameRef.set({
                         data: gameData,
                         updated_at: firebase.database.ServerValue.TIMESTAMP
                     });
@@ -655,6 +665,7 @@
         installStorageSync();
         markFirebaseReady();
         let authReadyResolved = false;
+
         firebase.auth().onAuthStateChanged(async user => {
             const previousUid = activeAccountUid;
             if (previousUid && (!user || previousUid !== user.uid)) {
@@ -672,6 +683,30 @@
                     console.error('載入帳號資料失敗：', err);
                 });
                 await accountDataSync;
+
+                // ===== 新增：多裝置登入踢除偵測 =====
+                const deviceId = getDeviceId();
+                const sessionRef = firebase.database().ref(`users_sessions/${user.uid}`);
+                
+                sessionRef.once('value').then(snap => {
+                    const lastDevice = snap.val()?.deviceId;
+                    if (lastDevice && lastDevice !== deviceId) {
+                        // 如果在別的裝置登入，強制登出並回首頁
+                        setTimeout(() => {
+                            alert("您的帳號已在其他裝置登入，本裝置將自動登出。");
+                            firebase.auth().signOut().then(() => {
+                                window.raingodClearLocalAccountData();
+                                window.location.href = 'https://raingod0101.github.io/';
+                            });
+                        }, 300);
+                    } else {
+                        // 更新當前這台裝置為最新登入裝置
+                        sessionRef.set({ deviceId: deviceId, timestamp: firebase.database.ServerValue.TIMESTAMP });
+                        firebase.database().onDisconnect(sessionRef).remove();
+                    }
+                }).catch(e => console.warn('多裝置偵測失敗', e));
+                // ==================================
+
             }
 
             if (!authReadyResolved) {
