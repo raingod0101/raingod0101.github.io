@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>意見回饋 | Raingod</title>
+<style>
+    :root{
+        --blue:#007aff;
+        --danger:#ff3b30;
+        --green:#1a9c4b;
+        --orange:#e08b00;
+        --gray:#8e8e93;
+        --bg:#f2f2f7;
+        --line:#e5e5ea;
+    }
+    *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+    html,body{margin:0;padding:0;}
+    body{
+        font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC","PingFang TC",sans-serif;
+        background:#000;height:100vh;overflow:hidden;
+        display:flex;justify-content:center;
+    }
+    #app{
+        width:100%;max-width:560px;height:100vh;
+        background:var(--bg);display:flex;flex-direction:column;
+        overflow:hidden;position:relative;
+    }
+    .hidden{display:none !important;}
+
+    /* ---------- 置中提示畫面 ---------- */
+    .center-msg{
+        flex:1;display:flex;flex-direction:column;
+        align-items:center;justify-content:center;
+        gap:12px;padding:40px 24px;text-align:center;color:#333;
+    }
+    .center-msg h2{margin:0;font-size:22px;color:var(--blue);}
+    .center-msg p{margin:0;font-size:14px;color:var(--gray);line-height:1.6;}
+    .big-icon{font-size:44px;}
+
+    /* ---------- Header ---------- */
+    #main-view{display:flex;flex-direction:column;flex:1;min-height:0;}
+    .header{
+        height:56px;padding:0 16px;background:#fff;
+        border-bottom:1px solid var(--line);
+        display:flex;align-items:center;justify-content:space-between;
+        flex-shrink:0;
+    }
+    .brand{font-weight:800;font-size:16px;color:#111;}
+    .header-right{display:flex;align-items:center;gap:10px;}
+    #user-label{font-size:12px;color:var(--gray);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .btn-sm{
+        padding:6px 12px;border-radius:9px;border:1px solid var(--line);
+        background:#fff;font-size:12px;font-weight:700;cursor:pointer;color:#333;
+    }
+
+    /* ---------- Tabs ---------- */
+    .tabs{
+        display:flex;gap:8px;padding:10px 14px;
+        background:#fff;border-bottom:1px solid var(--line);flex-shrink:0;
+    }
+    .tab{
+        flex:1;padding:10px;border-radius:11px;border:none;
+        background:var(--bg);color:#333;font-weight:700;font-size:14px;
+        cursor:pointer;transition:.15s;
+    }
+    .tab.active{background:var(--blue);color:#fff;}
+
+    /* ---------- Content ---------- */
+    .content{
+        flex:1;overflow-y:auto;padding:14px 14px 50px;min-height:0;
+        -webkit-overflow-scrolling:touch;
+    }
+    .card{
+        background:#fff;border-radius:16px;padding:16px;
+        box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:18px;
+    }
+    .field-label{font-size:13px;font-weight:700;color:#555;margin-bottom:7px;}
+    select,input[type="text"],textarea{
+        width:100%;padding:12px 14px;border:1px solid var(--line);
+        border-radius:12px;font-size:15px;background:#fff;
+        font-family:inherit;outline:none;color:#111;
+    }
+    textarea{min-height:130px;resize:vertical;line-height:1.55;}
+    select:focus,textarea:focus,input[type="text"]:focus{border-color:var(--blue);}
+    .counter{text-align:right;font-size:11px;color:var(--gray);margin:6px 2px 12px;}
+    .primary{
+        width:100%;padding:14px;border:none;border-radius:14px;
+        background:var(--blue);color:#fff;font-size:16px;font-weight:800;
+        cursor:pointer;transition:.15s;max-width:280px;margin:0 auto;display:block;
+    }
+    .primary:disabled{opacity:.45;cursor:not-allowed;}
+
+    .section-title{
+        font-size:13px;color:var(--gray);font-weight:700;
+        margin:0 0 10px 4px;letter-spacing:.5px;
+    }
+
+    /* ---------- 管理後台工具列 ---------- */
+    .admin-bar{display:flex;gap:8px;margin-bottom:12px;}
+    .admin-bar select{width:120px;flex-shrink:0;}
+    .stats{
+        font-size:12px;color:var(--gray);margin:0 0 12px 4px;font-weight:600;
+    }
+
+    /* ---------- 回饋卡片 ---------- */
+    .fb{
+        background:#fff;border-radius:14px;padding:14px;
+        margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.06);
+    }
+    .fb-top{
+        display:flex;align-items:center;gap:7px;flex-wrap:wrap;
+        font-size:11px;color:var(--gray);margin-bottom:9px;
+    }
+    .pill{
+        padding:2px 9px;border-radius:20px;font-size:11px;font-weight:800;
+        background:#eef4ff;color:var(--blue);
+    }
+    .pill.done{background:#e6f7ec;color:var(--green);}
+    .pill.open{background:#fff4e5;color:var(--orange);}
+    .who{font-weight:800;color:#333;font-size:12px;}
+    .mail{color:var(--gray);font-weight:400;}
+    .fb-body{
+        font-size:15px;color:#111;line-height:1.6;
+        white-space:pre-wrap;word-break:break-word;
+    }
+    .reply{
+        margin-top:10px;padding:10px 12px;background:#f2f7ff;
+        border-left:3px solid var(--blue);border-radius:8px;
+        font-size:14px;color:#123;line-height:1.55;
+        white-space:pre-wrap;word-break:break-word;
+    }
+    .reply b{color:var(--blue);}
+    .fb-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;}
+    .btn{
+        padding:7px 13px;border-radius:9px;border:1px solid var(--line);
+        background:#fff;font-size:13px;font-weight:700;cursor:pointer;color:#333;
+    }
+    .btn.blue{color:var(--blue);border-color:var(--blue);}
+    .btn.green{color:var(--green);border-color:var(--green);}
+    .btn.red{color:var(--danger);border-color:var(--danger);}
+    .empty{
+        text-align:center;padding:40px 20px;color:var(--gray);
+        font-size:14px;line-height:1.8;
+    }
+
+    /* ---------- Toast ---------- */
+    #toast{
+        position:fixed;left:50%;bottom:64px;
+        transform:translateX(-50%) translateY(12px);
+        background:rgba(0,0,0,.84);color:#fff;
+        padding:11px 20px;border-radius:12px;font-size:14px;
+        opacity:0;pointer-events:none;transition:.25s;z-index:999;
+        max-width:80%;text-align:center;
+    }
+    #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+</style>
+</head>
+<body>
+
+<link rel="stylesheet" href="menu.css">
+<div id="nav_bar"></div>
+<script src="menu.js"></script>
+
+<div id="app">
+
+    <!-- 載入中 -->
+    <div id="loading-view" class="center-msg">
+        <div class="big-icon">⏳</div>
+        <p>載入中…</p>
+    </div>
+
+    <!-- 未登入 -->
+    <div id="auth-view" class="center-msg hidden">
+        <div class="big-icon">🔒</div>
+        <h2>需要登入</h2>
+        <p>請先登入雨神帳號，<br>才能送出意見回饋。</p>
+        <button class="primary" onclick="document.getElementById('login-btn')?.click()">前往登入</button>
+    </div>
+
+    <!-- 主要畫面 -->
+    <div id="main-view" class="hidden">
+
+        <div class="header">
+            <div class="brand">💬 意見回饋</div>
+            <div class="header-right">
+                <span id="user-label"></span>
+                <button class="btn-sm" onclick="location.reload()">重新載入</button>
+            </div>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" data-tab="user">意見回饋</button>
+            <button class="tab hidden" data-tab="admin" id="admin-tab">🛡 管理後台</button>
+        </div>
+
+        <div class="content">
+
+            <!-- ===== 一般使用者 ===== -->
+            <div id="panel-user">
+                <div class="card">
+                    <div class="field-label">回饋類型</div>
+                    <select id="category">
+                        <option value="功能建議">💡 功能建議</option>
+                        <option value="錯誤回報">🐞 錯誤回報</option>
+                        <option value="使用問題">❓ 使用問題</option>
+                        <option value="其他">📝 其他</option>
+                    </select>
+
+                    <div class="field-label" style="margin-top:16px;">回饋內容</div>
+                    <textarea id="content" maxlength="1000" placeholder="請描述您的想法、建議或遇到的問題…"></textarea>
+                    <div class="counter"><span id="count">0</span> / 1000</div>
+
+                    <button class="primary" id="submit-btn">送出回饋</button>
+                </div>
+
+                <h3 class="section-title">我的回饋紀錄</h3>
+                <div id="my-list"></div>
+            </div>
+
+            <!-- ===== 管理後台（僅 raingod） ===== -->
+            <div id="panel-admin" class="hidden">
+                <div class="admin-bar">
+                    <select id="admin-filter">
+                        <option value="all">全部</option>
+                        <option value="open">待處理</option>
+                        <option value="done">已處理</option>
+                    </select>
+                    <input type="text" id="admin-search" placeholder="搜尋內容 / 帳號…">
+                </div>
+                <div class="stats" id="admin-stats"></div>
+                <div id="admin-list"></div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import {
+        getDatabase, ref, push, onValue, remove, update
+    } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyDHb0o6ahdNnvlL3-QQy_yRO_mg4XMqtJk",
+        databaseURL: "https://chat-73802-default-rtdb.firebaseio.com"
+    };
+    const app = initializeApp(firebaseConfig, 'rainFeedback');
+    const db  = getDatabase(app);
+
+    await window.raingodFirebaseReady;
+    await window.raingodAuthReady;
+
+    /* ================= 狀態 ================= */
+    const $ = id => document.getElementById(id);
+    const ADMIN_ACCOUNT = 'raingod';   // ← 只有這個帳號能看到管理後台
+
+    let uid = '', myEmail = '', myName = '', isAdmin = false;
+    let feedbacks = [];        // [{ id, uid, name, email, category, content, status, reply, ts }]
+    let unsubFeed = null;
+    let toastTimer = null;
+
+    /* ================= 小工具 ================= */
+    const esc = s => String(s ?? '').replace(/[&<>"']/g, c => (
+        { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]
+    ));
+
+    function fmt(ts){
+        if(!ts) return '';
+        const d = new Date(ts), now = new Date();
+        const p = n => String(n).padStart(2, '0');
+        const hm = `${p(d.getHours())}:${p(d.getMinutes())}`;
+        if(d.toDateString() === now.toDateString()) return `今天 ${hm}`;
+        const y = new Date(now); y.setDate(now.getDate() - 1);
+        if(d.toDateString() === y.toDateString()) return `昨天 ${hm}`;
+        if(d.getFullYear() === now.getFullYear()) return `${d.getMonth()+1}/${d.getDate()} ${hm}`;
+        return `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} ${hm}`;
+    }
+
+    function toast(msg){
+        let el = $('toast');
+        if(!el){ el = document.createElement('div'); el.id = 'toast'; document.body.appendChild(el); }
+        el.textContent = msg;
+        el.classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
+    }
+
+    /* ================= 登入狀態 ================= */
+    window.raingodOnAuthStateChanged(user => {
+        $('loading-view').classList.add('hidden');
+
+        if(!user){
+            uid = ''; isAdmin = false;
+            $('main-view').classList.add('hidden');
+            $('auth-view').classList.remove('hidden');
+            return;
+        }
+
+        uid     = user.uid;
+        myEmail = user.email || '';
+
+        const account = (myEmail.split('@')[0] || '').toLowerCase();
+        myName  = user.displayName || account || '雨神玩家';
+        isAdmin = (account === ADMIN_ACCOUNT);
+
+        $('auth-view').classList.add('hidden');
+        $('main-view').classList.remove('hidden');
+
+        $('user-label').textContent = isAdmin ? `${myName}（管理員）` : myName;
+        $('admin-tab').classList.toggle('hidden', !isAdmin);
+
+        startListening();
+    });
+
+    /* ================= 即時讀取全部回饋 ================= */
+    function startListening(){
+        if(unsubFeed) unsubFeed();
+
+        unsubFeed = onValue(ref(db, 'feedback'), snap => {
+            feedbacks = [];
+            snap.forEach(child => {
+                feedbacks.push({ id: child.key, ...child.val() });
+            });
+            feedbacks.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+
+            renderMine();
+            if(isAdmin) renderAdmin();
+        }, err => {
+            console.error(err);
+            toast('讀取回饋失敗：' + (err.message || err));
+        });
+    }
+
+    /* ================= 分頁切換 ================= */
+    document.querySelectorAll('.tab').forEach(btn => {
+        btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+    });
+
+    function switchTab(tab){
+        if(tab === 'admin' && !isAdmin) return;
+
+        document.querySelectorAll('.tab').forEach(b => {
+            b.classList.toggle('active', b.dataset.tab === tab);
+        });
+        $('panel-user').classList.toggle('hidden',  tab !== 'user');
+        $('panel-admin').classList.toggle('hidden', tab !== 'admin');
+
+        if(tab === 'admin') renderAdmin();
+    }
+
+    /* ================= 送出回饋 ================= */
+    const contentEl = $('content');
+    contentEl.addEventListener('input', () => {
+        $('count').textContent = contentEl.value.length;
+    });
+
+    $('submit-btn').addEventListener('click', submitFeedback);
+
+    async function submitFeedback(){
+        if(!uid){ toast('請先登入'); return; }
+
+        const content = contentEl.value.trim();
+        if(!content){ toast('請先輸入回饋內容'); contentEl.focus(); return; }
+
+        const btn = $('submit-btn');
+        btn.disabled = true;
+        btn.textContent = '送出中…';
+
+        try{
+            await push(ref(db, 'feedback'), {
+                uid,
+                name: myName,
+                email: myEmail,
+                category: $('category').value,
+                content,
+                status: 'open',
+                reply: null,
+                ts: Date.now()
+            });
+
+            contentEl.value = '';
+            $('count').textContent = '0';
+            toast('已送出，感謝您的回饋！');
+        }catch(e){
+            console.error(e);
+            toast('送出失敗：' + (e.message || e));
+        }finally{
+            btn.disabled = false;
+            btn.textContent = '送出回饋';
+        }
+    }
+
+    /* ================= 我的回饋 ================= */
+    function renderMine(){
+        const box  = $('my-list');
+        const list = feedbacks.filter(f => f.uid === uid);
+
+        if(!list.length){
+            box.innerHTML = '<div class="empty">目前還沒有回饋紀錄<br>歡迎提出您的想法 🙌</div>';
+            return;
+        }
+        box.innerHTML = list.map(f => cardHTML(f, false)).join('');
+    }
+
+    /* ================= 管理後台 ================= */
+    $('admin-filter').addEventListener('change', renderAdmin);
+    $('admin-search').addEventListener('input',  renderAdmin);
+
+    function renderAdmin(){
+        if(!isAdmin) return;
+
+        const filter = $('admin-filter').value;
+        const kw     = $('admin-search').value.trim().toLowerCase();
+
+        let list = feedbacks;
+        if(filter !== 'all'){
+            list = list.filter(f => (f.status || 'open') === filter);
+        }
+        if(kw){
+            list = list.filter(f =>
+                (f.content  || '').toLowerCase().includes(kw) ||
+                (f.name     || '').toLowerCase().includes(kw) ||
+                (f.email    || '').toLowerCase().includes(kw) ||
+                (f.category || '').toLowerCase().includes(kw)
+            );
+        }
+
+        const openCount = feedbacks.filter(f => (f.status || 'open') === 'open').length;
+        $('admin-stats').textContent =
+            `共 ${feedbacks.length} 筆回饋　·　待處理 ${openCount} 筆`;
+
+        const box = $('admin-list');
+        if(!list.length){
+            box.innerHTML = '<div class="empty">沒有符合條件的回饋</div>';
+            return;
+        }
+        box.innerHTML = list.map(f => cardHTML(f, true)).join('');
+    }
+
+    /* ================= 卡片 HTML ================= */
+    function cardHTML(f, admin){
+        const status = f.status || 'open';
+
+        const statusPill = status === 'done'
+            ? '<span class="pill done">已處理</span>'
+            : '<span class="pill open">待處理</span>';
+
+        const whoHTML = admin
+            ? `<span class="who">${esc(f.name || '未知')}</span>` +
+              (f.email ? ` <span class="mail">${esc(f.email)}</span>` : '')
+            : '';
+
+        const replyHTML = f.reply
+            ? `<div class="reply"><b>官方回覆：</b>${esc(f.reply)}</div>`
+            : '';
+
+        const actions = [];
+        if(admin){
+            actions.push(`<button class="btn blue"  data-act="reply"  data-id="${f.id}">回覆</button>`);
+            actions.push(`<button class="btn green" data-act="toggle" data-id="${f.id}">${status === 'done' ? '改為待處理' : '標為已處理'}</button>`);
+            actions.push(`<button class="btn red"   data-act="del"    data-id="${f.id}">刪除</button>`);
+        }else if(status === 'open'){
+            actions.push(`<button class="btn red"   data-act="del"    data-id="${f.id}">刪除</button>`);
+        }
+
+        return `
+        <div class="fb">
+            <div class="fb-top">
+                <span class="pill">${esc(f.category || '其他')}</span>
+                ${whoHTML}
+                ${statusPill}
+                <span>${fmt(f.ts)}</span>
+            </div>
+            <div class="fb-body">${esc(f.content)}</div>
+            ${replyHTML}
+            ${actions.length ? `<div class="fb-actions">${actions.join('')}</div>` : ''}
+        </div>`;
+    }
+
+    /* ================= 操作事件（事件委派） ================= */
+    document.addEventListener('click', e => {
+        const btn = e.target.closest('[data-act]');
+        if(!btn) return;
+
+        const { act, id } = btn.dataset;
+        const f = feedbacks.find(x => x.id === id);
+        if(!f) return;
+
+        if(act === 'reply')  replyFeedback(f);
+        if(act === 'toggle') toggleStatus(f);
+        if(act === 'del')    deleteFeedback(f);
+    });
+
+    async function replyFeedback(f){
+        if(!isAdmin){ toast('沒有權限'); return; }
+
+        const text = prompt('輸入回覆內容（留空並確定 = 清除回覆）：', f.reply || '');
+        if(text === null) return;
+
+        try{
+            if(text.trim()){
+                await update(ref(db, `feedback/${f.id}`), {
+                    reply: text.trim(),
+                    replyTs: Date.now(),
+                    status: 'done'
+                });
+                toast('已回覆並標為已處理');
+            }else{
+                await update(ref(db, `feedback/${f.id}`), { reply: null });
+                toast('已清除回覆');
+            }
+        }catch(e){
+            toast('更新失敗：' + (e.message || e));
+        }
+    }
+
+    async function toggleStatus(f){
+        if(!isAdmin){ toast('沒有權限'); return; }
+        const next = (f.status || 'open') === 'done' ? 'open' : 'done';
+        try{
+            await update(ref(db, `feedback/${f.id}`), { status: next });
+            toast(next === 'done' ? '已標為已處理' : '已改為待處理');
+        }catch(e){
+            toast('更新失敗：' + (e.message || e));
+        }
+    }
+
+    async function deleteFeedback(f){
+        if(!isAdmin && f.uid !== uid){ toast('沒有權限'); return; }
+        if(!confirm('確定要刪除這筆回饋嗎？刪除後無法復原。')) return;
+
+        try{
+            await remove(ref(db, `feedback/${f.id}`));
+            toast('已刪除');
+        }catch(e){
+            toast('刪除失敗：' + (e.message || e));
+        }
+    }
+</script>
+</body>
+</html>
