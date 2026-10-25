@@ -2896,12 +2896,37 @@ document.getElementById('subVerifyBtn').addEventListener('click', async () => {
     const p=S.player;
     S.time+=dt;
 
-    const cyclePos = Date.now() % FULL_CYCLE;
+        const cyclePos = Date.now() % FULL_CYCLE;
     const isNightNow = cyclePos >= DAY_MS;
     if (isNightNow !== S.night) {
       S.night = isNightNow;
       if (S.night) {
         showToast('🌙 夜晚來臨！蛋孵化速度 ×10，但無法偷蛋（屏障）', '#3a3a6a', '#1a1a3a');
+        
+        // ===== 新增：夜晚強制傳送回安全區並丟下蛋 =====
+        if (p.carry) {
+          // 把蛋丟在當前位置
+          const drop = p.carry;
+          const dropX = clamp(p.x + rnd(-20, 20), 30, WORLD_W - 30);
+          const dropY = clamp(p.y + rnd(-20, 20), MIN_Y, MAX_Y);
+          S.eggs.push({ ...drop, x: dropX, y: dropY, collected: false, origX: dropX, origY: dropY });
+          p.carry = null;
+          S.tensionActive = false;
+          
+          const bPos = getBasePos(S.myBaseIdx);
+          p.x = bPos.x; p.y = 2850; p.vx = 0; p.vy = 0; p.stun = 0; p.knockbackTimer = 0;
+          S.camera.x = p.x; S.camera.y = p.y - 100;
+          
+          showToast('🌙 夜晚屏障啟動！\n🥚 手中的蛋已掉落，你被傳回安全區！', '#8a2a2a', '#5a0a0a');
+        } else if (p.y < S.safeLineY) {
+          // 沒帶蛋，但人在外面
+          const bPos = getBasePos(S.myBaseIdx);
+          p.x = bPos.x; p.y = 2850; p.vx = 0; p.vy = 0; p.stun = 0; p.knockbackTimer = 0;
+          S.camera.x = p.x; S.camera.y = p.y - 100;
+          showToast('🌙 夜晚屏障啟動！你被傳回安全區！', '#3a5a8a', '#1a3a6a');
+        }
+        // ===================================
+        
       } else {
         showToast('☀️ 白天來臨！可以偷蛋了', '#6a8a3a', '#3a5a1a');
       }
