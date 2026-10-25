@@ -317,6 +317,62 @@
         return deviceId;
     }
 
+    // --- 0-1. 多裝置登入搶佔式偵測（後登入者勝）---
+    let sessionWatchRef = null;
+    let sessionWatchHandler = null;
+
+    function stopSessionWatch() {
+        if (sessionWatchRef && sessionWatchHandler) {
+            try { sessionWatchRef.off('value', sessionWatchHandler); } catch (e) {}
+        }
+        if (sessionWatchRef) {
+            // 取消自己的 onDisconnect，避免登出後把自己（或別人）的 session 節點誤刪
+            try { sessionWatchRef.onDisconnect().cancel(); } catch (e) {}
+        }
+        sessionWatchRef = null;
+        sessionWatchHandler = null;
+    }
+
+    async function claimSession(user) {
+        stopSessionWatch();
+
+        const deviceId = getDeviceId();
+        const sessionRef = firebase.database().ref(`users_sessions/${user.uid}`);
+
+        const handler = snap => {
+            const val = snap.val();
+            // null = 節點被移除（自己斷線觸發），不要當成被踢
+            if (!val || !val.deviceId) return;
+            if (val.deviceId === deviceId) return;
+
+            // 別的裝置搶登了 → 這台登出
+            stopSessionWatch();
+            alert('您的帳號已在其他裝置登入，本裝置將自動登出。');
+            const redirect = () => { window.location.href = 'https://raingod0101.github.io/'; };
+            firebase.auth().signOut().then(() => {
+                window.raingodClearLocalAccountData();
+                redirect();
+            }).catch(redirect);
+        };
+
+        sessionWatchRef = sessionRef;
+        sessionWatchHandler = handler;
+
+        try {
+            // 先搶佔，再監聽（順序絕對不能顛倒）
+            await sessionRef.set({ deviceId, timestamp: firebase.database.ServerValue.TIMESTAMP });
+            if (firebase.auth().currentUser?.uid !== user.uid) {
+                stopSessionWatch();
+                return;
+            }
+            firebase.database().onDisconnect(sessionRef).remove();
+            sessionRef.on('value', handler);
+        } catch (e) {
+            console.warn('多裝置偵測失敗', e);
+            stopSessionWatch();
+        }
+    }
+
     // --- 1. 自動加載資源 ---
     async function loadResources() {
         const resources = [
@@ -711,36 +767,40 @@
             }
 
             window.raingodCurrentUser = user;
+
+            if (!user) {
+                stopSessionWatch();
+            }
+
             if (user) {
                 activeAccountUid = user.uid;
+
+                // ===== 多裝置登入搶佔式偵測：先搶佔再監聽（後登入者勝）=====
+                await claimSession(user);
+                if (firebase.auth().currentUser?.uid !== user.uid) {
+                    // 已經被別的裝置搶登了，不再繼續初始化資料
+                    if (!authReadyResolved) {
+                        authReadyResolved = true;
+                        markAuthReady(user);
+                        markAccountDataReady();
+                    }
+                    return;
+                }
+                // ==========================================================
+
                 accountDataSync = syncAccountData(user).catch(err => {
                     console.error('載入帳號資料失敗：', err);
                 });
                 await accountDataSync;
 
-                // ===== 新增：多裝置登入踢除偵測 =====
-                const deviceId = getDeviceId();
-                const sessionRef = firebase.database().ref(`users_sessions/${user.uid}`);
-                
-                sessionRef.once('value').then(snap => {
-                    const lastDevice = snap.val()?.deviceId;
-                    if (lastDevice && lastDevice !== deviceId) {
-                        // 如果在別的裝置登入，強制登出並回首頁
-                        setTimeout(() => {
-                            alert("您的帳號已在其他裝置登入，本裝置將自動登出。");
-                            firebase.auth().signOut().then(() => {
-                                window.raingodClearLocalAccountData();
-                                window.location.href = 'https://raingod0101.github.io/';
-                            });
-                        }, 300);
-                    } else {
-                        // 更新當前這台裝置為最新登入裝置
-                        sessionRef.set({ deviceId: deviceId, timestamp: firebase.database.ServerValue.TIMESTAMP });
-                        firebase.database().onDisconnect(sessionRef).remove();
+                if (firebase.auth().currentUser?.uid !== user.uid) {
+                    if (!authReadyResolved) {
+                        authReadyResolved = true;
+                        markAuthReady(user);
+                        markAccountDataReady();
                     }
-                }).catch(e => console.warn('多裝置偵測失敗', e));
-                // ==================================
-
+                    return;
+                }
             }
 
             if (!authReadyResolved) {
