@@ -154,6 +154,14 @@
         max-width:80%;text-align:center;
     }
     #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+    /* ---------- 每日限制提示 ---------- */
+    .limit-banner{
+        background:#fff4e5;color:#8a5a00;border:1px solid #ffe0b2;
+        border-radius:12px;padding:10px 14px;font-size:13px;font-weight:600;
+        margin-bottom:14px;display:flex;align-items:center;gap:8px;
+    }
+    .limit-banner .icon{font-size:16px;}
 </style>
 </head>
 <body>
@@ -170,7 +178,7 @@
         <p>載入中…</p>
     </div>
 
-    <!-- 未登入 -->
+    <!-- 未登入（保留但不再強制顯示，匿名可提交） -->
     <div id="auth-view" class="center-msg hidden">
         <div class="big-icon">🔒</div>
         <h2>需要登入</h2>
@@ -198,6 +206,11 @@
 
             <!-- ===== 一般使用者 ===== -->
             <div id="panel-user">
+                <div id="daily-limit-banner" class="limit-banner hidden">
+                    <span class="icon">⏰</span>
+                    <span>您今天已經提交過回饋了。如需重新提交，請先刪除下方「我的回饋紀錄」中今天的項目。</span>
+                </div>
+
                 <div class="card">
                     <div class="field-label">回饋類型</div>
                     <select id="category">
@@ -270,6 +283,8 @@
     let uid = '', myEmail = '', myName = '', isAdmin = false;
     let feedbacks = [];
     let feedRef = null;
+    let myFeedbacks = [];   // 当前用户自己的回馈（非管理员或管理员也跟踪自己的）
+    let myFeedRef = null;
 
     const esc = s => String(s ?? '').replace(/[&<>"']/g, c => (
         { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]
@@ -295,11 +310,107 @@
         el._t = setTimeout(() => el.classList.remove('show'), 2200);
     }
 
+    // 判断时间戳是否为「今天」（本地时间）
+    function isToday(ts){
+        if(!ts) return false;
+        const d = new Date(ts), now = new Date();
+        return d.getFullYear() === now.getFullYear()
+            && d.getMonth() === now.getMonth()
+            && d.getDate() === now.getDate();
+    }
+
     // ===== 关键：显示主画面 =====
     function showMainView(){
         $('loading-view').classList.add('hidden');
         $('auth-view').classList.add('hidden');
         $('main-view').classList.remove('hidden');
+    }
+
+    // ===== 更新每日限制 UI =====
+    function updateDailyLimitUI(){
+        // 管理员不受限，但还是可以看自己的记录；这里只对「提交按钮」做限制
+        const todayMine = myFeedbacks.filter(f => isToday(f.ts));
+        const hasSubmittedToday = todayMine.length > 0;
+
+        const banner = $('daily-limit-banner');
+        const submitBtn = $('submit-btn');
+        const contentEl = $('content');
+        const categoryEl = $('category');
+
+        if (hasSubmittedToday && !isAdmin) {
+            banner.classList.remove('hidden');
+            submitBtn.disabled = true;
+            submitBtn.textContent = '今日已提交';
+            contentEl.disabled = true;
+            categoryEl.disabled = true;
+        } else {
+            banner.classList.add('hidden');
+            submitBtn.disabled = false;
+            submitBtn.textContent = '送出回饋';
+            contentEl.disabled = false;
+            categoryEl.disabled = false;
+        }
+    }
+
+    // ===== 渲染「我的回馈纪录」 =====
+    function renderMyList(){
+        const listEl = $('my-list');
+        if (!listEl) return;
+
+        // 管理员也可以看到自己的记录（如果管理员不是匿名，uid 对应）
+        if (myFeedbacks.length === 0) {
+            listEl.innerHTML = '<div class="empty">還沒有回饋紀錄</div>';
+            return;
+        }
+
+        listEl.innerHTML = myFeedbacks.map(f => {
+            const status = f.status || 'open';
+            const pill = status === 'done'
+                ? '<span class="pill done">已處理</span>'
+                : '<span class="pill open">待處理</span>';
+            const replyHTML = f.reply
+                ? `<div class="reply"><b>官方回覆：</b>${esc(f.reply)}</div>` : '';
+
+            return `
+            <div class="fb">
+                <div class="fb-top">
+                    <span class="pill">${esc(f.category || '其他')}</span>
+                    ${pill}
+                    <span>${fmt(f.ts)}</span>
+                </div>
+                <div class="fb-body">${esc(f.content)}</div>
+                ${replyHTML}
+                <div class="fb-actions">
+                    <button class="btn red" data-mine-del="${f.id}">刪除（可重新提交）</button>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    // ===== 监听「我的回馈」 =====
+    function listenMyFeedbacks(){
+        if (myFeedRef) { myFeedRef.off(); myFeedRef = null; }
+        myFeedbacks = [];
+
+        if (!uid) {
+            // 匿名访客：没有 uid，无法关联历史记录；本地不显示历史（或可显示本次会话内提交的？）
+            // 为了简单，匿名不显示「我的回馈纪录」（或者你可以用本地存储，但这里保持简单）
+            renderMyList();
+            updateDailyLimitUI();
+            return;
+        }
+
+        myFeedRef = db.ref('feedback').orderByChild('uid').equalTo(uid);
+        myFeedRef.on('value', snap => {
+            myFeedbacks = [];
+            snap.forEach(c => myFeedbacks.push({ id: c.key, ...c.val() }));
+            myFeedbacks.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+            renderMyList();
+            updateDailyLimitUI();
+        }, err => {
+            console.error(err);
+            toast('讀取我的回饋失敗：' + (err.message || err));
+        });
     }
 
     // ===== 登录状态 =====
@@ -336,10 +447,24 @@
             feedbacks = [];
         }
 
-        $('my-list').classList.toggle('hidden', !isAdmin);
+        // 监听当前用户自己的回馈
+        listenMyFeedbacks();
+
+        // 切换 tab 显示（如果当前在 admin 且不是管理员，切回 user）
+        if (!isAdmin) {
+            const adminTab = $('admin-tab');
+            if (!adminTab.classList.contains('hidden')) {
+                // 切回 user
+                document.querySelectorAll('.tab').forEach(b => {
+                    b.classList.toggle('active', b.dataset.tab === 'user');
+                });
+                $('panel-user').classList.remove('hidden');
+                $('panel-admin').classList.add('hidden');
+            }
+        }
     });
 
-    // ===== 提交（匿名可写）=====
+    // ===== 提交（匿名可写，每日一次）=====
     $('content').addEventListener('input', () => {
         $('count').textContent = $('content').value.length;
     });
@@ -347,6 +472,16 @@
     $('submit-btn').addEventListener('click', async () => {
         const content = $('content').value.trim();
         if (!content) { toast('請先輸入回饋內容'); return; }
+
+        // 每日限制检查（管理员不受限）
+        if (!isAdmin) {
+            const todayMine = myFeedbacks.filter(f => isToday(f.ts));
+            if (todayMine.length > 0) {
+                toast('您今天已經提交過回饋了，請先刪除今天的紀錄再重新提交');
+                updateDailyLimitUI();
+                return;
+            }
+        }
 
         const btn = $('submit-btn');
         btn.disabled = true;
@@ -366,15 +501,19 @@
             $('content').value = '';
             $('count').textContent = '0';
             toast('已送出，感謝您的回饋！');
+            // 注意：myFeedbacks 会通过监听自动更新
         } catch (e) {
             console.error(e);
             toast('送出失敗：' + (e.message || e));
         } finally {
             btn.disabled = false;
             btn.textContent = '送出回饋';
+            // 重新检查限制状态（如果刚才提交成功，myFeedbacks 更新后会自动 disable）
+            setTimeout(updateDailyLimitUI, 100);
         }
     });
-        // ===== 分頁切換邏輯 =====
+
+    // ===== 分頁切換邏輯 =====
     document.querySelectorAll('.tab').forEach(btn => {
         btn.addEventListener('click', () => {
             const tab = btn.dataset.tab;
@@ -396,6 +535,7 @@
             }
         });
     });
+
     // ===== 管理后台 =====
     $('admin-filter').addEventListener('change', renderAdmin);
     $('admin-search').addEventListener('input', renderAdmin);
@@ -449,7 +589,26 @@
         </div>`;
     }
 
+    // ===== 全局点击事件（管理后台操作 + 我的回馈删除） =====
     document.addEventListener('click', async e => {
+        // 1) 我的回馈删除（用户自己的）
+        const mineDelBtn = e.target.closest('[data-mine-del]');
+        if (mineDelBtn) {
+            const id = mineDelBtn.dataset.mineDel;
+            if (!id) return;
+            if (!confirm('確定要刪除這筆回饋嗎？刪除後今天可以重新提交。')) return;
+            try {
+                await db.ref(`feedback/${id}`).remove();
+                toast('已刪除，您可以重新提交回饋');
+                // myFeedbacks 会通过监听自动更新
+            } catch (err) {
+                console.error(err);
+                toast('刪除失敗：' + (err.message || err));
+            }
+            return;
+        }
+
+        // 2) 管理后台操作
         const btn = e.target.closest('[data-act]');
         if (!btn || !isAdmin) return;
         const { act, id } = btn.dataset;
@@ -478,6 +637,10 @@
             toast('已刪除');
         }
     });
+
+    // 初始化时先渲染一次我的回馈（空）
+    renderMyList();
+    updateDailyLimitUI();
 })();
 </script>
 </body>
