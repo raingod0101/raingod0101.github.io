@@ -253,6 +253,24 @@
 (async function () {
     const $ = id => document.getElementById(id);
 
+    // ===== 匿名裝置 ID（持久化）=====
+    const DEVICE_KEY = 'raingod_feedback_device_id';
+    let deviceId = '';
+    try {
+        deviceId = localStorage.getItem(DEVICE_KEY) || '';
+        if (!deviceId) {
+            // 產生一個足夠隨機的裝置 ID
+            const rand = (crypto && crypto.randomUUID)
+                ? crypto.randomUUID()
+                : 'dev_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 12);
+            deviceId = 'device_' + rand;
+            localStorage.setItem(DEVICE_KEY, deviceId);
+        }
+    } catch (e) {
+        // localStorage 不可用時，退化為本次瀏覽階段固定的 ID
+        deviceId = 'device_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 12);
+    }
+
     // 超时保护：8 秒后还没初始化完，就显示错误
     const timeout = setTimeout(() => {
         $('loading-view').innerHTML =
@@ -280,10 +298,13 @@
     const db = firebase.database();
 
     const ADMIN_ACCOUNT = 'raingod';
-    let uid = '', myEmail = '', myName = '', isAdmin = false;
+    let myUid = '';          // 登入用 Firebase uid；匿名用 deviceId
+    let myEmail = '';
+    let myName = '';
+    let isAdmin = false;
     let feedbacks = [];
     let feedRef = null;
-    let myFeedbacks = [];   // 当前用户自己的回馈（非管理员或管理员也跟踪自己的）
+    let myFeedbacks = [];
     let myFeedRef = null;
 
     const esc = s => String(s ?? '').replace(/[&<>"']/g, c => (
@@ -319,7 +340,7 @@
             && d.getDate() === now.getDate();
     }
 
-    // ===== 关键：显示主画面 =====
+    // ===== 显示主画面 =====
     function showMainView(){
         $('loading-view').classList.add('hidden');
         $('auth-view').classList.add('hidden');
@@ -328,7 +349,6 @@
 
     // ===== 更新每日限制 UI =====
     function updateDailyLimitUI(){
-        // 管理员不受限，但还是可以看自己的记录；这里只对「提交按钮」做限制
         const todayMine = myFeedbacks.filter(f => isToday(f.ts));
         const hasSubmittedToday = todayMine.length > 0;
 
@@ -337,6 +357,7 @@
         const contentEl = $('content');
         const categoryEl = $('category');
 
+        // 管理員不受限
         if (hasSubmittedToday && !isAdmin) {
             banner.classList.remove('hidden');
             submitBtn.disabled = true;
@@ -352,12 +373,11 @@
         }
     }
 
-    // ===== 渲染「我的回馈纪录」 =====
+    // ===== 渲染「我的回饋紀錄」 =====
     function renderMyList(){
         const listEl = $('my-list');
         if (!listEl) return;
 
-        // 管理员也可以看到自己的记录（如果管理员不是匿名，uid 对应）
         if (myFeedbacks.length === 0) {
             listEl.innerHTML = '<div class="empty">還沒有回饋紀錄</div>';
             return;
@@ -391,16 +411,12 @@
     function listenMyFeedbacks(){
         if (myFeedRef) { myFeedRef.off(); myFeedRef = null; }
         myFeedbacks = [];
+        renderMyList();
+        updateDailyLimitUI();
 
-        if (!uid) {
-            // 匿名访客：没有 uid，无法关联历史记录；本地不显示历史（或可显示本次会话内提交的？）
-            // 为了简单，匿名不显示「我的回馈纪录」（或者你可以用本地存储，但这里保持简单）
-            renderMyList();
-            updateDailyLimitUI();
-            return;
-        }
+        if (!myUid) return;
 
-        myFeedRef = db.ref('feedback').orderByChild('uid').equalTo(uid);
+        myFeedRef = db.ref('feedback').orderByChild('uid').equalTo(myUid);
         myFeedRef.on('value', snap => {
             myFeedbacks = [];
             snap.forEach(c => myFeedbacks.push({ id: c.key, ...c.val() }));
@@ -418,16 +434,17 @@
         const email = user?.email || '';
         const account = email.split('@')[0].toLowerCase();
         isAdmin = (account === ADMIN_ACCOUNT);
-        uid = user?.uid || '';
+
+        // 登入者用 Firebase uid；匿名者用裝置 ID
+        myUid = user?.uid || deviceId;
         myEmail = email;
         myName = account || '匿名訪客';
 
-        // 不管有没有登录，都显示主画面（匿名可提交）
         showMainView();
 
         $('user-label').textContent = isAdmin
             ? `${myName}（管理員）`
-            : (user ? myName : '未登入（可匿名提交）');
+            : (user ? myName : '未登入（匿名，以裝置為單位）');
         $('admin-tab').classList.toggle('hidden', !isAdmin);
 
         if (isAdmin) {
@@ -447,24 +464,20 @@
             feedbacks = [];
         }
 
-        // 监听当前用户自己的回馈
+        // 监听当前用户（或匿名裝置）自己的回馈
         listenMyFeedbacks();
 
-        // 切换 tab 显示（如果当前在 admin 且不是管理员，切回 user）
+        // 不是管理员则强制切回 user tab
         if (!isAdmin) {
-            const adminTab = $('admin-tab');
-            if (!adminTab.classList.contains('hidden')) {
-                // 切回 user
-                document.querySelectorAll('.tab').forEach(b => {
-                    b.classList.toggle('active', b.dataset.tab === 'user');
-                });
-                $('panel-user').classList.remove('hidden');
-                $('panel-admin').classList.add('hidden');
-            }
+            document.querySelectorAll('.tab').forEach(b => {
+                b.classList.toggle('active', b.dataset.tab === 'user');
+            });
+            $('panel-user').classList.remove('hidden');
+            $('panel-admin').classList.add('hidden');
         }
     });
 
-    // ===== 提交（匿名可写，每日一次）=====
+    // ===== 提交（匿名可写，每日一次，以裝置為單位）=====
     $('content').addEventListener('input', () => {
         $('count').textContent = $('content').value.length;
     });
@@ -489,7 +502,7 @@
 
         try {
             await db.ref('feedback').push({
-                uid: uid || 'guest',
+                uid: myUid,                    // 登入者 Firebase uid；匿名者 deviceId
                 name: myName || '匿名訪客',
                 email: myEmail || '',
                 category: $('category').value,
@@ -501,14 +514,13 @@
             $('content').value = '';
             $('count').textContent = '0';
             toast('已送出，感謝您的回饋！');
-            // 注意：myFeedbacks 会通过监听自动更新
+            // myFeedbacks 會透過監聽自動更新
         } catch (e) {
             console.error(e);
             toast('送出失敗：' + (e.message || e));
         } finally {
             btn.disabled = false;
             btn.textContent = '送出回饋';
-            // 重新检查限制状态（如果刚才提交成功，myFeedbacks 更新后会自动 disable）
             setTimeout(updateDailyLimitUI, 100);
         }
     });
@@ -517,21 +529,19 @@
     document.querySelectorAll('.tab').forEach(btn => {
         btn.addEventListener('click', () => {
             const tab = btn.dataset.tab;
-            if (tab === 'admin' && !isAdmin) return; // 安全檢查：不是管理員不能切
+            if (tab === 'admin' && !isAdmin) return;
 
-            // 切換按鈕樣式
             document.querySelectorAll('.tab').forEach(b => {
                 b.classList.toggle('active', b.dataset.tab === tab);
             });
 
-            // 切換面板顯示
             if (tab === 'user') {
                 $('panel-user').classList.remove('hidden');
                 $('panel-admin').classList.add('hidden');
             } else if (tab === 'admin') {
                 $('panel-user').classList.add('hidden');
                 $('panel-admin').classList.remove('hidden');
-                renderAdmin(); // 切過去時重新渲染一次後台資料
+                renderAdmin();
             }
         });
     });
@@ -591,7 +601,7 @@
 
     // ===== 全局点击事件（管理后台操作 + 我的回馈删除） =====
     document.addEventListener('click', async e => {
-        // 1) 我的回馈删除（用户自己的）
+        // 1) 我的回馈删除（自己的；匿名以 deviceId 关联）
         const mineDelBtn = e.target.closest('[data-mine-del]');
         if (mineDelBtn) {
             const id = mineDelBtn.dataset.mineDel;
@@ -600,7 +610,6 @@
             try {
                 await db.ref(`feedback/${id}`).remove();
                 toast('已刪除，您可以重新提交回饋');
-                // myFeedbacks 会通过监听自动更新
             } catch (err) {
                 console.error(err);
                 toast('刪除失敗：' + (err.message || err));
@@ -638,7 +647,7 @@
         }
     });
 
-    // 初始化时先渲染一次我的回馈（空）
+    // 初始化
     renderMyList();
     updateDailyLimitUI();
 })();
