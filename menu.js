@@ -34,35 +34,47 @@
     const v = new Date().getTime();
     let currentIp = "Unknown_IP"; 
 
-        // --- 節慶主題自動切換 ---
-    (function applyFestivalTheme() {
-        // 👇 測試用開關：想測試什麼節慶，就把這裡改成 'halloween'、'christmas'、'newyear' 等，測完記得改回 null
-        const testTheme = null; 
-        
-        let theme = '';
+    js:// --- 節慶主題自動切換 (陣列化優雅升級版) ---
+(function applyFestivalTheme() {
+    // 測試用開關：想測試什麼主題就填入字串，測完改回 null
+    const testTheme = null; 
+    
+    let theme = '';
 
-        if (testTheme) {
-            theme = 'theme-' + testTheme;
-        } else {
-            const now = new Date();
-            const m = now.getMonth() + 1; // 1-12
-            const d = now.getDate();
-            const md = m * 100 + d;
+    if (testTheme) {
+        theme = 'theme-' + testTheme;
+    } else {
+        const now = new Date();
+        const m = now.getMonth() + 1; // 1-12
+        const d = now.getDate();
+        const md = m * 100 + d; // 例如 320 代表 3月20日
 
-            // 稍微調整了區間，避免 2/10 同時符合新年與情人節
-            if (md >= 1024 && md <= 1101) theme = 'theme-halloween';   // 萬聖節
-            else if (md >= 1218 && md <= 1226) theme = 'theme-christmas'; // 聖誕節
-            else if (md >= 120 && md <= 209) theme = 'theme-newyear';  // 農曆新年
-            else if (md >= 915 && md <= 1005) theme = 'theme-midautumn'; // 中秋
-            else if (md >= 601 && md <= 610) theme = 'theme-dragonboat'; // 端午
-            else if (md >= 210 && md <= 216) theme = 'theme-valentine';  // 情人節
+        // 節慶設定陣列：集中管理所有主題與日期區間
+        const festivals = [
+            { name: 'newyear',    start: 120,  end: 209 },  // 🧨 農曆新年 (1/20 - 2/9)
+            { name: 'valentine',  start: 210,  end: 216 },  // 💝 情人節 (2/10 - 2/16)
+            { name: 'sakura',     start: 320,  end: 405 },  // 🌸 櫻花季 (3/20 - 4/5)
+            { name: 'dragonboat', start: 601,  end: 610 },  // 🐉 端午節 (6/1 - 6/10)
+            { name: 'midautumn',  start: 915,  end: 1005 }, // 🌕 中秋節 (9/15 - 10/5)
+            { name: 'halloween',  start: 1024, end: 1101 }, // 🎃 萬聖節 (10/24 - 11/1)
+            { name: 'shopping',   start: 1110, end: 1112 }, // 🛍️ 雙11購物節 (11/10 - 11/12)
+            { name: 'christmas',  start: 1218, end: 1226 }  // 🎄 聖誕節 (12/18 - 12/26)
+        ];
+
+        // 迴圈比對當前日期是否落在區間內
+        for (const f of festivals) {
+            if (md >= f.start && md <= f.end) {
+                theme = 'theme-' + f.name;
+                break; // 找到符合的第一個就跳出
+            }
         }
+    }
 
-        // 如果有對應的主題，就加到 body 上
-        if (theme) {
-            document.body.classList.add(theme);
-        }
-    })();
+    // 如果有對應的主題，就加到 body 上
+    if (theme) {
+        document.body.classList.add(theme);
+    }
+})();
 
     // --- 0. 設定網頁 Icon ---
     function setFavicon() {
