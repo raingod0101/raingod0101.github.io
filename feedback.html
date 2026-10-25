@@ -236,33 +236,20 @@
     </div>
 </div>
 
-<script type="module">
-    import {
-    getDatabase, ref, push, onValue, remove, update
-} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-import { getApps, getApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+<script>
+(async function () {
+    await window.raingodFirebaseReady;
+    await window.raingodAuthReady;
 
-// 等 menu.js 初始化好 Firebase
-await window.raingodFirebaseReady;
-await window.raingodAuthReady;
+    const db = firebase.database();
 
-// 复用 menu.js 的 [DEFAULT] app（不要自己 initializeApp）
-const defaultApp = getApps().find(a => a.name === '[DEFAULT]');
-if (!defaultApp) {
-    throw new Error('找不到 menu.js 初始化的 [DEFAULT] Firebase app');
-}
-const db = getDatabase(defaultApp);
-
-    /* ================= 狀態 ================= */
     const $ = id => document.getElementById(id);
-    const ADMIN_ACCOUNT = 'raingod';   // ← 只有這個帳號能看到管理後台
+    const ADMIN_ACCOUNT = 'raingod';
 
     let uid = '', myEmail = '', myName = '', isAdmin = false;
-    let feedbacks = [];        // [{ id, uid, name, email, category, content, status, reply, ts }]
-    let unsubFeed = null;
-    let toastTimer = null;
+    let feedbacks = [];
+    let feedRef = null;
 
-    /* ================= 小工具 ================= */
     const esc = s => String(s ?? '').replace(/[&<>"']/g, c => (
         { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]
     ));
@@ -275,7 +262,6 @@ const db = getDatabase(defaultApp);
         if(d.toDateString() === now.toDateString()) return `今天 ${hm}`;
         const y = new Date(now); y.setDate(now.getDate() - 1);
         if(d.toDateString() === y.toDateString()) return `昨天 ${hm}`;
-        if(d.getFullYear() === now.getFullYear()) return `${d.getMonth()+1}/${d.getDate()} ${hm}`;
         return `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} ${hm}`;
     }
 
@@ -284,261 +270,162 @@ const db = getDatabase(defaultApp);
         if(!el){ el = document.createElement('div'); el.id = 'toast'; document.body.appendChild(el); }
         el.textContent = msg;
         el.classList.add('show');
-        clearTimeout(toastTimer);
-        toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
+        clearTimeout(el._t);
+        el._t = setTimeout(() => el.classList.remove('show'), 2200);
     }
 
-    /* ================= 登入狀態 ================= */
+    // ===== 登录状态 =====
     window.raingodOnAuthStateChanged(user => {
-        $('loading-view').classList.add('hidden');
-
-        if(!user){
-            uid = ''; isAdmin = false;
-            $('main-view').classList.add('hidden');
-            $('auth-view').classList.remove('hidden');
-            return;
-        }
-
-        uid     = user.uid;
-        myEmail = user.email || '';
-
-        const account = (myEmail.split('@')[0] || '').toLowerCase();
-        myName  = user.displayName || account || '雨神玩家';
+        const email = user?.email || '';
+        const account = email.split('@')[0].toLowerCase();
         isAdmin = (account === ADMIN_ACCOUNT);
+        uid = user?.uid || '';
+        myEmail = email;
+        myName = account || '匿名訪客';
 
-        $('auth-view').classList.add('hidden');
-        $('main-view').classList.remove('hidden');
-
-        $('user-label').textContent = isAdmin ? `${myName}（管理員）` : myName;
+        $('user-label').textContent = isAdmin ? `${myName}（管理員）` : (user ? myName : '未登入（可匿名提交）');
         $('admin-tab').classList.toggle('hidden', !isAdmin);
 
-        startListening();
-    });
-
-    /* ================= 即時讀取全部回饋 ================= */
-    function startListening(){
-        if(unsubFeed) unsubFeed();
-
-        unsubFeed = onValue(ref(db, 'feedback'), snap => {
-            feedbacks = [];
-            snap.forEach(child => {
-                feedbacks.push({ id: child.key, ...child.val() });
+        if (isAdmin) {
+            if (feedRef) feedRef.off();
+            feedRef = db.ref('feedback');
+            feedRef.on('value', snap => {
+                feedbacks = [];
+                snap.forEach(c => feedbacks.push({ id: c.key, ...c.val() }));
+                feedbacks.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+                renderAdmin();
+            }, err => {
+                console.error(err);
+                toast('讀取回饋失敗：' + (err.message || err));
             });
-            feedbacks.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+        } else {
+            if (feedRef) { feedRef.off(); feedRef = null; }
+            feedbacks = [];
+        }
 
-            renderMine();
-            if(isAdmin) renderAdmin();
-        }, err => {
-            console.error(err);
-            toast('讀取回饋失敗：' + (err.message || err));
-        });
-    }
-
-    /* ================= 分頁切換 ================= */
-    document.querySelectorAll('.tab').forEach(btn => {
-        btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+        // 普通用户不显示“我的回馈”列表
+        $('my-list').classList.toggle('hidden', !isAdmin);
     });
 
-    function switchTab(tab){
-        if(tab === 'admin' && !isAdmin) return;
-
-        document.querySelectorAll('.tab').forEach(b => {
-            b.classList.toggle('active', b.dataset.tab === tab);
-        });
-        $('panel-user').classList.toggle('hidden',  tab !== 'user');
-        $('panel-admin').classList.toggle('hidden', tab !== 'admin');
-
-        if(tab === 'admin') renderAdmin();
-    }
-
-    /* ================= 送出回饋 ================= */
-    const contentEl = $('content');
-    contentEl.addEventListener('input', () => {
-        $('count').textContent = contentEl.value.length;
+    // ===== 提交（匿名可写）=====
+    $('content').addEventListener('input', () => {
+        $('count').textContent = $('content').value.length;
     });
 
-    $('submit-btn').addEventListener('click', submitFeedback);
-
-    async function submitFeedback(){
-        if(!uid){ toast('請先登入'); return; }
-
-        const content = contentEl.value.trim();
-        if(!content){ toast('請先輸入回饋內容'); contentEl.focus(); return; }
+    $('submit-btn').addEventListener('click', async () => {
+        const content = $('content').value.trim();
+        if (!content) { toast('請先輸入回饋內容'); return; }
 
         const btn = $('submit-btn');
         btn.disabled = true;
         btn.textContent = '送出中…';
 
-        try{
-            await push(ref(db, 'feedback'), {
-                uid,
-                name: myName,
-                email: myEmail,
+        try {
+            await db.ref('feedback').push({
+                uid: uid || 'guest',
+                name: myName || '匿名訪客',
+                email: myEmail || '',
                 category: $('category').value,
                 content,
                 status: 'open',
                 reply: null,
                 ts: Date.now()
             });
-
-            contentEl.value = '';
+            $('content').value = '';
             $('count').textContent = '0';
             toast('已送出，感謝您的回饋！');
-        }catch(e){
+        } catch (e) {
             console.error(e);
             toast('送出失敗：' + (e.message || e));
-        }finally{
+        } finally {
             btn.disabled = false;
             btn.textContent = '送出回饋';
         }
-    }
+    });
 
-    /* ================= 我的回饋 ================= */
-    function renderMine(){
-        const box  = $('my-list');
-        const list = feedbacks.filter(f => f.uid === uid);
-
-        if(!list.length){
-            box.innerHTML = '<div class="empty">目前還沒有回饋紀錄<br>歡迎提出您的想法 🙌</div>';
-            return;
-        }
-        box.innerHTML = list.map(f => cardHTML(f, false)).join('');
-    }
-
-    /* ================= 管理後台 ================= */
+    // ===== 管理后台 =====
     $('admin-filter').addEventListener('change', renderAdmin);
-    $('admin-search').addEventListener('input',  renderAdmin);
+    $('admin-search').addEventListener('input', renderAdmin);
 
     function renderAdmin(){
-        if(!isAdmin) return;
-
+        if (!isAdmin) return;
         const filter = $('admin-filter').value;
-        const kw     = $('admin-search').value.trim().toLowerCase();
+        const kw = $('admin-search').value.trim().toLowerCase();
 
         let list = feedbacks;
-        if(filter !== 'all'){
-            list = list.filter(f => (f.status || 'open') === filter);
-        }
-        if(kw){
-            list = list.filter(f =>
-                (f.content  || '').toLowerCase().includes(kw) ||
-                (f.name     || '').toLowerCase().includes(kw) ||
-                (f.email    || '').toLowerCase().includes(kw) ||
-                (f.category || '').toLowerCase().includes(kw)
-            );
-        }
+        if (filter !== 'all') list = list.filter(f => (f.status || 'open') === filter);
+        if (kw) list = list.filter(f =>
+            (f.content || '').toLowerCase().includes(kw) ||
+            (f.name || '').toLowerCase().includes(kw) ||
+            (f.email || '').toLowerCase().includes(kw) ||
+            (f.category || '').toLowerCase().includes(kw)
+        );
 
         const openCount = feedbacks.filter(f => (f.status || 'open') === 'open').length;
-        $('admin-stats').textContent =
-            `共 ${feedbacks.length} 筆回饋　·　待處理 ${openCount} 筆`;
+        $('admin-stats').textContent = `共 ${feedbacks.length} 筆回饋　·　待處理 ${openCount} 筆`;
 
-        const box = $('admin-list');
-        if(!list.length){
-            box.innerHTML = '<div class="empty">沒有符合條件的回饋</div>';
-            return;
-        }
-        box.innerHTML = list.map(f => cardHTML(f, true)).join('');
+        $('admin-list').innerHTML = list.length
+            ? list.map(f => cardHTML(f)).join('')
+            : '<div class="empty">沒有符合條件的回饋</div>';
     }
 
-    /* ================= 卡片 HTML ================= */
-    function cardHTML(f, admin){
+    function cardHTML(f){
         const status = f.status || 'open';
-
-        const statusPill = status === 'done'
+        const pill = status === 'done'
             ? '<span class="pill done">已處理</span>'
             : '<span class="pill open">待處理</span>';
-
-        const whoHTML = admin
-            ? `<span class="who">${esc(f.name || '未知')}</span>` +
-              (f.email ? ` <span class="mail">${esc(f.email)}</span>` : '')
-            : '';
-
         const replyHTML = f.reply
-            ? `<div class="reply"><b>官方回覆：</b>${esc(f.reply)}</div>`
-            : '';
-
-        const actions = [];
-        if(admin){
-            actions.push(`<button class="btn blue"  data-act="reply"  data-id="${f.id}">回覆</button>`);
-            actions.push(`<button class="btn green" data-act="toggle" data-id="${f.id}">${status === 'done' ? '改為待處理' : '標為已處理'}</button>`);
-            actions.push(`<button class="btn red"   data-act="del"    data-id="${f.id}">刪除</button>`);
-        }else if(status === 'open'){
-            actions.push(`<button class="btn red"   data-act="del"    data-id="${f.id}">刪除</button>`);
-        }
+            ? `<div class="reply"><b>官方回覆：</b>${esc(f.reply)}</div>` : '';
 
         return `
         <div class="fb">
             <div class="fb-top">
                 <span class="pill">${esc(f.category || '其他')}</span>
-                ${whoHTML}
-                ${statusPill}
+                <span class="who">${esc(f.name || '匿名')}</span>
+                ${f.email ? `<span class="mail">${esc(f.email)}</span>` : ''}
+                ${pill}
                 <span>${fmt(f.ts)}</span>
             </div>
             <div class="fb-body">${esc(f.content)}</div>
             ${replyHTML}
-            ${actions.length ? `<div class="fb-actions">${actions.join('')}</div>` : ''}
+            <div class="fb-actions">
+                <button class="btn blue" data-act="reply" data-id="${f.id}">回覆</button>
+                <button class="btn green" data-act="toggle" data-id="${f.id}">${status === 'done' ? '改為待處理' : '標為已處理'}</button>
+                <button class="btn red" data-act="del" data-id="${f.id}">刪除</button>
+            </div>
         </div>`;
     }
 
-    /* ================= 操作事件（事件委派） ================= */
-    document.addEventListener('click', e => {
+    document.addEventListener('click', async e => {
         const btn = e.target.closest('[data-act]');
-        if(!btn) return;
-
+        if (!btn || !isAdmin) return;
         const { act, id } = btn.dataset;
         const f = feedbacks.find(x => x.id === id);
-        if(!f) return;
+        if (!f) return;
 
-        if(act === 'reply')  replyFeedback(f);
-        if(act === 'toggle') toggleStatus(f);
-        if(act === 'del')    deleteFeedback(f);
-    });
-
-    async function replyFeedback(f){
-        if(!isAdmin){ toast('沒有權限'); return; }
-
-        const text = prompt('輸入回覆內容（留空並確定 = 清除回覆）：', f.reply || '');
-        if(text === null) return;
-
-        try{
-            if(text.trim()){
-                await update(ref(db, `feedback/${f.id}`), {
-                    reply: text.trim(),
-                    replyTs: Date.now(),
-                    status: 'done'
-                });
+        if (act === 'reply') {
+            const text = prompt('輸入回覆內容（留空並確定 = 清除回覆）：', f.reply || '');
+            if (text === null) return;
+            if (text.trim()) {
+                await db.ref(`feedback/${id}`).update({ reply: text.trim(), replyTs: Date.now(), status: 'done' });
                 toast('已回覆並標為已處理');
-            }else{
-                await update(ref(db, `feedback/${f.id}`), { reply: null });
+            } else {
+                await db.ref(`feedback/${id}`).update({ reply: null });
                 toast('已清除回覆');
             }
-        }catch(e){
-            toast('更新失敗：' + (e.message || e));
         }
-    }
-
-    async function toggleStatus(f){
-        if(!isAdmin){ toast('沒有權限'); return; }
-        const next = (f.status || 'open') === 'done' ? 'open' : 'done';
-        try{
-            await update(ref(db, `feedback/${f.id}`), { status: next });
+        if (act === 'toggle') {
+            const next = (f.status || 'open') === 'done' ? 'open' : 'done';
+            await db.ref(`feedback/${id}`).update({ status: next });
             toast(next === 'done' ? '已標為已處理' : '已改為待處理');
-        }catch(e){
-            toast('更新失敗：' + (e.message || e));
         }
-    }
-
-    async function deleteFeedback(f){
-        if(!isAdmin && f.uid !== uid){ toast('沒有權限'); return; }
-        if(!confirm('確定要刪除這筆回饋嗎？刪除後無法復原。')) return;
-
-        try{
-            await remove(ref(db, `feedback/${f.id}`));
+        if (act === 'del') {
+            if (!confirm('確定要刪除這筆回饋嗎？')) return;
+            await db.ref(`feedback/${id}`).remove();
             toast('已刪除');
-        }catch(e){
-            toast('刪除失敗：' + (e.message || e));
         }
-    }
+    });
+})();
 </script>
 </body>
 </html>
