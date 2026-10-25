@@ -12,7 +12,6 @@
         // 若距離上次活動超過 1 小時，先 refresh 網頁
         if (last > 0 && now - last > IDLE_LIMIT) {
             try { sessionStorage.setItem(KEY, String(now)); } catch (e) {}
-            // 使用 replace 避免使用者按上一頁又回到舊狀態
             window.location.reload();
             return;
         }
@@ -20,7 +19,7 @@
         // 更新活動時間
         try { sessionStorage.setItem(KEY, String(now)); } catch (e) {}
 
-        // 頁面關閉或切到背景時更新活動時間，讓「放置」判定更準確
+        // 頁面關閉或切到背景時更新活動時間
         const touch = () => {
             try { sessionStorage.setItem(KEY, String(Date.now())); } catch (e) {}
         };
@@ -35,20 +34,16 @@
     const v = new Date().getTime();
     let currentIp = "Unknown_IP"; 
 
-    // --- 0. 設定網頁 Icon (Favicon 修正機制) ---
+    // --- 0. 設定網頁 Icon ---
     function setFavicon() {
         const iconUrl = `${baseUrl}catdragon.png`;
-        
-        // 移除舊有任何相關的 favicon 標籤，避免被原有設定覆蓋
         const existingIcons = document.querySelectorAll("link[rel*='icon']");
         existingIcons.forEach(el => el.remove());
 
-        // 建立全新的 Favicon link
         const favicon = document.createElement('link');
         favicon.rel = 'icon';
         favicon.type = 'image/png';
-        favicon.href = `${iconUrl}?v=${v}`; // 加快取防刷參數
-        
+        favicon.href = `${iconUrl}?v=${v}`;
         (document.head || document.documentElement).appendChild(favicon);
     }
 
@@ -626,6 +621,15 @@
                     alert("密碼長度不足，請輸入至少 6 位數！");
                     return;
                 }
+
+                // ===== 新增：第二次輸入密碼驗證 =====
+                const confirmPassword = prompt("請再次輸入您的密碼以確認：");
+                if (confirmPassword === null) return; // 如果使用者按取消，就停止
+                if (password !== confirmPassword) {
+                    alert("錯誤：兩次輸入的密碼不一致，請重新註冊！");
+                    return;
+                }
+                // ==================================
 
                 const email = `${cleanUser}@raingod.app`;
 
