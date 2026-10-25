@@ -36,7 +36,7 @@
 
     js:// --- 節慶主題自動切換 (陣列化優雅升級版) ---
 (function applyFestivalTheme() {
-    // 測試用開關：想測試什麼主題就填入字串，測完改回 null
+    // 測試用開關：想測試什麼主題就填入字串（例如 'stpatrick'、'diwali' 等），測完改回 null
     const testTheme = null; 
     
     let theme = '';
@@ -47,10 +47,11 @@
         const now = new Date();
         const m = now.getMonth() + 1; // 1-12
         const d = now.getDate();
-        const md = m * 100 + d; // 例如 320 代表 3月20日
+        const md = m * 100 + d; // 例如 317 代表 3月17日
 
-        // 節慶設定陣列：集中管理所有主題與日期區間
+        // 集中管理全部 20 個節慶與日期區間
         const festivals = [
+            // 原有 8 個
             { name: 'newyear',    start: 120,  end: 209 },  // 🧨 農曆新年 (1/20 - 2/9)
             { name: 'valentine',  start: 210,  end: 216 },  // 💝 情人節 (2/10 - 2/16)
             { name: 'sakura',     start: 320,  end: 405 },  // 🌸 櫻花季 (3/20 - 4/5)
@@ -58,19 +59,38 @@
             { name: 'midautumn',  start: 915,  end: 1005 }, // 🌕 中秋節 (9/15 - 10/5)
             { name: 'halloween',  start: 1024, end: 1101 }, // 🎃 萬聖節 (10/24 - 11/1)
             { name: 'shopping',   start: 1110, end: 1112 }, // 🛍️ 雙11購物節 (11/10 - 11/12)
-            { name: 'christmas',  start: 1218, end: 1226 }  // 🎄 聖誕節 (12/18 - 12/26)
+            { name: 'christmas',  start: 1218, end: 1226 }, // 🎄 聖誕節 (12/18 - 12/26)
+
+            // 新增 12 個
+            { name: 'stpatrick',  start: 315,  end: 318 },  // 🍀 聖派翠克節 (3/15 - 3/18)
+            { name: 'diwali',     start: 1025, end: 1105 }, // 🪔 印度排燈節 (10/25 - 11/5)
+            { name: 'dayofdead',  start: 1101, end: 1102 }, // 💀 墨西哥亡靈節 (11/1 - 11/2)
+            { name: 'backtoschool',start: 901, end: 910 },  // ⚾ 開學季 (9/1 - 9/10)
+            { name: 'summer',     start: 701,  end: 715 },  // 🌊 盛夏海洋季 (7/1 - 7/15)
+            { name: 'thanksgiving',start: 1120, end: 1130 }, // 🍁 感恩節/楓葉季 (11/20 - 11/30)
+            { name: 'nye',        start: 1231, end: 102 },  // 🎆 跨年迎曙光 (12/31 - 1/2，跨年度比對需注意或簡化)
+            { name: 'lantern',    start: 217,  end: 225 },  // 🏮 元宵燈會 (2/17 - 2/25)
+            { name: 'earthday',   start: 420,  end: 424 },  // 🌍 世界地球日 (4/20 - 4/24)
+            { name: 'graduation', start: 525,  end: 615 }   // 🎓 畢業季 (5/25 - 6/15)
         ];
 
         // 迴圈比對當前日期是否落在區間內
         for (const f of festivals) {
-            if (md >= f.start && md <= f.end) {
-                theme = 'theme-' + f.name;
-                break; // 找到符合的第一個就跳出
+            // 簡單處理跨年度（如 1231 到 102）
+            if (f.start > f.end) {
+                if (md >= f.start || md <= f.end) {
+                    theme = 'theme-' + f.name;
+                    break;
+                }
+            } else {
+                if (md >= f.start && md <= f.end) {
+                    theme = 'theme-' + f.name;
+                    break;
+                }
             }
         }
     }
 
-    // 如果有對應的主題，就加到 body 上
     if (theme) {
         document.body.classList.add(theme);
     }
