@@ -365,7 +365,7 @@
                 stopSessionWatch();
                 return;
             }
-            firebase.database().onDisconnect(sessionRef).remove();
+            sessionRef.onDisconnect().remove();
             sessionRef.on('value', handler);
         } catch (e) {
             console.warn('多裝置偵測失敗', e);
