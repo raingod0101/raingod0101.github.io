@@ -238,14 +238,35 @@
 
 <script>
 (async function () {
-    await window.raingodFirebaseReady;
-    await window.raingodAuthReady;
+    const $ = id => document.getElementById(id);
+
+    // 超时保护：8 秒后还没初始化完，就显示错误
+    const timeout = setTimeout(() => {
+        $('loading-view').innerHTML =
+            '<div class="big-icon">⚠️</div><p>載入逾時，請重新整理頁面</p>';
+    }, 8000);
+
+    try {
+        await window.raingodFirebaseReady;
+        await window.raingodAuthReady;
+    } catch (e) {
+        clearTimeout(timeout);
+        $('loading-view').innerHTML =
+            '<div class="big-icon">⚠️</div><p>Firebase 初始化失敗：' + e.message + '</p>';
+        return;
+    }
+    clearTimeout(timeout);
+
+    // 确认 compat 的 firebase 存在
+    if (typeof firebase === 'undefined' || !firebase.database) {
+        $('loading-view').innerHTML =
+            '<div class="big-icon">⚠️</div><p>Firebase SDK 未載入，請重新整理</p>';
+        return;
+    }
 
     const db = firebase.database();
 
-    const $ = id => document.getElementById(id);
     const ADMIN_ACCOUNT = 'raingod';
-
     let uid = '', myEmail = '', myName = '', isAdmin = false;
     let feedbacks = [];
     let feedRef = null;
@@ -274,6 +295,13 @@
         el._t = setTimeout(() => el.classList.remove('show'), 2200);
     }
 
+    // ===== 关键：显示主画面 =====
+    function showMainView(){
+        $('loading-view').classList.add('hidden');
+        $('auth-view').classList.add('hidden');
+        $('main-view').classList.remove('hidden');
+    }
+
     // ===== 登录状态 =====
     window.raingodOnAuthStateChanged(user => {
         const email = user?.email || '';
@@ -283,7 +311,12 @@
         myEmail = email;
         myName = account || '匿名訪客';
 
-        $('user-label').textContent = isAdmin ? `${myName}（管理員）` : (user ? myName : '未登入（可匿名提交）');
+        // 不管有没有登录，都显示主画面（匿名可提交）
+        showMainView();
+
+        $('user-label').textContent = isAdmin
+            ? `${myName}（管理員）`
+            : (user ? myName : '未登入（可匿名提交）');
         $('admin-tab').classList.toggle('hidden', !isAdmin);
 
         if (isAdmin) {
@@ -303,7 +336,6 @@
             feedbacks = [];
         }
 
-        // 普通用户不显示“我的回馈”列表
         $('my-list').classList.toggle('hidden', !isAdmin);
     });
 
