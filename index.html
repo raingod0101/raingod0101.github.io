@@ -2060,15 +2060,38 @@
         if (!button) return;
 
         const CLASSES = ["hide-links", "hide-skills", "hide-controls"];
+        const STORAGE_KEY = "raingod_hide_stage";   // localStorage 的 key
 
         const STAGES = [
-    { classes: [], label: "隐藏", aria: "隐藏資訊欄" },
-    { classes: ["hide-links"], label: "隐藏", aria: "隐藏技能" },
-    { classes: ["hide-links", "hide-skills"], label: "隐藏", aria: "隐藏移動按鈕" },
-    { classes: ["hide-links", "hide-skills", "hide-controls"], label: "显示", aria: "显示全部" }
-];
+            { classes: [], label: "隐藏", aria: "隐藏資訊欄" },
+            { classes: ["hide-links"], label: "隐藏", aria: "隐藏技能" },
+            { classes: ["hide-links", "hide-skills"], label: "隐藏", aria: "隐藏移動按鈕" },
+            { classes: ["hide-links", "hide-skills", "hide-controls"], label: "显示", aria: "显示全部" }
+        ];
 
-        let stage = 0;
+        // 讀取上次記住的段數（失敗就回 0）
+        function readStage() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                if (raw === null) return 0;
+                const n = parseInt(raw, 10);
+                if (Number.isInteger(n) && n >= 0 && n < STAGES.length) return n;
+            } catch (err) {
+                console.warn("讀取隱藏狀態失敗：", err);
+            }
+            return 0;
+        }
+
+        // 寫入目前段數
+        function saveStage(n) {
+            try {
+                localStorage.setItem(STORAGE_KEY, String(n));
+            } catch (err) {
+                console.warn("儲存隱藏狀態失敗：", err);
+            }
+        }
+
+        let stage = readStage();
 
         function render() {
             const current = STAGES[stage];
@@ -2076,17 +2099,19 @@
             current.classes.forEach(c => document.body.classList.add(c));
 
             button.textContent = current.label;
-            button.setAttribute("aria-pressed", String(current.label === "顯示"));
+            // 原本用 label === "顯示" 判斷，繁簡不一致會永遠 false，改用段數判斷
+            button.setAttribute("aria-pressed", String(stage === STAGES.length - 1));
             button.setAttribute("aria-label", current.aria);
             button.title = current.aria;
         }
 
         button.addEventListener("click", () => {
             stage = (stage + 1) % STAGES.length;
+            saveStage(stage);   // 每次切換就存一次
             render();
         });
 
-        render();
+        render();   // 頁面載入時直接還原上次狀態
     })();
 </script>
 </body>
