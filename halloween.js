@@ -182,8 +182,8 @@
         <div class="halloween-info">
           <span>🎃 代幣：<b id="hwTokens">0</b></span>
           <span>🧩 碎片：<b id="hwFragments">0</b></span>
-          <span>💰 收益：<b id="hwCashMul">×1</b></span>
-          <span>⏳ 孵蛋：<b id="hwHatchMul">×1</b></span>
+          <span>💰 收益：<b id="hwCashMul">×1.25</b></span>
+          <span>⏳ 孵蛋：<b id="hwHatchMul">×1.10</b></span>
         </div>
         <div class="halloween-shop-item">
           <div class="hs-name">🎃 萬聖節變異碎片</div>
