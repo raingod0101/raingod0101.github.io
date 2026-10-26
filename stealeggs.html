@@ -74,6 +74,7 @@
   .index-card canvas{width:42px;height:42px}
   .index-card .name{font-size:.65rem;font-weight:900;color:#3a2a1a;text-align:center;line-height:1.1;min-height:1.4em}
   .index-card .biome-label{font-size:.55rem;color:#5a4a3a;font-weight:800}
+  .index-card .income-label{font-size:.6rem;font-weight:900;color:#0a6a0a;background:rgba(120,220,120,0.25);padding:1px 6px;border-radius:6px}
   .index-card .rarity-label{font-size:.55rem;font-weight:900;padding:1px 6px;border-radius:6px;background:#3a2a1a}
   .index-card .reward-btn{font-size:.6rem;padding:3px 8px;background:linear-gradient(180deg,#a0d8a0,#80c080);border:2px solid #4a8a4a;border-radius:6px;color:#0a3a0a;font-weight:800;cursor:pointer}
   .index-card .reward-btn.claimed{opacity:0.4;cursor:default;filter:grayscale(1)}
@@ -154,7 +155,7 @@
   .sub-status { min-height: 1.4em; font-weight: 900; font-size: .85rem; text-align: center; color: #2a6a2a; }
   .sub-close-btn { background: linear-gradient(180deg,#c0c0b0,#8a8a7a); border: 2px solid #5a5a4a; border-radius: 8px; padding: 5px 14px; color: #2a2a1a; font-weight: 800; font-size: .75rem; cursor: pointer; }
 
-  #testTriggerBtn { position: absolute; left: 0; bottom: 180px; width: 36px; height: 56px; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); border-left: none; border-radius: 0 10px 10px 0; display: flex; align-items: center; justify-content: center; z-index: 150; pointer-events: auto; color: #fff; font-size: 1.2rem; cursor: pointer; opacity: 0.6; transition: opacity 0.2s; }
+  #testTriggerBtn { position: absolute; left: 0; bottom: 180px; width: 36px; height: 56px; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); border-left: none; border-radius: 0 10px 10px 0; display: none; align-items: center; justify-content: center; z-index: 150; pointer-events: auto; color: #fff; font-size: 1.2rem; cursor: pointer; opacity: 0.6; transition: opacity 0.2s; }
   #testTriggerBtn:hover { opacity: 1; }
 
   .test-panel { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(30, 40, 30, 0.98); border: 3px solid #e0b040; border-radius: 12px; padding: 16px; z-index: 350; display: none; flex-direction: column; gap: 10px; width: 90%; max-width: 380px; box-shadow: 0 10px 40px rgba(0,0,0,0.8); max-height: 90vh; overflow-y: auto; }
@@ -296,9 +297,7 @@
       </div>
       <div class="test-row">
         <label>🎯 對象:</label>
-        <select id="testTargetSelect">
-          <option value="self">自己</option>
-        </select>
+        <select id="testTargetSelect"><option value="self">自己</option></select>
       </div>
       <div class="test-row">
         <label>💰 金錢:</label>
@@ -393,21 +392,12 @@
 <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
 
-<!-- ★ 事件鉤子 -->
 <script>
   window.raingodEventHooks = window.raingodEventHooks || {
-    onInit: [],
-    onUpdate: [],
-    onDrawBackground: [],
-    onDrawWorld: [],
-    onDrawPetBefore: [],
-    onDrawPetAfter: [],
-    onDrawHatcheryBefore: [],
-    onDrawHatcheryAfter: [],
-    onClick: [],
-    onSave: [],
-    onLoad: [],
-    onUIUpdate: [],
+    onInit: [], onUpdate: [], onDrawBackground: [], onDrawWorld: [],
+    onDrawPetBefore: [], onDrawPetAfter: [],
+    onDrawHatcheryBefore: [], onDrawHatcheryAfter: [],
+    onClick: [], onSave: [], onLoad: [], onUIUpdate: [],
   };
 </script>
 
@@ -613,7 +603,6 @@ import { getDatabase, ref, set, onValue, onDisconnect, serverTimestamp, remove }
 const firebaseApp = initializeApp({ databaseURL: "https://game-24b43-default-rtdb.firebaseio.com/" }, "gameApp");
 const db = getDatabase(firebaseApp);
 window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove };
-
 (function(){
   const HOOKS = window.raingodEventHooks;
   const c=document.getElementById('c');
@@ -722,10 +711,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove };
         },
       };
       for (let i = 0; i < HOOKS.onSave.length; i++) {
-        try {
-          const extra = HOOKS.onSave[i]();
-          if (extra && typeof extra === 'object') Object.assign(data, extra);
-        } catch(err) { console.error('onSave error', err); }
+        try { const extra = HOOKS.onSave[i](); if (extra && typeof extra === 'object') Object.assign(data, extra); } catch(err) { console.error('onSave error', err); }
       }
       const raw = JSON.stringify(data);
       localStorage.setItem(SAVE_KEY, raw);
@@ -833,6 +819,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove };
     adPlaying:false, adType:'2x', playerName:'玩家', equippedStick:null, stickCooldown:0, stickSwingAnim:0,
     ad2Step:0, ad4Step:0, ad8Step:0, ad16Step:0, ad32Step:0, subscriptionVerified: false, trails:{}, equippedTrail:null,
     night:false, lastNightCheck:0, tutorialTarget: null, tutorialText: '',
+    mutationCashMultiplier: 1, mutationHatchMultiplier: 1,
     _ext: {},
   };
   const keys={};
@@ -849,8 +836,8 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove };
   }
 
   function getSpeedMultiplier(){ let m = 1; if (S.ad2Step >= 1) m *= 2; if (S.ad4Step >= 1) m *= 4; if (S.ad8Step >= 1) m *= 8; if (S.ad16Step >= 1) m *= 16; if (S.ad32Step >= 1) m *= 32; return m; }
-  function getCashMultiplier(){ return S.subscriptionVerified ? 2 : 1; }
-  function getHatchMultiplier(){ let m = 1; const trail = TRAIL_DEFS.find(t => t.id === S.equippedTrail); if (trail) m *= trail.mult; if (S.night) m *= 10; return m; }
+  function getCashMultiplier(){ return (S.subscriptionVerified ? 2 : 1) * (S.mutationCashMultiplier || 1); }
+  function getHatchMultiplier(){ let m = 1; const trail = TRAIL_DEFS.find(t => t.id === S.equippedTrail); if (trail) m *= trail.mult; if (S.night) m *= 10; m *= (S.mutationHatchMultiplier || 1); return m; }
 
   const PLAYER_ID = localStorage.getItem('pid') || (()=>{ const id='p_'+Math.random().toString(36).slice(2,9); localStorage.setItem('pid',id); return id; })();
   const PLAYER_NAME = '玩家' + PLAYER_ID.slice(-3);
@@ -1019,7 +1006,27 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove };
     });
   }
 
+  // ★★★ 管理員判定：只有 raingod 帳號可以用測試模式 ★★★
+  function isAdmin() {
+    try {
+      const u = firebase.auth().currentUser;
+      if (!u || !u.email) return false;
+      const prefix = u.email.split('@')[0].toLowerCase().trim();
+      return prefix === 'raingod';
+    } catch (e) { return false; }
+  }
+  function tryActivateTestMode() {
+    if (!isAdmin()) { showToast('❌ 只有 raingod 帳號可以使用測試模式', '#8a2a2a', '#5a0a0a'); return; }
+    activateTestMode();
+  }
+  function refreshAdminUI() {
+    const btn = document.getElementById('testTriggerBtn');
+    if (!btn) return;
+    btn.style.display = isAdmin() ? 'flex' : 'none';
+  }
+
   function activateTestMode() {
+    if (!isAdmin()) { showToast('❌ 只有 raingod 帳號可以使用測試模式', '#8a2a2a', '#5a0a0a'); return; }
     document.getElementById('testPanel').classList.add('open');
     showToast('🛠️ 已進入測試模式！', '#8a3a8a', '#5a1a5a');
     const targetSel = document.getElementById('testTargetSelect'); targetSel.innerHTML = '<option value="self">自己</option>';
@@ -1030,12 +1037,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove };
     TRAIL_DEFS.forEach(t => { const opt = document.createElement('option'); opt.value = t.id; opt.textContent = t.name; trailSel.appendChild(opt); });
   }
 
-  document.getElementById('testTriggerBtn').addEventListener('click', () => {
-    const pwd = prompt("請輸入管理員密碼：");
-    if (pwd && (pwd.toLowerCase() === 'rain' || pwd.toLowerCase() === 'r+a+i+n+ctrl')) activateTestMode();
-    else if(pwd) showToast('❌ 密碼錯誤', '#8a2a2a', '#5a0a0a');
-  });
-
+  document.getElementById('testTriggerBtn').addEventListener('click', tryActivateTestMode);
   document.getElementById('btnCloseTest').addEventListener('click', () => document.getElementById('testPanel').classList.remove('open'));
   function getSelectedTarget() { const val = document.getElementById('testTargetSelect').value; if (val === 'self') return { type: 'self', data: S }; return { type: 'remote', data: S.remotePlayers.find(p => p.id === val) }; }
 
@@ -1261,11 +1263,9 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove };
     ['chicken','dog','bird','owl','raccoon','fox','guardian_0','crystal'],['lizard','frog','cow','iguana','chili','hound','guardian_1','dragon'],['parrotfish','swordfish','shark','orca','whaleshark','beluga','guardian_2','mermaid'],['dodo','pterodactyl','ankylo','triceratops','brontosaurus','trex','guardian_3','mosasaur'],['rabbit','penguin','owl','fox','deer','dragon','guardian_4','bear'],['centipede','gecko','gorilla','crystal','skeleton','cosmicdragon','guardian_5','unicorn'],['petal','mouse','butterfly','flower','deer','sakuradragon','guardian_6','goddess'],['titanbaby','colossus','statue','thunder','earth','sky','guardian_7','king'],['angel','unicorn','griffin','phoenix','thunder','king','guardian_8','creator'],['shard','shadow','eye','chaos','abyss','voidbeast','guardian_9','chaosgod'],['shard','shadow','eye','chaos','abyss','voidbeast','guardian_10','creator'],['shard','shadow','eye','chaos','abyss','voidbeast','guardian_11','creator']
   ];
 
-  // ★★★ 造型全部走外掛：characters.js 會負責實際繪製 ★★★
   function drawPetShape(g, shape, pal, s, time, rc) {
     const fn = window.__raingodDrawPetShape;
     if (fn) return fn(g, shape, pal, s, time, rc);
-    // 外掛未載入時的佔位
     g.fillStyle = pal && pal.body ? pal.body : '#888';
     g.beginPath(); g.arc(0, 0, s, 0, 7); g.fill();
   }
@@ -1288,11 +1288,13 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove };
     g.beginPath(); g.moveTo(0, -r); g.lineTo(0, r); g.stroke();
   }
 
+  // ★★★ 圖鑑：新增收益顯示（$X/s）★★★
   function buildIndexUI(){
     const tabs=document.getElementById('indexTabs');tabs.innerHTML='';
     WORLD.biomes.forEach((b,i)=>{ const tab=document.createElement('div'); tab.className='index-tab'+(i===S.indexTab?' active':''); tab.textContent=b.icon+' '+b.name; tab.onclick=()=>{S.indexTab=i;buildIndexUI()}; tabs.appendChild(tab); });
     const grid=document.getElementById('indexGrid');grid.innerHTML='';
     const bi=S.indexTab;const b=WORLD.biomes[bi];
+    const mul = getCashMultiplier();
     for(let pi=0;pi<8;pi++){
       const key=bi+'_'+pi; const unlocked=IndexData.discovered.has(key); const claimed=IndexData.claimed.has(key); const rar=WORLD.petRarity[bi][pi];const rc=WORLD.rarities[rar].c;
       const card=document.createElement('div'); card.className='index-card '+(unlocked?'unlocked':'locked');
@@ -1301,6 +1303,11 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove };
       else { cx.fillStyle='#6a5a3a';cx.font='34px "Segoe UI"';cx.textAlign='center';cx.textBaseline='middle';cx.fillText('?',42,42); }
       card.appendChild(cv);
       const name=document.createElement('div');name.className='name';name.textContent=unlocked?b.petNames[pi]:'???';card.appendChild(name);
+      // ★ 收益顯示
+      const incEl=document.createElement('div');incEl.className='income-label';
+      if(unlocked){ incEl.textContent='$'+fmt(WORLD.petIncome[bi][pi]*mul)+'/s'; }
+      else { incEl.textContent='???/s'; incEl.style.opacity='0.5'; }
+      card.appendChild(incEl);
       const bl=document.createElement('div');bl.className='biome-label';bl.textContent=b.icon+' '+b.name;card.appendChild(bl);
       const rl=document.createElement('div');rl.className='rarity-label';rl.style.color=rc;rl.style.background=hexA(rc,0.15);rl.textContent=unlocked?WORLD.rarities[rar].n:'未知';card.appendChild(rl);
       if(unlocked&&!claimed){ const rb=document.createElement('button');rb.className='reward-btn';rb.textContent='🎁'; rb.onclick=(e)=>{e.stopPropagation();IndexData.claimed.add(key);S.cash+=WORLD.petIncome[bi][pi]*20;buildIndexUI();updateUI();saveGame(true)}; card.appendChild(rb); }
@@ -1393,7 +1400,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove };
     closePetPanel();saveGame(true);updateUI();
   }
 
-  // ==== 多人同步 ====
   const REMOTE_PLAYERS = new Map();
 
   function initMultiplayer(){
@@ -1431,28 +1437,46 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove };
         if (typeof p.lastSeen === 'number' && now - p.lastSeen > HEARTBEAT_TIMEOUT) continue;
         seenIds.add(id);
         let entry = REMOTE_PLAYERS.get(id);
-        if (!entry) {
-          entry = { id, cur: { x: p.x, y: p.y }, target: { x: p.x, y: p.y }, data: p };
-          REMOTE_PLAYERS.set(id, entry);
-        } else {
-          entry.target.x = p.x; entry.target.y = p.y; entry.data = p;
-        }
+        if (!entry) { entry = { id, cur: { x: p.x, y: p.y }, target: { x: p.x, y: p.y }, data: p }; REMOTE_PLAYERS.set(id, entry); }
+        else { entry.target.x = p.x; entry.target.y = p.y; entry.data = p; }
         newRemoteList.push(entry);
       }
-      for (const id of Array.from(REMOTE_PLAYERS.keys())) {
-        if (!seenIds.has(id)) REMOTE_PLAYERS.delete(id);
-      }
+      for (const id of Array.from(REMOTE_PLAYERS.keys())) { if (!seenIds.has(id)) REMOTE_PLAYERS.delete(id); }
       S.remotePlayers = newRemoteList.map(e => ({ ...e.data, x: e.cur.x, y: e.cur.y }));
 
-      let conflict = false;
+            let conflict = false;
       S.remotePlayers.forEach(rp => { if (rp.baseIdx === S.myBaseIdx) conflict = true; });
-      if (conflict) {
-        let used = new Set(S.remotePlayers.map(r => r.baseIdx));
-        for(let i=0; i<5; i++) { if (!used.has(i)) { S.myBaseIdx = i; break; } }
-        localStorage.setItem('my_base_idx', S.myBaseIdx);
-        S.player.x = getBasePos(S.myBaseIdx).x;
-        showToast('🔄 基地發生衝突，系統已自動幫你更換基地', '#3a8a3a', '#2a6a2a');
-        pushMe();
+      
+      // ★ 防抖與冷卻機制：防止無限衝突死循環
+      if (conflict && !window.__resolvingBaseConflict) {
+        window.__resolvingBaseConflict = true;
+        
+        // 隨機等待 1~3 秒，讓同時衝突的玩家錯開，不會同時搶同一個新基地
+        setTimeout(() => {
+          window.__resolvingBaseConflict = false;
+          
+          // 延遲後再次確認是否還在衝突（可能這期間別人已經走了）
+          let stillConflict = false;
+          S.remotePlayers.forEach(rp => { if (rp.baseIdx === S.myBaseIdx) stillConflict = true; });
+          if (!stillConflict) return;
+
+          let used = new Set(S.remotePlayers.map(r => r.baseIdx));
+          let available = [];
+          for(let i=0; i<5; i++) { if (!used.has(i)) available.push(i); }
+          
+          if (available.length > 0) {
+            // 從空基地中隨機選擇一個，避免大家一直選到同一個
+            const newBase = available[Math.floor(Math.random() * available.length)];
+            S.myBaseIdx = newBase;
+            localStorage.setItem('my_base_idx', S.myBaseIdx);
+            S.player.x = getBasePos(S.myBaseIdx).x;
+            showToast('🔄 基地發生衝突，已自動更換至空基地', '#3a8a3a', '#2a6a2a');
+            pushMe();
+          } else {
+            // 如果基地全滿 (5人以上)，先不要動，避免無限迴圈
+            console.warn('所有基地已滿，無法更換');
+          }
+        }, 1000 + Math.random() * 2000);
       }
 
       const oc=document.getElementById('onlineCount'); if(oc) oc.textContent='👥 '+(S.remotePlayers.length+1);
@@ -1559,6 +1583,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove };
     IndexData.discovered.clear();IndexData.claimed.clear(); S.sticks={}; S.equippedStick=null; S.stickCooldown=0; S.stickSwingAnim=0;
     S.ad2Step=0; S.ad4Step=0; S.ad8Step=0; S.ad16Step=0; S.ad32Step=0; S.subscriptionVerified = false;
     S.doubleSpeed=false; S.quadSpeed=false; S.trails = {}; S.equippedTrail = null; S.night = false; S.tutorialTarget = null; S.tutorialText = '';
+    S.mutationCashMultiplier = 1; S.mutationHatchMultiplier = 1;
     for(let bi=0;bi<WORLD.biomes.length;bi++){spawnEggsForBiome(bi);spawnGuardsForBiome(bi)}
     buildIndexUI();updateUI();
   }
@@ -1572,10 +1597,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove };
       S.eggs.push({x:nx,y:b.nestsY+rnd(-15,15),r,size,mul,petIdx,biomeIdx:bi,collected:false,float:Math.random()*10,origX:nx,origY:b.nestsY});
     }
   }
-  function respawnAllEggs(){
-    S.eggs = [];
-    for(let bi=0;bi<WORLD.biomes.length;bi++) spawnEggsForBiome(bi);
-  }
+  function respawnAllEggs(){ S.eggs = []; for(let bi=0;bi<WORLD.biomes.length;bi++) spawnEggsForBiome(bi); }
 
   function spawnGuardsForBiome(bi){
     const b=WORLD.biomes[bi]; const gx=WORLD_W/2; const sleepX=gx, sleepY=b.nestsY-60;
@@ -1650,9 +1672,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove };
           S.camera.x = p.x; S.camera.y = p.y - 100;
           showToast('🌙 夜晚屏障啟動！你被傳回安全區！', '#3a5a8a', '#1a3a6a');
         }
-      } else {
-        showToast('☀️ 白天來臨！可以偷蛋了', '#6a8a3a', '#3a5a1a');
-      }
+      } else { showToast('☀️ 白天來臨！可以偷蛋了', '#6a8a3a', '#3a5a1a'); }
       updateUI();
     }
 
@@ -1695,14 +1715,11 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove };
       S.playerPath.push({ x: p.x, y: p.y }); if (S.playerPath.length > 35) S.playerPath.shift();
       if(p.y >= S.safeLineY) { p.x = clamp(p.x, 30, SAFE_W - 30); } else { p.x = clamp(p.x, 30, WORLD_W - 30); }
       p.y=clamp(p.y,MIN_Y,MAX_Y);
-
       if (S.night) {
         if (oldY >= S.safeLineY && p.y < S.safeLineY) { p.y = S.safeLineY; }
         else if (oldY < S.safeLineY && p.y < S.safeLineY) { p.y = Math.max(p.y, MIN_Y); }
       }
-    } else {
-      p.walkPhase += dt * 2; if (S.playerPath.length > 0 && Math.random() < 0.15) S.playerPath.shift();
-    }
+    } else { p.walkPhase += dt * 2; if (S.playerPath.length > 0 && Math.random() < 0.15) S.playerPath.shift(); }
 
     const hatchSpeedMul = getHatchMultiplier();
     for(let i=S.hatchery.length-1;i>=0;i--){
@@ -1869,31 +1886,20 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove };
       ctx.save();
       if (leftScreenX > 0) {
         const gradL = ctx.createLinearGradient(0, 0, leftScreenX, 0);
-        gradL.addColorStop(0, 'rgba(0,0,0,0.45)');
-        gradL.addColorStop(0.7, 'rgba(0,0,0,0.25)');
-        gradL.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.fillStyle = gradL;
-        ctx.fillRect(0, 0, leftScreenX, H);
-        ctx.strokeStyle = 'rgba(180,120,255,0.35)';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([10, 10]);
+        gradL.addColorStop(0, 'rgba(0,0,0,0.45)'); gradL.addColorStop(0.7, 'rgba(0,0,0,0.25)'); gradL.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = gradL; ctx.fillRect(0, 0, leftScreenX, H);
+        ctx.strokeStyle = 'rgba(180,120,255,0.35)'; ctx.lineWidth = 2; ctx.setLineDash([10, 10]);
         ctx.beginPath(); ctx.moveTo(leftScreenX, 0); ctx.lineTo(leftScreenX, H); ctx.stroke();
       }
       if (rightScreenX < W) {
         const w = W - rightScreenX;
         const gradR = ctx.createLinearGradient(rightScreenX, 0, W, 0);
-        gradR.addColorStop(0, 'rgba(0,0,0,0)');
-        gradR.addColorStop(0.3, 'rgba(0,0,0,0.25)');
-        gradR.addColorStop(1, 'rgba(0,0,0,0.45)');
-        ctx.fillStyle = gradR;
-        ctx.fillRect(rightScreenX, 0, w, H);
-        ctx.strokeStyle = 'rgba(180,120,255,0.35)';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([10, 10]);
+        gradR.addColorStop(0, 'rgba(0,0,0,0)'); gradR.addColorStop(0.3, 'rgba(0,0,0,0.25)'); gradR.addColorStop(1, 'rgba(0,0,0,0.45)');
+        ctx.fillStyle = gradR; ctx.fillRect(rightScreenX, 0, w, H);
+        ctx.strokeStyle = 'rgba(180,120,255,0.35)'; ctx.lineWidth = 2; ctx.setLineDash([10, 10]);
         ctx.beginPath(); ctx.moveTo(rightScreenX, 0); ctx.lineTo(rightScreenX, H); ctx.stroke();
       }
-      ctx.setLineDash([]);
-      ctx.restore();
+      ctx.setLineDash([]); ctx.restore();
     }
   }
 
@@ -2031,11 +2037,8 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove };
     const rar=h.rar;const rc=WORLD.rarities[rar].c; const sizeR = h.size === 'giant' ? 22 : (h.size === 'huge' ? 16 : (h.size === 'secret' ? 22 : 12));
     if (h.finished) {
       const jump = Math.sin(S.time * 8) * 3; ctx.save(); ctx.translate(0, jump - 5); drawEggShape(ctx, h, sizeR, S.time, rc); ctx.restore();
-      if (h.favorite) {
-        ctx.font='900 12px "Segoe UI"'; ctx.fillStyle='#ff80c0'; ctx.textAlign='center'; ctx.shadowBlur=10; ctx.shadowColor='#e040a0'; ctx.fillText('❤️ 已收藏', 0, -30); ctx.shadowBlur=0;
-      } else {
-        ctx.font='900 12px "Segoe UI"'; ctx.fillStyle='#ffe040'; ctx.textAlign='center'; ctx.shadowBlur=10; ctx.shadowColor='#ffaa00'; ctx.fillText('✨ 點擊打開', 0, -30); ctx.shadowBlur=0;
-      }
+      if (h.favorite) { ctx.font='900 12px "Segoe UI"'; ctx.fillStyle='#ff80c0'; ctx.textAlign='center'; ctx.shadowBlur=10; ctx.shadowColor='#e040a0'; ctx.fillText('❤️ 已收藏', 0, -30); ctx.shadowBlur=0; }
+      else { ctx.font='900 12px "Segoe UI"'; ctx.fillStyle='#ffe040'; ctx.textAlign='center'; ctx.shadowBlur=10; ctx.shadowColor='#ffaa00'; ctx.fillText('✨ 點擊打開', 0, -30); ctx.shadowBlur=0; }
     } else {
       ctx.save(); drawEggShape(ctx, h, sizeR, S.time, rc); ctx.restore();
       const progress=1-Math.max(0,h.timer)/h.total; const barW=40,barH=6; const barX=-barW/2, barY=28;
@@ -2044,34 +2047,18 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove };
     }
     const heartX = 22, heartY = -34;
     ctx.font = h.favorite ? '18px "Segoe UI Emoji", "Segoe UI"' : '16px "Segoe UI Emoji", "Segoe UI"';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    if (h.favorite) {
-      ctx.shadowBlur = 10; ctx.shadowColor = '#ff4080';
-      ctx.fillText('❤️', heartX, heartY);
-      ctx.shadowBlur = 0;
-    } else {
-      ctx.globalAlpha = 0.55;
-      ctx.fillText('🤍', heartX, heartY);
-      ctx.globalAlpha = 1;
-    }
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    if (h.favorite) { ctx.shadowBlur = 10; ctx.shadowColor = '#ff4080'; ctx.fillText('❤️', heartX, heartY); ctx.shadowBlur = 0; }
+    else { ctx.globalAlpha = 0.55; ctx.fillText('🤍', heartX, heartY); ctx.globalAlpha = 1; }
     for (let i = 0; i < HOOKS.onDrawHatcheryAfter.length; i++) { try { HOOKS.onDrawHatcheryAfter[i](ctx, h); } catch(err) { console.error(err); } }
     ctx.restore();
   }
 
   function openHatchedEgg(h) {
-    if (h.favorite) {
-      showToast('❤️ 這顆蛋已加愛心，取消收藏後才能打開', '#e040a0', '#a02080');
-      return;
-    }
+    if (h.favorite) { showToast('❤️ 這顆蛋已加愛心，取消收藏後才能打開', '#e040a0', '#a02080'); return; }
     const idx = S.hatchery.indexOf(h); if (idx === -1) return; S.hatchery.splice(idx, 1); let slot = -1;
     if (S.pets.length < S.petCap) { const usedSlots = new Set(S.pets.map(pt => pt.slot)); for (let j = 0; j < FARM_OFFSETS.length; j++) { if (!usedSlots.has(j)) { slot = j; break; } } }
-    const petData = {
-      id: Math.random().toString(36).slice(2),
-      name: h.name, inc: h.inc, rar: h.rar,
-      biomeIdx: h.biomeIdx, petIdx: h.petIdx, size: h.size,
-      mutations: { ...(h.mutations || {}) }
-    };
+    const petData = { id: Math.random().toString(36).slice(2), name: h.name, inc: h.inc, rar: h.rar, biomeIdx: h.biomeIdx, petIdx: h.petIdx, size: h.size, mutations: { ...(h.mutations || {}) } };
     if (slot !== -1) {
       const basePos = getBasePos(S.myBaseIdx); const mx = basePos.x + rnd(-35, 35); const my = basePos.y + rnd(-40, 365);
       S.pets.push({ ...petData, x: mx, y: my, wanderTargetX: mx, wanderTargetY: my, wanderTimer: 0, selected: false, slot, state: 'farm' });
@@ -2088,7 +2075,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove };
   window.addEventListener('keydown',e=>{
     const tag = e.target.tagName; if(tag === 'INPUT' || tag === 'TEXTAREA') return;
     const k=e.key.toLowerCase();
-    if (k === konamiCode[konamiIndex]) { konamiIndex++; if (konamiIndex === konamiCode.length) { activateTestMode(); konamiIndex = 0; } } else { konamiIndex = (k === 'r') ? 1 : 0; }
+    if (k === konamiCode[konamiIndex]) { konamiIndex++; if (konamiIndex === konamiCode.length) { tryActivateTestMode(); konamiIndex = 0; } } else { konamiIndex = (k === 'r') ? 1 : 0; }
     keys[k]=true; if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(k))e.preventDefault();
     if(k==='escape'){
       if(S.panelOpen)closePetPanel(); if(S.indexOpen){S.indexOpen=false;document.getElementById('indexPanel').classList.remove('open')} if(S.bagOpen){S.bagOpen=false;document.getElementById('bagPanel').classList.remove('open')}
@@ -2132,18 +2119,14 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove };
         }
       }
     } else if (S.night && !S.player.carry) {
-      for(const egg of S.eggs){
-        if(egg.collected) continue;
-        if(dist(w.x, w.y, egg.x, egg.y) < egg.r + 40){ showToast('🌙 夜晚屏障中，無法偷蛋！', '#3a3a6a', '#1a1a3a'); return; }
-      }
+      for(const egg of S.eggs){ if(egg.collected) continue; if(dist(w.x, w.y, egg.x, egg.y) < egg.r + 40){ showToast('🌙 夜晚屏障中，無法偷蛋！', '#3a3a6a', '#1a1a3a'); return; } }
     }
     for(const h of S.hatchery){
       if (dist(w.x, w.y, h.x + 22, h.y - 34) < 22) {
         h.favorite = !h.favorite;
         if (h.favorite) showToast('❤️ 已加愛心，孵好後不會被誤觸打開', '#e040a0', '#a02080');
         else showToast('💔 已取消愛心', '#8a8a8a', '#5a5a5a');
-        saveGame(true);
-        return;
+        saveGame(true); return;
       }
       if(h.finished && dist(w.x,w.y,h.x,h.y) < 40){
         if (h.favorite) { showToast('❤️ 這顆蛋已加愛心，先取消收藏才能打開', '#e040a0', '#a02080'); return; }
@@ -2173,7 +2156,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove };
     const adBtn = document.getElementById('btnAd'); const adBtn4x = document.getElementById('btnAd4x'); const adBtn8x = document.getElementById('btnAd8x'); const adBtn16x= document.getElementById('btnAd16x'); const adBtn32x= document.getElementById('btnAd32x');
     const show2 = (p.displaySpeed >= AD_SPEED_2X) && (S.ad2Step < AD_STEPS_TOTAL); const show4 = (p.displaySpeed >= AD_SPEED_4X) && (S.ad4Step < AD_STEPS_TOTAL);
     const show8 = (p.displaySpeed >= AD_SPEED_8X) && (S.ad8Step < AD_STEPS_TOTAL); const show16 = (p.displaySpeed >= AD_SPEED_16X) && (S.ad16Step < AD_STEPS_TOTAL); const show32 = (p.displaySpeed >= AD_SPEED_32X) && (S.ad32Step < AD_STEPS_TOTAL);
-
     if (show2) { adBtn.style.display = 'flex'; adBtn.textContent = `🎬 2× (${S.ad2Step}/3)`; } else { adBtn.style.display = 'none'; }
     if (show4) { adBtn4x.style.display = 'flex'; adBtn4x.textContent = `🎬 4× (${S.ad4Step}/3)`; } else { adBtn4x.style.display = 'none'; }
     if (show8) { adBtn8x.style.display = 'flex'; adBtn8x.textContent = `🎬 8× (${S.ad8Step}/3)`; } else { adBtn8x.style.display = 'none'; }
@@ -2215,7 +2197,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove };
         const distToBase = Math.round(dist(p.x, p.y, basePos.x, basePos.y)); label.textContent = `🏠 基地 (${distToBase}m)`;
       }
     }
-
     updateTutorial();
     safeHook(HOOKS.onUIUpdate);
   }
@@ -2289,11 +2270,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove };
   reset(); resizeCanvas(); window.addEventListener('resize',resizeCanvas);
 
   let __initFired = false;
-  function fireInitOnce(){
-    if (__initFired) return;
-    __initFired = true;
-    for (let i = 0; i < HOOKS.onInit.length; i++) { try { HOOKS.onInit[i](); } catch(err) { console.error('onInit error', err); } }
-  }
+  function fireInitOnce(){ if (__initFired) return; __initFired = true; for (let i = 0; i < HOOKS.onInit.length; i++) { try { HOOKS.onInit[i](); } catch(err) { console.error('onInit error', err); } } }
 
   async function loadStealEggsSave() {
     await window.raingodFirebaseReady;
@@ -2302,16 +2279,20 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove };
       let done = false; const unsub = firebase.auth().onAuthStateChanged(u => { if (done) return; done = true; unsub(); resolve(u); });
       setTimeout(() => { if (done) return; done = true; try { unsub(); } catch (e) {} resolve(firebase.auth().currentUser || null); }, 2000);
     });
-    let data = null;
+    // ★ 時間戳比較：用比較新的那份（本地剛操作的檔案 ts 一定比雲端新）
+    let cloudData = null, localData = null;
     if (user) {
       try {
         const snap = await firebase.database().ref(`users/${user.uid}/account_data`).once('value'); const cloud = snap.val();
-        if (cloud && Array.isArray(cloud.data)) { const entry = cloud.data.find(e => e.key === SAVE_KEY); if (entry && entry.value) { const parsed = JSON.parse(entry.value); if (parsed && parsed.version === 17) data = parsed; } }
-      } catch (e) { console.warn('讀取雲端存檔失敗，改用本機', e); }
+        if (cloud && Array.isArray(cloud.data)) { const entry = cloud.data.find(e => e.key === SAVE_KEY); if (entry && entry.value) { const parsed = JSON.parse(entry.value); if (parsed && parsed.version === 17) cloudData = parsed; } }
+      } catch (e) { console.warn('讀取雲端存檔失敗', e); }
     }
-    if (!data) {
-      try { const raw = localStorage.getItem(SAVE_KEY); if (raw) { const parsed = JSON.parse(raw); if (parsed && parsed.version === 17) data = parsed; } } catch (e) { console.warn('解析本機存檔失敗', e); }
-    }
+    try { const raw = localStorage.getItem(SAVE_KEY); if (raw) { const parsed = JSON.parse(raw); if (parsed && parsed.version === 17) localData = parsed; } } catch (e) { console.warn('解析本機存檔失敗', e); }
+    let data = null;
+    if (localData && cloudData) {
+      const localTs = localData.ts || 0; const cloudTs = cloudData.ts || 0;
+      data = (localTs >= cloudTs) ? localData : cloudData;
+    } else { data = localData || cloudData; }
     if (data) { try { applyLoadedData(data); } catch (e) { console.warn('應用存檔失敗', e); } }
 
     if (data && data.lastHatchTime) {
@@ -2350,7 +2331,15 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove };
   setInterval(()=>saveGame(true),15000);
   window.addEventListener('beforeunload',()=>saveGame(true));
 
-  // ★★★ 對外 API ★★★
+  // ★ 監聽登入狀態，切換測試按鈕顯示（初始隱藏，raingod 登入後才出現）
+  (function setupAdminVisibility(){
+    const btn = document.getElementById('testTriggerBtn');
+    if (btn) btn.style.display = 'none';
+    try { firebase.auth().onAuthStateChanged(() => { refreshAdminUI(); }); } catch (e) { setTimeout(setupAdminVisibility, 200); return; }
+    refreshAdminUI();
+  })();
+  setTimeout(refreshAdminUI, 1500);
+
   window.raingodGame = {
     S, WORLD, SIZE_MUL, FARM_OFFSETS, HATCH_OFFSETS, BASE_XS,
     TRAIL_DEFS, STICK_DEFS, BIOME_PALETTES, PET_SHAPES,
@@ -2367,14 +2356,18 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove };
     getCtx: () => ctx,
     openHatchedEgg,
     getRemotePlayers: () => S.remotePlayers,
+    getMutationCashMul: () => S.mutationCashMultiplier || 1,
+    setMutationCashMul: (v) => { S.mutationCashMultiplier = v; },
+    getMutationHatchMul: () => S.mutationHatchMultiplier || 1,
+    setMutationHatchMul: (v) => { S.mutationHatchMultiplier = v; },
+    isAdmin,
   };
   window.raingodGameReadyFlag = true;
 })();
 </script>
 
-<!-- ★ 造型外掛（畫寵物 / 蛋 / 守衛 / 角色 / 足跡）-->
+<!-- ★ 造型外掛 -->
 <script type="module" src="characters.js"></script>
-
 <!-- ★ 萬聖節活動 -->
 <script type="module" src="halloween.js"></script>
 </body>
