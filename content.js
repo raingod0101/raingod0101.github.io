@@ -18,7 +18,7 @@ window.RG_CONTENT = (function () {
 const EVENT = {
     enabled: true,
     title: 'RAINGOD 週年慶',
-    bannerText: '🎉 週年慶活動進行中：造型碎片保底 20 抽、寵物抽獎同步開放！',
+    bannerText: '每三十分鐘有玩聖節活動！',
     start: '2024-01-01',
     end: '2030-12-31'
 };
