@@ -1,16 +1,15 @@
 /* ===================================================================
- * 🎨 characters.js
+ * 🎨 characters.js  (v2 — 精緻化重製)
  * 全遊戲的「造型繪製」都在這個檔案：
  *   - drawPetShape(g, shape, pal, s, time, rc)     寵物
  *   - drawEggShape(g, e, s, time, rc)              蛋
  *   - drawGuardAnimal(g, biomeIdx, s, time, alert) 守衛
- *   - drawStickFigure(g, cx, cy, r, time, facing, walkPhase, swingPhase) 角色
- *   - drawStickIcon(g, def, s, swingPhase)         棒子（含在 player 手上）
- *   - drawTrailOnPlayer(g, player, trailDef, time) 足跡粒子
+ *   - drawStickFigure(...)                         角色
  *
- * 主遊戲 index.html 的 drawPetShape / drawEggShape / drawGuardAnimal /
- * drawStickFigure 都是「呼叫 window.__raingodDrawXxx」，這裡註冊對應函式即可。
- * 以後要改造型，只改這個檔案，不會動到主遊戲邏輯與活動。
+ * v2 改動重點：
+ *   1. 每種寵物都有獨立物種原型的繪製函式（不再共用一个 default 圓形）
+ *   2. 加上眼睛高光/眨眼、腮紅、漸層、描邊、耳朵/尾巴/翅膀/花紋變化
+ *   3. 未知形狀用名稱 hash 決定物種，保證每隻長得都不一樣但穩定
  * =================================================================== */
 (function () {
   'use strict';
@@ -19,10 +18,123 @@
     const G = window.raingodGame;
     if (!G) { setTimeout(setup, 50); return; }
 
-    const { WORLD, BIOME_PALETTES, hexA, shade, clamp, rnd } = G;
+    const { hexA, shade } = G;
 
     /* =========================================================
-     *  1. 守衛動物（12 種 biome）
+     *  共用繪圖小工具
+     * ========================================================= */
+    const TAU = Math.PI * 2;
+
+    function circ(g, x, y, r) {
+      g.beginPath(); g.arc(x, y, Math.max(r, 0.01), 0, TAU);
+    }
+    function ell(g, x, y, rx, ry, rot) {
+      g.beginPath();
+      g.ellipse(x, y, Math.max(rx, 0.01), Math.max(ry, 0.01), rot || 0, 0, TAU);
+    }
+    // 帶左上高光的徑向漸層
+    function rgrad(g, cx, cy, r, c1, c2) {
+      const rr = Math.max(r, 0.01);
+      const gr = g.createRadialGradient(cx - rr * 0.35, cy - rr * 0.42, rr * 0.06, cx, cy, rr * 1.08);
+      gr.addColorStop(0, c1);
+      gr.addColorStop(1, c2);
+      return gr;
+    }
+    // 線性漸層（由上而下）
+    function lgrad(g, x, y0, y1, c1, c2) {
+      const gr = g.createLinearGradient(x, y0, x, y1);
+      gr.addColorStop(0, c1); gr.addColorStop(1, c2);
+      return gr;
+    }
+    // 眨眼曲線（0=張眼 1=閉眼）
+    function blinkAt(time, seed) {
+      const cyc = (time * 0.85 + (seed % 17) * 0.37) % 3.6;
+      if (cyc < 3.34) return 0;
+      return Math.max(0, 1 - Math.abs(cyc - 3.47) / 0.13);
+    }
+    function hashStr(str) {
+      let h = 2166136261 >>> 0;
+      for (let i = 0; i < str.length; i++) {
+        h ^= str.charCodeAt(i);
+        h = Math.imul(h, 16777619) >>> 0;
+      }
+      return h >>> 0;
+    }
+    function normPal(pal) {
+      pal = pal || {};
+      const body = pal.body || '#9aa4b8';
+      return {
+        body,
+        belly: pal.belly || shade(body, 34),
+        accent: pal.accent || '#ffcc55',
+        dark: pal.dark || shade(body, -55),
+        light: pal.light || shade(body, 30)
+      };
+    }
+
+    /* -------- 眼睛（含高光 / 眨眼 / 瞇眼） -------- */
+    function drawEye(g, x, y, r, o) {
+      o = o || {};
+      const blink = o.blink || 0;
+      g.save();
+      g.translate(x, y);
+      const eh = Math.max(0.05, 1 - blink * 0.93);
+
+      // 眼白
+      g.fillStyle = o.white || '#ffffff';
+      ell(g, 0, 0, r, r * eh); g.fill();
+      g.strokeStyle = 'rgba(20,20,35,0.20)';
+      g.lineWidth = Math.max(r * 0.16, 0.4);
+      g.stroke();
+
+      if (blink < 0.74) {
+        const pr = r * (o.pr || 0.56);
+        const px = (o.lx || 0) * r * 0.30;
+        const py = r * 0.08;
+        if (o.iris) { g.fillStyle = o.iris; circ(g, px, py, pr * 1.06); g.fill(); }
+        g.fillStyle = o.pupil || '#141420';
+        circ(g, px, py, pr); g.fill();
+        // 高光
+        g.fillStyle = 'rgba(255,255,255,0.96)';
+        circ(g, px - pr * 0.34, py - pr * 0.40, pr * 0.38); g.fill();
+        g.fillStyle = 'rgba(255,255,255,0.55)';
+        circ(g, px + pr * 0.36, py + pr * 0.34, pr * 0.19); g.fill();
+      } else {
+        g.strokeStyle = o.pupil || '#242432';
+        g.lineWidth = Math.max(r * 0.30, 0.6);
+        g.lineCap = 'round';
+        g.beginPath();
+        g.arc(0, 0, r * 0.74, Math.PI * 0.12, Math.PI * 0.88);
+        g.stroke();
+      }
+      g.restore();
+    }
+
+    function blush(g, x, y, r, a) {
+      g.save();
+      g.globalAlpha = (a === undefined ? 0.40 : a);
+      g.fillStyle = '#ff7fa8';
+      ell(g, x, y, r, r * 0.60); g.fill();
+      g.restore();
+    }
+
+    // 兩撇鬍鬚
+    function whiskers(g, x, y, r, dir, color) {
+      g.save();
+      g.strokeStyle = color || 'rgba(40,40,55,0.45)';
+      g.lineWidth = Math.max(r * 0.10, 0.4);
+      g.lineCap = 'round';
+      for (let i = -1; i <= 1; i++) {
+        g.beginPath();
+        g.moveTo(x, y);
+        g.quadraticCurveTo(x + dir * r * 0.9, y + i * r * 0.55, x + dir * r * 1.7, y + i * r * 0.9);
+        g.stroke();
+      }
+      g.restore();
+    }
+
+    /* =========================================================
+     *  1. 守衛動物（沿用原本 12 種，造型本身已足夠有辨識度）
      * ========================================================= */
     const GUARD_ANIMALS = [
       // 0 森林 - 雞
@@ -52,112 +164,1539 @@
     ];
 
     /* =========================================================
-     *  2. 寵物造型（每種 biome × 8 只）
+     *  2. 寵物物種原型（每隻都有自己的解剖結構）
      * ========================================================= */
-    function drawPetShape(g, shape, pal, s, time, rc) {
-      if (shape && shape.startsWith('guardian_')) {
-        const gIdx = parseInt(shape.split('_')[1]);
-        const anim = GUARD_ANIMALS[gIdx] || GUARD_ANIMALS[0];
-        anim.draw(g, s, time, false);
-        return;
-      }
-      const body = pal.body, belly = pal.belly, accent = pal.accent, dark = pal.dark, light = pal.light;
-      const bob = Math.sin(time * 3) * 2;
+
+    /* ---------- 2-1 小雞 ---------- */
+    function drawChicken(g, s, time, pal) {
+      const { body, belly, dark, light } = pal;
+      const bob = Math.sin(time * 4.2) * s * 0.03;
       g.save(); g.translate(0, bob);
-      function grad(cx, cy, r1, r2, c1, c2) { const gr = g.createRadialGradient(cx - r1 * 0.4, cy - r1 * 0.4, r1 * 0.1, cx, cy, r2); gr.addColorStop(0, c1); gr.addColorStop(1, c2); return gr; }
-      switch (shape) {
-        case 'chicken': {
-          g.fillStyle = grad(0, 0, s * 0.7, s * 0.9, light, body); g.beginPath(); g.moveTo(-s * 0.7, s * 0.1); g.quadraticCurveTo(-s * 0.8, -s * 0.5, -s * 0.3, -s * 0.7); g.quadraticCurveTo(0, -s * 0.9, s * 0.3, -s * 0.7); g.quadraticCurveTo(s * 0.8, -s * 0.5, s * 0.7, s * 0.1); g.quadraticCurveTo(s * 0.6, s * 0.8, 0, s * 0.85); g.quadraticCurveTo(-s * 0.6, s * 0.8, -s * 0.7, s * 0.1); g.closePath(); g.fill(); g.strokeStyle = dark; g.lineWidth = 1.5; g.stroke();
-          g.fillStyle = grad(0, s * 0.3, s * 0.3, s * 0.5, belly, shade(belly, -40)); g.beginPath(); g.ellipse(0, s * 0.25, s * 0.42, s * 0.4, 0, 0, 7); g.fill();
-          g.fillStyle = grad(0, -s * 0.5, s * 0.3, s * 0.5, light, body); g.beginPath(); g.arc(0, -s * 0.5, s * 0.48, 0, 7); g.fill(); g.stroke();
-          g.fillStyle = '#ff4040'; for (let i = -1; i <= 1; i++) { g.beginPath(); g.moveTo(i * s * 0.1, -s * 0.85); g.quadraticCurveTo(i * s * 0.2, -s * 1.15, i * s * 0.3, -s * 0.85); g.closePath(); g.fill(); }
-          g.fillStyle = '#ffb020'; g.beginPath(); g.moveTo(-s * 0.18, -s * 0.44); g.lineTo(s * 0.18, -s * 0.44); g.lineTo(0, -s * 0.14); g.closePath(); g.fill();
-          g.fillStyle = '#fff'; g.beginPath(); g.arc(-s * 0.22, -s * 0.58, s * 0.14, 0, 7); g.fill(); g.beginPath(); g.arc(s * 0.22, -s * 0.58, s * 0.14, 0, 7); g.fill();
-          g.fillStyle = '#000'; g.beginPath(); g.arc(-s * 0.22, -s * 0.58, s * 0.07, 0, 7); g.fill(); g.beginPath(); g.arc(s * 0.22, -s * 0.58, s * 0.07, 0, 7); g.fill(); break;
+
+      // 尾羽
+      g.fillStyle = hexA(shade(body, 18), 0.95);
+      for (let i = -1; i <= 1; i++) {
+        g.save();
+        g.translate(-s * 0.05, s * 0.05);
+        g.rotate(-0.35 + i * 0.30 + Math.sin(time * 3 + i) * 0.05);
+        g.beginPath();
+        g.moveTo(0, 0);
+        g.quadraticCurveTo(-s * 0.50, -s * 0.16, -s * 0.72, s * 0.10);
+        g.quadraticCurveTo(-s * 0.42, s * 0.06, 0, s * 0.14);
+        g.closePath(); g.fill();
+        g.strokeStyle = hexA(dark, 0.35); g.lineWidth = s * 0.02; g.stroke();
+        g.restore();
+      }
+
+      // 腿
+      const swing = Math.sin(time * 5) * s * 0.05;
+      g.strokeStyle = '#e8a020';
+      g.lineCap = 'round';
+      g.lineWidth = s * 0.055;
+      g.beginPath(); g.moveTo(-s * 0.15, s * 0.42); g.lineTo(-s * 0.16 + swing, s * 0.66); g.stroke();
+      g.beginPath(); g.moveTo( s * 0.15, s * 0.42); g.lineTo( s * 0.16 - swing, s * 0.66); g.stroke();
+      g.lineWidth = s * 0.042;
+      for (const sx of [-1, 1]) {
+        const bx = sx * s * 0.155 + sx * swing * -1;
+        g.beginPath();
+        g.moveTo(bx, s * 0.66); g.lineTo(bx - s * 0.11, s * 0.74);
+        g.moveTo(bx, s * 0.66); g.lineTo(bx + s * 0.11, s * 0.74);
+        g.moveTo(bx, s * 0.66); g.lineTo(bx, s * 0.76);
+        g.stroke();
+      }
+
+      // 身體
+      g.fillStyle = rgrad(g, 0, s * 0.15, s * 0.62, light, body);
+      g.beginPath();
+      g.moveTo(0, -s * 0.06);
+      g.bezierCurveTo(-s * 0.60, -s * 0.06, -s * 0.54, s * 0.56, 0, s * 0.52);
+      g.bezierCurveTo( s * 0.54, s * 0.56,  s * 0.60, -s * 0.06, 0, -s * 0.06);
+      g.closePath(); g.fill();
+      g.strokeStyle = hexA(dark, 0.55); g.lineWidth = s * 0.032; g.stroke();
+
+      // 肚子
+      g.fillStyle = rgrad(g, 0, s * 0.25, s * 0.34, belly, shade(belly, -16));
+      ell(g, 0, s * 0.22, s * 0.32, s * 0.28); g.fill();
+
+      // 翅膀
+      for (const sx of [-1, 1]) {
+        g.save();
+        g.translate(sx * s * 0.42, s * 0.06);
+        g.rotate(sx * (0.25 + Math.sin(time * 4) * 0.07));
+        g.fillStyle = rgrad(g, 0, 0, s * 0.28, light, shade(body, -12));
+        ell(g, 0, 0, s * 0.17, s * 0.25); g.fill();
+        g.strokeStyle = hexA(dark, 0.45); g.lineWidth = s * 0.02; g.stroke();
+        g.strokeStyle = hexA(dark, 0.22); g.lineWidth = s * 0.014;
+        for (let i = -1; i <= 1; i++) {
+          g.beginPath();
+          g.moveTo(0, i * s * 0.07);
+          g.lineTo(sx * s * 0.09, i * s * 0.10);
+          g.stroke();
         }
-        case 'dog': {
-          g.fillStyle = grad(0, s * 0.1, s * 0.6, s * 0.65, light, body); g.beginPath(); g.moveTo(-s * 0.6, s * 0.0); g.quadraticCurveTo(-s * 0.7, s * 0.5, -s * 0.2, s * 0.65); g.quadraticCurveTo(0, s * 0.7, s * 0.2, s * 0.65); g.quadraticCurveTo(s * 0.7, s * 0.5, s * 0.6, s * 0.0); g.quadraticCurveTo(s * 0.5, -s * 0.3, 0, -s * 0.3); g.quadraticCurveTo(-s * 0.5, -s * 0.3, -s * 0.6, s * 0.0); g.closePath(); g.fill(); g.strokeStyle = dark; g.lineWidth = 1.5; g.stroke();
-          g.fillStyle = grad(0, -s * 0.4, s * 0.35, s * 0.48, light, body); g.beginPath(); g.arc(0, -s * 0.35, s * 0.45, 0, 7); g.fill(); g.stroke();
-          g.fillStyle = dark; g.beginPath(); g.moveTo(-s * 0.42, -s * 0.7); g.lineTo(-s * 0.55, -s * 1.05); g.lineTo(-s * 0.25, -s * 0.82); g.closePath(); g.fill(); g.beginPath(); g.moveTo(s * 0.42, -s * 0.7); g.lineTo(s * 0.55, -s * 1.05); g.lineTo(s * 0.25, -s * 0.82); g.closePath(); g.fill();
-          g.fillStyle = '#fff'; g.beginPath(); g.arc(-s * 0.2, -s * 0.44, s * 0.12, 0, 7); g.fill(); g.beginPath(); g.arc(s * 0.2, -s * 0.44, s * 0.12, 0, 7); g.fill();
-          g.fillStyle = '#000'; g.beginPath(); g.arc(-s * 0.2, -s * 0.44, s * 0.06, 0, 7); g.fill(); g.beginPath(); g.arc(s * 0.2, -s * 0.44, s * 0.06, 0, 7); g.fill();
-          g.fillStyle = '#ff6a8a'; g.beginPath(); g.ellipse(0, -s * 0.12, s * 0.08, s * 0.12, 0, 0, 7); g.fill(); break;
-        }
-        case 'bird': {
-          g.fillStyle = grad(0, 0, s * 0.6, s * 0.8, light, body); g.beginPath(); g.moveTo(-s * 0.55, s * 0.0); g.quadraticCurveTo(-s * 0.6, -s * 0.6, -s * 0.2, -s * 0.75); g.quadraticCurveTo(0, -s * 0.85, s * 0.2, -s * 0.75); g.quadraticCurveTo(s * 0.6, -s * 0.6, s * 0.55, s * 0.0); g.quadraticCurveTo(s * 0.5, s * 0.7, 0, s * 0.75); g.quadraticCurveTo(-s * 0.5, s * 0.7, -s * 0.55, s * 0.0); g.closePath(); g.fill(); g.strokeStyle = dark; g.lineWidth = 1.5; g.stroke();
-          g.fillStyle = grad(0, -s * 0.45, s * 0.3, s * 0.42, light, body); g.beginPath(); g.arc(0, -s * 0.46, s * 0.42, 0, 7); g.fill(); g.stroke();
-          g.fillStyle = '#ffb020'; g.beginPath(); g.moveTo(-s * 0.14, -s * 0.4); g.lineTo(s * 0.14, -s * 0.4); g.lineTo(0, -s * 0.1); g.closePath(); g.fill();
-          g.fillStyle = '#fff'; g.beginPath(); g.arc(-s * 0.18, -s * 0.58, s * 0.12, 0, 7); g.fill(); g.beginPath(); g.arc(s * 0.18, -s * 0.58, s * 0.12, 0, 7); g.fill();
-          g.fillStyle = '#000'; g.beginPath(); g.arc(-s * 0.18, -s * 0.58, s * 0.06, 0, 7); g.fill(); g.beginPath(); g.arc(s * 0.18, -s * 0.58, s * 0.06, 0, 7); g.fill(); break;
-        }
-        case 'fox': {
-          g.fillStyle = grad(0, s * 0.15, s * 0.6, s * 0.55, light, body); g.beginPath(); g.moveTo(-s * 0.6, s * 0.05); g.quadraticCurveTo(-s * 0.65, s * 0.55, -s * 0.2, s * 0.65); g.quadraticCurveTo(0, s * 0.7, s * 0.2, s * 0.65); g.quadraticCurveTo(s * 0.65, s * 0.55, s * 0.6, s * 0.05); g.quadraticCurveTo(s * 0.5, -s * 0.25, 0, -s * 0.25); g.quadraticCurveTo(-s * 0.5, -s * 0.25, -s * 0.6, s * 0.05); g.closePath(); g.fill(); g.strokeStyle = dark; g.lineWidth = 1.5; g.stroke();
-          g.fillStyle = grad(0, -s * 0.3, s * 0.35, s * 0.45, light, body); g.beginPath(); g.arc(0, -s * 0.3, s * 0.45, 0, 7); g.fill(); g.stroke();
-          g.fillStyle = shade(body, -25); g.beginPath(); g.moveTo(-s * 0.38, -s * 0.55); g.lineTo(-s * 0.18, -s * 1.0); g.lineTo(-s * 0.04, -s * 0.55); g.closePath(); g.fill(); g.beginPath(); g.moveTo(s * 0.38, -s * 0.55); g.lineTo(s * 0.18, -s * 1.0); g.lineTo(s * 0.04, -s * 0.55); g.closePath(); g.fill();
-          g.fillStyle = '#fff'; g.beginPath(); g.arc(-s * 0.2, -s * 0.44, s * 0.11, 0, 7); g.fill(); g.beginPath(); g.arc(s * 0.2, -s * 0.44, s * 0.11, 0, 7); g.fill();
-          g.fillStyle = '#000'; g.beginPath(); g.arc(-s * 0.2, -s * 0.44, s * 0.055, 0, 7); g.fill(); g.beginPath(); g.arc(s * 0.2, -s * 0.44, s * 0.055, 0, 7); g.fill(); break;
-        }
-        case 'bear': {
-          g.fillStyle = grad(0, s * 0.1, s * 0.65, s * 0.65, light, body); g.beginPath(); g.moveTo(-s * 0.65, s * 0.05); g.quadraticCurveTo(-s * 0.7, s * 0.55, -s * 0.2, s * 0.68); g.quadraticCurveTo(0, s * 0.72, s * 0.2, s * 0.68); g.quadraticCurveTo(s * 0.7, s * 0.55, s * 0.65, s * 0.05); g.quadraticCurveTo(s * 0.55, -s * 0.3, 0, -s * 0.3); g.quadraticCurveTo(-s * 0.55, -s * 0.3, -s * 0.65, s * 0.05); g.closePath(); g.fill(); g.strokeStyle = dark; g.lineWidth = 1.5; g.stroke();
-          g.fillStyle = grad(0, -s * 0.35, s * 0.35, s * 0.48, light, body); g.beginPath(); g.arc(0, -s * 0.35, s * 0.46, 0, 7); g.fill(); g.stroke();
-          g.fillStyle = shade(body, -25); g.beginPath(); g.arc(-s * 0.36, -s * 0.74, s * 0.18, 0, 7); g.fill(); g.beginPath(); g.arc(s * 0.36, -s * 0.74, s * 0.18, 0, 7); g.fill();
-          g.fillStyle = '#fff'; g.beginPath(); g.arc(-s * 0.2, -s * 0.44, s * 0.11, 0, 7); g.fill(); g.beginPath(); g.arc(s * 0.2, -s * 0.44, s * 0.11, 0, 7); g.fill();
-          g.fillStyle = '#000'; g.beginPath(); g.arc(-s * 0.2, -s * 0.44, s * 0.055, 0, 7); g.fill(); g.beginPath(); g.arc(s * 0.2, -s * 0.44, s * 0.055, 0, 7); g.fill(); break;
-        }
-        case 'hound': {
-          g.fillStyle = grad(0, s * 0.1, s * 0.6, s * 0.55, light, body); g.beginPath(); g.moveTo(-s * 0.6, s * 0.05); g.quadraticCurveTo(-s * 0.65, s * 0.55, -s * 0.2, s * 0.65); g.quadraticCurveTo(0, s * 0.7, s * 0.2, s * 0.65); g.quadraticCurveTo(s * 0.65, s * 0.55, s * 0.6, s * 0.05); g.quadraticCurveTo(s * 0.5, -s * 0.25, 0, -s * 0.25); g.quadraticCurveTo(-s * 0.5, -s * 0.25, -s * 0.6, s * 0.05); g.closePath(); g.fill(); g.strokeStyle = dark; g.lineWidth = 1.5; g.stroke();
-          g.fillStyle = grad(0, -s * 0.35, s * 0.35, s * 0.45, light, body); g.beginPath(); g.arc(0, -s * 0.35, s * 0.45, 0, 7); g.fill(); g.stroke();
-          g.fillStyle = '#ff2020'; g.beginPath(); g.arc(-s * 0.2, -s * 0.44, s * 0.12, 0, 7); g.fill(); g.beginPath(); g.arc(s * 0.2, -s * 0.44, s * 0.12, 0, 7); g.fill();
-          g.fillStyle = '#ffee00'; g.beginPath(); g.arc(-s * 0.2, -s * 0.44, s * 0.055, 0, 7); g.fill(); g.beginPath(); g.arc(s * 0.2, -s * 0.44, s * 0.055, 0, 7); g.fill(); break;
-        }
-        case 'dragon': {
-          g.fillStyle = accent; g.beginPath(); g.moveTo(-s * 0.2, s * 0.0); g.lineTo(-s * 0.8, -s * 0.6); g.lineTo(-s * 0.6, -s * 0.3); g.lineTo(-s * 0.9, -s * 0.2); g.lineTo(-s * 0.55, -s * 0.1); g.lineTo(-s * 0.75, s * 0.15); g.lineTo(-s * 0.3, s * 0.15); g.closePath(); g.fill();
-          g.fillStyle = grad(0, s * 0.1, s * 0.6, s * 0.55, light, body); g.beginPath(); g.moveTo(-s * 0.6, s * 0.05); g.quadraticCurveTo(-s * 0.65, s * 0.55, -s * 0.2, s * 0.65); g.quadraticCurveTo(0, s * 0.7, s * 0.2, s * 0.65); g.quadraticCurveTo(s * 0.65, s * 0.55, s * 0.6, s * 0.05); g.quadraticCurveTo(s * 0.5, -s * 0.25, 0, -s * 0.25); g.quadraticCurveTo(-s * 0.5, -s * 0.25, -s * 0.6, s * 0.05); g.closePath(); g.fill(); g.strokeStyle = dark; g.lineWidth = 1.5; g.stroke();
-          g.fillStyle = grad(s * 0.3, -s * 0.3, s * 0.25, s * 0.35, light, body); g.beginPath(); g.ellipse(s * 0.3, -s * 0.3, s * 0.38, s * 0.34, 0.2, 0, 7); g.fill(); g.stroke();
-          g.fillStyle = '#fff'; g.beginPath(); g.arc(s * 0.4, -s * 0.38, s * 0.11, 0, 7); g.fill();
-          g.fillStyle = '#000'; g.beginPath(); g.arc(s * 0.4, -s * 0.38, s * 0.055, 0, 7); g.fill();
-          g.fillStyle = accent; for (let i = 0; i < 4; i++) { const xx = -s * 0.3 + i * s * 0.16; g.beginPath(); g.moveTo(xx, -s * 0.38); g.lineTo(xx + s * 0.07, -s * 0.6); g.lineTo(xx + s * 0.14, -s * 0.38); g.closePath(); g.fill(); } break;
-        }
-        case 'shark': {
-          g.fillStyle = grad(0, 0, s * 0.7, s * 0.5, light, body); g.beginPath(); g.moveTo(-s * 0.65, s * 0.0); g.quadraticCurveTo(-s * 0.5, -s * 0.35, 0, -s * 0.4); g.quadraticCurveTo(s * 0.5, -s * 0.35, s * 0.65, s * 0.0); g.quadraticCurveTo(s * 0.5, s * 0.35, 0, s * 0.4); g.quadraticCurveTo(-s * 0.5, s * 0.35, -s * 0.65, s * 0.0); g.closePath(); g.fill(); g.strokeStyle = dark; g.lineWidth = 1.5; g.stroke();
-          g.fillStyle = shade(body, -25); g.beginPath(); g.moveTo(-s * 0.1, -s * 0.2); g.quadraticCurveTo(s * 0.05, -s * 0.65, s * 0.15, -s * 0.65); g.quadraticCurveTo(s * 0.25, -s * 0.5, s * 0.32, -s * 0.2); g.closePath(); g.fill();
-          g.fillStyle = '#fff'; g.beginPath(); g.arc(-s * 0.27, -s * 0.07, s * 0.1, 0, 7); g.fill();
-          g.fillStyle = '#000'; g.beginPath(); g.arc(-s * 0.27, -s * 0.07, s * 0.05, 0, 7); g.fill(); break;
-        }
-        default: {
-          const key = shape.toLowerCase();
-          const isEvil   = /evil|skeleton|shadow|abyss|chaos|void|dark|shard|end|chaosgod/.test(key);
-          const isWinged = /phoenix|butterfly|mermaid|dragon|goddess|angel|pterodactyl|sakura|cosmic|moon|griffin|unicorn/.test(key);
-          const isHorned = /cow|deer|unicorn|triceratops|ankylo|trex|thunder|beast/.test(key);
-          const isRound  = /frog|kraken|turtle|eye|chaos|ankylo/.test(key);
-          const isLong   = /lizard|gecko|centipede|brontosaurus|mosasaur|worm/.test(key);
-          const isBoss   = /king|creator|goddess|voidbeast|colossus|titanbaby|shadow|abyss|chaos|god/.test(key);
-          const r = s * (isBoss ? 1.25 : 1);
-          const b2 = isEvil ? shade(body, -40) : body; const l2 = isEvil ? shade(light, -30) : light; const d2 = isEvil ? shade(dark, -20) : dark; const be2 = isEvil ? shade(belly, -30) : belly;
-          if (isWinged) { g.fillStyle = hexA(accent, 0.75); g.beginPath(); g.moveTo(-r * 0.2, -r * 0.1); g.quadraticCurveTo(-r * 1.3, -r * 0.9, -r * 1.15, -r * 0.05); g.quadraticCurveTo(-r * 1.0, r * 0.1, -r * 0.25, r * 0.2); g.closePath(); g.fill(); g.beginPath(); g.moveTo(r * 0.2, -r * 0.1); g.quadraticCurveTo(r * 1.3, -r * 0.9, r * 1.15, -r * 0.05); g.quadraticCurveTo(r * 1.0, r * 0.1, r * 0.25, r * 0.2); g.closePath(); g.fill(); }
-          if (!isRound) { g.fillStyle = b2; g.beginPath(); if (isLong) { g.moveTo(-r * 0.4, r * 0.3); g.quadraticCurveTo(-r * 1.5, r * 0.5, -r * 1.1, r * 0.8); g.quadraticCurveTo(-r * 0.9, r * 0.5, -r * 0.3, r * 0.5); } else { g.moveTo(-r * 0.4, r * 0.2); g.quadraticCurveTo(-r * 0.9, r * 0.4, -r * 0.7, r * 0.6); g.quadraticCurveTo(-r * 0.4, r * 0.4, -r * 0.2, r * 0.4); } g.closePath(); g.fill(); g.strokeStyle = d2; g.lineWidth = 1.5; g.stroke(); }
-          g.fillStyle = grad(0, 0, r * 0.55, r * 0.6, l2, b2); if (isRound) { g.beginPath(); g.ellipse(0, r * 0.15, r * 0.9, r * 0.8, 0, 0, 7); g.fill(); } else if (isLong) { g.beginPath(); g.ellipse(0, r * 0.2, r * 0.6, r * 0.9, 0, 0, 7); g.fill(); } else { g.beginPath(); g.ellipse(0, r * 0.1, r * 0.65, r * 0.7, 0, 0, 7); g.fill(); }
-          g.strokeStyle = d2; g.lineWidth = 1.5; g.stroke();
-          g.fillStyle = be2; g.beginPath(); g.ellipse(0, r * 0.3, r * 0.35, r * 0.35, 0, 0, 7); g.fill();
-          if (isEvil && !isRound) { g.fillStyle = d2; for (let i = 0; i < 3; i++) { const xx = -r * 0.3 + i * r * 0.3; g.beginPath(); g.moveTo(xx - r * 0.08, r * 0.05); g.lineTo(xx, -r * 0.2); g.lineTo(xx + r * 0.08, r * 0.05); g.closePath(); g.fill(); } }
-          if (isHorned) { g.fillStyle = d2; g.beginPath(); g.moveTo(-r * 0.35, -r * 0.5); g.lineTo(-r * 0.55, -r * 1.15); g.lineTo(-r * 0.15, -r * 0.55); g.closePath(); g.fill(); g.beginPath(); g.moveTo(r * 0.35, -r * 0.5); g.lineTo(r * 0.55, -r * 1.15); g.lineTo(r * 0.15, -r * 0.55); g.closePath(); g.fill(); }
-          g.fillStyle = grad(0, -r * 0.6, r * 0.4, r * 0.5, l2, b2); g.beginPath(); if (isRound) g.arc(0, -r * 0.3, r * 0.6, 0, 7); else g.arc(0, -r * 0.45, r * 0.55, 0, 7); g.fill(); g.strokeStyle = d2; g.lineWidth = 1.5; g.stroke();
-          const eyeY = isRound ? -r * 0.3 : -r * 0.45;
-          if (isEvil) { g.fillStyle = '#ff2020'; g.beginPath(); g.arc(-r * 0.22, eyeY, r * 0.12, 0, 7); g.fill(); g.beginPath(); g.arc(r * 0.22, eyeY, r * 0.12, 0, 7); g.fill(); g.fillStyle = '#ffee00'; g.beginPath(); g.arc(-r * 0.22, eyeY, r * 0.06, 0, 7); g.fill(); g.beginPath(); g.arc(r * 0.22, eyeY, r * 0.06, 0, 7); g.fill(); }
-          else { g.fillStyle = '#fff'; g.beginPath(); g.arc(-r * 0.22, eyeY, r * 0.14, 0, 7); g.fill(); g.beginPath(); g.arc(r * 0.22, eyeY, r * 0.14, 0, 7); g.fill(); g.fillStyle = '#000'; g.beginPath(); g.arc(-r * 0.22, eyeY, r * 0.07, 0, 7); g.fill(); g.beginPath(); g.arc(r * 0.22, eyeY, r * 0.07, 0, 7); g.fill(); g.fillStyle = '#fff'; g.beginPath(); g.arc(-r * 0.24, eyeY - r * 0.03, r * 0.03, 0, 7); g.fill(); g.beginPath(); g.arc(r * 0.2, eyeY - r * 0.03, r * 0.03, 0, 7); g.fill(); }
-          g.strokeStyle = isEvil ? '#3a0a0a' : d2; g.lineWidth = 1.5; g.beginPath(); g.moveTo(-r * 0.1, eyeY + r * 0.3); g.quadraticCurveTo(0, eyeY + r * 0.4, r * 0.1, eyeY + r * 0.3); g.stroke();
-          if (isBoss) { g.fillStyle = accent; g.beginPath(); g.moveTo(-r * 0.45, -r * 0.75); g.lineTo(-r * 0.45, -r * 1.0); g.lineTo(-r * 0.22, -r * 0.85); g.lineTo(0, -r * 1.1); g.lineTo(r * 0.22, -r * 0.85); g.lineTo(r * 0.45, -r * 1.0); g.lineTo(r * 0.45, -r * 0.75); g.closePath(); g.fill(); g.strokeStyle = d2; g.lineWidth = 1.5; g.stroke(); }
+        g.restore();
+      }
+
+      // 頭
+      g.fillStyle = rgrad(g, 0, -s * 0.46, s * 0.42, light, body);
+      circ(g, 0, -s * 0.45, s * 0.39); g.fill();
+      g.strokeStyle = hexA(dark, 0.55); g.lineWidth = s * 0.032; g.stroke();
+
+      // 雞冠
+      g.fillStyle = '#e84545';
+      g.beginPath();
+      g.moveTo(-s * 0.26, -s * 0.71);
+      g.quadraticCurveTo(-s * 0.30, -s * 0.96, -s * 0.13, -s * 0.79);
+      g.quadraticCurveTo(-s * 0.08, -s * 1.03,  s * 0.01, -s * 0.82);
+      g.quadraticCurveTo( s * 0.09, -s * 1.03,  s * 0.14, -s * 0.79);
+      g.quadraticCurveTo( s * 0.30, -s * 0.96,  s * 0.26, -s * 0.71);
+      g.closePath(); g.fill();
+      g.strokeStyle = '#a82a2a'; g.lineWidth = s * 0.018; g.stroke();
+
+      // 肉垂
+      g.fillStyle = '#e84545';
+      ell(g, 0, -s * 0.27, s * 0.07, s * 0.10); g.fill();
+
+      // 喙
+      g.fillStyle = '#f4a828';
+      g.beginPath();
+      g.moveTo(-s * 0.11, -s * 0.40);
+      g.lineTo( s * 0.11, -s * 0.40);
+      g.lineTo( 0, -s * 0.21);
+      g.closePath(); g.fill();
+      g.strokeStyle = '#c07a10'; g.lineWidth = s * 0.016; g.stroke();
+
+      // 眼睛
+      const bl = blinkAt(time, 3);
+      drawEye(g, -s * 0.17, -s * 0.52, s * 0.115, { blink: bl });
+      drawEye(g,  s * 0.17, -s * 0.52, s * 0.115, { blink: bl });
+
+      // 腮紅
+      blush(g, -s * 0.29, -s * 0.33, s * 0.095, 0.35);
+      blush(g,  s * 0.29, -s * 0.33, s * 0.095, 0.35);
+
+      g.restore();
+    }
+
+    /* ---------- 2-2 小狗 ---------- */
+    function drawDog(g, s, time, pal, h) {
+      const { body, belly, accent, dark, light } = pal;
+      const bob = Math.sin(time * 3) * s * 0.03;
+      g.save(); g.translate(0, bob);
+
+      // 尾巴（搖）
+      g.save();
+      g.translate(s * 0.40, s * 0.22);
+      g.rotate(-0.5 + Math.sin(time * 8) * 0.45);
+      g.fillStyle = rgrad(g, 0, s * 0.2, s * 0.22, light, body);
+      ell(g, s * 0.10, s * 0.12, s * 0.12, s * 0.26, -0.4); g.fill();
+      g.strokeStyle = hexA(dark, 0.4); g.lineWidth = s * 0.02; g.stroke();
+      g.restore();
+
+      // 腿
+      g.fillStyle = shade(body, -12);
+      ell(g, -s * 0.24, s * 0.55, s * 0.15, s * 0.15); g.fill();
+      ell(g,  s * 0.24, s * 0.55, s * 0.15, s * 0.15); g.fill();
+      g.strokeStyle = hexA(dark, 0.35); g.lineWidth = s * 0.02;
+      ell(g, -s * 0.24, s * 0.55, s * 0.15, s * 0.15); g.stroke();
+      ell(g,  s * 0.24, s * 0.55, s * 0.15, s * 0.15); g.stroke();
+
+      // 身體
+      g.fillStyle = rgrad(g, 0, s * 0.20, s * 0.62, light, body);
+      ell(g, 0, s * 0.22, s * 0.48, s * 0.42); g.fill();
+      g.strokeStyle = hexA(dark, 0.5); g.lineWidth = s * 0.03; g.stroke();
+
+      // 肚子
+      g.fillStyle = hexA(belly, 0.92);
+      ell(g, 0, s * 0.32, s * 0.27, s * 0.26); g.fill();
+
+      // 項圈
+      g.strokeStyle = accent; g.lineWidth = s * 0.07; g.lineCap = 'round';
+      g.beginPath(); g.arc(0, s * 0.02, s * 0.34, Math.PI * 0.14, Math.PI * 0.86); g.stroke();
+      g.fillStyle = '#ffd94a';
+      circ(g, 0, s * 0.31, s * 0.07); g.fill();
+      g.strokeStyle = '#b88a10'; g.lineWidth = s * 0.016; g.stroke();
+
+      // 頭
+      const hy = -s * 0.30, hr = s * 0.44;
+      g.fillStyle = rgrad(g, 0, hy, hr, light, body);
+      circ(g, 0, hy, hr); g.fill();
+      g.strokeStyle = hexA(dark, 0.5); g.lineWidth = s * 0.03; g.stroke();
+
+      // 垂耳
+      for (const sx of [-1, 1]) {
+        g.save();
+        g.translate(sx * hr * 0.82, hy - hr * 0.10);
+        g.rotate(sx * (0.35 + Math.sin(time * 3 + sx) * 0.06));
+        g.fillStyle = rgrad(g, 0, 0, hr * 0.5, shade(body, -8), shade(body, -35));
+        ell(g, 0, hr * 0.32, hr * 0.30, hr * 0.58); g.fill();
+        g.strokeStyle = hexA(dark, 0.45); g.lineWidth = s * 0.022; g.stroke();
+        g.restore();
+      }
+
+      // 口鼻
+      g.fillStyle = hexA(belly, 0.95);
+      ell(g, 0, hy + hr * 0.44, hr * 0.50, hr * 0.36); g.fill();
+      g.strokeStyle = hexA(dark, 0.22); g.lineWidth = s * 0.016; g.stroke();
+
+      // 鼻子 + 嘴
+      g.fillStyle = '#2a2a3a';
+      ell(g, 0, hy + hr * 0.22, hr * 0.17, hr * 0.13); g.fill();
+      g.strokeStyle = '#3a3a4a'; g.lineWidth = s * 0.022; g.lineCap = 'round';
+      g.beginPath();
+      g.moveTo(0, hy + hr * 0.34);
+      g.lineTo(0, hy + hr * 0.46);
+      g.moveTo(0, hy + hr * 0.46);
+      g.quadraticCurveTo(-hr * 0.14, hy + hr * 0.58, -hr * 0.22, hy + hr * 0.44);
+      g.moveTo(0, hy + hr * 0.46);
+      g.quadraticCurveTo( hr * 0.14, hy + hr * 0.58,  hr * 0.22, hy + hr * 0.44);
+      g.stroke();
+
+      // 舌頭
+      g.fillStyle = '#ff7f9c';
+      ell(g, 0, hy + hr * 0.60, hr * 0.10, hr * 0.11); g.fill();
+
+      // 眼睛
+      const bl = blinkAt(time, 5);
+      drawEye(g, -hr * 0.42, hy - hr * 0.10, hr * 0.25, { blink: bl });
+      drawEye(g,  hr * 0.42, hy - hr * 0.10, hr * 0.25, { blink: bl });
+
+      blush(g, -hr * 0.66, hy + hr * 0.16, hr * 0.15, 0.35);
+      blush(g,  hr * 0.66, hy + hr * 0.16, hr * 0.15, 0.35);
+
+      g.restore();
+    }
+
+    /* ---------- 2-3 小鳥 ---------- */
+    function drawBird(g, s, time, pal) {
+      const { body, belly, accent, dark, light } = pal;
+      const bob = Math.sin(time * 3.4) * s * 0.035;
+      g.save(); g.translate(0, bob);
+
+      // 尾羽
+      g.fillStyle = hexA(accent, 0.9);
+      for (let i = -1; i <= 1; i++) {
+        g.save();
+        g.translate(-s * 0.30, s * 0.22);
+        g.rotate(0.9 + i * 0.30);
+        g.beginPath();
+        g.moveTo(0, 0);
+        g.quadraticCurveTo(-s * 0.12, s * 0.28, 0, s * 0.48);
+        g.quadraticCurveTo( s * 0.12, s * 0.28, 0, 0);
+        g.closePath(); g.fill();
+        g.restore();
+      }
+
+      // 腿
+      g.strokeStyle = '#e8a020'; g.lineWidth = s * 0.05; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(-s * 0.13, s * 0.40); g.lineTo(-s * 0.14, s * 0.62); g.stroke();
+      g.beginPath(); g.moveTo( s * 0.13, s * 0.40); g.lineTo( s * 0.14, s * 0.62); g.stroke();
+
+      // 身體
+      g.fillStyle = rgrad(g, 0, s * 0.10, s * 0.60, light, body);
+      ell(g, 0, s * 0.14, s * 0.44, s * 0.46); g.fill();
+      g.strokeStyle = hexA(dark, 0.5); g.lineWidth = s * 0.03; g.stroke();
+
+      // 肚子
+      g.fillStyle = rgrad(g, 0, s * 0.30, s * 0.30, belly, shade(belly, -14));
+      ell(g, 0, s * 0.26, s * 0.28, s * 0.26); g.fill();
+
+      // 頭
+      const hy = -s * 0.36, hr = s * 0.38;
+      g.fillStyle = rgrad(g, 0, hy, hr, light, body);
+      circ(g, 0, hy, hr); g.fill();
+      g.strokeStyle = hexA(dark, 0.5); g.lineWidth = s * 0.03; g.stroke();
+
+      // 頭頂冠羽
+      g.fillStyle = hexA(accent, 0.95);
+      g.beginPath();
+      g.moveTo(-hr * 0.30, hy - hr * 0.88);
+      g.quadraticCurveTo(-hr * 0.10, hy - hr * 1.55, hr * 0.06, hy - hr * 0.92);
+      g.quadraticCurveTo( hr * 0.20, hy - hr * 1.40, hr * 0.34, hy - hr * 0.86);
+      g.closePath(); g.fill();
+      g.strokeStyle = hexA(dark, 0.4); g.lineWidth = s * 0.018; g.stroke();
+
+      // 翅膀
+      for (const sx of [-1, 1]) {
+        g.save();
+        g.translate(sx * s * 0.40, s * 0.10);
+        g.rotate(sx * (0.30 + Math.sin(time * 6) * 0.10));
+        g.fillStyle = rgrad(g, 0, 0, s * 0.26, light, shade(body, -14));
+        ell(g, 0, 0, s * 0.15, s * 0.24); g.fill();
+        g.strokeStyle = hexA(dark, 0.4); g.lineWidth = s * 0.018; g.stroke();
+        g.restore();
+      }
+
+      // 喙
+      g.fillStyle = '#f4a828';
+      g.beginPath();
+      g.moveTo(-s * 0.10, hy + hr * 0.22);
+      g.lineTo( s * 0.10, hy + hr * 0.22);
+      g.lineTo( 0, hy + hr * 0.60);
+      g.closePath(); g.fill();
+      g.strokeStyle = '#c07a10'; g.lineWidth = s * 0.014; g.stroke();
+
+      // 眼睛
+      const bl = blinkAt(time, 7);
+      drawEye(g, -hr * 0.40, hy - hr * 0.14, hr * 0.26, { blink: bl });
+      drawEye(g,  hr * 0.40, hy - hr * 0.14, hr * 0.26, { blink: bl });
+
+      blush(g, -hr * 0.62, hy + hr * 0.24, hr * 0.16, 0.32);
+      blush(g,  hr * 0.62, hy + hr * 0.24, hr * 0.16, 0.32);
+
+      g.restore();
+    }
+
+    /* ---------- 2-4 狐狸 ---------- */
+    function drawFox(g, s, time, pal) {
+      const { body, belly, dark, light } = pal;
+      const bob = Math.sin(time * 3.2) * s * 0.03;
+      g.save(); g.translate(0, bob);
+
+      // 大尾巴
+      g.save();
+      g.translate(-s * 0.42, s * 0.24);
+      g.rotate(-0.35 + Math.sin(time * 2.6) * 0.22);
+      g.fillStyle = rgrad(g, 0, s * 0.3, s * 0.35, light, body);
+      g.beginPath();
+      g.moveTo(0, 0);
+      g.bezierCurveTo(-s * 0.35, s * 0.12, -s * 0.30, s * 0.62, 0, s * 0.70);
+      g.bezierCurveTo( s * 0.30, s * 0.62,  s * 0.35, s * 0.12, 0, 0);
+      g.closePath(); g.fill();
+      g.strokeStyle = hexA(dark, 0.45); g.lineWidth = s * 0.026; g.stroke();
+      // 尾巴白尖
+      g.fillStyle = hexA(belly, 0.95);
+      ell(g, 0, s * 0.56, s * 0.17, s * 0.15); g.fill();
+      g.restore();
+
+      // 腿
+      g.fillStyle = shade(body, -18);
+      ell(g, -s * 0.22, s * 0.55, s * 0.14, s * 0.15); g.fill();
+      ell(g,  s * 0.22, s * 0.55, s * 0.14, s * 0.15); g.fill();
+
+      // 身體
+      g.fillStyle = rgrad(g, 0, s * 0.18, s * 0.60, light, body);
+      ell(g, 0, s * 0.20, s * 0.45, s * 0.44); g.fill();
+      g.strokeStyle = hexA(dark, 0.5); g.lineWidth = s * 0.028; g.stroke();
+
+      // 胸前白毛
+      g.fillStyle = hexA(belly, 0.95);
+      ell(g, 0, s * 0.30, s * 0.24, s * 0.24); g.fill();
+
+      // 頭
+      const hy = -s * 0.32, hr = s * 0.42;
+      g.fillStyle = rgrad(g, 0, hy, hr, light, body);
+      circ(g, 0, hy, hr); g.fill();
+      g.strokeStyle = hexA(dark, 0.5); g.lineWidth = s * 0.028; g.stroke();
+
+      // 大三角耳（外 + 內）
+      for (const sx of [-1, 1]) {
+        g.fillStyle = shade(body, -10);
+        g.beginPath();
+        g.moveTo(sx * hr * 0.34, hy - hr * 0.60);
+        g.lineTo(sx * hr * 1.00, hy - hr * 1.42);
+        g.lineTo(sx * hr * 0.86, hy - hr * 0.34);
+        g.closePath(); g.fill();
+        g.strokeStyle = hexA(dark, 0.5); g.lineWidth = s * 0.024; g.stroke();
+        g.fillStyle = hexA('#ff9db8', 0.75);
+        g.beginPath();
+        g.moveTo(sx * hr * 0.46, hy - hr * 0.62);
+        g.lineTo(sx * hr * 0.90, hy - hr * 1.22);
+        g.lineTo(sx * hr * 0.80, hy - hr * 0.46);
+        g.closePath(); g.fill();
+        // 耳尖深色
+        g.fillStyle = '#2a2230';
+        g.beginPath();
+        g.moveTo(sx * hr * 0.86, hy - hr * 1.18);
+        g.lineTo(sx * hr * 1.00, hy - hr * 1.42);
+        g.lineTo(sx * hr * 1.02, hy - hr * 1.20);
+        g.closePath(); g.fill();
+      }
+
+      // 白色口鼻
+      g.fillStyle = hexA(belly, 0.97);
+      g.beginPath();
+      g.moveTo(0, hy + hr * 0.10);
+      g.quadraticCurveTo(-hr * 0.42, hy + hr * 0.12, -hr * 0.34, hy + hr * 0.56);
+      g.quadraticCurveTo(0, hy + hr * 0.86, hr * 0.34, hy + hr * 0.56);
+      g.quadraticCurveTo( hr * 0.42, hy + hr * 0.12, 0, hy + hr * 0.10);
+      g.closePath(); g.fill();
+
+      // 鼻子
+      g.fillStyle = '#2a2230';
+      ell(g, 0, hy + hr * 0.40, hr * 0.14, hr * 0.11); g.fill();
+
+      // 眼睛（帶琥珀虹膜）
+      const bl = blinkAt(time, 11);
+      drawEye(g, -hr * 0.44, hy - hr * 0.06, hr * 0.26, { blink: bl, iris: '#ffb347', pr: 0.42 });
+      drawEye(g,  hr * 0.44, hy - hr * 0.06, hr * 0.26, { blink: bl, iris: '#ffb347', pr: 0.42 });
+
+      // 鬍鬚
+      whiskers(g, -hr * 0.30, hy + hr * 0.40, hr * 0.16, -1);
+      whiskers(g,  hr * 0.30, hy + hr * 0.40, hr * 0.16,  1);
+
+      blush(g, -hr * 0.68, hy + hr * 0.24, hr * 0.15, 0.32);
+      blush(g,  hr * 0.68, hy + hr * 0.24, hr * 0.15, 0.32);
+
+      g.restore();
+    }
+
+    /* ---------- 2-5 熊貓 / 熊 ---------- */
+    function drawBear(g, s, time, pal, h) {
+      const { body, belly, dark, light } = pal;
+      const bob = Math.sin(time * 2.6) * s * 0.025;
+      g.save(); g.translate(0, bob);
+
+      // 尾巴
+      g.fillStyle = rgrad(g, 0, s * 0.3, s * 0.18, light, body);
+      circ(g, -s * 0.36, s * 0.30, s * 0.11); g.fill();
+      g.strokeStyle = hexA(dark, 0.35); g.lineWidth = s * 0.018; g.stroke();
+
+      // 腿 / 掌
+      for (const sx of [-1, 1]) {
+        g.fillStyle = shade(body, -16);
+        ell(g, sx * s * 0.25, s * 0.56, s * 0.17, s * 0.15); g.fill();
+        g.strokeStyle = hexA(dark, 0.4); g.lineWidth = s * 0.02; g.stroke();
+        g.fillStyle = hexA(dark, 0.7);
+        for (let i = -1; i <= 1; i++) {
+          circ(g, sx * s * 0.25 + i * s * 0.07, s * 0.61, s * 0.024); g.fill();
         }
       }
+
+      // 身體
+      g.fillStyle = rgrad(g, 0, s * 0.18, s * 0.62, light, body);
+      ell(g, 0, s * 0.20, s * 0.52, s * 0.46); g.fill();
+      g.strokeStyle = hexA(dark, 0.5); g.lineWidth = s * 0.03; g.stroke();
+
+      // 肚子
+      g.fillStyle = hexA(belly, 0.9);
+      ell(g, 0, s * 0.28, s * 0.32, s * 0.30); g.fill();
+
+      // 頭
+      const hy = -s * 0.30, hr = s * 0.48;
+      g.fillStyle = rgrad(g, 0, hy, hr, light, body);
+      circ(g, 0, hy, hr); g.fill();
+      g.strokeStyle = hexA(dark, 0.5); g.lineWidth = s * 0.03; g.stroke();
+
+      // 圓耳
+      for (const sx of [-1, 1]) {
+        g.fillStyle = rgrad(g, sx * hr * 0.74, hy - hr * 0.68, hr * 0.40, light, body);
+        circ(g, sx * hr * 0.74, hy - hr * 0.68, hr * 0.38); g.fill();
+        g.strokeStyle = hexA(dark, 0.45); g.lineWidth = s * 0.024; g.stroke();
+        g.fillStyle = hexA(belly, 0.85);
+        circ(g, sx * hr * 0.74, hy - hr * 0.68, hr * 0.18); g.fill();
+      }
+
+      // 口鼻
+      g.fillStyle = hexA(belly, 0.97);
+      ell(g, 0, hy + hr * 0.40, hr * 0.52, hr * 0.38); g.fill();
+      g.strokeStyle = hexA(dark, 0.18); g.lineWidth = s * 0.016; g.stroke();
+
+      // 鼻子
+      g.fillStyle = '#2a2430';
+      ell(g, 0, hy + hr * 0.20, hr * 0.19, hr * 0.14); g.fill();
+      g.fillStyle = 'rgba(255,255,255,0.6)';
+      circ(g, -hr * 0.06, hy + hr * 0.16, hr * 0.045); g.fill();
+
+      // 嘴
+      g.strokeStyle = '#3a3444'; g.lineWidth = s * 0.022; g.lineCap = 'round';
+      g.beginPath();
+      g.moveTo(0, hy + hr * 0.34);
+      g.lineTo(0, hy + hr * 0.44);
+      g.moveTo(0, hy + hr * 0.44);
+      g.quadraticCurveTo(-hr * 0.14, hy + hr * 0.56, -hr * 0.22, hy + hr * 0.42);
+      g.moveTo(0, hy + hr * 0.44);
+      g.quadraticCurveTo( hr * 0.14, hy + hr * 0.56,  hr * 0.22, hy + hr * 0.42);
+      g.stroke();
+
+      // 眼睛
+      const bl = blinkAt(time, 13);
+      drawEye(g, -hr * 0.44, hy - hr * 0.12, hr * 0.24, { blink: bl });
+      drawEye(g,  hr * 0.44, hy - hr * 0.12, hr * 0.24, { blink: bl });
+
+      // 腮紅
+      blush(g, -hr * 0.72, hy + hr * 0.18, hr * 0.15, 0.34);
+      blush(g,  hr * 0.72, hy + hr * 0.18, hr * 0.15, 0.34);
+
+      g.restore();
+    }
+
+    /* ---------- 2-6 地獄犬 / 獵犬 ---------- */
+    function drawHound(g, s, time, pal) {
+      const { body, belly, accent, dark, light } = pal;
+      const bob = Math.sin(time * 2.2) * s * 0.02;
+      g.save(); g.translate(0, bob);
+
+      // 尾巴
+      g.save();
+      g.translate(s * 0.40, s * 0.24);
+      g.rotate(-0.4 + Math.sin(time * 6) * 0.35);
+      g.fillStyle = shade(body, -22);
+      g.beginPath();
+      g.moveTo(0, 0);
+      g.quadraticCurveTo(s * 0.22, s * 0.28, s * 0.04, s * 0.55);
+      g.quadraticCurveTo(-s * 0.10, s * 0.28, 0, 0);
+      g.closePath(); g.fill();
+      g.restore();
+
+      // 腿
+      g.fillStyle = shade(body, -20);
+      ell(g, -s * 0.26, s * 0.54, s * 0.14, s * 0.16); g.fill();
+      ell(g,  s * 0.26, s * 0.54, s * 0.14, s * 0.16); g.fill();
+
+      // 身體
+      g.fillStyle = rgrad(g, 0, s * 0.18, s * 0.60, light, body);
+      ell(g, 0, s * 0.20, s * 0.50, s * 0.44); g.fill();
+      g.strokeStyle = hexA(dark, 0.6); g.lineWidth = s * 0.032; g.stroke();
+
+      // 肋骨紋
+      g.strokeStyle = hexA(shade(body, -40), 0.55); g.lineWidth = s * 0.022;
+      for (let i = 0; i < 3; i++) {
+        g.beginPath();
+        g.arc(0, s * 0.30, s * (0.16 + i * 0.08), Math.PI * 1.12, Math.PI * 1.88);
+        g.stroke();
+      }
+
+      // 頸刺項圈
+      g.strokeStyle = '#2a2a34'; g.lineWidth = s * 0.08; g.lineCap = 'round';
+      g.beginPath(); g.arc(0, s * 0.00, s * 0.36, Math.PI * 0.10, Math.PI * 0.90); g.stroke();
+      g.fillStyle = '#b8b8c8';
+      for (let i = 0; i < 5; i++) {
+        const a = Math.PI * (0.16 + i * 0.17);
+        const px = Math.cos(a) * s * 0.36, py = Math.sin(a) * s * 0.36;
+        g.beginPath();
+        g.moveTo(px, py);
+        g.lineTo(px + Math.cos(a) * s * 0.11, py + Math.sin(a) * s * 0.11);
+        g.lineTo(px + Math.cos(a + 0.3) * s * 0.05, py + Math.sin(a + 0.3) * s * 0.05);
+        g.closePath(); g.fill();
+      }
+
+      // 頭
+      const hy = -s * 0.34, hr = s * 0.46;
+      g.fillStyle = rgrad(g, 0, hy, hr, light, body);
+      circ(g, 0, hy, hr); g.fill();
+      g.strokeStyle = hexA(dark, 0.6); g.lineWidth = s * 0.032; g.stroke();
+
+      // 尖耳
+      for (const sx of [-1, 1]) {
+        g.fillStyle = shade(body, -26);
+        g.beginPath();
+        g.moveTo(sx * hr * 0.42, hy - hr * 0.62);
+        g.lineTo(sx * hr * 0.90, hy - hr * 1.36);
+        g.lineTo(sx * hr * 0.92, hy - hr * 0.40);
+        g.closePath(); g.fill();
+        g.strokeStyle = hexA(dark, 0.6); g.lineWidth = s * 0.024; g.stroke();
+      }
+
+      // 口鼻
+      g.fillStyle = hexA(belly, 0.25);
+      ell(g, 0, hy + hr * 0.48, hr * 0.46, hr * 0.34); g.fill();
+
+      // 咧嘴獠牙
+      g.fillStyle = '#1a1420';
+      g.beginPath();
+      g.moveTo(-hr * 0.36, hy + hr * 0.30);
+      g.quadraticCurveTo(0, hy + hr * 0.74, hr * 0.36, hy + hr * 0.30);
+      g.quadraticCurveTo(0, hy + hr * 0.50, -hr * 0.36, hy + hr * 0.30);
+      g.closePath(); g.fill();
+      g.fillStyle = '#fff';
+      for (let i = -1; i <= 1; i++) {
+        const bx = i * hr * 0.18;
+        g.beginPath();
+        g.moveTo(bx - hr * 0.06, hy + hr * 0.34);
+        g.lineTo(bx, hy + hr * 0.56);
+        g.lineTo(bx + hr * 0.06, hy + hr * 0.34);
+        g.closePath(); g.fill();
+      }
+
+      // 鼻子
+      g.fillStyle = '#141018';
+      ell(g, 0, hy + hr * 0.30, hr * 0.15, hr * 0.11); g.fill();
+
+      // 發光眼
+      const bl = blinkAt(time, 17);
+      const glow = 0.65 + Math.sin(time * 4) * 0.35;
+      g.save();
+      g.shadowBlur = s * 0.30;
+      g.shadowColor = '#ff3020';
+      g.fillStyle = `rgba(255,60,40,${0.85 * glow})`;
+      ell(g, -hr * 0.44, hy - hr * 0.10, hr * 0.24, hr * 0.16 * (1 - bl)); g.fill();
+      ell(g,  hr * 0.44, hy - hr * 0.10, hr * 0.24, hr * 0.16 * (1 - bl)); g.fill();
+      g.restore();
+      g.fillStyle = '#ffe24a';
+      if (bl < 0.7) {
+        ell(g, -hr * 0.44, hy - hr * 0.10, hr * 0.10, hr * 0.10); g.fill();
+        ell(g,  hr * 0.44, hy - hr * 0.10, hr * 0.10, hr * 0.10); g.fill();
+      }
+
+      g.restore();
+    }
+
+    /* ---------- 2-7 龍 ---------- */
+    function drawDragon(g, s, time, pal) {
+      const { body, belly, accent, dark, light } = pal;
+      const bob = Math.sin(time * 2.4) * s * 0.03;
+      const flap = Math.sin(time * 3) * 0.15;
+      g.save(); g.translate(0, bob);
+
+      // 翅膀
+      for (const sx of [-1, 1]) {
+        g.save();
+        g.translate(sx * s * 0.16, s * 0.02);
+        g.rotate(sx * (0.45 + flap));
+        g.fillStyle = lgrad(g, 0, -s * 0.7, s * 0.2, hexA(accent, 0.95), hexA(shade(accent, -40), 0.9));
+        g.beginPath();
+        g.moveTo(0, 0);
+        g.quadraticCurveTo(sx * s * 0.48, -s * 0.70, sx * s * 1.05, -s * 0.55);
+        g.quadraticCurveTo(sx * s * 0.95, -s * 0.18, sx * s * 0.72, -s * 0.05);
+        g.quadraticCurveTo(sx * s * 0.60, s * 0.14, sx * s * 0.40, s * 0.10);
+        g.quadraticCurveTo(sx * s * 0.22, s * 0.22, 0, 0);
+        g.closePath(); g.fill();
+        g.strokeStyle = hexA(dark, 0.6); g.lineWidth = s * 0.024; g.stroke();
+        g.strokeStyle = hexA(dark, 0.35); g.lineWidth = s * 0.02;
+        g.beginPath();
+        g.moveTo(sx * s * 0.10, 0);
+        g.lineTo(sx * s * 0.75, -s * 0.35);
+        g.moveTo(sx * s * 0.10, 0);
+        g.lineTo(sx * s * 0.60, -s * 0.12);
+        g.stroke();
+        g.restore();
+      }
+
+      // 尾巴 + 尖刺
+      g.save();
+      g.translate(-s * 0.42, s * 0.26);
+      g.rotate(-0.5 + Math.sin(time * 2.6) * 0.22);
+      g.fillStyle = shade(body, -12);
+      g.beginPath();
+      g.moveTo(0, 0);
+      g.quadraticCurveTo(-s * 0.36, s * 0.24, -s * 0.14, s * 0.62);
+      g.quadraticCurveTo( s * 0.06, s * 0.26, 0, 0);
+      g.closePath(); g.fill();
+      g.fillStyle = accent;
+      g.beginPath();
+      g.moveTo(-s * 0.20, s * 0.44);
+      g.lineTo(-s * 0.34, s * 0.72);
+      g.lineTo(-s * 0.06, s * 0.60);
+      g.closePath(); g.fill();
+      g.restore();
+
+      // 腿
+      g.fillStyle = shade(body, -22);
+      ell(g, -s * 0.24, s * 0.55, s * 0.15, s * 0.15); g.fill();
+      ell(g,  s * 0.24, s * 0.55, s * 0.15, s * 0.15); g.fill();
+      g.strokeStyle = hexA(dark, 0.45); g.lineWidth = s * 0.02; g.stroke();
+
+      // 身體
+      g.fillStyle = rgrad(g, 0, s * 0.18, s * 0.60, light, body);
+      ell(g, 0, s * 0.20, s * 0.48, s * 0.44); g.fill();
+      g.strokeStyle = hexA(dark, 0.6); g.lineWidth = s * 0.03; g.stroke();
+
+      // 腹甲
+      g.fillStyle = hexA(belly, 0.92);
+      for (let i = 0; i < 3; i++) {
+        ell(g, 0, s * (0.16 + i * 0.13), s * (0.30 - i * 0.045), s * 0.09); g.fill();
+        g.strokeStyle = hexA(dark, 0.30); g.lineWidth = s * 0.014; g.stroke();
+      }
+
+      // 頭
+      const hy = -s * 0.32, hr = s * 0.44;
+      g.fillStyle = rgrad(g, 0, hy, hr, light, body);
+      circ(g, 0, hy, hr); g.fill();
+      g.strokeStyle = hexA(dark, 0.6); g.lineWidth = s * 0.03; g.stroke();
+
+      // 角
+      for (const sx of [-1, 1]) {
+        g.fillStyle = hexA(belly, 0.95);
+        g.beginPath();
+        g.moveTo(sx * hr * 0.44, hy - hr * 0.66);
+        g.quadraticCurveTo(sx * hr * 0.78, hy - hr * 1.30, sx * hr * 0.30, hy - hr * 1.34);
+        g.quadraticCurveTo(sx * hr * 0.52, hy - hr * 1.02, sx * hr * 0.26, hy - hr * 0.66);
+        g.closePath(); g.fill();
+        g.strokeStyle = hexA(dark, 0.5); g.lineWidth = s * 0.02; g.stroke();
+      }
+
+      // 頭脊刺
+      g.fillStyle = accent;
+      for (let i = 0; i < 3; i++) {
+        const bx = -hr * 0.18 + i * hr * 0.18;
+        g.beginPath();
+        g.moveTo(bx - hr * 0.06, hy - hr * 0.88);
+        g.lineTo(bx, hy - hr * 1.12);
+        g.lineTo(bx + hr * 0.06, hy - hr * 0.88);
+        g.closePath(); g.fill();
+      }
+
+      // 口鼻
+      g.fillStyle = hexA(shade(body, 14), 1);
+      ell(g, 0, hy + hr * 0.50, hr * 0.48, hr * 0.34); g.fill();
+      g.strokeStyle = hexA(dark, 0.45); g.lineWidth = s * 0.02; g.stroke();
+      // 鼻孔
+      g.fillStyle = hexA(dark, 0.8);
+      circ(g, -hr * 0.14, hy + hr * 0.34, hr * 0.045); g.fill();
+      circ(g,  hr * 0.14, hy + hr * 0.34, hr * 0.045); g.fill();
+
+      // 眼睛（金色豎瞳）
+      const bl = blinkAt(time, 19);
+      for (const sx of [-1, 1]) {
+        g.save();
+        g.fillStyle = '#fff';
+        ell(g, sx * hr * 0.44, hy - hr * 0.10, hr * 0.24, hr * 0.20 * (1 - bl * 0.9)); g.fill();
+        g.strokeStyle = 'rgba(20,20,30,0.25)'; g.lineWidth = s * 0.018; g.stroke();
+        if (bl < 0.7) {
+          g.fillStyle = '#ffd23c';
+          ell(g, sx * hr * 0.44, hy - hr * 0.10, hr * 0.17, hr * 0.17); g.fill();
+          g.fillStyle = '#1a1424';
+          ell(g, sx * hr * 0.44, hy - hr * 0.10, hr * 0.055, hr * 0.14); g.fill();
+          g.fillStyle = '#fff';
+          circ(g, sx * hr * 0.44 - hr * 0.07, hy - hr * 0.18, hr * 0.055); g.fill();
+        }
+        g.restore();
+      }
+
+      g.restore();
+    }
+
+    /* ---------- 2-8 鯊魚 ---------- */
+    function drawShark(g, s, time, pal) {
+      const { body, belly, dark, light } = pal;
+      const sway = Math.sin(time * 2.2);
+      g.save();
+      g.translate(0, sway * s * 0.05);
+
+      // 尾鰭
+      g.save();
+      g.translate(-s * 0.60, s * 0.02);
+      g.rotate(sway * 0.25);
+      g.fillStyle = shade(body, -14);
+      g.beginPath();
+      g.moveTo(0, 0);
+      g.quadraticCurveTo(-s * 0.28, -s * 0.50, -s * 0.52, -s * 0.22);
+      g.quadraticCurveTo(-s * 0.34, s * 0.02, -s * 0.50, s * 0.30);
+      g.quadraticCurveTo(-s * 0.24, s * 0.30, 0, 0);
+      g.closePath(); g.fill();
+      g.strokeStyle = hexA(dark, 0.5); g.lineWidth = s * 0.022; g.stroke();
+      g.restore();
+
+      // 背鰭
+      g.fillStyle = shade(body, -6);
+      g.beginPath();
+      g.moveTo(-s * 0.06, -s * 0.32);
+      g.quadraticCurveTo(s * 0.06, -s * 0.80, s * 0.30, -s * 0.28);
+      g.closePath(); g.fill();
+      g.strokeStyle = hexA(dark, 0.5); g.lineWidth = s * 0.022; g.stroke();
+
+      // 身體
+      g.fillStyle = rgrad(g, 0, 0, s * 0.72, light, body);
+      ell(g, 0, s * 0.02, s * 0.66, s * 0.42); g.fill();
+      g.strokeStyle = hexA(dark, 0.55); g.lineWidth = s * 0.028; g.stroke();
+
+      // 白肚
+      g.fillStyle = hexA(belly, 0.92);
+      g.beginPath();
+      g.ellipse(0, s * 0.14, s * 0.52, s * 0.24, 0, 0, Math.PI);
+      g.fill();
+
+      // 胸鰭
+      for (const sx of [-1, 1]) {
+        g.fillStyle = shade(body, -8);
+        g.beginPath();
+        g.moveTo(sx * s * 0.16, s * 0.20);
+        g.lineTo(sx * s * 0.40, s * 0.46);
+        g.lineTo(sx * s * 0.12, s * 0.30);
+        g.closePath(); g.fill();
+        g.strokeStyle = hexA(dark, 0.4); g.lineWidth = s * 0.018; g.stroke();
+      }
+
+      // 鰓
+      g.strokeStyle = hexA(dark, 0.45); g.lineWidth = s * 0.02; g.lineCap = 'round';
+      for (let i = 0; i < 3; i++) {
+        g.beginPath();
+        g.moveTo(-s * (0.30 + i * 0.06), -s * 0.12);
+        g.quadraticCurveTo(-s * (0.33 + i * 0.06), 0, -s * (0.30 + i * 0.06), s * 0.12);
+        g.stroke();
+      }
+
+      // 嘴 + 牙
+      g.fillStyle = '#2a1a24';
+      g.beginPath();
+      g.moveTo(s * 0.28, s * 0.16);
+      g.quadraticCurveTo(s * 0.46, s * 0.26, s * 0.56, s * 0.10);
+      g.quadraticCurveTo(s * 0.44, s * 0.20, s * 0.30, s * 0.12);
+      g.closePath(); g.fill();
+      g.fillStyle = '#fff';
+      for (let i = 0; i < 4; i++) {
+        const bx = s * (0.31 + i * 0.06);
+        g.beginPath();
+        g.moveTo(bx, s * 0.14);
+        g.lineTo(bx + s * 0.02, s * 0.05);
+        g.lineTo(bx + s * 0.04, s * 0.14);
+        g.closePath(); g.fill();
+      }
+
+      // 眼睛
+      const bl = blinkAt(time, 23);
+      drawEye(g, s * 0.34, -s * 0.12, s * 0.10, { blink: bl, pupil: '#101018' });
+
       g.restore();
     }
 
     /* =========================================================
-     *  3. 蛋造型
+     *  3. 通用物種原型（給其餘大量寵物形狀使用）
+     * ========================================================= */
+
+    /* ---------- 3-1 走獸（貓 / 牛 / 鹿 / 獨角獸 / 虎 / 兔 …） ---------- */
+    function drawBeast(g, s, time, pal, h) {
+      const { body, belly, accent, dark, light } = pal;
+      const bob = Math.sin(time * 2.4 + (h % 7)) * s * 0.035;
+      g.save(); g.translate(0, bob);
+
+      const earType = ['round', 'pointed', 'long', 'droop', 'horns', 'antlers', 'none'][h % 7];
+      const patType = ['none', 'spots', 'stripes', 'patch'][(h >>> 3) % 4];
+
+      // 尾巴
+      const tw = Math.sin(time * 2.8 + (h % 5)) * 0.35;
+      g.save();
+      g.translate(-s * 0.40, s * 0.24);
+      g.rotate(-0.45 + tw);
+      g.fillStyle = rgrad(g, 0, s * 0.24, s * 0.24, light, body);
+      ell(g, 0, s * 0.22, s * 0.13, s * 0.30); g.fill();
+      g.strokeStyle = hexA(dark, 0.4); g.lineWidth = s * 0.02; g.stroke();
+      if (patType === 'patch' || earType === 'antlers') {
+        g.fillStyle = hexA(belly, 0.9);
+        ell(g, 0, s * 0.40, s * 0.12, s * 0.11); g.fill();
+      }
+      g.restore();
+
+      // 腿
+      g.fillStyle = shade(body, -14);
+      ell(g, -s * 0.23, s * 0.55, s * 0.15, s * 0.15); g.fill();
+      ell(g,  s * 0.23, s * 0.55, s * 0.15, s * 0.15); g.fill();
+      g.strokeStyle = hexA(dark, 0.35); g.lineWidth = s * 0.02; g.stroke();
+      ell(g, -s * 0.23, s * 0.55, s * 0.15, s * 0.15); g.stroke();
+      ell(g,  s * 0.23, s * 0.55, s * 0.15, s * 0.15); g.stroke();
+
+      // 身體
+      g.fillStyle = rgrad(g, 0, s * 0.20, s * 0.62, light, body);
+      ell(g, 0, s * 0.20, s * 0.50, s * 0.46); g.fill();
+      g.strokeStyle = hexA(dark, 0.5); g.lineWidth = s * 0.03; g.stroke();
+
+      // 肚子
+      g.fillStyle = hexA(belly, 0.92);
+      ell(g, 0, s * 0.30, s * 0.29, s * 0.28); g.fill();
+
+      // 花紋（身體上）
+      drawBeastPattern(g, s, patType, dark, light, body, 0.20, 0.28);
+
+      // 頭
+      const hy = -s * 0.30, hr = s * 0.46;
+      g.fillStyle = rgrad(g, 0, hy, hr, light, body);
+      circ(g, 0, hy, hr); g.fill();
+      g.strokeStyle = hexA(dark, 0.5); g.lineWidth = s * 0.03; g.stroke();
+
+      // 耳朵 / 角
+      drawBeastEars(g, s, hy, hr, earType, pal);
+
+      // 額頭花紋
+      if (patType === 'stripes') {
+        g.fillStyle = hexA(shade(body, -45), 0.85);
+        for (let i = -1; i <= 1; i++) {
+          g.beginPath();
+          g.moveTo(i * hr * 0.28, hy - hr * 0.90);
+          g.lineTo(i * hr * 0.28 - hr * 0.07, hy - hr * 0.42);
+          g.lineTo(i * hr * 0.28 + hr * 0.07, hy - hr * 0.42);
+          g.closePath(); g.fill();
+        }
+      }
+
+      // 口鼻
+      g.fillStyle = hexA(belly, 0.95);
+      ell(g, 0, hy + hr * 0.46, hr * 0.48, hr * 0.34); g.fill();
+      g.strokeStyle = hexA(dark, 0.16); g.lineWidth = s * 0.016; g.stroke();
+
+      // 鼻子
+      g.fillStyle = dark;
+      ell(g, 0, hy + hr * 0.26, hr * 0.17, hr * 0.12); g.fill();
+      g.fillStyle = 'rgba(255,255,255,0.55)';
+      circ(g, -hr * 0.05, hy + hr * 0.22, hr * 0.04); g.fill();
+
+      // 嘴（ω）
+      g.strokeStyle = hexA(dark, 0.65); g.lineWidth = s * 0.022; g.lineCap = 'round';
+      g.beginPath();
+      g.moveTo(0, hy + hr * 0.38);
+      g.lineTo(0, hy + hr * 0.48);
+      g.moveTo(-hr * 0.16, hy + hr * 0.50);
+      g.quadraticCurveTo(-hr * 0.08, hy + hr * 0.60, 0, hy + hr * 0.48);
+      g.quadraticCurveTo( hr * 0.08, hy + hr * 0.60, hr * 0.16, hy + hr * 0.50);
+      g.stroke();
+
+      // 眼睛
+      const bl = blinkAt(time, h);
+      const iris = (h % 3 === 0) ? accent : null;
+      drawEye(g, -hr * 0.44, hy - hr * 0.10, hr * 0.25, { blink: bl, iris });
+      drawEye(g,  hr * 0.44, hy - hr * 0.10, hr * 0.25, { blink: bl, iris });
+
+      // 鬍鬚（貓科）
+      if (earType === 'pointed' || earType === 'round') {
+        whiskers(g, -hr * 0.34, hy + hr * 0.40, hr * 0.18, -1);
+        whiskers(g,  hr * 0.34, hy + hr * 0.40, hr * 0.18,  1);
+      }
+
+      blush(g, -hr * 0.70, hy + hr * 0.22, hr * 0.15, 0.32);
+      blush(g,  hr * 0.70, hy + hr * 0.22, hr * 0.15, 0.32);
+
+      g.restore();
+    }
+
+    function drawBeastEars(g, s, hy, hr, type, pal) {
+      const { body, belly, accent, dark, light } = pal;
+      const inner = hexA('#ff9db8', 0.70);
+
+      if (type === 'round') {
+        for (const sx of [-1, 1]) {
+          g.fillStyle = rgrad(g, sx * hr * 0.74, hy - hr * 0.62, hr * 0.42, light, body);
+          circ(g, sx * hr * 0.74, hy - hr * 0.62, hr * 0.40); g.fill();
+          g.strokeStyle = hexA(dark, 0.5); g.lineWidth = s * 0.024; g.stroke();
+          g.fillStyle = inner;
+          circ(g, sx * hr * 0.74, hy - hr * 0.62, hr * 0.19); g.fill();
+        }
+      } else if (type === 'pointed') {
+        for (const sx of [-1, 1]) {
+          g.fillStyle = shade(body, -6);
+          g.beginPath();
+          g.moveTo(sx * hr * 0.34, hy - hr * 0.66);
+          g.lineTo(sx * hr * 0.96, hy - hr * 1.34);
+          g.lineTo(sx * hr * 0.92, hy - hr * 0.36);
+          g.closePath(); g.fill();
+          g.strokeStyle = hexA(dark, 0.5); g.lineWidth = s * 0.024; g.stroke();
+          g.fillStyle = inner;
+          g.beginPath();
+          g.moveTo(sx * hr * 0.48, hy - hr * 0.66);
+          g.lineTo(sx * hr * 0.86, hy - hr * 1.16);
+          g.lineTo(sx * hr * 0.84, hy - hr * 0.50);
+          g.closePath(); g.fill();
+        }
+      } else if (type === 'long') {
+        for (const sx of [-1, 1]) {
+          g.save();
+          g.translate(sx * hr * 0.52, hy - hr * 0.72);
+          g.rotate(sx * 0.28);
+          g.fillStyle = rgrad(g, 0, 0, hr * 0.60, light, body);
+          ell(g, 0, -hr * 0.34, hr * 0.24, hr * 0.66); g.fill();
+          g.strokeStyle = hexA(dark, 0.5); g.lineWidth = s * 0.024; g.stroke();
+          g.fillStyle = inner;
+          ell(g, 0, -hr * 0.34, hr * 0.11, hr * 0.44); g.fill();
+          g.restore();
+        }
+      } else if (type === 'droop') {
+        for (const sx of [-1, 1]) {
+          g.fillStyle = rgrad(g, sx * hr * 0.80, hy, hr * 0.5, shade(body, -4), shade(body, -32));
+          ell(g, sx * hr * 0.86, hy + hr * 0.30, hr * 0.30, hr * 0.58, sx * 0.15); g.fill();
+          g.strokeStyle = hexA(dark, 0.45); g.lineWidth = s * 0.022; g.stroke();
+        }
+      } else if (type === 'horns') {
+        for (const sx of [-1, 1]) {
+          g.fillStyle = hexA(belly, 0.95);
+          g.beginPath();
+          g.moveTo(sx * hr * 0.48, hy - hr * 0.72);
+          g.quadraticCurveTo(sx * hr * 0.90, hy - hr * 1.14, sx * hr * 0.34, hy - hr * 1.20);
+          g.quadraticCurveTo(sx * hr * 0.62, hy - hr * 0.94, sx * hr * 0.28, hy - hr * 0.70);
+          g.closePath(); g.fill();
+          g.strokeStyle = hexA(dark, 0.5); g.lineWidth = s * 0.02; g.stroke();
+        }
+        // 小圓耳
+        for (const sx of [-1, 1]) {
+          g.fillStyle = shade(body, -10);
+          circ(g, sx * hr * 0.86, hy - hr * 0.40, hr * 0.20); g.fill();
+          g.strokeStyle = hexA(dark, 0.4); g.lineWidth = s * 0.02; g.stroke();
+        }
+      } else if (type === 'antlers') {
+        for (const sx of [-1, 1]) {
+          g.strokeStyle = '#c8a468';
+          g.lineWidth = s * 0.055;
+          g.lineCap = 'round';
+          g.beginPath();
+          g.moveTo(sx * hr * 0.44, hy - hr * 0.80);
+          g.quadraticCurveTo(sx * hr * 0.70, hy - hr * 1.24, sx * hr * 0.44, hy - hr * 1.56);
+          g.stroke();
+          g.lineWidth = s * 0.036;
+          g.beginPath();
+          g.moveTo(sx * hr * 0.58, hy - hr * 1.08);
+          g.lineTo(sx * hr * 0.92, hy - hr * 1.24);
+          g.moveTo(sx * hr * 0.50, hy - hr * 1.30);
+          g.lineTo(sx * hr * 0.24, hy - hr * 1.46);
+          g.stroke();
+        }
+        // 耳朵
+        for (const sx of [-1, 1]) {
+          g.fillStyle = shade(body, -8);
+          ell(g, sx * hr * 0.84, hy - hr * 0.36, hr * 0.24, hr * 0.16, sx * 0.5); g.fill();
+          g.strokeStyle = hexA(dark, 0.4); g.lineWidth = s * 0.018; g.stroke();
+        }
+      }
+    }
+
+    function drawBeastPattern(g, s, type, dark, light, body, cy, cr) {
+      if (type === 'spots') {
+        g.fillStyle = hexA(shade(body, -42), 0.55);
+        const pts = [[-0.26, 0.10], [0.24, 0.16], [-0.10, 0.32], [0.12, -0.02], [0.30, 0.36]];
+        for (const p of pts) {
+          ell(g, p[0] * s, cy + p[1] * s * 0.9, s * 0.07, s * 0.06); g.fill();
+        }
+      } else if (type === 'stripes') {
+        g.strokeStyle = hexA(shade(body, -45), 0.65);
+        g.lineWidth = s * 0.055;
+        g.lineCap = 'round';
+        for (let i = -1; i <= 1; i++) {
+          g.beginPath();
+          g.moveTo(i * s * 0.20, cy - s * 0.10);
+          g.quadraticCurveTo(i * s * 0.24, cy + s * 0.08, i * s * 0.16, cy + s * 0.24);
+          g.stroke();
+        }
+      } else if (type === 'patch') {
+        g.fillStyle = hexA(shade(body, -45), 0.45);
+        ell(g, s * 0.20, cy + s * 0.06, s * 0.15, s * 0.12, 0.4); g.fill();
+      }
+    }
+
+    /* ---------- 3-2 有翼（鳳凰 / 天使 / 蝴蝶 / 獅鷲 / 月光 …） ---------- */
+    function drawWinged(g, s, time, pal, h) {
+      const { body, belly, accent, dark, light } = pal;
+      const flap = Math.sin(time * 3.0 + (h % 6)) * 0.16 + 0.10;
+      g.save();
+      g.translate(0, Math.sin(time * 2.0 + (h % 9)) * s * 0.05);
+
+      // 翅膀
+      for (const sx of [-1, 1]) {
+        g.save();
+        g.translate(sx * s * 0.10, -s * 0.06);
+        g.rotate(sx * (0.48 + flap));
+        g.fillStyle = rgrad(g, 0, 0, s * 0.80, hexA(accent, 0.96), hexA(shade(accent, -42), 0.86));
+        g.beginPath();
+        g.moveTo(0, 0);
+        g.bezierCurveTo(sx * s * 0.50, -s * 0.56, sx * s * 1.14, -s * 0.66, sx * s * 1.28, -s * 0.14);
+        g.bezierCurveTo(sx * s * 1.08, s * 0.06, sx * s * 0.78, s * 0.12, sx * s * 0.54, s * 0.06);
+        g.bezierCurveTo(sx * s * 0.38, s * 0.26, sx * s * 0.14, s * 0.22, 0, 0);
+        g.closePath(); g.fill();
+        g.strokeStyle = hexA(dark, 0.5); g.lineWidth = s * 0.024; g.stroke();
+        // 羽毛分線
+        g.strokeStyle = hexA(dark, 0.30); g.lineWidth = s * 0.018;
+        for (let i = 1; i <= 3; i++) {
+          g.beginPath();
+          g.moveTo(sx * s * 0.08 * i, s * 0.02);
+          g.quadraticCurveTo(sx * s * (0.30 + i * 0.18), -s * 0.28, sx * s * (0.34 + i * 0.26), -s * 0.44);
+          g.stroke();
+        }
+        g.restore();
+      }
+
+      // 尾羽
+      g.fillStyle = hexA(accent, 0.88);
+      for (let i = -2; i <= 2; i++) {
+        g.save();
+        g.translate(0, s * 0.42);
+        g.rotate(i * 0.30 + Math.sin(time * 2.4 + i) * 0.05);
+        g.beginPath();
+        g.moveTo(0, 0);
+        g.quadraticCurveTo(-s * 0.10, s * 0.24, 0, s * 0.52);
+        g.quadraticCurveTo( s * 0.10, s * 0.24, 0, 0);
+        g.closePath(); g.fill();
+        g.restore();
+      }
+
+      // 身體
+      g.fillStyle = rgrad(g, 0, s * 0.14, s * 0.58, light, body);
+      ell(g, 0, s * 0.16, s * 0.44, s * 0.46); g.fill();
+      g.strokeStyle = hexA(dark, 0.5); g.lineWidth = s * 0.028; g.stroke();
+
+      // 胸前
+      g.fillStyle = hexA(belly, 0.88);
+      ell(g, 0, s * 0.24, s * 0.26, s * 0.28); g.fill();
+
+      // 頭
+      const hy = -s * 0.36, hr = s * 0.40;
+      g.fillStyle = rgrad(g, 0, hy, hr, light, body);
+      circ(g, 0, hy, hr); g.fill();
+      g.strokeStyle = hexA(dark, 0.5); g.lineWidth = s * 0.028; g.stroke();
+
+      // 光環 / 星冠
+      if ((h >>> 4) % 3 === 0) {
+        g.save();
+        g.strokeStyle = hexA('#ffe680', 0.9);
+        g.lineWidth = s * 0.05;
+        g.shadowBlur = s * 0.30;
+        g.shadowColor = '#ffe680';
+        ell(g, 0, hy - hr * 1.30, hr * 0.58, hr * 0.16); g.stroke();
+        g.restore();
+      } else {
+        g.fillStyle = hexA(accent, 0.95);
+        for (let i = -1; i <= 1; i++) {
+          const a = -Math.PI / 2 + i * 0.42;
+          const bx = Math.cos(a) * hr * 0.92, by = Math.sin(a) * hr * 0.92;
+          g.beginPath();
+          g.moveTo(bx - hr * 0.10, by + hr * 0.14);
+          g.lineTo(bx, by - hr * 0.30);
+          g.lineTo(bx + hr * 0.10, by + hr * 0.14);
+          g.closePath(); g.fill();
+          g.strokeStyle = hexA(dark, 0.35); g.lineWidth = s * 0.014; g.stroke();
+        }
+      }
+
+      // 眼睛
+      const bl = blinkAt(time, h);
+      drawEye(g, -hr * 0.42, hy - hr * 0.08, hr * 0.25, { blink: bl, iris: accent, pr: 0.44 });
+      drawEye(g,  hr * 0.42, hy - hr * 0.08, hr * 0.25, { blink: bl, iris: accent, pr: 0.44 });
+
+      // 小喙 / 嘴
+      g.strokeStyle = hexA(dark, 0.55); g.lineWidth = s * 0.022; g.lineCap = 'round';
+      g.beginPath();
+      g.arc(0, hy + hr * 0.42, hr * 0.14, Math.PI * 0.15, Math.PI * 0.85);
+      g.stroke();
+
+      blush(g, -hr * 0.68, hy + hr * 0.20, hr * 0.15, 0.34);
+      blush(g,  hr * 0.68, hy + hr * 0.20, hr * 0.15, 0.34);
+
+      g.restore();
+    }
+
+    /* ---------- 3-3 水生（人魚 / 鯨 / 章魚 / 海龜 / 海怪 …） ---------- */
+    function drawAquatic(g, s, time, pal, h) {
+      const { body, belly, accent, dark, light } = pal;
+      const sw = Math.sin(time * 2.0 + (h % 5));
+      g.save();
+      g.translate(0, sw * s * 0.05);
+
+      // 尾鰭
+      g.save();
+      g.translate(-s * 0.58, s * 0.06);
+      g.rotate(sw * 0.30);
+      g.fillStyle = hexA(accent, 0.92);
+      g.beginPath();
+      g.moveTo(0, 0);
+      g.quadraticCurveTo(-s * 0.34, -s * 0.46, -s * 0.56, -s * 0.14);
+      g.quadraticCurveTo(-s * 0.42, 0, -s * 0.56, s * 0.14);
+      g.quadraticCurveTo(-s * 0.34, s * 0.46, 0, 0);
+      g.closePath(); g.fill();
+      g.strokeStyle = hexA(dark, 0.4); g.lineWidth = s * 0.02; g.stroke();
+      g.strokeStyle = hexA(dark, 0.25); g.lineWidth = s * 0.016;
+      for (let i = -2; i <= 2; i++) {
+        g.beginPath();
+        g.moveTo(-s * 0.05, 0);
+        g.lineTo(-s * 0.42, i * s * 0.10);
+        g.stroke();
+      }
+      g.restore();
+
+      // 背鰭
+      g.fillStyle = hexA(accent, 0.88);
+      g.beginPath();
+      g.moveTo(-s * 0.08, -s * 0.28);
+      g.quadraticCurveTo(s * 0.02, -s * 0.70, s * 0.28, -s * 0.26);
+      g.closePath(); g.fill();
+      g.strokeStyle = hexA(dark, 0.4); g.lineWidth = s * 0.02; g.stroke();
+
+      // 身體
+      g.fillStyle = rgrad(g, 0, s * 0.02, s * 0.72, light, body);
+      ell(g, 0, s * 0.02, s * 0.64, s * 0.44); g.fill();
+      g.strokeStyle = hexA(dark, 0.5); g.lineWidth = s * 0.028; g.stroke();
+
+      // 白肚
+      g.fillStyle = hexA(belly, 0.92);
+      g.beginPath();
+      g.ellipse(0, s * 0.14, s * 0.50, s * 0.26, 0, 0, Math.PI);
+      g.fill();
+
+      // 胸鰭
+      for (const sx of [-1, 1]) {
+        g.fillStyle = hexA(accent, 0.82);
+        g.beginPath();
+        g.moveTo(sx * s * 0.14, s * 0.14);
+        g.lineTo(sx * s * 0.44, s * 0.34);
+        g.lineTo(sx * s * 0.16, s * 0.28);
+        g.closePath(); g.fill();
+        g.strokeStyle = hexA(dark, 0.35); g.lineWidth = s * 0.016; g.stroke();
+      }
+
+      // 眼睛
+      const bl = blinkAt(time, h);
+      drawEye(g, s * 0.34, -s * 0.12, s * 0.11, { blink: bl });
+
+      // 嘴
+      g.strokeStyle = hexA(dark, 0.55); g.lineWidth = s * 0.022; g.lineCap = 'round';
+      g.beginPath();
+      g.arc(s * 0.40, s * 0.04, s * 0.08, Math.PI * 0.30, Math.PI * 0.95);
+      g.stroke();
+
+      // 腮紅
+      blush(g, s * 0.28, s * 0.04, s * 0.10, 0.30);
+
+      g.restore();
+    }
+
+    /* ---------- 3-4 長條 / 爬蟲（蜥蜴 / 蛇 / 蠕蟲 / 恐龍 …） ---------- */
+    function drawReptile(g, s, time, pal, h) {
+      const { body, belly, accent, dark, light } = pal;
+      const wob = Math.sin(time * 2.4 + (h % 7));
+      g.save();
+      g.translate(0, wob * s * 0.04);
+
+      // 尾巴（分節）
+      for (let i = 5; i >= 1; i--) {
+        const t = i / 5;
+        const tx = -s * (0.36 + t * 0.60);
+        const ty = s * (0.10 + Math.sin(time * 3 - i * 0.8) * 0.10 * t);
+        const r = s * (0.10 + t * 0.07);
+        g.fillStyle = rgrad(g, tx, ty, r, light, body);
+        circ(g, tx, ty, r); g.fill();
+        g.strokeStyle = hexA(dark, 0.42); g.lineWidth = s * 0.018; g.stroke();
+      }
+
+      // 腿
+      g.fillStyle = shade(body, -16);
+      for (const sx of [-1, 1]) {
+        ell(g, sx * s * 0.30, s * 0.46, s * 0.14, s * 0.10, sx * 0.35); g.fill();
+        g.strokeStyle = hexA(dark, 0.4); g.lineWidth = s * 0.018; g.stroke();
+      }
+
+      // 身體
+      g.fillStyle = rgrad(g, 0, s * 0.10, s * 0.60, light, body);
+      ell(g, 0, s * 0.10, s * 0.48, s * 0.40); g.fill();
+      g.strokeStyle = hexA(dark, 0.5); g.lineWidth = s * 0.028; g.stroke();
+
+      // 腹部橫紋
+      g.fillStyle = hexA(belly, 0.82);
+      for (let i = 0; i < 3; i++) {
+        ell(g, 0, s * (0.02 + i * 0.14), s * (0.30 - i * 0.04), s * 0.07); g.fill();
+      }
+
+      // 頭
+      const hy = -s * 0.32, hr = s * 0.38;
+      g.fillStyle = rgrad(g, 0, hy, hr, light, body);
+      circ(g, 0, hy, hr); g.fill();
+      g.strokeStyle = hexA(dark, 0.5); g.lineWidth = s * 0.028; g.stroke();
+
+      // 頭冠 / 小刺
+      g.fillStyle = accent;
+      for (let i = -1; i <= 1; i++) {
+        const bx = i * hr * 0.36;
+        g.beginPath();
+        g.moveTo(bx - hr * 0.10, hy - hr * 0.86);
+        g.lineTo(bx, hy - hr * 1.16);
+        g.lineTo(bx + hr * 0.10, hy - hr * 0.86);
+        g.closePath(); g.fill();
+      }
+
+      // 口鼻
+      g.fillStyle = hexA(shade(body, 12), 1);
+      ell(g, 0, hy + hr * 0.48, hr * 0.52, hr * 0.30); g.fill();
+      g.strokeStyle = hexA(dark, 0.35); g.lineWidth = s * 0.018; g.stroke();
+      // 鼻孔
+      g.fillStyle = hexA(dark, 0.8);
+      circ(g, -hr * 0.16, hy + hr * 0.36, hr * 0.045); g.fill();
+      circ(g,  hr * 0.16, hy + hr * 0.36, hr * 0.045); g.fill();
+
+      // 眼睛（黃瞳豎瞳）
+      const bl = blinkAt(time, h);
+      for (const sx of [-1, 1]) {
+        g.save();
+        g.fillStyle = '#fff';
+        ell(g, sx * hr * 0.44, hy - hr * 0.10, hr * 0.24, hr * 0.22 * (1 - bl * 0.9)); g.fill();
+        g.strokeStyle = 'rgba(20,20,30,0.22)'; g.lineWidth = s * 0.016; g.stroke();
+        if (bl < 0.7) {
+          g.fillStyle = '#ffd23c';
+          circ(g, sx * hr * 0.44, hy - hr * 0.10, hr * 0.17); g.fill();
+          g.fillStyle = '#1a1424';
+          ell(g, sx * hr * 0.44, hy - hr * 0.10, hr * 0.055, hr * 0.13); g.fill();
+          g.fillStyle = '#fff';
+          circ(g, sx * hr * 0.44 - hr * 0.07, hy - hr * 0.18, hr * 0.05); g.fill();
+        }
+        g.restore();
+      }
+
+      g.restore();
+    }
+
+    /* ---------- 3-5 軟體 / 圓滾（史萊姆 / 青蛙 / 眼球 …） ---------- */
+    function drawBlob(g, s, time, pal, h) {
+      const { body, belly, accent, dark, light } = pal;
+      const squash = Math.sin(time * 2.2 + (h % 8));
+      g.save();
+      g.translate(0, s * 0.12 + Math.sin(time * 2 + h) * s * 0.03);
+      g.scale(1 + squash * 0.045, 1 - squash * 0.045);
+
+      // 身體（水滴型）
+      g.fillStyle = rgrad(g, 0, s * 0.05, s * 0.80, light, body);
+      g.beginPath();
+      g.moveTo(-s * 0.78, s * 0.24);
+      g.bezierCurveTo(-s * 0.84, -s * 0.42, -s * 0.44, -s * 0.82, 0, -s * 0.82);
+      g.bezierCurveTo( s * 0.44, -s * 0.82,  s * 0.84, -s * 0.42, s * 0.78, s * 0.24);
+      g.bezierCurveTo( s * 0.68, s * 0.72, -s * 0.68, s * 0.72, -s * 0.78, s * 0.24);
+      g.closePath(); g.fill();
+      g.strokeStyle = hexA(dark, 0.5); g.lineWidth = s * 0.028; g.stroke();
+
+      // 內部高光
+      g.fillStyle = 'rgba(255,255,255,0.34)';
+      ell(g, -s * 0.30, -s * 0.34, s * 0.18, s * 0.12, -0.5); g.fill();
+      g.fillStyle = 'rgba(255,255,255,0.18)';
+      ell(g, s * 0.28, -s * 0.20, s * 0.10, s * 0.07, 0.4); g.fill();
+
+      // 肚
+      g.fillStyle = hexA(belly, 0.45);
+      ell(g, 0, s * 0.30, s * 0.46, s * 0.30); g.fill();
+
+      // 眼睛
+      const bl = blinkAt(time, h);
+      drawEye(g, -s * 0.26, -s * 0.12, s * 0.20, { blink: bl });
+      drawEye(g,  s * 0.26, -s * 0.12, s * 0.20, { blink: bl });
+
+      // 嘴
+      g.strokeStyle = hexA(dark, 0.65); g.lineWidth = s * 0.032; g.lineCap = 'round';
+      g.beginPath();
+      g.arc(0, s * 0.16, s * 0.14, Math.PI * 0.16, Math.PI * 0.84);
+      g.stroke();
+
+      // 腮紅
+      blush(g, -s * 0.46, s * 0.10, s * 0.13, 0.36);
+      blush(g,  s * 0.46, s * 0.10, s * 0.13, 0.36);
+
+      // 小點裝飾
+      g.fillStyle = hexA(accent, 0.85);
+      for (let i = 0; i < 4; i++) {
+        const a = time * 0.8 + i * Math.PI / 2;
+        circ(g, Math.cos(a) * s * 0.62, -s * 0.52 + Math.sin(a) * s * 0.22, s * 0.045); g.fill();
+      }
+
+      g.restore();
+    }
+
+    /* ---------- 3-6 幽靈 / 亡魂 ---------- */
+    function drawGhost(g, s, time, pal, h) {
+      const { body, belly, accent, dark, light } = pal;
+      g.save();
+      g.translate(0, Math.sin(time * 1.8 + (h % 6)) * s * 0.06);
+
+      // 幽光
+      const glow = g.createRadialGradient(0, 0, s * 0.3, 0, 0, s * 1.5);
+      glow.addColorStop(0, hexA(accent, 0.28));
+      glow.addColorStop(1, hexA(accent, 0));
+      g.fillStyle = glow;
+      circ(g, 0, 0, s * 1.5); g.fill();
+
+      // 身體（下擺波浪）
+      g.fillStyle = rgrad(g, 0, -s * 0.2, s * 0.9, hexA(light, 0.94), hexA(body, 0.86));
+      g.beginPath();
+      g.moveTo(-s * 0.62, s * 0.10);
+      g.bezierCurveTo(-s * 0.72, -s * 0.60, -s * 0.38, -s * 0.92, 0, -s * 0.92);
+      g.bezierCurveTo( s * 0.38, -s * 0.92,  s * 0.72, -s * 0.60, s * 0.62, s * 0.10);
+      // 波浪下擺
+      const n = 5;
+      for (let i = 0; i <= n; i++) {
+        const t = i / n;
+        const x = s * (0.62 - t * 1.24);
+        const y = s * (0.36 + Math.sin(time * 3 + t * Math.PI * 3) * 0.10);
+        g.lineTo(x, y);
+      }
+      g.closePath(); g.fill();
+      g.strokeStyle = hexA(dark, 0.35); g.lineWidth = s * 0.024; g.stroke();
+
+      // 眼睛（黑洞）
+      const bl = blinkAt(time, h);
+      g.save();
+      g.globalAlpha = 1 - bl * 0.8;
+      g.fillStyle = '#1a1428';
+      ell(g, -s * 0.24, -s * 0.26, s * 0.15, s * 0.20); g.fill();
+      ell(g,  s * 0.24, -s * 0.26, s * 0.15, s * 0.20); g.fill();
+      g.restore();
+      if (bl < 0.5) {
+        g.fillStyle = 'rgba(255,255,255,0.8)';
+        circ(g, -s * 0.28, -s * 0.33, s * 0.045); g.fill();
+        circ(g,  s * 0.20, -s * 0.33, s * 0.045); g.fill();
+      }
+
+      // 小嘴
+      g.strokeStyle = 'rgba(30,24,44,0.7)'; g.lineWidth = s * 0.028; g.lineCap = 'round';
+      g.beginPath();
+      g.arc(0, s * 0.04, s * 0.10, Math.PI * 0.18, Math.PI * 0.82);
+      g.stroke();
+
+      // 幽浮粒子
+      g.fillStyle = hexA(accent, 0.7);
+      for (let i = 0; i < 4; i++) {
+        const a = time * 1.2 + i * Math.PI / 2;
+        circ(g, Math.cos(a) * s * 0.80, Math.sin(a) * s * 0.66, s * 0.038); g.fill();
+      }
+
+      g.restore();
+    }
+
+    /* ---------- 3-7 骷髏 / 亡靈 ---------- */
+    function drawSkeleton(g, s, time, pal, h) {
+      const { body, belly, accent, dark, light } = pal;
+      g.save();
+      g.translate(0, Math.sin(time * 2.4 + (h % 5)) * s * 0.03);
+
+      // 身體（骨頭）
+      g.strokeStyle = hexA(light, 0.95); g.lineWidth = s * 0.075; g.lineCap = 'round';
+      g.beginPath();
+      g.moveTo(0, s * 0.02);
+      g.lineTo(0, s * 0.46);
+      g.stroke();
+      // 肋骨
+      g.lineWidth = s * 0.05;
+      for (let i = 0; i < 3; i++) {
+        g.beginPath();
+        g.arc(0, s * (0.08 + i * 0.12), s * (0.22 - i * 0.02), Math.PI * 1.08, Math.PI * 1.92);
+        g.stroke();
+        g.beginPath();
+        g.arc(0, s * (0.08 + i * 0.12), s * (0.22 - i * 0.02), Math.PI * 0.08, Math.PI * 0.92);
+        g.stroke();
+      }
+      // 手骨
+      g.lineWidth = s * 0.05;
+      for (const sx of [-1, 1]) {
+        g.beginPath();
+        g.moveTo(0, s * 0.12);
+        g.lineTo(sx * s * 0.30, s * 0.34);
+        g.stroke();
+      }
+      // 頭骨
+      const hy = -s * 0.32, hr = s * 0.44;
+      g.fillStyle = rgrad(g, 0, hy, hr, '#f8f8ff', '#c8c8d8');
+      circ(g, 0, hy, hr); g.fill();
+      g.strokeStyle = hexA(dark, 0.35); g.lineWidth = s * 0.022; g.stroke();
+      // 下顎
+      g.fillStyle = '#dcdce8';
+      g.beginPath();
+      g.moveTo(-hr * 0.40, hy + hr * 0.52);
+      g.quadraticCurveTo(0, hy + hr * 0.86, hr * 0.40, hy + hr * 0.52);
+      g.quadraticCurveTo(0, hy + hr * 0.66, -hr * 0.40, hy + hr * 0.52);
+      g.closePath(); g.fill();
+      // 眼窩
+      g.fillStyle = '#14121e';
+      ell(g, -hr * 0.40, hy - hr * 0.04, hr * 0.24, hr * 0.26); g.fill();
+      ell(g,  hr * 0.40, hy - hr * 0.04, hr * 0.24, hr * 0.26); g.fill();
+      // 瞳孔紅光
+      const glow = 0.5 + Math.sin(time * 5 + h) * 0.5;
+      g.save();
+      g.shadowBlur = s * 0.28;
+      g.shadowColor = '#ff3030';
+      g.fillStyle = `rgba(255,60,50,${0.6 + glow * 0.4})`;
+      circ(g, -hr * 0.40, hy - hr * 0.04, hr * 0.09); g.fill();
+      circ(g,  hr * 0.40, hy - hr * 0.04, hr * 0.09); g.fill();
+      g.restore();
+      // 鼻孔
+      g.fillStyle = '#2a2636';
+      g.beginPath();
+      g.moveTo(0, hy + hr * 0.20);
+      g.lineTo(-hr * 0.10, hy + hr * 0.42);
+      g.lineTo(hr * 0.10, hy + hr * 0.42);
+      g.closePath(); g.fill();
+      // 牙齒
+      g.strokeStyle = '#a8a8bc'; g.lineWidth = s * 0.018;
+      for (let i = -1; i <= 1; i++) {
+        g.beginPath();
+        g.moveTo(i * hr * 0.14, hy + hr * 0.56);
+        g.lineTo(i * hr * 0.14, hy + hr * 0.70);
+        g.stroke();
+      }
+      // 王冠
+      if ((h >>> 4) % 2 === 0) {
+        g.fillStyle = hexA(accent, 0.95);
+        g.beginPath();
+        g.moveTo(-hr * 0.60, hy - hr * 0.80);
+        g.lineTo(-hr * 0.36, hy - hr * 1.16);
+        g.lineTo(-hr * 0.12, hy - hr * 0.86);
+        g.lineTo( hr * 0.12, hy - hr * 1.16);
+        g.lineTo( hr * 0.36, hy - hr * 0.86);
+        g.lineTo( hr * 0.60, hy - hr * 1.16);
+        g.lineTo( hr * 0.60, hy - hr * 0.74);
+        g.closePath(); g.fill();
+        g.strokeStyle = hexA(dark, 0.4); g.lineWidth = s * 0.02; g.stroke();
+      }
+
+      g.restore();
+    }
+
+    /* =========================================================
+     *  4. 形狀名稱 → 物種 對應
+     * ========================================================= */
+    const SPECIES_FN = {
+      chicken: drawChicken,
+      dog: drawDog,
+      bird: drawBird,
+      fox: drawFox,
+      bear: drawBear,
+      hound: drawHound,
+      dragon: drawDragon,
+      shark: drawShark,
+      beast: drawBeast,
+      winged: drawWinged,
+      aquatic: drawAquatic,
+      reptile: drawReptile,
+      blob: drawBlob,
+      ghost: drawGhost,
+      skeleton: drawSkeleton
+    };
+
+    const KEYWORDS = [
+      [/(chicken|chick|hen|rooster|小雞)/, 'chicken'],
+      [/(hound|wolf|lycan|地獄犬|獵犬)/, 'hound'],
+      [/(dog|puppy|犬|狗)/, 'dog'],
+      [/(fox|kitsune|狐)/, 'fox'],
+      [/(bear|panda|熊|貓熊)/, 'bear'],
+      [/(dragon|wyvern|draco|龍)/, 'dragon'],
+      [/(shark|鯊)/, 'shark'],
+      [/(phoenix|butterfly|fairy|angel|goddess|griffin|wing|moth|sakura|cosmic|moon|star|鳳凰|天使|蝴蝶|女神|獅鷲|櫻)/, 'winged'],
+      [/(mermaid|kraken|fish|whale|dolphin|turtle|octopus|squid|mosasaur|人魚|海|鯨|龜|章魚)/, 'aquatic'],
+      [/(lizard|gecko|worm|centipede|serpent|snake|bronto|dino|trex|rex|ankylo|triceratops|raptor|蜥|蛇|蟲|暴龍|恐龍)/, 'reptile'],
+      [/(cow|deer|unicorn|beast|thunder|goat|horse|bull|ox|pig|sheep|rabbit|bunny|cat|kitten|mouse|rat|hamster|squirrel|elephant|rhino|hippo|monkey|ape|tiger|lion|leopard|cheetah|牛|鹿|獨角獸|獸|兔|貓|鼠|虎|獅)/, 'beast'],
+      [/(ghost|spirit|wraith|soul|phantom|幽靈|魂)/, 'ghost'],
+      [/(skeleton|skull|bone|reaper|lich|骷髏|骨)/, 'skeleton'],
+      [/(frog|slime|blob|chaos|eye|jelly|蛙|史萊姆|混沌|眼)/, 'blob']
+    ];
+
+    const FALLBACK_SPECIES = ['beast', 'winged', 'blob', 'reptile', 'aquatic', 'ghost', 'skeleton'];
+
+    function resolveSpecies(shape, h) {
+      const key = String(shape || '').toLowerCase();
+      for (let i = 0; i < KEYWORDS.length; i++) {
+        if (KEYWORDS[i][0].test(key)) return KEYWORDS[i][1];
+      }
+      return FALLBACK_SPECIES[(h >>> 5) % FALLBACK_SPECIES.length];
+    }
+
+    /* =========================================================
+     *  5. 主入口：寵物造型
+     * ========================================================= */
+    function drawPetShape(g, shape, pal, s, time, rc) {
+      if (!s || s <= 0) return;
+
+      // 守衛型寵物
+      if (shape && shape.indexOf('guardian_') === 0) {
+        const gIdx = parseInt(shape.split('_')[1], 10);
+        const anim = GUARD_ANIMALS[gIdx] || GUARD_ANIMALS[0];
+        anim.draw(g, s, time, false);
+        return;
+      }
+
+      const P = normPal(pal);
+      const h = hashStr(String(shape || 'x'));
+      const species = resolveSpecies(shape, h);
+      const fn = SPECIES_FN[species] || drawBeast;
+
+      g.save();
+      g.lineJoin = 'round';
+      g.lineCap = 'round';
+      fn(g, s, time, P, h);
+      g.restore();
+    }
+
+    /* =========================================================
+     *  6. 蛋造型
      * ========================================================= */
     function drawEggShape(g, e, s, time, rc) {
       const bob = Math.sin(time * 2 + (e.float || 0)) * 3;
       g.save(); g.translate(0, bob); const r = s;
+
       if (e.secret) {
         const pulse = Math.sin(time * 4) * 0.5 + 0.5;
         const hue = (time * 60) % 360;
@@ -165,32 +1704,58 @@
           const glow = g.createRadialGradient(0, 0, r * 0.5, 0, 0, r * (3 + i * 1.5));
           glow.addColorStop(0, `hsla(${hue + i * 50},100%,70%,${0.5 * pulse})`);
           glow.addColorStop(1, `hsla(${hue + i * 50},100%,70%,0)`);
-          g.fillStyle = glow; g.beginPath(); g.arc(0, 0, r * (3 + i * 1.5), 0, 7); g.fill();
+          g.fillStyle = glow; circ(g, 0, 0, r * (3 + i * 1.5)); g.fill();
         }
       } else if (e.rar >= 3 || e.size !== 'normal') {
         const glow = g.createRadialGradient(0, 0, r * 0.5, 0, 0, r * 2.6);
         glow.addColorStop(0, hexA(rc, 0.6)); glow.addColorStop(1, hexA(rc, 0));
-        g.fillStyle = glow; g.beginPath(); g.arc(0, 0, r * 2.6, 0, 7); g.fill();
+        g.fillStyle = glow; circ(g, 0, 0, r * 2.6); g.fill();
       }
+
       g.shadowBlur = 12; g.shadowColor = '#00000066';
       const grad = g.createRadialGradient(-r * 0.3, -r * 0.4, r * 0.15, 0, 0, r * 1.3);
-      if (e.secret) { const hue = (time * 60) % 360; grad.addColorStop(0, '#ffffff'); grad.addColorStop(0.5, `hsl(${hue},100%,85%)`); grad.addColorStop(1, `hsl(${hue},100%,55%)`); }
-      else if (e.size === 'giant') { grad.addColorStop(0, '#e0f0ff'); grad.addColorStop(1, '#4a8ac8'); }
-      else if (e.size === 'huge') { grad.addColorStop(0, '#f0f8ff'); grad.addColorStop(1, '#6a9ac8'); }
-      else { grad.addColorStop(0, '#ffffff'); grad.addColorStop(1, '#a0a0a0'); }
-      g.beginPath(); g.ellipse(0, 0, r, r * 1.3, 0, 0, 7); g.fillStyle = grad; g.fill();
+      if (e.secret) {
+        const hue = (time * 60) % 360;
+        grad.addColorStop(0, '#ffffff');
+        grad.addColorStop(0.5, `hsl(${hue},100%,85%)`);
+        grad.addColorStop(1, `hsl(${hue},100%,55%)`);
+      } else if (e.size === 'giant') {
+        grad.addColorStop(0, '#e0f0ff'); grad.addColorStop(1, '#4a8ac8');
+      } else if (e.size === 'huge') {
+        grad.addColorStop(0, '#f0f8ff'); grad.addColorStop(1, '#6a9ac8');
+      } else {
+        grad.addColorStop(0, '#ffffff'); grad.addColorStop(1, '#a0a0a0');
+      }
+      ell(g, 0, 0, r, r * 1.3); g.fillStyle = grad; g.fill();
       g.strokeStyle = hexA(rc, 0.5); g.lineWidth = 1.5; g.stroke();
+
       g.strokeStyle = hexA(rc, 0.7); g.lineWidth = 1.5;
       g.beginPath(); g.moveTo(-r * 0.3, -r * 0.5); g.lineTo(-r * 0.1, 0); g.lineTo(-r * 0.4, r * 0.4); g.stroke();
-      if (e.secret) { g.beginPath(); g.moveTo(r * 0.2, -r * 0.4); g.lineTo(r * 0.4, 0); g.lineTo(r * 0.1, r * 0.5); g.stroke(); }
-      g.shadowBlur = 0; g.globalAlpha = 0.6; g.fillStyle = '#fff'; g.beginPath(); g.ellipse(-r * 0.35, -r * 0.45, r * 0.25, r * 0.35, -0.4, 0, 7); g.fill(); g.globalAlpha = 1;
-      if (e.secret) { g.font = 'bold 16px "Segoe UI"'; g.fillStyle = '#fff'; g.shadowBlur = 18; g.shadowColor = '#ff88ff'; g.textAlign = 'center'; g.fillText('★', 0, -r * 1.8); g.font = 'bold 9px "Segoe UI"'; g.fillStyle = '#ffddff'; g.fillText('SECRET', 0, -r * 1.2); }
-      else if (e.rar >= 4) { g.font = 'bold 14px "Segoe UI"'; g.fillStyle = rc; g.shadowBlur = 14; g.shadowColor = rc; g.textAlign = 'center'; g.fillText('★', 0, -r * 1.6); }
+      if (e.secret) {
+        g.beginPath(); g.moveTo(r * 0.2, -r * 0.4); g.lineTo(r * 0.4, 0); g.lineTo(r * 0.1, r * 0.5); g.stroke();
+      }
+
+      g.shadowBlur = 0;
+      g.globalAlpha = 0.6; g.fillStyle = '#fff';
+      ell(g, -r * 0.35, -r * 0.45, r * 0.25, r * 0.35, -0.4); g.fill();
+      g.globalAlpha = 1;
+
+      if (e.secret) {
+        g.font = 'bold 16px "Segoe UI"'; g.fillStyle = '#fff';
+        g.shadowBlur = 18; g.shadowColor = '#ff88ff'; g.textAlign = 'center';
+        g.fillText('★', 0, -r * 1.8);
+        g.font = 'bold 9px "Segoe UI"'; g.fillStyle = '#ffddff';
+        g.fillText('SECRET', 0, -r * 1.2);
+      } else if (e.rar >= 4) {
+        g.font = 'bold 14px "Segoe UI"'; g.fillStyle = rc;
+        g.shadowBlur = 14; g.shadowColor = rc; g.textAlign = 'center';
+        g.fillText('★', 0, -r * 1.6);
+      }
       g.restore();
     }
 
     /* =========================================================
-     *  4. 火柴人角色
+     *  7. 火柴人角色
      * ========================================================= */
     function drawStickFigure(g, cx, cy, r, time, facing, walkPhase, swingPhase) {
       const scale = r / 15;
@@ -210,8 +1775,10 @@
       g.strokeStyle = bodyColor;
       g.lineWidth = 2.5 * scale;
       g.lineCap = 'round'; g.lineJoin = 'round';
-      g.fillStyle = '#ffe0c0'; g.beginPath(); g.arc(0, -14 * scale, headR, 0, 7); g.fill(); g.stroke();
-      g.fillStyle = '#1a1a2a'; g.beginPath(); g.arc(-2 * scale, -15 * scale, 1 * scale, 0, 7); g.fill(); g.beginPath(); g.arc(2 * scale, -15 * scale, 1 * scale, 0, 7); g.fill();
+      g.fillStyle = '#ffe0c0'; circ(g, 0, -14 * scale, headR); g.fill(); g.stroke();
+      g.fillStyle = '#1a1a2a';
+      circ(g, -2 * scale, -15 * scale, 1 * scale); g.fill();
+      circ(g,  2 * scale, -15 * scale, 1 * scale); g.fill();
       g.beginPath(); g.moveTo(0, -8 * scale); g.lineTo(0, hipY); g.stroke();
       if (swingPhase !== undefined && swingPhase > 0) {
         const swingAngle = Math.PI * 0.5 - Math.sin(swingPhase * Math.PI) * Math.PI * 0.7;
@@ -221,15 +1788,15 @@
         g.beginPath(); g.moveTo(0, armY); g.lineTo(-armSpread * 0.6 + armSwing, armY + armSpread * 0.5); g.stroke();
       } else {
         g.beginPath(); g.moveTo(0, armY); g.lineTo(-armSpread + armSwing, armY + armSpread * 0.5); g.stroke();
-        g.beginPath(); g.moveTo(0, armY); g.lineTo(armSpread + armSwing, armY + armSpread * 0.5); g.stroke();
+        g.beginPath(); g.moveTo(0, armY); g.lineTo( armSpread + armSwing, armY + armSpread * 0.5); g.stroke();
       }
       g.beginPath(); g.moveTo(0, hipY); g.lineTo(-legSpread + legSwing, hipY + 8 * scale); g.stroke();
-      g.beginPath(); g.moveTo(0, hipY); g.lineTo(legSpread - legSwing, hipY + 8 * scale); g.stroke();
+      g.beginPath(); g.moveTo(0, hipY); g.lineTo( legSpread - legSwing, hipY + 8 * scale); g.stroke();
       g.restore();
     }
 
     /* =========================================================
-     *  5. 註冊到主遊戲
+     *  8. 註冊到主遊戲
      * ========================================================= */
     window.__raingodDrawPetShape = drawPetShape;
     window.__raingodDrawEggShape = drawEggShape;
