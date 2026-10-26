@@ -1,3 +1,608 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>🥚 Steal Eggs | Raingod</title>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;user-select:none;-webkit-tap-highlight-color:transparent}
+  html,body{width:100%;height:100%;overflow:hidden;background:#1a2a1a;font-family:'Segoe UI',system-ui,sans-serif;touch-action:none}
+  #game{position:relative;width:100vw;height:100vh;height:100dvh;display:flex;align-items:center;justify-content:center;background:#1a2a1a}
+  #game-wrapper{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  #c{display:block;background:#8ac86a;touch-action:none;image-rendering:auto}
+  .hud-top{position:absolute;top:0;left:0;right:0;display:flex;flex-wrap:wrap;gap:3px;justify-content:space-between;padding:5px 8px;pointer-events:none;z-index:10}
+  .stats{display:flex;flex-wrap:wrap;gap:3px}
+  .stat{display:flex;align-items:center;gap:3px;background:linear-gradient(180deg,#f5f0e0cc,#e8dcc8cc);border:2px solid #8a7a5a;border-radius:8px;padding:2px 8px;color:#3a2a1a;font-weight:800;font-size:.75rem;backdrop-filter:blur(4px);box-shadow:0 2px 0 #4a3a2a;white-space:nowrap}
+  .stat b{color:#1a0a00;font-size:.9rem}
+  .stat.speed{background:linear-gradient(180deg,#d8f0d8cc,#b8e0b8cc);border-color:#4a8a4a}
+  .stat.speed b{color:#1a5a1a}
+  .stat.pet{background:linear-gradient(180deg,#e8d8f0cc,#d8c0e8cc);border-color:#8a5a9a}
+  .stat.pet b{color:#4a2a5a}
+  .stat.timer{background:linear-gradient(180deg,#f0e8c8cc,#e0d0a0cc);border-color:#aa8a3a}
+  .stat.timer b{color:#5a4a1a}
+  .stat.night{background:linear-gradient(180deg,#3a3a5acc,#2a2a4acc);border-color:#6a6a9a}
+  .stat.night b{color:#c0c0ff}
+  .btns-right{position:absolute;right:6px;top:50px;display:flex;flex-direction:column;gap:5px;z-index:10;pointer-events:auto}
+  .btn-right{display:flex;align-items:center;justify-content:center;gap:3px;background:linear-gradient(180deg,#f0f0e0,#d8d0b8);border:2px solid #8a7a5a;border-radius:9px;padding:6px 8px;color:#3a2a1a;font-weight:800;font-size:.7rem;cursor:pointer;box-shadow:0 3px 0 #5a4a2a,inset 0 1px 0 #fff;transition:transform .06s,box-shadow .06s;min-width:62px;text-align:center;white-space:nowrap}
+  .btn-right:active{transform:translateY(2px);box-shadow:0 1px 0 #5a4a2a}
+  .btn-right:disabled{opacity:.4;transform:translateY(2px);box-shadow:0 1px 0 #5a4a2a;cursor:not-allowed;filter:grayscale(.5)}
+  .btn-right.sell{background:linear-gradient(180deg,#e8a0a0,#d08080);border-color:#aa4a4a;color:#4a0a0a}
+  .btn-right.save{background:linear-gradient(180deg,#a0d8a0,#80c080);border-color:#4a8a4a;color:#0a3a0a}
+  .btn-right.stick{background:linear-gradient(180deg,#f0c060,#d8a040);border-color:#aa7a20;color:#4a2a00}
+  .btn-right.best{background:linear-gradient(180deg,#a0d0f0,#80b0d8);border-color:#4a7aaa;color:#0a2a4a}
+  .btn-right.upg{background:linear-gradient(180deg,#f0e080,#d8c060);border-color:#aa8a20;color:#4a3a00;flex-direction:column;gap:1px;padding:4px 6px;line-height:1.1}
+  .btn-right.upg span{font-size:.6rem;color:#5a3a00;font-weight:900}
+  .btn-right.return{background:linear-gradient(180deg,#f0a0c0,#d080a0);border-color:#aa4a6a;color:#4a002a}
+  .btn-right.bag{background:linear-gradient(180deg,#d0a0f0,#b080d8);border-color:#8a4aaa;color:#3a004a}
+  .btn-right.trail{background:linear-gradient(180deg,#a0f0e0,#60c0a0);border-color:#2a8a6a;color:#003a2a}
+  .btn-right.ad{background:linear-gradient(180deg,#ffd060,#ffa020);border-color:#cc7700;color:#4a2200;animation:adPulse 1.6s ease-in-out infinite}
+  .btn-right.ad4x{background:linear-gradient(180deg,#ffb0ff,#c060ff);border-color:#8a2aaa;color:#3a003a;animation:adPulse4 1.4s ease-in-out infinite}
+  .btn-right.ad8x{background:linear-gradient(180deg,#ff90ff,#c040ff);border-color:#8a2aaa;color:#3a003a;animation:adPulse4 1.4s ease-in-out infinite}
+  .btn-right.ad16x{background:linear-gradient(180deg,#90ffff,#40c0ff);border-color:#2a8aaa;color:#003a4a;animation:adPulse4 1.4s ease-in-out infinite}
+  .btn-right.ad32x{background:linear-gradient(180deg,#ffe060,#ffaa00);border-color:#aa7700;color:#4a2200;animation:adPulse 1.2s ease-in-out infinite}
+  .btn-right.subscribe{background:linear-gradient(180deg,#ff8080,#ff3030);border-color:#aa0000;color:#fff;animation:subPulse 1.8s ease-in-out infinite}
+  @keyframes adPulse{0%,100%{box-shadow:0 3px 0 #5a4a2a,0 0 0 rgba(255,170,0,0)}50%{box-shadow:0 3px 0 #5a4a2a,0 0 14px rgba(255,170,0,0.8)}}
+  @keyframes adPulse4{0%,100%{box-shadow:0 3px 0 #5a4a2a,0 0 0 rgba(200,80,255,0)}50%{box-shadow:0 3px 0 #5a4a2a,0 0 16px rgba(200,80,255,0.9)}}
+  @keyframes subPulse{0%,100%{box-shadow:0 3px 0 #5a4a2a,0 0 0 rgba(255,50,50,0)}50%{box-shadow:0 3px 0 #5a4a2a,0 0 16px rgba(255,80,80,0.9)}}
+  
+  .joystick-zone{position:absolute;bottom:calc(15px + env(safe-area-inset-bottom, 0px));left:calc(15px + env(safe-area-inset-left, 0px));width:130px;height:130px;z-index:20;pointer-events:auto;touch-action:none}
+  .joystick-base{position:absolute;width:100%;height:100%;border-radius:50%;background:radial-gradient(circle,rgba(200,220,180,0.7),rgba(160,180,140,0.4));border:3px solid rgba(100,130,80,0.7);box-shadow:0 0 20px rgba(0,0,0,0.3)}
+  .joystick-knob{position:absolute;top:50%;left:50%;width:55px;height:55px;margin:-27.5px 0 0 -27.5px;border-radius:50%;background:radial-gradient(circle,#a0e0a0,#4a8a4a);border:2px solid #d0ffd0;box-shadow:0 4px 12px rgba(0,0,0,0.4);transition:transform 0.05s}
+  .hud-bottom{position:absolute;bottom:6px;left:0;right:0;display:flex;justify-content:center;gap:10px;font-size:.7rem;color:#f0f0d0;font-weight:800;pointer-events:none;z-index:5;text-shadow:0 2px 4px #000;flex-wrap:wrap}
+  .pet-panel{position:absolute;bottom:155px;left:50%;transform:translateX(-50%);background:linear-gradient(180deg,#f5f0e0f0,#e8dcc8f0);border:3px solid #8a7a5a;border-radius:12px;padding:8px 12px;z-index:30;display:none;align-items:center;gap:8px;box-shadow:0 10px 40px rgba(0,0,0,0.5);max-width:calc(100vw - 20px);flex-wrap:wrap;justify-content:center}
+  .pet-panel.open{display:flex}
+  .pet-panel canvas{width:40px;height:40px;flex-shrink:0}
+  .pet-panel .info{display:flex;flex-direction:column;gap:1px;min-width:80px}
+  .pet-panel .pname{font-size:.8rem;font-weight:900;color:#4a2a00}
+  .pet-panel .pinc{font-size:.7rem;color:#2a6a2a;font-weight:800}
+  .pet-panel .prar{font-size:.65rem;font-weight:900}
+  .pet-panel button{background:linear-gradient(180deg,#e8a0a0,#d08080);border:2px solid #aa4a4a;border-radius:7px;padding:4px 10px;color:#fff;font-weight:800;font-size:.7rem;cursor:pointer;box-shadow:0 2px 0 #5a2a2a}
+  .pet-panel button:active{transform:translateY(2px);box-shadow:none}
+  .pet-panel .pickup-btn{background:linear-gradient(180deg,#a0d8f0,#80b0d8);border-color:#4a7aaa;color:#0a2a4a;box-shadow:0 2px 0 #2a4a6a}
+  .pet-panel .pickup-btn.following{background:linear-gradient(180deg,#f0c060,#d8a040);border-color:#aa7a20;color:#4a2a00;box-shadow:0 2px 0 #6a4a0a}
+  .pet-panel .close-btn{background:#8a8a7a;border-color:#5a5a4a;font-size:.65rem;padding:3px 8px}
+  .index-panel{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(30,40,30,0.97);backdrop-filter:blur(10px);z-index:100;display:none;flex-direction:column;padding:70px 10px 10px;overflow-y:auto}
+  .index-panel.open{display:flex}
+  .index-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:6px}
+  .index-header h2{color:#ffe080;font-size:1.1rem;font-weight:900;text-shadow:0 2px 8px rgba(0,0,0,0.5)}
+  .index-header button{background:linear-gradient(180deg,#e8a0a0,#d08080);border:2px solid #aa4a4a;border-radius:7px;padding:4px 12px;color:#fff;font-weight:800;font-size:.7rem;cursor:pointer}
+  .index-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px}
+  .index-card{background:linear-gradient(180deg,#f0f0e0,#d8d0b8);border:3px solid #8a7a5a;border-radius:10px;padding:6px;display:flex;flex-direction:column;align-items:center;gap:3px}
+  .index-card.unlocked{border-color:#e0b040;box-shadow:0 0 20px rgba(255,200,50,0.4)}
+  .index-card.locked{opacity:0.4;filter:grayscale(1)}
+  .index-card canvas{width:42px;height:42px}
+  .index-card .name{font-size:.65rem;font-weight:900;color:#3a2a1a;text-align:center;line-height:1.1;min-height:1.4em}
+  .index-card .biome-label{font-size:.55rem;color:#5a4a3a;font-weight:800}
+  .index-card .income-label{font-size:.6rem;font-weight:900;color:#0a6a0a;background:rgba(120,220,120,0.25);padding:1px 6px;border-radius:6px}
+  .index-card .rarity-label{font-size:.55rem;font-weight:900;padding:1px 6px;border-radius:6px;background:#3a2a1a}
+  .index-card .reward-btn{font-size:.6rem;padding:3px 8px;background:linear-gradient(180deg,#a0d8a0,#80c080);border:2px solid #4a8a4a;border-radius:6px;color:#0a3a0a;font-weight:800;cursor:pointer}
+  .index-card .reward-btn.claimed{opacity:0.4;cursor:default;filter:grayscale(1)}
+  .index-tabs{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px}
+  .index-tab{padding:5px 10px;border-radius:7px;background:#3a4a3a;border:2px solid #5a6a5a;color:#c0d0c0;font-weight:800;font-size:.65rem;cursor:pointer;transition:all 0.15s}
+  .index-tab.active{background:linear-gradient(180deg,#f0f0e0,#d8d0b8);color:#3a2a1a;border-color:#e0b040}
+  .toast{position:fixed;left:50%;background:linear-gradient(180deg,#f5f0e0,#e8dcc8);border:3px solid #8a7a5a;border-radius:10px;padding:8px 18px;color:#3a2a1a;font-weight:900;font-size:.8rem;z-index:200;pointer-events:none;box-shadow:0 6px 30px rgba(0,0,0,0.6);max-width:90vw;text-align:center;transition:all 0.3s ease;transform:translateX(-50%);white-space:pre-line;line-height:1.5}
+  .knockback-flash{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(255,50,50,0.35);pointer-events:none;z-index:150;animation:flash 0.5s ease-out}
+  @keyframes flash{0%{opacity:0.9}100%{opacity:0}}
+  .tension-vignette{position:fixed;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:5;box-shadow:inset 0 0 150px rgba(255,30,30,0.7);animation:tensionPulse 0.8s ease-in-out infinite}
+  @keyframes tensionPulse{0%,100%{opacity:0.4}50%{opacity:1}}
+  .success-flash{position:fixed;top:0;left:0;right:0;bottom:0;background:radial-gradient(circle,rgba(100,255,120,0.5),transparent 70%);pointer-events:none;z-index:150;animation:successOut 0.9s ease-out}
+  @keyframes successOut{0%{opacity:1}100%{opacity:0}}
+  
+  .hatch-burst { position: fixed; pointer-events: none; z-index: 160; animation: burstOut 0.6s ease-out forwards; }
+  @keyframes burstOut { 0% { transform: scale(0); opacity: 1; } 100% { transform: scale(3); opacity: 0; } }
+  .hatch-text { position: fixed; pointer-events: none; z-index: 170; color: #ffe040; font-weight: 900; font-size: 1.2rem; text-shadow: 0 0 10px #ffaa00; animation: textUp 1s ease-out forwards; }
+  @keyframes textUp { 0% { transform: translateY(0); opacity: 1; } 100% { transform: translateY(-50px); opacity: 0; } }
+
+  .bag-panel { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(30,40,30,0.95); backdrop-filter: blur(10px); z-index: 100; display: none; flex-direction: column; padding: 70px 10px 10px; overflow-y: auto; }
+  .bag-panel.open { display: flex; }
+  .bag-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .bag-header h2 { color: #d0a0ff; font-size: 1.1rem; font-weight: 900; text-shadow: 0 2px 8px rgba(0,0,0,0.5); }
+  .bag-header button { background: linear-gradient(180deg,#e8a0a0,#d08080); border: 2px solid #aa4a4a; border-radius: 7px; padding: 4px 12px; color: #fff; font-weight: 800; font-size: .7rem; cursor: pointer; }
+  .bag-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; }
+  .bag-card { background: linear-gradient(180deg,#f0f0e0,#d8d0b8); border: 3px solid #8a7a5a; border-radius: 10px; padding: 6px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .bag-card canvas { width: 42px; height: 42px; }
+  .bag-card .bname { font-size: .65rem; font-weight: 900; color: #3a2a1a; text-align: center; }
+  .bag-card .binc { font-size: .6rem; font-weight: 800; color: #2a6a2a; }
+  .bag-card .brar { font-size: .55rem; font-weight: 900; padding: 1px 6px; border-radius: 6px; background: #3a2a1a; }
+  .bag-card .bag-actions { display: flex; gap: 4px; margin-top: 2px; }
+  .bag-card button { font-size: .6rem; padding: 3px 6px; border-radius: 6px; border: 2px solid; font-weight: 800; cursor: pointer; }
+  .bag-card .btn-equip { background: linear-gradient(180deg,#a0d8a0,#80c080); border-color: #4a8a4a; color: #0a3a0a; }
+  .bag-card .btn-sell { background: linear-gradient(180deg,#e8a0a0,#d08080); border-color: #aa4a4a; color: #4a0a0a; }
+  
+  .edge-indicator { position: fixed; pointer-events: none; z-index: 50; display: flex; flex-direction: column; align-items: center; gap: 2px; transform: translate(-50%, -50%); opacity: 0.8; filter: drop-shadow(0 0 5px rgba(0,0,0,0.8)); }
+  .edge-indicator .arrow { font-size: 1.5rem; color: #ffec80; animation: bounce 1s infinite alternate; }
+  .edge-indicator .label { font-size: .6rem; color: #fff; font-weight: 900; text-shadow: 0 0 4px #000; }
+  @keyframes bounce { 0% { transform: scale(1); } 100% { transform: scale(1.2); } }
+
+  .tut-arrow { position: fixed; display: none; flex-direction: column; align-items: center; gap: 4px; transform: translate(-50%, -50%); z-index: 80; pointer-events: none; filter: drop-shadow(0 0 10px rgba(255,200,0,0.9)); }
+  .tut-arrow-icon { font-size: 2.4rem; line-height: 1; color: #ffdd40; text-shadow: 0 0 8px #000, 0 0 16px #ffaa00, 0 0 24px #ff8800; transition: transform 0.15s; animation: tutBob 0.9s ease-in-out infinite; }
+  @keyframes tutBob { 0%,100%{transform:scale(1)} 50%{transform:scale(1.15)} }
+  .tut-arrow-text { background: linear-gradient(180deg,#ffe880,#ffb820); border: 3px solid #aa6600; color: #4a2200; font-weight: 900; font-size: .85rem; padding: 4px 12px; border-radius: 10px; white-space: nowrap; box-shadow: 0 4px 0 #6a3a00, 0 6px 20px rgba(0,0,0,0.5); text-shadow: 0 1px 0 #ffdd88; }
+
+  .ad-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(10,15,10,0.94); backdrop-filter: blur(8px); z-index: 300; display: none; align-items: center; justify-content: center; flex-direction: column; padding: 16px; }
+  .ad-modal.open { display: flex; }
+  .ad-modal-content { background: linear-gradient(180deg,#f5f0e0,#e0d4b8); border: 4px solid #8a7a5a; border-radius: 16px; padding: 18px 20px; max-width: 400px; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 14px; box-shadow: 0 20px 60px rgba(0,0,0,0.6); }
+  .ad-modal-title { color: #4a2a00; font-weight: 900; font-size: 1rem; text-align: center; }
+  .ad-modal-sub { color:#6a4a00; font-weight:800; font-size:.8rem; text-align:center; }
+  .ad-url-display { width: 100%; background: linear-gradient(135deg,#ffdd40,#ffaa00); border: 4px solid #cc7700; border-radius: 14px; padding: 22px 14px; text-align: center; box-shadow: inset 0 0 30px rgba(255,255,255,0.6), 0 6px 0 #aa6600; transition: background 0.5s ease, border-color 0.5s ease, box-shadow 0.5s ease; }
+  .ad-url-display.hidden-url { background: linear-gradient(135deg,#b8b8b8,#909090); border-color: #606060; box-shadow: inset 0 0 30px rgba(255,255,255,0.3), 0 6px 0 #505050; }
+  .ad-url-text { font-size: 2.4rem; font-weight: 900; color: #4a2200; letter-spacing: 1px; text-shadow: 0 3px 0 #ff8800, 0 5px 12px rgba(0,0,0,0.35); font-family: 'Courier New', monospace; word-break: break-all; line-height: 1.15; transition: opacity 0.5s ease, transform 0.5s ease; min-height: 1.2em; }
+  .ad-url-display.hidden-url .ad-url-text { opacity: 0; transform: scale(0.6); }
+  .ad-url-hint { margin-top: 10px; font-size: .8rem; color: #6a3a00; font-weight: 900; line-height: 1.4; transition: color 0.5s ease; }
+  .ad-url-display.hidden-url .ad-url-hint { color: #fff; }
+  .ad-countdown { font-size: 1.8rem; font-weight: 900; color: #4a2a00; text-shadow: 0 2px 0 #c8a860; min-height: 2rem; }
+  .ad-input-wrap { width: 100%; display: none; flex-direction: column; gap: 8px; }
+  .ad-input-wrap input { width: 100%; padding: 12px 14px; border: 3px solid #8a7a5a; border-radius: 10px; font-size: 1.05rem; font-weight: 800; text-align: center; background: #fff; color: #3a2a1a; font-family: 'Courier New', monospace; outline: none; letter-spacing: 1px; }
+  .ad-input-wrap input:focus { border-color: #ffaa00; box-shadow: 0 0 0 4px rgba(255,170,0,0.3); }
+  .ad-claim-btn { background: linear-gradient(180deg,#a0e0a0,#4a9a4a); border: 3px solid #2a6a2a; border-radius: 10px; padding: 10px 20px; color: #fff; font-weight: 900; font-size: .95rem; cursor: pointer; box-shadow: 0 4px 0 #1a4a1a, inset 0 1px 0 #d0ffd0; width: 100%; }
+  .ad-claim-btn:not(:disabled):active { transform: translateY(3px); box-shadow: 0 1px 0 #1a4a1a; }
+  .ad-error { color: #cc0000; font-weight: 900; font-size: .8rem; text-align: center; min-height: 1em; }
+  .ad-close-btn { background: linear-gradient(180deg,#c0c0b0,#8a8a7a); border: 2px solid #5a5a4a; border-radius: 8px; padding: 5px 14px; color: #2a2a1a; font-weight: 800; font-size: .75rem; cursor: pointer; }
+
+  .sub-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(10,15,10,0.94); backdrop-filter: blur(8px); z-index: 300; display: none; align-items: center; justify-content: center; flex-direction: column; padding: 16px; }
+  .sub-modal.open { display: flex; }
+  .sub-content { background: linear-gradient(180deg,#fff0f0,#ffd0d0); border: 4px solid #aa3030; border-radius: 16px; padding: 18px 20px; max-width: 400px; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 14px; box-shadow: 0 20px 60px rgba(0,0,0,0.7); }
+  .sub-title { color: #8a0000; font-weight: 900; font-size: 1.05rem; text-align: center; }
+  .sub-desc { color:#8a2020; font-weight:800; font-size:.8rem; text-align:center; line-height:1.5; }
+  .sub-yt-link { display:inline-flex; align-items:center; gap:8px; background: linear-gradient(180deg,#ff3030,#aa0000); border: 3px solid #7a0000; color: #fff; font-weight: 900; font-size: .9rem; padding: 10px 18px; border-radius: 10px; text-decoration: none; box-shadow: 0 4px 0 #5a0000; cursor: pointer; transition: transform .1s; }
+  .sub-yt-link:active { transform: translateY(3px); box-shadow: 0 1px 0 #5a0000; }
+  .sub-steps { background: rgba(255,255,255,0.6); border: 2px dashed #aa3030; border-radius: 10px; padding: 10px 14px; width: 100%; color: #6a0000; font-weight: 800; font-size: .78rem; line-height: 1.7; }
+  .sub-file-wrap { width: 100%; display: flex; flex-direction: column; gap: 8px; }
+  .sub-file-wrap input[type=file] { width: 100%; padding: 10px; border: 3px solid #aa3030; border-radius: 10px; background: #fff; color: #3a2a1a; font-weight: 800; font-size: .8rem; cursor: pointer; }
+  .sub-verify-btn { background: linear-gradient(180deg,#ffe060,#ffaa00); border: 3px solid #aa7700; border-radius: 10px; padding: 10px 20px; color: #4a2200; font-weight: 900; font-size: .95rem; cursor: pointer; box-shadow: 0 4px 0 #6a3a00, inset 0 1px 0 #fff; width: 100%; }
+  .sub-verify-btn:not(:disabled):active { transform: translateY(3px); box-shadow: 0 1px 0 #6a3a00; }
+  .sub-status { min-height: 1.4em; font-weight: 900; font-size: .85rem; text-align: center; color: #2a6a2a; }
+  .sub-close-btn { background: linear-gradient(180deg,#c0c0b0,#8a8a7a); border: 2px solid #5a5a4a; border-radius: 8px; padding: 5px 14px; color: #2a2a1a; font-weight: 800; font-size: .75rem; cursor: pointer; }
+
+  #testTriggerBtn { position: absolute; left: 0; bottom: 180px; width: 36px; height: 56px; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); border-left: none; border-radius: 0 10px 10px 0; display: none; align-items: center; justify-content: center; z-index: 150; pointer-events: auto; color: #fff; font-size: 1.2rem; cursor: pointer; opacity: 0.6; transition: opacity 0.2s; }
+  #testTriggerBtn:hover { opacity: 1; }
+
+  .test-panel { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(30, 40, 30, 0.98); border: 3px solid #e0b040; border-radius: 12px; padding: 16px; z-index: 350; display: none; flex-direction: column; gap: 10px; width: 90%; max-width: 380px; box-shadow: 0 10px 40px rgba(0,0,0,0.8); max-height: 90vh; overflow-y: auto; }
+  .test-panel.open { display: flex; }
+  .test-header { display: flex; justify-content: space-between; align-items: center; color: #ffe080; }
+  .test-header h2 { font-size: 1.1rem; font-weight: 900; }
+  .test-header button { background: #8a2a2a; color: #fff; border: none; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-weight: bold; }
+  .test-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .test-row label { color: #fff; font-weight: 800; font-size: 0.8rem; width: 55px; flex-shrink: 0; }
+  .test-row input, .test-row select { flex: 1; min-width: 100px; padding: 6px 10px; border: 2px solid #8a7a5a; border-radius: 6px; background: #fff; color: #3a2a1a; font-weight: 800; font-size: 0.85rem; outline: none; }
+  .test-row button { background: linear-gradient(180deg,#a0d8a0,#80c080); border: 2px solid #4a8a4a; border-radius: 6px; padding: 6px 10px; color: #0a3a0a; font-weight: 900; cursor: pointer; white-space: nowrap; }
+  .test-row button:active { transform: translateY(2px); }
+  .test-btn-red { background: linear-gradient(180deg,#e8a0a0,#d08080); border-color: #aa4a4a; color: #4a0a0a; }
+  .test-btn-blue { background: linear-gradient(180deg,#a0d8f0,#80b0d8); border-color: #4a7aaa; color: #0a2a4a; }
+  
+  .player-info-panel { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(30, 40, 30, 0.98); border: 3px solid #e0b040; border-radius: 12px; padding: 16px; z-index: 350; display: none; flex-direction: column; gap: 12px; width: 90%; max-width: 300px; box-shadow: 0 10px 40px rgba(0,0,0,0.8); }
+  .player-info-panel.open { display: flex; }
+  .pi-header { display: flex; justify-content: space-between; align-items: center; color: #ffe080; }
+  .pi-header h2 { font-size: 1.1rem; font-weight: 900; }
+  .pi-header button { background: #8a2a2a; color: #fff; border: none; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-weight: bold; }
+  .pi-row { color: #fff; font-weight: 800; font-size: 0.9rem; display: flex; justify-content: space-between; }
+  .pi-row span { color: #a0e0a0; }
+
+  .stick-panel { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(30,40,30,0.97); backdrop-filter: blur(10px); z-index: 100; display: none; flex-direction: column; padding: 70px 10px 10px; overflow-y: auto; }
+  .stick-panel.open { display: flex; }
+  .stick-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .stick-header h2 { color: #ffc040; font-size: 1.1rem; font-weight: 900; text-shadow: 0 2px 8px rgba(0,0,0,0.5); }
+  .stick-header button { background: linear-gradient(180deg,#e8a0a0,#d08080); border: 2px solid #aa4a4a; border-radius: 7px; padding: 4px 12px; color: #fff; font-weight: 800; font-size: .7rem; cursor: pointer; }
+  .stick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }
+
+  .trail-panel { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(20,30,40,0.97); backdrop-filter: blur(10px); z-index: 100; display: none; flex-direction: column; padding: 70px 10px 10px; overflow-y: auto; }
+  .trail-panel.open { display: flex; }
+  .trail-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .trail-header h2 { color: #80f0e0; font-size: 1.1rem; font-weight: 900; text-shadow: 0 2px 8px rgba(0,0,0,0.5); }
+  .trail-header button { background: linear-gradient(180deg,#e8a0a0,#d08080); border: 2px solid #aa4a4a; border-radius: 7px; padding: 4px 12px; color: #fff; font-weight: 800; font-size: .7rem; cursor: pointer; }
+  .trail-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+  .trail-card { background: linear-gradient(180deg,#e0f8f0,#b0d8d0); border: 3px solid #4a8a7a; border-radius: 12px; padding: 8px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .trail-card.owned { border-color: #60d0a0; box-shadow: 0 0 18px rgba(80,220,160,0.4); }
+  .trail-card.equipped { border-color: #ffe040; box-shadow: 0 0 24px rgba(255,220,60,0.7); }
+  .trail-card canvas { width: 60px; height: 60px; }
+  .trail-card .tname { font-size: .7rem; font-weight: 900; color: #1a3a2a; text-align: center; }
+  .trail-card .tmult { font-size: .65rem; font-weight: 900; color: #0a6a3a; }
+  .trail-card .tprice { font-size: .6rem; font-weight: 800; color: #6a4a00; }
+  .trail-card button { font-size: .6rem; padding: 4px 8px; border-radius: 7px; border: 2px solid; font-weight: 800; cursor: pointer; width: 100%; }
+  .trail-card .btn-buy { background: linear-gradient(180deg,#a0f0a0,#60c060); border-color: #2a8a2a; color: #0a3a0a; }
+  .trail-card .btn-buy:disabled { opacity: 0.45; filter: grayscale(0.6); cursor: not-allowed; }
+  .trail-card .btn-equip { background: linear-gradient(180deg,#f0e080,#d0b040); border-color: #aa8a20; color: #4a3a00; }
+  .trail-card .btn-equip.equipped { background: linear-gradient(180deg,#ffe040,#ffaa00); border-color: #cc7700; color: #4a2200; }
+
+  @media (hover: hover) and (pointer: fine){ .joystick-zone{display:none} .pet-panel{bottom:20px} .btns-right{top:20px;right:20px} .btn-right{padding:8px 16px;font-size:.9rem;min-width:auto} .stat{font-size:.85rem;padding:3px 12px} .stat b{font-size:1.05rem} }
+  @media (max-width:700px){ .stat{font-size:.6rem;padding:2px 5px} .stat b{font-size:.75rem} .btn-right{font-size:.6rem;padding:5px 6px;min-width:52px} .hud-bottom{font-size:.6rem} .pet-panel{bottom:140px;padding:5px 10px} .pet-panel .pname{font-size:.7rem} .pet-panel .pinc{font-size:.6rem} .pet-panel canvas{width:32px;height:32px} .index-grid{grid-template-columns:repeat(auto-fill,minmax(80px,1fr))} .trail-grid{grid-template-columns:repeat(auto-fill,minmax(110px,1fr))} }
+  @media (max-width:450px){ .stat{font-size:.5rem;padding:1px 3px} .stat b{font-size:.65rem} .btn-right{font-size:.5rem;padding:4px 4px;min-width:44px} .tut-arrow-icon{font-size:2rem} .tut-arrow-text{font-size:.75rem;padding:3px 8px} .ad-url-text{font-size:1.8rem} }
+</style>
+</head>
+<body>
+ <link rel="stylesheet" href="menu.css">
+<div id="nav_bar"></div>
+<script src="menu.js"></script>
+<div id="game">
+  <div id="game-wrapper">
+    <canvas id="c"></canvas>
+    <div class="hud-top">
+      <div class="stats">
+        <div class="stat speed">⚡ <b id="uiSpeed">10</b></div>
+        <div class="stat">💰 <b id="uiCash">0</b></div>
+        <div class="stat">🥚 <b id="uiEgg">0</b></div>
+        <div class="stat pet">📖 <b id="uiIndex">0/96</b></div>
+        <div class="stat timer">⏳ <b id="uiTimer">5:00</b></div>
+        <div class="stat night" id="uiNightStat">☀️ <b id="uiNight">白天</b></div>
+        <div class="stat">🏏 <b id="uiSticks">0</b></div>
+        <div class="stat">🐾 <b id="uiPetCap">3/3</b></div>
+        <div class="stat">✨ <b id="uiTrail">無</b></div>
+      </div>
+    </div>
+    <div class="btns-right" id="btnsRight">
+      <button class="btn-right" id="btnUp">⬆️<span id="lvTxt">1</span><span id="costTxt" style="color:#aa6600">$40</span></button>
+      <button class="btn-right trail" id="btnTrail">✨ 軌跡</button>
+      <button class="btn-right ad" id="btnAd" style="display:none;">🎬 2× (0/3)</button>
+      <button class="btn-right ad4x" id="btnAd4x" style="display:none;">🎬 4× (0/3)</button>
+      <button class="btn-right ad8x" id="btnAd8x" style="display:none;">🎬 8× (0/3)</button>
+      <button class="btn-right ad16x" id="btnAd16x" style="display:none;">🎬 16× (0/3)</button>
+      <button class="btn-right ad32x" id="btnAd32x" style="display:none;">🎬 32× (0/3)</button>
+      <button class="btn-right subscribe" id="btnSubscribe" style="display:none;">🔔 訂閱 ×2</button>
+      <button class="btn-right upg" id="btnUpgradeCap"><div>🐾 擴充</div><span id="capCostTxt">$500</span></button>
+      <button class="btn-right bag" id="btnBag">🎒 背包</button>
+      <button class="btn-right best" id="btnBest">✨ 一鍵最佳</button>
+      <button class="btn-right" id="btnIndex">📖</button>
+      <button class="btn-right stick" id="btnStickPanel">🎯 棒子</button>
+      <button class="btn-right stick" id="btnStick">👊 空手</button>
+      <button class="btn-right sell" id="btnSellSelected" disabled>💸</button>
+      <button class="btn-right return" id="btnReturn" style="display:none;">🏠 返回</button>
+    </div>
+    <div class="hud-bottom">
+      <span id="trainStatus">🚶 未在訓練</span>
+      <span id="biomeName">🌲 森林</span>
+      <span id="myNameDisplay" style="cursor:pointer; text-decoration:underline;" title="點擊登入/註冊">👤 玩家</span>
+      <span id="onlineCount">👥 1</span>
+    </div>
+    <div class="joystick-zone" id="joystickZone">
+      <div class="joystick-base"></div>
+      <div class="joystick-knob" id="joystickKnob"></div>
+    </div>
+    <div class="pet-panel" id="petPanel">
+      <canvas id="petPanelCanvas" width="40" height="40"></canvas>
+      <div class="info"><div class="pname" id="ppName">-</div><div class="pinc" id="ppInc">-</div><div class="prar" id="ppRar">-</div></div>
+      <button class="pickup-btn" id="btnPickupPanel">✋ 拿起</button>
+      <button id="btnSellPanel">💸</button>
+      <button class="close-btn" id="btnClosePanel">✕</button>
+    </div>
+    <div class="index-panel" id="indexPanel">
+      <div class="index-header"><h2>📖 寵物圖鑑</h2><button id="btnCloseIndex">✕ 關閉</button></div>
+      <div class="index-tabs" id="indexTabs"></div>
+      <div class="index-grid" id="indexGrid"></div>
+    </div>
+    <div class="bag-panel" id="bagPanel">
+      <div class="bag-header"><h2>🎒 寵物背包</h2><button id="btnCloseBag">✕ 關閉</button></div>
+      <div class="bag-grid" id="bagGrid"></div>
+    </div>
+    <div class="stick-panel" id="stickPanel">
+      <div class="stick-header"><h2>🏏 我的棒子</h2><button id="btnCloseStickPanel">✕ 關閉</button></div>
+      <div class="stick-grid" id="stickGrid"></div>
+    </div>
+    <div class="trail-panel" id="trailPanel">
+      <div class="trail-header"><h2>✨ 孵蛋軌跡</h2><button id="btnCloseTrailPanel">✕ 關閉</button></div>
+      <div class="trail-grid" id="trailGrid"></div>
+    </div>
+    <div id="edgeIndicator" style="position:fixed; display:none; pointer-events:none; z-index:60; transform:translate(-50%, -50%); flex-direction:column; align-items:center; gap:2px;">
+      <div id="edgeArrow" style="font-size:1.8rem; text-shadow:0 0 8px #000, 0 0 12px #ffaa00; transition: transform 0.1s; line-height:1;">➡️</div>
+      <div id="edgeLabel" style="font-size:.65rem; font-weight:900; color:#ffe080; text-shadow:0 0 4px #000; white-space:nowrap;">🏠 基地</div>
+    </div>
+    <div class="tut-arrow" id="tutArrow"><div class="tut-arrow-icon" id="tutArrowIcon">➡️</div><div class="tut-arrow-text" id="tutArrowText"></div></div>
+    
+    <div id="testTriggerBtn">⚙️</div>
+
+    <div class="test-panel" id="testPanel">
+      <div class="test-header">
+        <h2>🛠️ 測試模式</h2>
+        <button id="btnCloseTest">✕</button>
+      </div>
+      <div class="test-row">
+        <label>🎯 對象:</label>
+        <select id="testTargetSelect"><option value="self">自己</option></select>
+      </div>
+      <div class="test-row">
+        <label>💰 金錢:</label>
+        <input type="number" id="testCashInput" placeholder="輸入金額...">
+        <button id="btnSetCash">設定</button>
+      </div>
+      <div class="test-row">
+        <label>⚡ 速度:</label>
+        <input type="number" id="testSpeedInput" placeholder="輸入速度...">
+        <button id="btnSetSpeed">設定</button>
+      </div>
+      <div class="test-row">
+        <label>⚡ 跑等:</label>
+        <input type="number" id="testSpeedLvInput" placeholder="輸入跑步機等級...">
+        <button id="btnSetSpeedLv">設定</button>
+      </div>
+      <div class="test-row">
+        <label>🐾 寵物:</label>
+        <select id="testPetSelect"></select>
+      </div>
+      <div class="test-row" style="justify-content:space-between;">
+        <button id="btnAddPetBag" class="test-btn-blue" style="flex:1;">放背包</button>
+        <button id="btnAddPetFarm" style="flex:1;">放農場</button>
+      </div>
+      <div class="test-row">
+        <label>✨ 軌跡:</label>
+        <select id="testTrailSelect"></select>
+        <button id="btnGiveTrail" class="test-btn-blue">解鎖/裝備</button>
+      </div>
+      <div class="test-row" style="margin-top:4px;">
+        <button id="btnGiveStick" class="test-btn-blue" style="width:100%;">🏏 解鎖所有棒子</button>
+      </div>
+      <div class="test-row" style="margin-top:4px;">
+        <button id="btnUnlockAll" class="test-btn-red" style="width:100%;">📖 解鎖全圖鑑 (自己)</button>
+      </div>
+    </div>
+
+    <div class="player-info-panel" id="playerInfoPanel">
+      <div class="pi-header">
+        <h2 id="piTitle">👤 玩家資料</h2>
+        <button id="btnClosePI">✕</button>
+      </div>
+      <div class="pi-row">💰 金錢: <span id="piCash">0</span></div>
+      <div class="pi-row">⚡ 速度: <span id="piSpeed">10</span></div>
+      <div class="pi-row" style="flex-direction:column; gap:4px;">
+        <div>🐾 寵物:</div>
+        <div id="piPets" style="font-size:0.8rem; color:#c0d0c0; max-height:80px; overflow-y:auto; font-weight:normal;"></div>
+      </div>
+    </div>
+
+    <div class="ad-modal" id="adModal">
+      <div class="ad-modal-content">
+        <div class="ad-modal-title" id="adTitle">🎬 觀看廣告</div>
+        <div class="ad-modal-sub" id="adSub"></div>
+        <div class="ad-url-display" id="adUrlDisplay">
+          <div class="ad-url-text" id="adUrlText">is.gd/raingod</div>
+          <div class="ad-url-hint" id="adUrlHint">📺 看完廣告後請輸入上方黃色網址</div>
+        </div>
+        <div class="ad-countdown" id="adCountdown">5</div>
+        <div class="ad-input-wrap" id="adInputWrap">
+          <input type="text" id="adInput" placeholder="輸入剛剛背下來的網址..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+          <button class="ad-claim-btn" id="adClaimBtn">✅ 領取獎勵</button>
+          <div class="ad-error" id="adError"></div>
+        </div>
+        <button class="ad-close-btn" id="adCloseBtn">✕ 關閉</button>
+      </div>
+    </div>
+
+    <div class="sub-modal" id="subModal">
+      <div class="sub-content">
+        <div class="sub-title">🔔 訂閱 YouTube 頻道</div>
+        <div class="sub-desc">訂閱後可永久獲得金錢 ×2 加成（最高 ×2）</div>
+        <a class="sub-yt-link" href="https://www.youtube.com/@raingod0101" target="_blank" rel="noopener">📺 前往頻道訂閱</a>
+        <div class="sub-steps">
+          1️⃣ 點擊上方按鈕前往 YouTube 頻道<br>
+          2️⃣ 點擊「訂閱」按鈕<br>
+          3️⃣ 截圖訂閱畫面並上傳<br>
+          4️⃣ 系統驗證後立即生效
+        </div>
+        <div class="sub-file-wrap" id="subFileWrap">
+          <input type="file" id="subScreenshot" accept="image/*">
+          <button class="sub-verify-btn" id="subVerifyBtn">✅ 上傳並驗證</button>
+        </div>
+        <div class="sub-status" id="subStatus"></div>
+        <button class="sub-close-btn" id="subCloseBtn">✕ 關閉</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
+
+<script>
+  window.raingodEventHooks = window.raingodEventHooks || {
+    onInit: [], onUpdate: [], onDrawBackground: [], onDrawWorld: [],
+    onDrawPetBefore: [], onDrawPetAfter: [],
+    onDrawHatcheryBefore: [], onDrawHatcheryAfter: [],
+    onClick: [], onSave: [], onLoad: [], onUIUpdate: [],
+  };
+</script>
+
+<script type="module">
+(function() {
+    const baseUrl = "https://raingod0101.github.io/";
+    const v = new Date().getTime();
+    function setFavicon() {
+        const iconUrl = `${baseUrl}catdragon.png`;
+        document.querySelectorAll("link[rel*='icon']").forEach(el => el.remove());
+        const favicon = document.createElement('link');
+        favicon.rel = 'icon'; favicon.type = 'image/png'; favicon.href = `${iconUrl}?v=${v}`;
+        (document.head || document.documentElement).appendChild(favicon);
+    }
+    if (document.head) setFavicon(); else document.addEventListener('DOMContentLoaded', setFavicon);
+    let markFirebaseReady, markAuthReady, markAccountDataReady;
+    window.raingodFirebaseReady = new Promise(resolve => { markFirebaseReady = resolve; });
+    window.raingodAuthReady = new Promise(resolve => { markAuthReady = resolve; });
+    window.raingodAccountDataReady = new Promise(resolve => { markAccountDataReady = resolve; });
+    const storageBindings = new Map();
+    let storageSyncInstalled = false;
+    let accountDataSync = Promise.resolve();
+    let accountDataSyncing = false;
+    let activeAccountUid = '';
+    let accountSaveTimer = null;
+    function accountDataRef(uid) { return firebase.database().ref(`users/${uid}/account_data`); }
+    function readAccountData() {
+        const data = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key !== 'raingod_device_id') data.push({ key, value: localStorage.getItem(key) });
+        }
+        return data.sort((a, b) => a.key.localeCompare(b.key));
+    }
+    function accountDataSignature(data) { return JSON.stringify((Array.isArray(data) ? data : []).slice().sort((a, b) => a.key.localeCompare(b.key))); }
+    function clearLocalAccountData(clearSession = true) {
+        const bindings = new Set(storageBindings.values());
+        bindings.forEach(binding => { if (binding.pause) binding.pause(); });
+        const keys = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key !== 'raingod_device_id') keys.push(key);
+        }
+        keys.forEach(key => localStorage.removeItem(key));
+        if (clearSession) { try { sessionStorage.clear(); } catch (err) {} }
+    }
+    function replaceLocalAccountData(data) {
+        accountDataSyncing = true;
+        try {
+            const bindings = new Set(storageBindings.values());
+            bindings.forEach(binding => { if (binding.pause) binding.pause(); });
+            clearLocalAccountData(false);
+            (Array.isArray(data) ? data : []).forEach(entry => {
+                if (entry && typeof entry.key === 'string' && entry.key !== 'raingod_device_id' && typeof entry.value === 'string') localStorage.setItem(entry.key, entry.value);
+            });
+        } finally { accountDataSyncing = false; }
+    }
+    window.raingodClearLocalAccountData = function() {
+        activeAccountUid = ''; clearTimeout(accountSaveTimer); window.raingodCurrentUser = null; clearLocalAccountData();
+    };
+    function scheduleAccountDataSave() {
+        if (!activeAccountUid || accountDataSyncing) return;
+        const uid = activeAccountUid;
+        clearTimeout(accountSaveTimer);
+        accountSaveTimer = setTimeout(async () => {
+            if (activeAccountUid !== uid || !firebase.auth().currentUser || firebase.auth().currentUser.uid !== uid) return;
+            try {
+                await accountDataRef(uid).set({ data: readAccountData(), updated_at: firebase.database.ServerValue.TIMESTAMP });
+            } catch (err) { console.error('帳號資料同步失敗：', err); }
+        }, 400);
+    }
+    async function syncAccountData(user) {
+        const uid = user.uid; const localData = readAccountData();
+        const snapshot = await accountDataRef(uid).once('value');
+        if (firebase.auth().currentUser?.uid !== uid) return;
+        if (!snapshot.exists()) {
+            await accountDataRef(uid).set({ data: localData, updated_at: firebase.database.ServerValue.TIMESTAMP }); return;
+        }
+        const cloudData = snapshot.val().data;
+        if (!Array.isArray(cloudData)) throw new Error('雲端帳號資料格式無效');
+        const localDiffers = accountDataSignature(localData) !== accountDataSignature(cloudData);
+        if (!localData.length || !localDiffers) { replaceLocalAccountData(cloudData); return; }
+        const accountKey = user.email ? user.email.split('@')[0] : uid;
+        let choice = readSaveChoice(accountKey);
+        if (!choice) {
+            choice = window.confirm('此帳號已有雲端資料，且與本機資料不同。是否用雲端帳號資料覆蓋本機？按「取消」會保留本機資料並同步至此帳號。此選擇在本次登入期間只詢問一次。') ? 'cloud' : 'local';
+            try { sessionStorage.setItem(saveChoiceKey(accountKey), choice); } catch (err) {}
+        }
+        if (firebase.auth().currentUser?.uid !== uid) return;
+        if (choice === 'cloud') { replaceLocalAccountData(cloudData); }
+        else { await accountDataRef(uid).set({ data: localData, updated_at: firebase.database.ServerValue.TIMESTAMP }); }
+    }
+    window.raingodWaitForAccountData = async function(uid) {
+        while (activeAccountUid === uid) {
+            const pendingSync = accountDataSync;
+            await pendingSync;
+            if (pendingSync === accountDataSync) return;
+        }
+    };
+    function saveChoiceKey(uid) { return `raingod_save_choice_${uid}`; }
+    function readSaveChoice(uid) { try { return sessionStorage.getItem(saveChoiceKey(uid)); } catch (e) { return null; } }
+    function installStorageSync() {
+        if (storageSyncInstalled || !window.Storage) return;
+        storageSyncInstalled = true;
+        const originalSetItem = Storage.prototype.setItem;
+        const originalRemoveItem = Storage.prototype.removeItem;
+        const originalClear = Storage.prototype.clear;
+        Storage.prototype.setItem = function(key, value) {
+            originalSetItem.call(this, key, value);
+            if (this === localStorage) scheduleAccountDataSave();
+            const binding = this === localStorage && storageBindings.get(String(key));
+            if (binding) binding.scheduleSave();
+        };
+        Storage.prototype.removeItem = function(key) {
+            originalRemoveItem.call(this, key);
+            if (this === localStorage) scheduleAccountDataSave();
+            const binding = this === localStorage && storageBindings.get(String(key));
+            if (binding) binding.scheduleSave();
+        };
+        Storage.prototype.clear = function() {
+            originalClear.call(this);
+            if (this === localStorage) scheduleAccountDataSave();
+        };
+    }
+    function initSystem() {
+        if (!firebase.apps.length) {
+            firebase.initializeApp({
+                apiKey: "AIzaSyB6ddhbgcV0aUgezkJVr61XMrJkcFWYzxI",
+                authDomain: "project-245615336743.firebaseapp.com",
+                databaseURL: "https://project-161757768102958224-default-rtdb.firebaseio.com",
+                projectId: "project-245615336743",
+                storageBucket: "project-245615336743.firebasestorage.app",
+                messagingSenderId: "245615336743",
+                appId: "1:245615336743:web:5f1b46b5a74668a2ac5d02",
+                measurementId: "G-067PR7PJVE"
+            });
+        }
+        installStorageSync();
+        markFirebaseReady();
+        let authReadyResolved = false;
+        let loggingOut = false;
+        firebase.auth().onAuthStateChanged(async user => {
+            if (loggingOut) return;
+            const previousUid = activeAccountUid;
+            if (previousUid && (!user || previousUid !== user.uid)) {
+                loggingOut = true;
+                activeAccountUid = '';
+                clearTimeout(accountSaveTimer);
+                window.raingodCurrentUser = null;
+                clearLocalAccountData();
+                location.reload();
+                return;
+            }
+            window.raingodCurrentUser = user;
+            if (user) {
+                activeAccountUid = user.uid;
+                accountDataSync = syncAccountData(user).catch(err => console.error('載入帳號資料失敗：', err));
+                await accountDataSync;
+            }
+            if (!authReadyResolved) { authReadyResolved = true; markAuthReady(user); markAccountDataReady(); }
+        });
+    }
+    initSystem();
+    (function setupLoginReload() {
+      const KEY = 'raingod_login_reload_done';
+      let firstCallback = true; let lastUser = null;
+      firebase.auth().onAuthStateChanged(user => {
+        if (firstCallback) { firstCallback = false; lastUser = user; if (user) sessionStorage.setItem(KEY, '1'); return; }
+        if (!lastUser && user && sessionStorage.getItem(KEY) !== '1') { sessionStorage.setItem(KEY, '1'); location.reload(); return; }
+        lastUser = user;
+      });
+    })();
+    window.addEventListener('DOMContentLoaded', () => {
+        const nameDisplay = document.getElementById('myNameDisplay');
+        if(nameDisplay) nameDisplay.addEventListener('click', () => {
+            const choice = prompt("請選擇功能：\n1. 登入\n2. 註冊新帳號\n(請輸入數字 1 或 2)");
+            if (choice === '1') {
+                const u = prompt("請輸入您的帳號："); if (!u) return;
+                const p = prompt("請輸入您的密碼："); if (!p) return;
+                firebase.auth().signInWithEmailAndPassword(`${u.trim().toLowerCase()}@raingod.app`, p).then(() => alert("登入成功！")).catch(err => alert("登入失敗：" + err.message));
+            } else if (choice === '2') {
+                let dev = localStorage.getItem('raingod_device_id');
+                if (!dev) { dev = 'dev_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now(); localStorage.setItem('raingod_device_id', dev); }
+                firebase.database().ref('registered_devices/' + dev).once('value').then(snap => {
+                    if (snap.exists()) { alert("【註冊限制】這台裝置已經建立過帳號！"); return; }
+                    const u = prompt("請建立新帳號（只能包含英文字母或數字）："); if (!u) return;
+                    const c = u.trim().toLowerCase();
+                    if (!/^[a-zA-Z0-9]+$/.test(c)) { alert("帳號格式不合！"); return; }
+                    const p = prompt("請設定您的密碼（至少 6 位數）："); if (!p || p.length < 6) { alert("密碼長度不足！"); return; }
+                    firebase.auth().createUserWithEmailAndPassword(`${c}@raingod.app`, p).then(cred => {
+                        firebase.database().ref('registered_devices/' + dev).set({ username: c, uid: cred.user.uid, created_at: firebase.database.ServerValue.TIMESTAMP });
+                        alert("帳號註冊成功，已自動登入！");
+                    }).catch(err => alert("註冊失敗：" + err.message));
+                });
+            }
+        });
+    });
+})();
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, set, onValue, onDisconnect, serverTimestamp, remove }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+const firebaseApp = initializeApp({ databaseURL: "https://game-24b43-default-rtdb.firebaseio.com/" }, "gameApp");
+const db = getDatabase(firebaseApp);
+window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove };
 (function(){
   const HOOKS = window.raingodEventHooks;
   const c=document.getElementById('c');
