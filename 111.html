@@ -1023,25 +1023,48 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
       ctx.beginPath(); ctx.moveTo(0,sy); ctx.lineTo(W,sy); ctx.stroke(); ctx.restore();
     }
 
-    // 左右屏障遮罩
-    if (S.player.y < S.safeLineY){
-      const lsp = worldToScreen(0, S.player.y);
-      const rsp = worldToScreen(WORLD_W, S.player.y);
-      ctx.save();
-      ctx.fillStyle = 'rgba(0,0,0,0.75)';
-      if (lsp.x>0) ctx.fillRect(0,0,lsp.x,H);
-      if (rsp.x<W) ctx.fillRect(rsp.x,0,W-rsp.x,H);
-      ctx.strokeStyle = 'rgba(200,120,255,0.6)'; ctx.lineWidth=4; ctx.setLineDash([12,8]);
-      if (lsp.x>0 && lsp.x<W){ ctx.beginPath(); ctx.moveTo(lsp.x,0); ctx.lineTo(lsp.x,H); ctx.stroke(); }
-      if (rsp.x>0 && rsp.x<W){ ctx.beginPath(); ctx.moveTo(rsp.x,0); ctx.lineTo(rsp.x,H); ctx.stroke(); }
-      ctx.setLineDash([]);
-      ctx.font = '900 13px "Segoe UI"'; ctx.fillStyle = 'rgba(210,160,255,0.9)';
-      ctx.textAlign = 'center'; ctx.shadowBlur=10; ctx.shadowColor='#8a40ff';
-      if (lsp.x>60 && lsp.x<W/2) ctx.fillText('🚧 屏障', lsp.x+70, H/2);
-      if (rsp.x<W-60 && rsp.x>W/2) ctx.fillText('屏障 🚧', rsp.x-70, H/2);
-      ctx.restore();
+    // 左右屏障遮罩（僅偷蛋區）
+if (S.player.y < S.safeLineY) {
+  const lsp = worldToScreen(0, S.player.y);
+  const rsp = worldToScreen(WORLD_W, S.player.y);
+
+  // 只遮住「偷蛋區以上的畫面」(0 ~ 安全線)，不要遮到安全區
+  const safeLineScreenY = (S.safeLineY - S.camera.y) * S.zoom + H / 2 + S.camShakeY;
+  const maskBottom = Math.max(0, Math.min(H, safeLineScreenY));
+
+  if (maskBottom > 0) {
+    ctx.save();
+
+    // 淡紫漸層（近屏障深、遠屏障淺），不再用死黑
+    if (lsp.x > 0) {
+      const gL = ctx.createLinearGradient(0, 0, lsp.x, 0);
+      gL.addColorStop(0, 'rgba(40, 15, 60, 0.25)');
+      gL.addColorStop(1, 'rgba(70, 30, 100, 0.55)');
+      ctx.fillStyle = gL;
+      ctx.fillRect(0, 0, lsp.x, maskBottom);
     }
+    if (rsp.x < W) {
+      const gR = ctx.createLinearGradient(rsp.x, 0, W, 0);
+      gR.addColorStop(0, 'rgba(70, 30, 100, 0.55)');
+      gR.addColorStop(1, 'rgba(40, 15, 60, 0.25)');
+      ctx.fillStyle = gR;
+      ctx.fillRect(rsp.x, 0, W - rsp.x, maskBottom);
+    }
+
+    // 柔和虛線（低透明度）
+    ctx.strokeStyle = 'rgba(180, 130, 240, 0.35)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([10, 10]);
+    if (lsp.x > 0 && lsp.x < W) {
+      ctx.beginPath(); ctx.moveTo(lsp.x, 0); ctx.lineTo(lsp.x, maskBottom); ctx.stroke();
+    }
+    if (rsp.x > 0 && rsp.x < W) {
+      ctx.beginPath(); ctx.moveTo(rsp.x, 0); ctx.lineTo(rsp.x, maskBottom); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    ctx.restore();
   }
+}
 
   function draw(){
     drawBackground();
