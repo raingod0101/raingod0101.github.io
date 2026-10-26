@@ -741,88 +741,68 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
         continue;
       }
       if (g.sleeping) continue;
-      if (g.dashPhase){
+            if (g.dashPhase){
         if (S.night){ g.dashPhase=false; g.chasing=false; g.returning=true; continue; }
         g.dashTimer -= dt;
-        const pb = getBiomeIndex(p.y), targetY = WORLD.biomes[pb].nestsY;
-        const gx = p.x-g.x, gy = targetY-g.y;
-        const len = Math.hypot(gx,gy)||1;
-        const spd = 60 + g.biomeIdx*8;
-        g.x += (gx/len)*spd; g.y += (gy/len)*spd;
-        if (g.dashTimer<=0 || Math.abs(g.y-targetY)<200) g.dashPhase=false;
-      } else if (g.chasing){
+        const pb = getBiomeIndex(p.y);
+        const targetY = WORLD.biomes[pb].nestsY;
+        const gx = p.x - g.x, gy = targetY - g.y;
+        const len = Math.hypot(gx, gy) || 1;
+        const spd = 60 + g.biomeIdx * 8;
+        const step = spd * dt;
+        const steps = Math.max(1, Math.ceil(step / ((p.r + g.r) * 0.5)));
+        const sx = (gx / len) * (step / steps);
+        const sy = (gy / len) * (step / steps);
+        for (let s = 0; s < steps; s++){
+          g.x += sx; g.y += sy;
+          if (!S.night && dist(p.x, p.y, g.x, g.y) < p.r + g.r + 6 && p.stun <= 0 && p.knockbackTimer <= 0){
+            if (p.carry) dropCarryToServer();
+            const kbx = p.x - g.x, kby = p.y - g.y;
+            const kblen = Math.hypot(kbx, kby) || 1;
+            const baseF = 800 + displayToReal(p.displaySpeed) * 20;
+            const biomeB = g.biomeIdx * 800;
+            triggerKnockback((kbx/kblen)*(baseF+biomeB), (kby/kblen)*(baseF+biomeB));
+            g.stun = 1.5; g.alert = false; g.sleeping = true; g.wakeTimer = 0;
+            g.chasing = false; g.dashPhase = false; g.returning = true;
+            g.x = g.sleepX; g.y = g.sleepY;
+            updateUI();
+            break;
+          }
+        }
+        if (g.dashTimer <= 0 || Math.abs(g.y - targetY) < 200) g.dashPhase = false;
+      }
+      else if (g.chasing){
         if (S.night){ g.chasing=false; g.alert=false; g.returning=true; continue; }
         g.alert = true;
-        const gx=p.x-g.x, gy=p.y-g.y; const len=Math.hypot(gx,gy)||1;
-        let spd = g.spd*1.8 + g.biomeIdx*0.6;
+        const gx = p.x - g.x, gy = p.y - g.y;
+        const len = Math.hypot(gx, gy) || 1;
+        let spd = g.spd * 1.8 + g.biomeIdx * 0.6;
         if (p.displaySpeed < WORLD.biomes[g.biomeIdx].reqDisplay){
-          const prs = displayToReal(p.displaySpeed)*2.2;
-          spd = Math.max(spd, prs*1.5 + g.biomeIdx*0.4);
+          const prs = displayToReal(p.displaySpeed) * 2.2;
+          const maxStep = (p.r + g.r) * 0.5 * 60;
+          spd = Math.max(spd, Math.min(prs * 1.5 + g.biomeIdx * 0.4, maxStep));
         }
-        g.x += (gx/len)*spd; g.y += (gy/len)*spd;
-        if (g.y > WORLD.safeY+20){ g.chasing=false; g.alert=false; g.returning=true; }
-      } else if (g.returning){
-        const gx=g.sleepX-g.x, gy=g.sleepY-g.y; const len=Math.hypot(gx,gy)||1;
-        const spd = g.spd*1.5;
-        g.x += (gx/len)*spd; g.y += (gy/len)*spd;
-        if (!S.night && p.carry && p.carry.biomeIdx===g.biomeIdx && !g.sleeping){
-          g.returning=false; g.chasing=true; g.alert=true;
+        const step = spd * dt;
+        const steps = Math.max(1, Math.ceil(step / ((p.r + g.r) * 0.5)));
+        const sx = (gx / len) * (step / steps);
+        const sy = (gy / len) * (step / steps);
+        for (let s = 0; s < steps; s++){
+          g.x += sx; g.y += sy;
+          if (!S.night && dist(p.x, p.y, g.x, g.y) < p.r + g.r + 6 && p.stun <= 0 && p.knockbackTimer <= 0){
+            if (p.carry) dropCarryToServer();
+            const kbx = p.x - g.x, kby = p.y - g.y;
+            const kblen = Math.hypot(kbx, kby) || 1;
+            const baseF = 800 + displayToReal(p.displaySpeed) * 20;
+            const biomeB = g.biomeIdx * 800;
+            triggerKnockback((kbx/kblen)*(baseF+biomeB), (kby/kblen)*(baseF+biomeB));
+            g.stun = 1.5; g.alert = false; g.sleeping = true; g.wakeTimer = 0;
+            g.chasing = false; g.dashPhase = false; g.returning = true;
+            g.x = g.sleepX; g.y = g.sleepY;
+            updateUI();
+            break;
+          }
         }
-        if (dist(g.x, g.y, g.sleepX, g.sleepY)<30){
-          g.returning=false; g.sleeping=true; g.alert=false;
-          g.x = g.sleepX; g.y = g.sleepY;
-        }
-      } else {
-        if (dist(g.x, g.y, g.sleepX, g.sleepY) > 40){
-          const gx=g.sleepX-g.x, gy=g.sleepY-g.y; const len=Math.hypot(gx,gy)||1;
-          g.x += (gx/len)*g.spd*0.5; g.y += (gy/len)*g.spd*0.5;
-        } else { g.sleeping=true; g.alert=false; g.x=g.sleepX; g.y=g.sleepY; }
-      }
-      g.x = clamp(g.x, 30, WORLD_W-30); g.y = clamp(g.y, MIN_Y, MAX_Y);
-    }
-
-    // 帶蛋回安全區
-    if (p.carry && p.y > S.safeLineY){
-      const egg = p.carry;
-      const b = WORLD.biomes[egg.biomeIdx];
-      const inc = WORLD.petIncome[egg.biomeIdx][egg.petIdx] * egg.mul;
-      const rar = WORLD.petRarity[egg.biomeIdx][egg.petIdx];
-      const hatchTime = getHatchTimeForEgg(egg);
-      const hp = getHatchPod(S.myBaseIdx, S.hatchery.length);
-      S.hatchery.push({
-        id: Math.random().toString(36).slice(2),
-        name:b.petNames[egg.petIdx], inc, rar,
-        biomeIdx:egg.biomeIdx, petIdx:egg.petIdx, size:egg.size, secret:!!egg.secret,
-        timer:hatchTime, total:hatchTime, finished:false,
-        favorite:false, mutations:{}, x:hp.x, y:hp.y,
-      });
-      // 從伺服器移除
-      if (egg.key){
-        const { db, ref, remove } = window.__FB;
-        remove(ref(db, 'eggs/'+egg.key)).catch(()=>{});
-      }
-      p.carry = null; S.tensionActive = false;
-      const sf = document.createElement('div'); sf.className='success-flash'; document.body.appendChild(sf); setTimeout(()=>sf.remove(),900);
-      showToast(`✅ 成功偷到蛋！放入孵化器 (${fmt(hatchTime)}秒)`,'#3a8a3a','#2a6a2a');
-      for (const g of S.guards){ if (g.chasing||g.dashPhase){ g.chasing=false; g.dashPhase=false; g.returning=true; g.alert=false; } }
-      updateUI(); saveGame(true);
-    }
-
-    // 守衛抓人
-    if (!S.night){
-      for (const g of S.guards){
-        if (g.stun>0 || g.sleeping || g.wakeTimer>0 || g.returning) continue;
-        if (dist(p.x, p.y, g.x, g.y) < p.r+g.r+6 && p.stun<=0 && p.knockbackTimer<=0){
-          if (p.carry){ dropCarryToServer(); }
-          const kbx=p.x-g.x, kby=p.y-g.y; const kblen=Math.hypot(kbx,kby)||1;
-          const baseF = 800 + displayToReal(p.displaySpeed)*20;
-          const biomeB = g.biomeIdx*800;
-          triggerKnockback((kbx/kblen)*(baseF+biomeB), (kby/kblen)*(baseF+biomeB));
-          g.stun = 1.5; g.alert = false; g.sleeping = true; g.wakeTimer = 0;
-          g.chasing = false; g.dashPhase = false; g.returning = true;
-          g.x = g.sleepX; g.y = g.sleepY;
-          updateUI(); break;
-        }
+        if (g.y > WORLD.safeY + 20){ g.chasing=false; g.alert=false; g.returning=true; }
       }
     }
 
