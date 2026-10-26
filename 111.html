@@ -823,7 +823,8 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove };
   function getBasePos(baseIdx, offsetX=0, offsetY=0){ return { x: BASE_XS[baseIdx] + offsetX, y: 2750 + offsetY }; }
   function getFarmPod(baseIdx, slot){ const off = FARM_OFFSETS[slot % FARM_OFFSETS.length]; return getBasePos(baseIdx, off.x, off.y + 50); }
   function getHatchPod(baseIdx, idx){ const off = HATCH_OFFSETS[idx % HATCH_OFFSETS.length]; return getBasePos(baseIdx, off.x, off.y - 50); }
-
+  mutationCashMultiplier: 1,   // 由外掛設定
+  mutationHatchMultiplier: 1,  // 由外掛設定
   const S={
     player:{x:300,y:2900,r:15,displaySpeed:10,carry:null,stun:0,tsLv:1,knockbackTimer:0,vx:0,vy:0,training:false,trainTickTimer:0, facing:1, walkPhase:0},
     playerPath: [], cash:0,eggs:[],guards:[],pets:[],hatchery:[],bag:[],biomeIdx:0,eggTimer:0,lastT:0,cps:0,
@@ -849,9 +850,16 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove };
   }
 
   function getSpeedMultiplier(){ let m = 1; if (S.ad2Step >= 1) m *= 2; if (S.ad4Step >= 1) m *= 4; if (S.ad8Step >= 1) m *= 8; if (S.ad16Step >= 1) m *= 16; if (S.ad32Step >= 1) m *= 32; return m; }
-  function getCashMultiplier(){ return S.subscriptionVerified ? 2 : 1; }
-  function getHatchMultiplier(){ let m = 1; const trail = TRAIL_DEFS.find(t => t.id === S.equippedTrail); if (trail) m *= trail.mult; if (S.night) m *= 10; return m; }
-
+  function getCashMultiplier(){
+  return (S.subscriptionVerified ? 2 : 1) * (S.mutationCashMultiplier || 1);
+}function getHatchMultiplier(){
+  let m = 1;
+  const trail = TRAIL_DEFS.find(t => t.id === S.equippedTrail);
+  if (trail) m *= trail.mult;
+  if (S.night) m *= 10;
+  m *= (S.mutationHatchMultiplier || 1);   // ★ 變異倍率
+  return m;
+}
   const PLAYER_ID = localStorage.getItem('pid') || (()=>{ const id='p_'+Math.random().toString(36).slice(2,9); localStorage.setItem('pid',id); return id; })();
   const PLAYER_NAME = '玩家' + PLAYER_ID.slice(-3);
 
@@ -2367,6 +2375,10 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove };
     getCtx: () => ctx,
     openHatchedEgg,
     getRemotePlayers: () => S.remotePlayers,
+    getMutationCashMul: () => S.mutationCashMultiplier || 1,      // 外掛查「目前收益變異倍率」
+   setMutationCashMul: (v) => { S.mutationCashMultiplier = v; },  // 外掛設「收益變異倍率」
+   getMutationHatchMul: () => S.mutationHatchMultiplier || 1,     // 外掛查「目前孵蛋變異倍率」
+   setMutationHatchMul: (v) => { S.mutationHatchMultiplier = v; },// 外掛設「孵蛋變異倍率」
   };
   window.raingodGameReadyFlag = true;
 })();
