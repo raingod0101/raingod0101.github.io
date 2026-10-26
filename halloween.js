@@ -1,10 +1,5 @@
 /* ===================================================================
- * 🎃 halloween.js
- * 需求：
- *  - 每 30 分鐘活動（5 分鐘槽），HUD 倒數計時
- *  - 糖果每 5 秒一顆、無上限
- *  - 商店只能對「孵化器中的蛋」使用碎片
- *  - 萬聖節變異：蛋有光環＋蝙蝠，寵物也有
+ * 🎃 halloween.js（修正：商店按鈕事件綁定）
  * =================================================================== */
 (function () {
   'use strict';
@@ -55,7 +50,7 @@
         @keyframes hwPulse{0%,100%{box-shadow:0 3px 0 #5a4a2a,0 0 0 rgba(255,138,32,0)}50%{box-shadow:0 3px 0 #5a4a2a,0 0 16px rgba(255,138,32,0.9)}}
         .candy-notice{position:fixed;top:130px;left:50%;transform:translateX(-50%);background:linear-gradient(180deg,#a040d0,#5a1a8a);border:3px solid #ff8a20;border-radius:12px;padding:6px 16px;color:#fff;font-weight:900;font-size:.8rem;z-index:90;pointer-events:none;opacity:0;transition:opacity .25s,transform .25s;text-align:center;white-space:nowrap;box-shadow:0 4px 20px rgba(160,60,220,.6);max-width:92vw;overflow:hidden;text-overflow:ellipsis}
         .candy-notice.show{opacity:1;transform:translateX(-50%) scale(1.03)}
-        .halloween-panel{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(40,10,50,.97);backdrop-filter:blur(10px);z-index:100;display:none;flex-direction:column;padding:70px 10px 10px;overflow-y:auto}
+        .halloween-panel{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(40,10,50,.97);backdrop-filter:blur(10px);z-index:9999;display:none;flex-direction:column;padding:70px 10px 10px;overflow-y:auto}
         .halloween-panel.open{display:flex}
         .halloween-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:6px}
         .halloween-header h2{color:#ffb040;font-size:1.1rem;font-weight:900;text-shadow:0 2px 8px rgba(0,0,0,.5)}
@@ -83,32 +78,50 @@
       document.head.appendChild(style);
     }
 
+    // ★★★ 修正版：btn 提升到函數作用域，避免塊級作用域問題 ★★★
     function injectDOM() {
       if (document.getElementById('hwTokensStat')) return;
+
+      // 1) 代幣 + 倒數計時
       const stats = document.querySelector('.stats');
       if (stats) {
         const tok = document.createElement('div');
-        tok.className = 'stat halloween'; tok.id = 'hwTokensStat'; tok.style.display = 'none';
+        tok.className = 'stat halloween';
+        tok.id = 'hwTokensStat';
+        tok.style.display = 'none';
         tok.innerHTML = '🎃 <b id="uiTokens">0</b>';
         stats.appendChild(tok);
+
         const timer = document.createElement('div');
-        timer.className = 'stat hwTimer'; timer.id = 'hwTimerStat'; timer.style.display = 'none';
+        timer.className = 'stat hwTimer';
+        timer.id = 'hwTimerStat';
+        timer.style.display = 'none';
         timer.innerHTML = '🎃 <b id="uiHwTimer">--:--</b>';
         stats.appendChild(timer);
       }
+
+      // 2) 右側按鈕（提升變數到函數作用域）
+      let halloweenBtn = null;
       const btns = document.querySelector('.btns-right');
       if (btns) {
-        const btn = document.createElement('button');
-        btn.className = 'btn-right halloween'; btn.id = 'btnHalloween';
-        btn.style.display = 'none'; btn.textContent = '🎃 萬聖節';
-        btns.appendChild(btn);
+        halloweenBtn = document.createElement('button');
+        halloweenBtn.className = 'btn-right halloween';
+        halloweenBtn.id = 'btnHalloween';
+        halloweenBtn.style.display = 'none';
+        halloweenBtn.textContent = '🎃 萬聖節';
+        btns.appendChild(halloweenBtn);
       }
+
+      // 3) 糖果通知條
       const notice = document.createElement('div');
-      notice.className = 'candy-notice'; notice.id = 'candyNotice';
+      notice.className = 'candy-notice';
+      notice.id = 'candyNotice';
       document.body.appendChild(notice);
 
+      // 4) 商店面板
       const panel = document.createElement('div');
-      panel.className = 'halloween-panel'; panel.id = 'halloweenPanel';
+      panel.className = 'halloween-panel';
+      panel.id = 'halloweenPanel';
       panel.innerHTML = `
         <div class="halloween-header">
           <h2>🎃 萬聖節商店</h2>
@@ -128,9 +141,12 @@
       `;
       document.body.appendChild(panel);
 
-      btn && btn.addEventListener('click', openShop);
-      document.getElementById('btnCloseHalloween').addEventListener('click', closeShop);
-      document.getElementById('btnBuyFrag').addEventListener('click', buyFragment);
+      // 5) 綁定事件（全部用 getElementById 或保存好的變數，避免作用域問題）
+      if (halloweenBtn) halloweenBtn.addEventListener('click', openShop);
+      const closeBtn = document.getElementById('btnCloseHalloween');
+      if (closeBtn) closeBtn.addEventListener('click', closeShop);
+      const buyBtn = document.getElementById('btnBuyFrag');
+      if (buyBtn) buyBtn.addEventListener('click', buyFragment);
     }
 
     function isInHalloweenWindow(now) {
@@ -142,20 +158,28 @@
       const nextSlot = (Math.floor(now / REFRESH_MS) + 1) * REFRESH_MS;
       return Math.max(0, nextSlot - now);
     }
+
     function updateHalloweenState() {
       const now = Date.now();
       const should = isInHalloweenWindow(now);
       if (should !== HW.active) {
         HW.active = should;
-        if (HW.active) { HW.spawnTimer = 0; showToast('🎃 萬聖節活動開始！\n5 分鐘內收集糖果，兌換限定變異！', '#8a3a8a', '#5a1a5a'); }
-        else { showToast('🎃 萬聖節活動結束，恢復正常。', '#5a5a5a', '#3a3a3a'); HW.candies = []; }
+        if (HW.active) {
+          HW.spawnTimer = 0;
+          showToast('🎃 萬聖節活動開始！\n5 分鐘內收集糖果，兌換限定變異！', '#8a3a8a', '#5a1a5a');
+        } else {
+          showToast('🎃 萬聖節活動結束，恢復正常。', '#5a5a5a', '#3a3a3a');
+          HW.candies = [];
+        }
         updateUI();
       }
     }
 
     function showCandyNotice(msg) {
-      const el = document.getElementById('candyNotice'); if (!el) return;
-      el.textContent = msg; el.classList.add('show');
+      const el = document.getElementById('candyNotice');
+      if (!el) return;
+      el.textContent = msg;
+      el.classList.add('show');
       clearTimeout(HW.noticeTimer);
       HW.noticeTimer = setTimeout(() => el.classList.remove('show'), 2200);
     }
@@ -167,7 +191,8 @@
       const x = rnd(60, G.WORLD_W - 60);
       const y = b.nestsY + rnd(-70, 70);
       const totalW = CANDY_TYPES.reduce((s, c) => s + c.weight, 0);
-      let r = Math.random() * totalW; let type = CANDY_TYPES[0];
+      let r = Math.random() * totalW;
+      let type = CANDY_TYPES[0];
       for (const c of CANDY_TYPES) { if (r < c.weight) { type = c; break; } r -= c.weight; }
       HW.candies.push({ id: Math.random().toString(36).slice(2), x, y, biomeIdx: bi, type, bob: Math.random() * Math.PI * 2 });
       showCandyNotice('🍬 ' + type.icon + ' ' + type.name + ' 在 ' + b.icon + ' ' + b.name + ' 出現了！');
@@ -189,12 +214,22 @@
       updateUI(); saveGame(true);
     }
 
-    function openShop() { HW.panelOpen = true; document.getElementById('halloweenPanel').classList.add('open'); buildShopUI(); }
-    function closeShop() { HW.panelOpen = false; document.getElementById('halloweenPanel').classList.remove('open'); }
+    function openShop() {
+      HW.panelOpen = true;
+      const el = document.getElementById('halloweenPanel');
+      if (el) el.classList.add('open');
+      buildShopUI();
+    }
+    function closeShop() {
+      HW.panelOpen = false;
+      const el = document.getElementById('halloweenPanel');
+      if (el) el.classList.remove('open');
+    }
 
     function buyFragment() {
       if (HW.tokens < FRAGMENT_PRICE) { showToast('❌ 代幣不足（需要 100 🎃）', '#8a2a2a', '#5a0a0a'); return; }
-      HW.tokens -= FRAGMENT_PRICE; HW.fragments += 1;
+      HW.tokens -= FRAGMENT_PRICE;
+      HW.fragments += 1;
       showToast('🧩 已購買萬聖節變異碎片 ×1', '#8a3a8a', '#5a1a5a');
       buildShopUI(); updateUI(); saveGame(true);
     }
@@ -203,6 +238,7 @@
       const tokEl = document.getElementById('hwTokens'); if (tokEl) tokEl.textContent = HW.tokens;
       const fragEl = document.getElementById('hwFragments'); if (fragEl) fragEl.textContent = HW.fragments;
       const buyBtn = document.getElementById('btnBuyFrag'); if (buyBtn) buyBtn.disabled = HW.tokens < FRAGMENT_PRICE;
+
       const grid = document.getElementById('hwEggList'); if (!grid) return;
       grid.innerHTML = '';
       const eggs = S.hatchery;
@@ -214,18 +250,32 @@
         const has = hasMutation(egg);
         const card = document.createElement('div');
         card.className = 'hw-egg-card' + (has ? ' mutated' : '') + (egg.favorite ? ' favorited' : '');
-        if (egg.favorite) { const h = document.createElement('div'); h.className = 'hwe-heart'; h.textContent = '❤️'; card.appendChild(h); }
-        const cv = document.createElement('canvas'); cv.width = 84; cv.height = 84;
-        const cx = cv.getContext('2d'); cx.translate(42, 42);
+        if (egg.favorite) {
+          const h = document.createElement('div');
+          h.className = 'hwe-heart';
+          h.textContent = '❤️';
+          card.appendChild(h);
+        }
+        const cv = document.createElement('canvas');
+        cv.width = 84; cv.height = 84;
+        const cx = cv.getContext('2d');
+        cx.translate(42, 42);
         const rc = WORLD.rarities[egg.rar].c;
         G.drawEggShape(cx, egg, 18, performance.now() / 1000, rc);
         card.appendChild(cv);
-        const nm = document.createElement('div'); nm.className = 'hwe-name'; nm.textContent = egg.name; card.appendChild(nm);
-        const st = document.createElement('div'); st.className = 'hwe-status';
+
+        const nm = document.createElement('div');
+        nm.className = 'hwe-name';
+        nm.textContent = egg.name;
+        card.appendChild(nm);
+
+        const st = document.createElement('div');
+        st.className = 'hwe-status';
         if (has) { st.textContent = '🎃 已變異'; st.style.color = '#ff8a20'; }
         else if (egg.finished) { st.textContent = '✨ 可打開'; st.style.color = '#ffe040'; }
         else { st.textContent = '⏳ 孵蛋中'; st.style.color = '#a0a0d0'; }
         card.appendChild(st);
+
         const btn = document.createElement('button');
         btn.textContent = has ? '已變異' : '使用碎片';
         btn.disabled = has || HW.fragments <= 0;
@@ -283,13 +333,19 @@
         const sc = S.zoom;
         const bob = Math.sin(S.time * 4 + c.bob) * 4;
         ctx.save();
-        ctx.translate(sp.x, sp.y); ctx.scale(sc, sc); ctx.translate(0, bob);
+        ctx.translate(sp.x, sp.y);
+        ctx.scale(sc, sc);
+        ctx.translate(0, bob);
         const gl = ctx.createRadialGradient(0, 0, 4, 0, 0, 32);
-        gl.addColorStop(0, hexA(c.type.color, 0.85)); gl.addColorStop(1, hexA(c.type.color, 0));
-        ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(0, 0, 32, 0, 7); ctx.fill();
+        gl.addColorStop(0, hexA(c.type.color, 0.85));
+        gl.addColorStop(1, hexA(c.type.color, 0));
+        ctx.fillStyle = gl;
+        ctx.beginPath(); ctx.arc(0, 0, 32, 0, 7); ctx.fill();
         ctx.font = '26px "Segoe UI Emoji", "Segoe UI", sans-serif';
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.shadowBlur = 12; ctx.shadowColor = c.type.color;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.shadowBlur = 12;
+        ctx.shadowColor = c.type.color;
         ctx.fillText(c.type.icon, 0, 0);
         ctx.shadowBlur = 0;
         ctx.font = '900 10px "Segoe UI", sans-serif';
@@ -306,13 +362,15 @@
       const glow = ctx.createRadialGradient(0, -5, 6, 0, -5, 36);
       glow.addColorStop(0, hexA(MUTATION_DEF.color, 0.55 * pulse));
       glow.addColorStop(1, hexA('#a040d0', 0));
-      ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(0, -5, 36, 0, 7); ctx.fill();
+      ctx.fillStyle = glow;
+      ctx.beginPath(); ctx.arc(0, -5, 36, 0, 7); ctx.fill();
     }
     function drawPetMutationAfter(ctx, pet) {
       if (!hasMutation(pet)) return;
       for (let i = 0; i < 3; i++) {
         const a = S.time * 1.8 + i * Math.PI * 2 / 3 + (pet.x || 0) * 0.01;
-        const bx = Math.cos(a) * 24, by = Math.sin(a) * 12 - 8;
+        const bx = Math.cos(a) * 24;
+        const by = Math.sin(a) * 12 - 8;
         ctx.font = '11px "Segoe UI Emoji", "Segoe UI", sans-serif';
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.globalAlpha = 0.9;
@@ -331,10 +389,12 @@
       const glow = ctx.createRadialGradient(0, 0, 8, 0, 0, 42);
       glow.addColorStop(0, hexA(MUTATION_DEF.color, 0.55 * pulse));
       glow.addColorStop(1, hexA('#a040d0', 0));
-      ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(0, 0, 42, 0, 7); ctx.fill();
+      ctx.fillStyle = glow;
+      ctx.beginPath(); ctx.arc(0, 0, 42, 0, 7); ctx.fill();
       for (let i = 0; i < 3; i++) {
         const a = S.time * 2 + i * Math.PI * 2 / 3 + (egg.x || 0) * 0.01;
-        const bx = Math.cos(a) * 26, by = Math.sin(a) * 14 - 8;
+        const bx = Math.cos(a) * 26;
+        const by = Math.sin(a) * 14 - 8;
         ctx.font = '11px "Segoe UI Emoji", "Segoe UI", sans-serif';
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText('🦇', bx, by);
@@ -353,12 +413,17 @@
       if (!HW.active || HW.candies.length === 0) return false;
       for (let i = HW.candies.length - 1; i >= 0; i--) {
         const c = HW.candies[i];
-        if (Math.hypot(wx - c.x, wy - c.y) < 40) { collectCandy(c, i); return true; }
+        if (Math.hypot(wx - c.x, wy - c.y) < 40) {
+          collectCandy(c, i);
+          return true;
+        }
       }
       return false;
     }
 
-    function onSave() { return { halloweenTokens: HW.tokens, halloweenFragments: HW.fragments }; }
+    function onSave() {
+      return { halloweenTokens: HW.tokens, halloweenFragments: HW.fragments };
+    }
     function onLoad(d) {
       HW.tokens = (d && typeof d.halloweenTokens === 'number') ? d.halloweenTokens : 0;
       HW.fragments = (d && typeof d.halloweenFragments === 'number') ? d.halloweenFragments : 0;
@@ -397,7 +462,10 @@
     }
 
     window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && HW.panelOpen) { e.preventDefault(); closeShop(); }
+      if (e.key === 'Escape' && HW.panelOpen) {
+        e.preventDefault();
+        closeShop();
+      }
     });
 
     HOOKS.onUpdate.push(onUpdate);
