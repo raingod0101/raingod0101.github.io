@@ -115,14 +115,6 @@
             font-size: 16px; cursor: pointer; display: flex;
             align-items: center; justify-content: center;
         }
-        .avatar-unread-badge {
-            position: absolute; top: -2px; right: -2px;
-            min-width: 20px; height: 20px; padding: 0 5px;
-            border-radius: 10px; background: var(--danger); color: #fff;
-            font-size: 11px; font-weight: 700; line-height: 20px;
-            text-align: center; border: 2px solid #fff;
-            display: none;
-        }
 
         .profile-form { display: grid; gap: 14px; margin-top: 16px; }
         .profile-form label { display: grid; gap: 7px; font-size: 0.9rem; font-weight: 600; }
@@ -202,6 +194,25 @@
         .chat-sidebar .friend-item { border-radius: 0; border: 0; background: transparent; }
         .chat-sidebar .friend-item.active { background: #eaf2ff; }
         .chat-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+        /* 手機版好友選擇下拉選單 */
+        .chat-mobile-picker {
+            display: none;
+            padding: 10px 12px;
+            border-bottom: 1px solid #eee;
+            background: #fff;
+            flex-shrink: 0;
+        }
+        .chat-mobile-picker select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #cbd2dc;
+            border-radius: 9px;
+            font: inherit;
+            background: #fff;
+            color: #1d1d1f;
+        }
+
         .chat-header {
             padding: 13px 16px; border-bottom: 1px solid #eee;
             display: flex; justify-content: space-between; align-items: center;
@@ -250,6 +261,7 @@
 
         @media (max-width: 640px) {
             .chat-sidebar { display: none; }
+            .chat-mobile-picker { display: block; }
             .chat-panel { height: calc(100vh - 210px); }
             .tab-btn { font-size: 0.82rem; padding: 10px 4px; }
             .page-wrap { padding: 0 10px; }
@@ -282,7 +294,6 @@
                     <div class="profile-avatar-row">
                         <div class="avatar-wrap">
                             <img id="profile-avatar" class="profile-avatar" src="https://raingod0101.github.io/catdragon.png" alt="個人頭像">
-                            <span id="avatar-unread-badge" class="avatar-unread-badge">0</span>
                             <button id="avatar-edit-btn" class="avatar-edit-btn" type="button" title="更換頭像">✎</button>
                         </div>
                         <div>
@@ -367,17 +378,23 @@
                             <ul id="chat-sidebar-friends" style="list-style:none;margin:0;padding:0;"></ul>
                         </aside>
                         <div class="chat-main">
+                            <!-- 手機版好友選擇器 -->
+                            <div class="chat-mobile-picker">
+                                <select id="chat-mobile-select">
+                                    <option value="">選擇好友開始聊天…</option>
+                                </select>
+                            </div>
                             <div class="chat-header">
                                 <div>
                                     <div class="title" id="chat-title">聊天室</div>
-                                    <div class="sub" id="chat-subtitle">請從好友列表選擇一位好友開始聊天。</div>
+                                    <div class="sub" id="chat-subtitle">請選擇一位好友開始聊天。</div>
                                 </div>
                                 <div class="chat-header-actions">
                                     <button id="chat-clear-friend" class="mini-btn" type="button" hidden>關閉對話</button>
                                 </div>
                             </div>
                             <div class="chat-box" id="chat-box">
-                                <div class="chat-empty" id="chat-empty">請從左側好友列表選擇一位好友開始聊天。</div>
+                                <div class="chat-empty" id="chat-empty">請選擇一位好友開始聊天。</div>
                             </div>
                             <div class="chat-input-area">
                                 <input type="text" id="msg-input" placeholder="輸入訊息..." disabled>
@@ -393,18 +410,8 @@
     <script src="menu.js"></script>
     <script>
         (function() {
-            // 等待 menu.js 的 Firebase 初始化
             var ready = window.raingodFirebaseReady || Promise.resolve();
             var authReady = window.raingodAuthReady || Promise.resolve(null);
-
-            ready.then(function() {
-                return authReady;
-            }).then(function(user) {
-                if (!user) {
-                    document.getElementById('login-required').hidden = false;
-                    document.getElementById('app-area').hidden = true;
-                }
-            });
 
             // ===== DOM =====
             var fallbackAvatar = 'https://raingod0101.github.io/catdragon.png';
@@ -412,7 +419,6 @@
             var appArea = document.getElementById('app-area');
 
             var avatarImg = document.getElementById('profile-avatar');
-            var avatarBadge = document.getElementById('avatar-unread-badge');
             var avatarEditBtn = document.getElementById('avatar-edit-btn');
             var avatarFileInput = document.getElementById('avatar-file-input');
             var nameForm = document.getElementById('name-form');
@@ -425,6 +431,7 @@
             var requestList = document.getElementById('request-list');
             var friendList = document.getElementById('friend-list');
             var chatSidebarFriends = document.getElementById('chat-sidebar-friends');
+            var chatMobileSelect = document.getElementById('chat-mobile-select');
 
             var chatTitle = document.getElementById('chat-title');
             var chatSubtitle = document.getElementById('chat-subtitle');
@@ -532,7 +539,7 @@
                 displayNameInput.value = user.displayName || currentUsername;
 
                 fetchUserProfile(currentUsername, function(profile) {
-                    if (profile && profile.profile && profile.profile.avatar && !user.photoURL) {
+                    if (profile && profile.profile && profile.profile.avatar) {
                         avatarImg.src = profile.profile.avatar;
                     }
                 });
@@ -558,23 +565,17 @@
                 var reader = new FileReader();
                 reader.onload = function() {
                     var dataUrl = reader.result;
-                    try {
-                        db().ref('users/' + currentUsername + '/profile/avatar').set(dataUrl, function(err) {
-                            if (err) {
-                                console.error('頭像儲存失敗', err);
-                                setStatus('avatar-status', '頭像儲存失敗：' + errorMessage(err), 'error');
-                                return;
-                            }
-                            avatarImg.src = dataUrl;
-                            setStatus('avatar-status', '頭像已更新並儲存。', 'ok');
-                            refreshFriendsUI();
-                        });
-                    } catch (e) {
-                        console.error(e);
-                        setStatus('avatar-status', '頭像儲存失敗：' + errorMessage(e), 'error');
-                    } finally {
-                        avatarFileInput.value = '';
-                    }
+                    db().ref('users/' + currentUsername + '/profile/avatar').set(dataUrl, function(err) {
+                        if (err) {
+                            console.error('頭像儲存失敗', err);
+                            setStatus('avatar-status', '頭像儲存失敗：' + errorMessage(err), 'error');
+                            return;
+                        }
+                        avatarImg.src = dataUrl;
+                        setStatus('avatar-status', '頭像已更新並儲存。', 'ok');
+                        refreshFriendsUI();
+                    });
+                    avatarFileInput.value = '';
                 };
                 reader.readAsDataURL(file);
             });
@@ -829,7 +830,7 @@
                     }
                 }
 
-                // 聊天室側邊欄
+                // 聊天室側邊欄（桌面）
                 chatSidebarFriends.innerHTML = '';
                 if (!entries.length) {
                     chatSidebarFriends.innerHTML = '<li class="profile-help" style="padding:12px;">尚無好友</li>';
@@ -852,8 +853,33 @@
                         chatSidebarFriends.appendChild(li);
                     });
                 }
+
+                // 手機版好友選擇器
+                refreshMobileSelect(entries);
                 updateUnreadBadges();
             }
+
+            function refreshMobileSelect(entries) {
+                var currentVal = activeFriendUid;
+                chatMobileSelect.innerHTML = '<option value="">選擇好友開始聊天…</option>';
+                entries.forEach(function(pair) {
+                    var uid = pair[0];
+                    var f = pair[1];
+                    var opt = document.createElement('option');
+                    opt.value = uid;
+                    opt.textContent = (f.name || f.username || '好友') + (unreadCache[uid] ? ' (' + unreadCache[uid] + ')' : '');
+                    if (uid === currentVal) opt.selected = true;
+                    chatMobileSelect.appendChild(opt);
+                });
+            }
+
+            chatMobileSelect.addEventListener('change', function() {
+                var uid = chatMobileSelect.value;
+                if (!uid) return;
+                var f = friendsCache[uid];
+                if (!f) return;
+                openPrivateChat(uid, f.name || f.username || '好友', f.avatar || fallbackAvatar);
+            });
 
             // ===== 未讀 =====
             function listenAllUnread() {
@@ -876,6 +902,7 @@
                             });
                             unreadCache[friendUid] = unread;
                             updateUnreadBadges();
+                            refreshMobileSelect(Object.keys(friendsCache).map(function(k) { return [k, friendsCache[k]]; }));
                         }).catch(function() {});
                     };
                     msgsRef.on('value', handler);
@@ -895,12 +922,6 @@
                 }
                 var total = 0;
                 Object.keys(unreadCache).forEach(function(k) { total += unreadCache[k] || 0; });
-                if (total > 0) {
-                    avatarBadge.textContent = total > 99 ? '99+' : String(total);
-                    avatarBadge.style.display = 'block';
-                } else {
-                    avatarBadge.style.display = 'none';
-                }
                 tabBadgeUnread.textContent = total > 99 ? '99+' : String(total);
                 tabBadgeUnread.classList.toggle('show', total > 0);
                 updateTabBadges();
@@ -960,6 +981,8 @@
                     return function() { ref.off('value', handler); };
                 })(msgsRef));
 
+                // 更新選取狀態
+                chatMobileSelect.value = friendUid;
                 refreshFriendsUI();
                 markChatRead(cid);
             }
@@ -980,13 +1003,14 @@
                 activeFriendUid = '';
                 clearChatListeners();
                 chatTitle.textContent = '聊天室';
-                chatSubtitle.textContent = '請從好友列表選擇一位好友開始聊天。';
+                chatSubtitle.textContent = '請選擇一位好友開始聊天。';
                 chatClearFriend.hidden = true;
                 msgInput.disabled = true;
                 chatSendBtn.disabled = true;
                 var rows = chatBox.querySelectorAll('.msg-row');
                 for (var i = 0; i < rows.length; i++) rows[i].remove();
                 chatEmpty.style.display = 'block';
+                chatMobileSelect.value = '';
                 refreshFriendsUI();
             });
 
@@ -1031,49 +1055,47 @@
             }
 
             // ===== 啟動 =====
-            (function init() {
-                var p = window.raingodFirebaseReady || Promise.resolve();
-                p.then(function() {
-                    return window.raingodAuthReady || Promise.resolve(null);
-                }).then(function(user) {
-                    if (!user) {
-                        loginRequired.hidden = false;
-                        appArea.hidden = true;
-                        return;
-                    }
-                    initProfile(user);
-                    window.firebase.auth().onAuthStateChanged(function(u) {
-                        if (u) {
-                            initProfile(u);
-                        } else {
-                            currentUser = null; currentUid = ''; currentUsername = '';
-                            appArea.hidden = true;
-                            loginRequired.hidden = false;
-                            clearChatListeners();
-                            for (var i = 0; i < friendUnreadListeners.length; i++) friendUnreadListeners[i]();
-                            friendUnreadListeners = [];
-                            friendsCache = {};
-                            unreadCache = {};
-                            requestList.innerHTML = '';
-                            friendList.innerHTML = '';
-                            chatSidebarFriends.innerHTML = '';
-                            searchResults.innerHTML = '';
-                            var rows = chatBox.querySelectorAll('.msg-row');
-                            for (var j = 0; j < rows.length; j++) rows[j].remove();
-                            chatEmpty.style.display = 'block';
-                            chatClearFriend.hidden = true;
-                            msgInput.disabled = true;
-                            chatSendBtn.disabled = true;
-                            updateUnreadBadges();
-                        }
-                    });
-                }).catch(function(e) {
-                    console.error('初始化失敗', e);
+            ready.then(function() {
+                return authReady;
+            }).then(function(user) {
+                if (!user) {
                     loginRequired.hidden = false;
-                    loginRequired.textContent = '載入個人檔案失敗：' + errorMessage(e);
-                    loginRequired.classList.add('error');
+                    appArea.hidden = true;
+                    return;
+                }
+                initProfile(user);
+                window.firebase.auth().onAuthStateChanged(function(u) {
+                    if (u) {
+                        initProfile(u);
+                    } else {
+                        currentUser = null; currentUid = ''; currentUsername = '';
+                        appArea.hidden = true;
+                        loginRequired.hidden = false;
+                        clearChatListeners();
+                        for (var i = 0; i < friendUnreadListeners.length; i++) friendUnreadListeners[i]();
+                        friendUnreadListeners = [];
+                        friendsCache = {};
+                        unreadCache = {};
+                        requestList.innerHTML = '';
+                        friendList.innerHTML = '';
+                        chatSidebarFriends.innerHTML = '';
+                        searchResults.innerHTML = '';
+                        chatMobileSelect.innerHTML = '<option value="">選擇好友開始聊天…</option>';
+                        var rows = chatBox.querySelectorAll('.msg-row');
+                        for (var j = 0; j < rows.length; j++) rows[j].remove();
+                        chatEmpty.style.display = 'block';
+                        chatClearFriend.hidden = true;
+                        msgInput.disabled = true;
+                        chatSendBtn.disabled = true;
+                        updateUnreadBadges();
+                    }
                 });
-            })();
+            }).catch(function(e) {
+                console.error('初始化失敗', e);
+                loginRequired.hidden = false;
+                loginRequired.textContent = '載入個人檔案失敗：' + errorMessage(e);
+                loginRequired.classList.add('error');
+            });
         })();
     </script>
 </body>
