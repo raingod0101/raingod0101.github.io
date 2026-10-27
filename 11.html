@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>個人檔案 × 聊天室 | 雨神</title>
+    <title>個人檔案 × 好友 × 聊天室 | 雨神</title>
     <link rel="stylesheet" href="menu.css">
     <style>
         :root {
@@ -25,49 +25,87 @@
         }
         #nav_bar { position: relative; z-index: 10; }
 
-        /* ===== 主布局 ===== */
-        .app-layout {
+        /* ===== 頁籤導覽 ===== */
+        .tab-bar {
             display: flex;
-            max-width: 1200px;
-            margin: 24px auto;
-            gap: 20px;
-            padding: 0 16px;
-            align-items: flex-start;
+            gap: 4px;
+            max-width: 860px;
+            margin: 20px auto 0;
+            padding: 5px;
+            background: #e8ecf2;
+            border-radius: 12px;
+            width: calc(100% - 32px);
         }
-        .profile-column {
-            flex: 1 1 380px;
-            min-width: 320px;
+        .tab-btn {
+            flex: 1;
+            padding: 11px 8px;
+            border: 0;
+            border-radius: 9px;
+            background: transparent;
+            color: #5b6470;
+            font: inherit;
+            font-size: 0.92rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s;
+            position: relative;
         }
-        .chat-column {
-            flex: 1 1 420px;
-            min-width: 320px;
-            position: sticky;
-            top: 24px;
-            max-height: calc(100vh - 48px);
-            display: flex;
-            flex-direction: column;
+        .tab-btn.active {
+            background: #fff;
+            color: #1d1d1f;
+            box-shadow: 0 1px 4px rgba(25, 40, 60, 0.12);
         }
-        @media (max-width: 860px) {
-            .app-layout { flex-direction: column; }
-            .chat-column { position: static; max-height: none; }
+        .tab-btn .tab-badge {
+            display: none;
+            min-width: 17px;
+            height: 17px;
+            padding: 0 4px;
+            margin-left: 4px;
+            border-radius: 9px;
+            background: var(--danger);
+            color: #fff;
+            font-size: 10px;
+            font-weight: 700;
+            line-height: 17px;
+            text-align: center;
+            vertical-align: middle;
         }
+        .tab-btn .tab-badge.show { display: inline-block; }
 
-        /* ===== 個人檔案 ===== */
-        .profile-page { width: 100%; }
-        .profile-heading {
-            display: flex; align-items: center; justify-content: space-between;
-            gap: 12px; margin-bottom: 20px;
+        /* ===== 頁面容器 ===== */
+        .page-wrap {
+            max-width: 860px;
+            margin: 18px auto 40px;
+            padding: 0 16px;
         }
-        .profile-heading h1 { margin: 0; font-size: 1.6rem; }
-        .profile-card {
-            margin-bottom: 18px; padding: 24px;
-            border: 1px solid var(--border); border-radius: 16px;
-            background: #fff; box-shadow: 0 8px 24px rgba(25, 40, 60, 0.06);
+        .page { display: none; }
+        .page.active { display: block; }
+
+        /* ===== 共用卡片 ===== */
+        .card {
+            margin-bottom: 18px;
+            padding: 24px;
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            background: #fff;
+            box-shadow: 0 8px 24px rgba(25, 40, 60, 0.06);
         }
-        .profile-card h2 { margin: 0 0 8px; font-size: 1.1rem; }
+        .card h2 { margin: 0 0 8px; font-size: 1.1rem; }
+        .card h3 { margin: 18px 0 8px; font-size: 0.95rem; }
         .profile-help, .profile-status {
             color: #606a78; font-size: 0.88rem; line-height: 1.5;
         }
+        .profile-status { min-height: 1.4em; margin: 10px 0 0; }
+        .profile-status.error { color: #b42318; }
+        .profile-status.ok { color: var(--success); }
+
+        .page-heading {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 12px; margin-bottom: 18px;
+        }
+        .page-heading h1 { margin: 0; font-size: 1.55rem; }
+
+        /* ===== 頭像 ===== */
         .profile-avatar-row { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
         .avatar-wrap { position: relative; width: 104px; height: 104px; flex: 0 0 auto; }
         .profile-avatar {
@@ -89,6 +127,8 @@
             text-align: center; border: 2px solid #fff;
             display: none;
         }
+
+        /* ===== 表單 ===== */
         .profile-form { display: grid; gap: 14px; margin-top: 16px; }
         .profile-form label { display: grid; gap: 7px; font-size: 0.9rem; font-weight: 600; }
         .profile-form input {
@@ -106,13 +146,14 @@
         .profile-button:disabled { cursor: wait; opacity: 0.65; }
         .profile-button.secondary { background: #687385; }
         .profile-button.danger { background: var(--danger); }
-        .profile-button.success { background: var(--success); }
-        .profile-status { min-height: 1.4em; margin: 10px 0 0; }
-        .profile-status.error { color: #b42318; }
-        .profile-status.ok { color: var(--success); }
 
-        /* ===== 好友列表 ===== */
-        .friend-list, .request-list {
+        /* ===== 好友 ===== */
+        .search-row { display: flex; gap: 8px; }
+        .search-row input {
+            flex: 1; padding: 10px 12px; border: 1px solid #cbd2dc;
+            border-radius: 8px; font: inherit;
+        }
+        .friend-list, .request-list, .search-results {
             list-style: none; margin: 0; padding: 0;
             display: flex; flex-direction: column; gap: 8px;
         }
@@ -123,11 +164,14 @@
         }
         .friend-item.active { border-color: var(--me-bg); background: #eaf2ff; }
         .friend-avatar {
-            width: 40px; height: 40px; border-radius: 50%;
+            width: 42px; height: 42px; border-radius: 50%;
             object-fit: cover; background: #fff; flex: 0 0 auto;
             border: 1px solid var(--border);
         }
-        .friend-name { flex: 1; font-weight: 600; font-size: 0.95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .friend-name {
+            flex: 1; font-weight: 600; font-size: 0.95rem;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
         .friend-unread {
             min-width: 18px; height: 18px; padding: 0 5px;
             border-radius: 9px; background: var(--danger); color: #fff;
@@ -137,10 +181,11 @@
         .friend-unread.show { display: inline-block; }
         .friend-actions { display: flex; gap: 6px; flex-wrap: wrap; }
         .mini-btn {
-            padding: 5px 10px; border-radius: 7px; border: 1px solid #ccc;
+            padding: 6px 11px; border-radius: 7px; border: 1px solid #ccc;
             background: #fff; font-size: 12px; font-weight: 600; cursor: pointer;
         }
         .mini-btn.primary { background: var(--me-bg); color: #fff; border-color: var(--me-bg); }
+        .mini-btn.success { background: var(--success); color: #fff; border-color: var(--success); }
         .mini-btn.danger { background: #fff0f0; color: var(--danger); border-color: #ffc9c9; }
 
         /* ===== 聊天室 ===== */
@@ -149,10 +194,23 @@
             background: #fff; border-radius: 16px; overflow: hidden;
             border: 1px solid var(--border);
             box-shadow: 0 8px 24px rgba(25, 40, 60, 0.06);
-            height: 100%; min-height: 480px;
+            height: calc(100vh - 190px);
+            min-height: 460px;
         }
+        .chat-layout { display: flex; height: 100%; }
+        .chat-sidebar {
+            width: 210px; flex-shrink: 0; border-right: 1px solid #eee;
+            overflow-y: auto; background: #fafbfd;
+        }
+        .chat-sidebar-title {
+            padding: 12px 14px 6px; font-size: 12px; font-weight: 700;
+            color: var(--text-gray); letter-spacing: 0.4px;
+        }
+        .chat-sidebar .friend-item { border-radius: 0; border: 0; background: transparent; }
+        .chat-sidebar .friend-item.active { background: #eaf2ff; }
+        .chat-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
         .chat-header {
-            padding: 14px 16px; border-bottom: 1px solid #eee;
+            padding: 13px 16px; border-bottom: 1px solid #eee;
             display: flex; justify-content: space-between; align-items: center;
             background: #fff; flex-shrink: 0;
         }
@@ -195,137 +253,155 @@
         }
         .chat-send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-        /* 好友搜尋 */
-        .search-row { display: flex; gap: 8px; margin-top: 10px; }
-        .search-row input { flex: 1; padding: 9px 12px; border: 1px solid #cbd2dc; border-radius: 8px; font: inherit; }
-        .search-results { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }
-
         .hidden { display: none !important; }
-        @media (max-width: 480px) {
-            .app-layout { padding: 0 10px; margin-top: 14px; }
-            .profile-card { padding: 16px; }
+
+        @media (max-width: 640px) {
+            .chat-sidebar { display: none; }
+            .chat-panel { height: calc(100vh - 210px); }
+            .tab-btn { font-size: 0.82rem; padding: 10px 4px; }
+            .page-wrap { padding: 0 10px; }
+            .card { padding: 18px; }
         }
     </style>
 </head>
 <body>
     <div id="nav_bar"></div>
 
-    <div class="app-layout">
-        <!-- ===== 左側：個人檔案 ===== -->
-        <div class="profile-column">
-            <main class="profile-page">
-                <div class="profile-heading">
-                    <h1>個人檔案</h1>
-                    <button id="sign-out" class="profile-button secondary" type="button" hidden>登出</button>
-                </div>
-                <p id="login-required" class="profile-help" hidden>請先登入帳號，再管理個人檔案與好友。</p>
+    <p id="login-required" class="profile-help" style="text-align:center;margin:24px;" hidden>請先登入帳號，再管理個人檔案與好友。</p>
 
-                <section id="profile-content" hidden>
-                    <!-- 頭像 -->
-                    <section class="profile-card" aria-labelledby="avatar-heading">
-                        <h2 id="avatar-heading">個人頭像</h2>
-                        <div class="profile-avatar-row">
-                            <div class="avatar-wrap">
-                                <img id="profile-avatar" class="profile-avatar" src="https://raingod0101.github.io/catdragon.png" alt="個人頭像">
-                                <span id="avatar-unread-badge" class="avatar-unread-badge">0</span>
-                                <button id="avatar-edit-btn" class="avatar-edit-btn" type="button" title="更換頭像">✎</button>
-                            </div>
-                            <div>
-                                <p class="profile-help">點擊右下角鉛筆更換頭像，儲存後會同步到帳號資料庫。</p>
-                                <input id="avatar-file-input" type="file" accept="image/*" class="hidden">
-                            </div>
-                        </div>
-                        <p id="avatar-status" class="profile-status" role="status"></p>
-                    </section>
-
-                    <!-- 顯示名稱 -->
-                    <section class="profile-card" aria-labelledby="name-heading">
-                        <h2 id="name-heading">顯示名稱</h2>
-                        <form id="name-form" class="profile-form">
-                            <label>
-                                名稱
-                                <input id="display-name" type="text" maxlength="40" autocomplete="nickname" required>
-                            </label>
-                            <button class="profile-button" type="submit">儲存名稱</button>
-                        </form>
-                        <p id="name-status" class="profile-status" role="status"></p>
-                    </section>
-
-                    <!-- 好友管理 -->
-                    <section class="profile-card" aria-labelledby="friend-heading">
-                        <h2 id="friend-heading">好友</h2>
-                        <p class="profile-help">輸入對方帳號（@ 前面的名稱）送出好友申請。對方接受後即可私訊。</p>
-                        <div class="search-row">
-                            <input id="friend-search-input" type="text" placeholder="輸入帳號搜尋好友" autocomplete="off">
-                            <button id="friend-search-btn" class="profile-button" type="button" style="width:auto; padding:9px 14px;">搜尋</button>
-                        </div>
-                        <ul id="search-results" class="search-results"></ul>
-
-                        <h3 style="margin:18px 0 8px; font-size:0.95rem;">好友申請</h3>
-                        <ul id="request-list" class="request-list">
-                            <li class="profile-help" id="request-empty">目前沒有待處理的好友申請。</li>
-                        </ul>
-
-                        <h3 style="margin:18px 0 8px; font-size:0.95rem;">好友列表</h3>
-                        <ul id="friend-list" class="friend-list">
-                            <li class="profile-help" id="friend-empty">尚未加入任何好友。</li>
-                        </ul>
-                    </section>
-
-                    <!-- 變更密碼 -->
-                    <section class="profile-card" aria-labelledby="password-heading">
-                        <h2 id="password-heading">變更密碼</h2>
-                        <p class="profile-help">為保護帳號安全，變更密碼時需要驗證目前密碼。</p>
-                        <form id="password-form" class="profile-form">
-                            <label>
-                                目前密碼
-                                <input id="current-password" type="password" autocomplete="current-password" required>
-                            </label>
-                            <label>
-                                新密碼（至少 6 個字元）
-                                <input id="new-password" type="password" minlength="6" autocomplete="new-password" required>
-                            </label>
-                            <label>
-                                確認新密碼
-                                <input id="confirm-password" type="password" minlength="6" autocomplete="new-password" required>
-                            </label>
-                            <button class="profile-button" type="submit">變更密碼</button>
-                        </form>
-                        <p id="password-status" class="profile-status" role="status"></p>
-                    </section>
-                </section>
-            </main>
+    <div id="app-area" hidden>
+        <!-- 分頁導覽 -->
+        <div class="tab-bar" role="tablist">
+            <button class="tab-btn active" data-page="profile" role="tab">個人檔案</button>
+            <button class="tab-btn" data-page="friends" role="tab">好友 <span class="tab-badge" id="tab-badge-requests"></span></button>
+            <button class="tab-btn" data-page="chat" role="tab">聊天室 <span class="tab-badge" id="tab-badge-unread"></span></button>
         </div>
 
-        <!-- ===== 右側：聊天室 ===== -->
-        <div class="chat-column">
-            <div class="chat-panel" id="chat-panel">
-                <div class="chat-header">
-                    <div>
-                        <div class="title" id="chat-title">聊天室</div>
-                        <div class="sub" id="chat-subtitle">登入後可與好友私訊</div>
+        <div class="page-wrap">
+            <!-- ===== 頁面一：個人檔案 ===== -->
+            <section class="page active" id="page-profile">
+                <div class="page-heading">
+                    <h1>個人檔案</h1>
+                    <button id="sign-out" class="profile-button secondary" type="button">登出</button>
+                </div>
+
+                <section class="card">
+                    <h2>個人頭像</h2>
+                    <div class="profile-avatar-row">
+                        <div class="avatar-wrap">
+                            <img id="profile-avatar" class="profile-avatar" src="https://raingod0101.github.io/catdragon.png" alt="個人頭像">
+                            <span id="avatar-unread-badge" class="avatar-unread-badge">0</span>
+                            <button id="avatar-edit-btn" class="avatar-edit-btn" type="button" title="更換頭像">✎</button>
+                        </div>
+                        <div>
+                            <p class="profile-help">點擊右下角鉛筆更換頭像，儲存後會同步到帳號資料庫。</p>
+                            <input id="avatar-file-input" type="file" accept="image/*" class="hidden">
+                        </div>
                     </div>
-                    <div class="chat-header-actions">
-                        <button id="chat-clear-friend" class="mini-btn" type="button" hidden>關閉對話</button>
+                    <p id="avatar-status" class="profile-status" role="status"></p>
+                </section>
+
+                <section class="card">
+                    <h2>顯示名稱</h2>
+                    <form id="name-form" class="profile-form">
+                        <label>
+                            名稱
+                            <input id="display-name" type="text" maxlength="40" autocomplete="nickname" required>
+                        </label>
+                        <button class="profile-button" type="submit">儲存名稱</button>
+                    </form>
+                    <p id="name-status" class="profile-status" role="status"></p>
+                </section>
+
+                <section class="card">
+                    <h2>變更密碼</h2>
+                    <p class="profile-help">為保護帳號安全，變更密碼時需要驗證目前密碼。</p>
+                    <form id="password-form" class="profile-form">
+                        <label>
+                            目前密碼
+                            <input id="current-password" type="password" autocomplete="current-password" required>
+                        </label>
+                        <label>
+                            新密碼（至少 6 個字元）
+                            <input id="new-password" type="password" minlength="6" autocomplete="new-password" required>
+                        </label>
+                        <label>
+                            確認新密碼
+                            <input id="confirm-password" type="password" minlength="6" autocomplete="new-password" required>
+                        </label>
+                        <button class="profile-button" type="submit">變更密碼</button>
+                    </form>
+                    <p id="password-status" class="profile-status" role="status"></p>
+                </section>
+            </section>
+
+            <!-- ===== 頁面二：好友 ===== -->
+            <section class="page" id="page-friends">
+                <div class="page-heading">
+                    <h1>好友</h1>
+                </div>
+
+                <section class="card">
+                    <h2>搜尋好友</h2>
+                    <p class="profile-help">輸入對方帳號（@ 前面的名稱）送出好友申請。</p>
+                    <div class="search-row">
+                        <input id="friend-search-input" type="text" placeholder="輸入帳號搜尋" autocomplete="off">
+                        <button id="friend-search-btn" class="profile-button" type="button" style="width:auto;padding:10px 16px;">搜尋</button>
+                    </div>
+                    <ul id="search-results" class="search-results" style="margin-top:12px;"></ul>
+                </section>
+
+                <section class="card">
+                    <h2>好友申請</h2>
+                    <ul id="request-list" class="request-list">
+                        <li class="profile-help" id="request-empty">目前沒有待處理的好友申請。</li>
+                    </ul>
+                </section>
+
+                <section class="card">
+                    <h2>好友列表</h2>
+                    <ul id="friend-list" class="friend-list">
+                        <li class="profile-help" id="friend-empty">尚未加入任何好友。</li>
+                    </ul>
+                </section>
+            </section>
+
+            <!-- ===== 頁面三：聊天室 ===== -->
+            <section class="page" id="page-chat">
+                <div class="chat-panel">
+                    <div class="chat-layout">
+                        <aside class="chat-sidebar">
+                            <div class="chat-sidebar-title">好友對話</div>
+                            <ul id="chat-sidebar-friends" style="list-style:none;margin:0;padding:0;"></ul>
+                        </aside>
+                        <div class="chat-main">
+                            <div class="chat-header">
+                                <div>
+                                    <div class="title" id="chat-title">聊天室</div>
+                                    <div class="sub" id="chat-subtitle">請從好友列表選擇一位好友開始聊天。</div>
+                                </div>
+                                <div class="chat-header-actions">
+                                    <button id="chat-clear-friend" class="mini-btn" type="button" hidden>關閉對話</button>
+                                </div>
+                            </div>
+                            <div class="chat-box" id="chat-box">
+                                <div class="chat-empty" id="chat-empty">請從左側好友列表選擇一位好友開始聊天。</div>
+                            </div>
+                            <div class="chat-input-area">
+                                <input type="text" id="msg-input" placeholder="輸入訊息..." disabled>
+                                <button class="chat-send-btn" id="chat-send-btn" type="button" disabled>傳送</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
-                <div class="chat-box" id="chat-box">
-                    <div class="chat-empty" id="chat-empty">請從好友列表選擇一位好友開始聊天。</div>
-                </div>
-                <div class="chat-input-area">
-                    <input type="text" id="msg-input" placeholder="輸入訊息..." disabled>
-                    <button class="chat-send-btn" id="chat-send-btn" type="button" disabled>傳送</button>
-                </div>
-            </div>
+            </section>
         </div>
     </div>
 
-    <!-- 頭像上傳隱藏輸入 -->
     <script src="menu.js"></script>
     <script type="module">
-        // ===== Firebase 相容模式（由 menu.js 載入）與模組化聊天室 =====
         import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getDatabase, ref, set, push, onValue, remove, get, update, serverTimestamp, query, orderByChild, equalTo, onChildAdded } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        import { getDatabase, ref, set, push, onValue, remove, get, update, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
         // 等待 menu.js 完成 Firebase 初始化
         if (window.raingodFirebaseReady) await window.raingodFirebaseReady;
@@ -335,24 +411,18 @@
             apiKey: "AIzaSyDHb0o6ahdNnvlL3-QQy_yRO_mg4XMqtJk",
             databaseURL: "https://chat-73802-default-rtdb.firebaseio.com"
         };
-        let chatApp;
-        try {
-            chatApp = getApps().find(a => a.name === 'rainChat');
-            if (!chatApp) chatApp = initializeApp(firebaseConfig, 'rainChat');
-        } catch (e) {
-            console.warn('聊天室 Firebase 初始化失敗，可能已存在：', e);
-            chatApp = getApps().find(a => a.name === 'rainChat');
-        }
-        const chatDb = chatApp ? getDatabase(chatApp) : null;
+        let chatApp = getApps().find(a => a.name === 'rainChat');
+        if (!chatApp) chatApp = initializeApp(firebaseConfig, 'rainChat');
+        const chatDb = getDatabase(chatApp);
 
-        // ===== 取得相容模式下的 auth 與 database（menu.js 初始化） =====
         const compatAuth = () => window.firebase?.auth ? window.firebase.auth() : null;
         const compatDb = () => window.firebase?.database ? window.firebase.database() : null;
 
         // ===== DOM =====
         const fallbackAvatar = 'https://raingod0101.github.io/catdragon.png';
-        const content = document.getElementById('profile-content');
         const loginRequired = document.getElementById('login-required');
+        const appArea = document.getElementById('app-area');
+
         const avatarImg = document.getElementById('profile-avatar');
         const avatarBadge = document.getElementById('avatar-unread-badge');
         const avatarEditBtn = document.getElementById('avatar-edit-btn');
@@ -366,6 +436,7 @@
         const searchResults = document.getElementById('search-results');
         const requestList = document.getElementById('request-list');
         const friendList = document.getElementById('friend-list');
+        const chatSidebarFriends = document.getElementById('chat-sidebar-friends');
 
         const chatTitle = document.getElementById('chat-title');
         const chatSubtitle = document.getElementById('chat-subtitle');
@@ -375,15 +446,19 @@
         const chatSendBtn = document.getElementById('chat-send-btn');
         const chatClearFriend = document.getElementById('chat-clear-friend');
 
+        const tabBadgeRequests = document.getElementById('tab-badge-requests');
+        const tabBadgeUnread = document.getElementById('tab-badge-unread');
+
         // ===== 狀態 =====
         let currentUser = null;
         let currentUid = '';
         let currentUsername = '';
-        let chatListeners = [];       // 目前對話的 onValue 取消函式
-        let friendUnreadListeners = []; // 好友未讀監聽取消
-        let activeFriendUid = '';      // 目前打開的私訊好友 uid
-        let friendsCache = {};         // uid -> { name, avatar, email }
-        let unreadCache = {};          // uid -> 未讀數
+        let chatListeners = [];
+        let friendUnreadListeners = [];
+        let activeFriendUid = '';
+        let friendsCache = {};
+        let unreadCache = {};
+        let requestsCount = 0;
 
         // ===== 通用 =====
         function setStatus(id, message, type = '') {
@@ -408,29 +483,29 @@
         function escapeHtml(str) {
             return String(str ?? '').replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
         }
+        function chatIdFor(a, b) { return [a, b].sort().join('__'); }
 
-        // ===== 聊天室資料路徑 =====
-        // users/{username}/friends/{friendUid} = { name, avatar, since }
-        // users/{username}/friend_requests/{fromUsername} = { fromUid, fromName, ts }
-        // private_chats/{chatId}/msgs/{pushId} = { from, to, text, ts }
-        // private_chats/{chatId}/read/{uid} = timestamp
-        // unread 以 private_chats/{chatId}/msgs 中 from != uid 且 ts > read[uid] 計算
-        function chatIdFor(uidA, uidB) {
-            return [uidA, uidB].sort().join('__');
-        }
+        // ===== 分頁切換 =====
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+                btn.classList.add('active');
+                const page = document.getElementById('page-' + btn.dataset.page);
+                if (page) page.classList.add('active');
+                // 切到聊天室時，若有選取好友則滾到底部
+                if (btn.dataset.page === 'chat') {
+                    chatBox.scrollTop = chatBox.scrollHeight;
+                }
+            });
+        });
 
-        // ===== 帳號資料（相容模式）=====
-        function getUserRef(username) {
-            const db = compatDb();
-            return db ? db.ref(`users/${username}`) : null;
-        }
-
-        // 取得使用者公開資料（名稱、頭像、email）
+        // ===== 取得使用者資料 =====
         async function fetchUserProfile(username) {
-            const ref = getUserRef(username);
-            if (!ref) return null;
+            const db = compatDb();
+            if (!db) return null;
             try {
-                const snap = await ref.once('value');
+                const snap = await db.ref(`users/${username}`).once('value');
                 return snap.exists() ? snap.val() : null;
             } catch (e) {
                 console.warn('讀取使用者資料失敗', e);
@@ -438,33 +513,28 @@
             }
         }
 
-        // ===== 初始化個人檔案 =====
+        // ===== 初始化 =====
         async function initProfile(user) {
             currentUser = user;
             currentUid = user.uid;
             currentUsername = user.email ? user.email.split('@')[0] : '';
 
             loginRequired.hidden = true;
-            content.hidden = false;
-            signOutButton.hidden = false;
+            appArea.hidden = false;
 
-            // 頭像與名稱
             avatarImg.src = user.photoURL || fallbackAvatar;
             displayNameInput.value = user.displayName || currentUsername;
 
-            // 從資料庫補齊頭像（若 photoURL 為空，但 users/{username}/profile/avatar 有值）
             const profile = await fetchUserProfile(currentUsername);
             if (profile?.profile?.avatar && !user.photoURL) {
                 avatarImg.src = profile.profile.avatar;
             }
 
-            // 載入好友與申請
             listenFriendRequests();
             listenFriends();
-            listenAllUnread();
         }
 
-        // ===== 頭像更換 =====
+        // ===== 頭像 =====
         avatarEditBtn.addEventListener('click', () => avatarFileInput.click());
         avatarFileInput.addEventListener('change', async () => {
             const file = avatarFileInput.files?.[0];
@@ -484,16 +554,13 @@
                 try {
                     const db = compatDb();
                     if (!db) throw new Error('Firebase 未就緒');
-                    // 儲存到 users/{username}/profile/avatar
                     await db.ref(`users/${currentUsername}/profile/avatar`).set(dataUrl);
-                    // 同時更新 Auth photoURL
                     if (currentUser && typeof currentUser.updateProfile === 'function') {
                         await currentUser.updateProfile({ photoURL: dataUrl });
                         await currentUser.reload();
                     }
                     avatarImg.src = dataUrl;
                     setStatus('avatar-status', '頭像已更新並儲存。', 'ok');
-                    // 同步到好友列表顯示
                     refreshFriendsUI();
                 } catch (e) {
                     console.error(e);
@@ -505,7 +572,7 @@
             reader.readAsDataURL(file);
         });
 
-        // ===== 顯示名稱 =====
+        // ===== 名稱 =====
         nameForm.addEventListener('submit', async e => {
             e.preventDefault();
             const name = displayNameInput.value.trim();
@@ -528,7 +595,7 @@
             }
         });
 
-        // ===== 變更密碼 =====
+        // ===== 密碼 =====
         passwordForm.addEventListener('submit', async e => {
             e.preventDefault();
             if (!currentUser?.email) return;
@@ -573,7 +640,7 @@
             }
         });
 
-        // ===== 好友申請：搜尋 =====
+        // ===== 好友搜尋 =====
         friendSearchBtn.addEventListener('click', async () => {
             const keyword = friendSearchInput.value.trim().toLowerCase();
             searchResults.innerHTML = '';
@@ -590,11 +657,9 @@
                 searchResults.innerHTML = '<li class="profile-help">找不到此帳號。</li>';
                 return;
             }
-            // 檢查是否已是好友
             const db = compatDb();
             const friendSnap = await db.ref(`users/${currentUsername}/friends/${profile.uid}`).once('value').catch(() => null);
             const isFriend = friendSnap?.exists();
-            // 檢查是否已送出申請
             const reqSnap = await db.ref(`users/${keyword}/friend_requests/${currentUsername}`).once('value').catch(() => null);
             const requestSent = reqSnap?.exists();
 
@@ -635,7 +700,6 @@
             if (!db) throw new Error('Firebase 未就緒');
             const myName = currentUser.displayName || currentUsername;
             const myAvatar = currentUser.photoURL || avatarImg.src || fallbackAvatar;
-            // 寫入對方 friend_requests/{我的username}
             await db.ref(`users/${toUsername}/friend_requests/${currentUsername}`).set({
                 fromUid: currentUid,
                 fromName: myName,
@@ -645,7 +709,7 @@
             });
         }
 
-        // ===== 監聽好友申請 =====
+        // ===== 好友申請監聽 =====
         function listenFriendRequests() {
             const db = compatDb();
             if (!db) return;
@@ -654,6 +718,8 @@
                 const val = snap.val() || {};
                 const entries = Object.entries(val);
                 requestList.innerHTML = '';
+                requestsCount = entries.length;
+                updateTabBadges();
                 if (!entries.length) {
                     requestList.innerHTML = '<li class="profile-help" id="request-empty">目前沒有待處理的好友申請。</li>';
                     return;
@@ -702,17 +768,14 @@
             const myName = currentUser.displayName || currentUsername;
             const myAvatar = currentUser.photoURL || avatarImg.src || fallbackAvatar;
             const updates = {};
-            // 我的好友列表加入對方
             updates[`users/${currentUsername}/friends/${fromUid}`] = {
                 name: fromName, avatar: fromAvatar, username: fromUsername,
                 since: window.firebase.database.ServerValue.TIMESTAMP
             };
-            // 對方好友列表加入我
             updates[`users/${fromUsername}/friends/${currentUid}`] = {
                 name: myName, avatar: myAvatar, username: currentUsername,
                 since: window.firebase.database.ServerValue.TIMESTAMP
             };
-            // 移除申請
             updates[`users/${currentUsername}/friend_requests/${fromUsername}`] = null;
             await db.ref().update(updates);
         }
@@ -722,7 +785,7 @@
             await db.ref(`users/${currentUsername}/friend_requests/${fromUsername}`).remove();
         }
 
-        // ===== 監聽好友列表 =====
+        // ===== 好友列表 =====
         function listenFriends() {
             const db = compatDb();
             if (!db) return;
@@ -730,46 +793,66 @@
             ref.on('value', snap => {
                 friendsCache = snap.val() || {};
                 refreshFriendsUI();
+                listenAllUnread();
             });
         }
 
         function refreshFriendsUI() {
+            // 好友頁列表
             friendList.innerHTML = '';
             const entries = Object.entries(friendsCache);
             if (!entries.length) {
                 friendList.innerHTML = '<li class="profile-help" id="friend-empty">尚未加入任何好友。</li>';
-                return;
-            }
-            entries.forEach(([uid, f]) => {
-                const li = document.createElement('li');
-                li.className = 'friend-item' + (uid === activeFriendUid ? ' active' : '');
-                li.innerHTML = `
-                    <img class="friend-avatar" src="${escapeHtml(f.avatar || fallbackAvatar)}" alt="">
-                    <div class="friend-name">${escapeHtml(f.name || f.username || '好友')}</div>
-                    <span class="friend-unread" data-uid="${escapeHtml(uid)}"></span>
-                    <div class="friend-actions">
-                        <button class="mini-btn primary" data-chat-uid="${escapeHtml(uid)}" data-chat-name="${escapeHtml(f.name || f.username || '好友')}" data-chat-avatar="${escapeHtml(f.avatar || fallbackAvatar)}">私訊</button>
-                    </div>`;
-                friendList.appendChild(li);
-            });
-
-            // 更新未讀顯示
-            updateUnreadBadges();
-
-            friendList.querySelectorAll('[data-chat-uid]').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    openPrivateChat(btn.dataset.chatUid, btn.dataset.chatName, btn.dataset.chatAvatar);
+            } else {
+                entries.forEach(([uid, f]) => {
+                    const li = document.createElement('li');
+                    li.className = 'friend-item' + (uid === activeFriendUid ? ' active' : '');
+                    li.innerHTML = `
+                        <img class="friend-avatar" src="${escapeHtml(f.avatar || fallbackAvatar)}" alt="">
+                        <div class="friend-name">${escapeHtml(f.name || f.username || '好友')}</div>
+                        <span class="friend-unread" data-uid="${escapeHtml(uid)}"></span>
+                        <div class="friend-actions">
+                            <button class="mini-btn primary" data-chat-uid="${escapeHtml(uid)}" data-chat-name="${escapeHtml(f.name || f.username || '好友')}" data-chat-avatar="${escapeHtml(f.avatar || fallbackAvatar)}">私訊</button>
+                        </div>`;
+                    friendList.appendChild(li);
                 });
-            });
+                friendList.querySelectorAll('[data-chat-uid]').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        openPrivateChat(btn.dataset.chatUid, btn.dataset.chatName, btn.dataset.chatAvatar);
+                        // 切到聊天室頁籤
+                        switchTab('chat');
+                    });
+                });
+            }
+
+            // 聊天室側邊欄
+            chatSidebarFriends.innerHTML = '';
+            if (!entries.length) {
+                chatSidebarFriends.innerHTML = '<li class="profile-help" style="padding:12px;">尚無好友</li>';
+            } else {
+                entries.forEach(([uid, f]) => {
+                    const li = document.createElement('li');
+                    li.className = 'friend-item' + (uid === activeFriendUid ? ' active' : '');
+                    li.style.cursor = 'pointer';
+                    li.innerHTML = `
+                        <img class="friend-avatar" src="${escapeHtml(f.avatar || fallbackAvatar)}" alt="">
+                        <div class="friend-name">${escapeHtml(f.name || f.username || '好友')}</div>
+                        <span class="friend-unread" data-uid="${escapeHtml(uid)}"></span>`;
+                    li.addEventListener('click', () => {
+                        openPrivateChat(uid, f.name || f.username || '好友', f.avatar || fallbackAvatar);
+                    });
+                    chatSidebarFriends.appendChild(li);
+                });
+            }
+
+            updateUnreadBadges();
         }
 
-        // ===== 未讀計算與監聽 =====
+        // ===== 未讀 =====
         function listenAllUnread() {
-            // 清除舊監聽
             friendUnreadListeners.forEach(fn => fn());
             friendUnreadListeners = [];
             unreadCache = {};
-
             const db = compatDb();
             if (!db) return;
 
@@ -777,11 +860,8 @@
                 const cid = chatIdFor(currentUid, friendUid);
                 const readRef = db.ref(`private_chats/${cid}/read/${currentUid}`);
                 const msgsRef = db.ref(`private_chats/${cid}/msgs`);
-
-                // 使用 onValue 一次讀取並監聽變化
-                const unsub = msgsRef.on('value', snap => {
+                const handler = snap => {
                     const msgs = snap.val() || {};
-                    // 取得最後已讀時間
                     readRef.once('value').then(readSnap => {
                         const lastRead = readSnap.val() || 0;
                         let unread = 0;
@@ -791,21 +871,21 @@
                         unreadCache[friendUid] = unread;
                         updateUnreadBadges();
                     }).catch(() => {});
-                });
-                friendUnreadListeners.push(() => msgsRef.off('value', unsub));
+                };
+                msgsRef.on('value', handler);
+                friendUnreadListeners.push(() => msgsRef.off('value', handler));
             });
         }
 
         function updateUnreadBadges() {
-            // 好友列表上的紅點
-            friendList.querySelectorAll('.friend-unread').forEach(el => {
+            // 好友列表與側邊欄紅點
+            document.querySelectorAll('.friend-unread').forEach(el => {
                 const uid = el.dataset.uid;
                 const count = unreadCache[uid] || 0;
                 el.textContent = count > 99 ? '99+' : String(count);
                 el.classList.toggle('show', count > 0);
             });
-
-            // 頭像上的總未讀
+            // 頭像總未讀
             const total = Object.values(unreadCache).reduce((s, n) => s + n, 0);
             if (total > 0) {
                 avatarBadge.textContent = total > 99 ? '99+' : String(total);
@@ -813,19 +893,29 @@
             } else {
                 avatarBadge.style.display = 'none';
             }
+            // 頁籤徽章
+            tabBadgeUnread.textContent = total > 99 ? '99+' : String(total);
+            tabBadgeUnread.classList.toggle('show', total > 0);
+            updateTabBadges();
         }
 
-        // ===== 私訊聊天 =====
+        function updateTabBadges() {
+            tabBadgeRequests.textContent = requestsCount > 99 ? '99+' : String(requestsCount);
+            tabBadgeRequests.classList.toggle('show', requestsCount > 0);
+        }
+
+        // ===== 聊天室 =====
+        function switchTab(name) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.page === name));
+            document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + name));
+        }
+
         function clearChatListeners() {
             chatListeners.forEach(fn => fn());
             chatListeners = [];
         }
 
         async function openPrivateChat(friendUid, friendName, friendAvatar) {
-            if (!chatDb) {
-                chatBox.innerHTML = '<div class="chat-empty">聊天室資料庫未就緒，請重新整理。</div>';
-                return;
-            }
             activeFriendUid = friendUid;
             clearChatListeners();
             chatTitle.textContent = friendName;
@@ -838,12 +928,9 @@
 
             const cid = chatIdFor(currentUid, friendUid);
             const msgsRef = ref(chatDb, `private_chats/${cid}/msgs`);
-
-            // 監聽訊息
             const unsub = onValue(msgsRef, snap => {
                 const msgs = snap.val() || {};
                 const list = Object.entries(msgs).sort((a, b) => (a[1].ts || 0) - (b[1].ts || 0));
-                // 保留空狀態
                 chatBox.querySelectorAll('.msg-row').forEach(el => el.remove());
                 if (!list.length) {
                     chatEmpty.style.display = 'block';
@@ -860,12 +947,9 @@
                     chatBox.appendChild(div);
                 });
                 chatBox.scrollTop = chatBox.scrollHeight;
-                // 標記已讀
                 markChatRead(cid);
             });
             chatListeners.push(unsub);
-
-            // 好友列表高亮
             refreshFriendsUI();
             markChatRead(cid);
         }
@@ -874,7 +958,6 @@
             if (!chatDb || !currentUid) return;
             try {
                 await set(ref(chatDb, `private_chats/${cid}/read/${currentUid}`), serverTimestamp());
-                // 本地未讀歸零
                 if (activeFriendUid) {
                     unreadCache[activeFriendUid] = 0;
                     updateUnreadBadges();
@@ -897,7 +980,6 @@
             refreshFriendsUI();
         });
 
-        // 傳送訊息
         async function sendMessage() {
             if (!activeFriendUid || !chatDb) return;
             const text = msgInput.value.trim();
@@ -938,26 +1020,24 @@
             return `${d.getMonth()+1}/${d.getDate()} ${time}`;
         }
 
-        // ===== 監聽 Auth 狀態 =====
+        // ===== 初始化 =====
         (async function init() {
             try {
                 if (window.raingodFirebaseReady) await window.raingodFirebaseReady;
                 const user = await window.raingodAuthReady;
                 if (!user) {
                     loginRequired.hidden = false;
-                    content.hidden = true;
-                    signOutButton.hidden = true;
+                    appArea.hidden = true;
                     return;
                 }
                 await initProfile(user);
 
-                // 即時監聽 Auth 變化（登入 / 登出）
                 window.firebase.auth().onAuthStateChanged(async u => {
                     if (u) {
                         await initProfile(u);
                     } else {
                         currentUser = null; currentUid = ''; currentUsername = '';
-                        content.hidden = true; signOutButton.hidden = true;
+                        appArea.hidden = true;
                         loginRequired.hidden = false;
                         clearChatListeners();
                         friendUnreadListeners.forEach(fn => fn());
@@ -965,12 +1045,14 @@
                         friendsCache = {};
                         unreadCache = {};
                         requestList.innerHTML = ''; friendList.innerHTML = '';
+                        chatSidebarFriends.innerHTML = '';
                         searchResults.innerHTML = '';
                         chatBox.querySelectorAll('.msg-row').forEach(el => el.remove());
                         chatEmpty.style.display = 'block';
                         chatClearFriend.hidden = true;
                         msgInput.disabled = true;
                         chatSendBtn.disabled = true;
+                        updateUnreadBadges();
                     }
                 });
             } catch (e) {
