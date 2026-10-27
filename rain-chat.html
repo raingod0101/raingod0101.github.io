@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>好友聊天室 | 雨神</title>
+    <title>個人檔案 × 好友 × 聊天室 | 雨神</title>
     <link rel="stylesheet" href="menu.css">
     <style>
         :root {
@@ -230,18 +230,60 @@
             margin: auto; text-align: center; color: var(--text-gray);
             font-size: 0.92rem; padding: 30px;
         }
-        .msg-row { display: flex; flex-direction: column; width: 100%; }
-        .msg-row.me { align-items: flex-end; }
-        .msg-row.other { align-items: flex-start; }
+
+        /* ===== 訊息列（含頭像）===== */
+        .msg-row {
+            display: flex;
+            align-items: flex-end;
+            gap: 8px;
+            width: 100%;
+        }
+        .msg-row.me { flex-direction: row-reverse; }
+        .msg-avatar {
+            width: 34px; height: 34px; border-radius: 50%;
+            object-fit: cover; background: #fff; flex: 0 0 auto;
+            border: 1px solid var(--border);
+        }
+        .msg-body {
+            display: flex; flex-direction: column;
+            max-width: 78%;
+        }
+        .msg-row.me .msg-body { align-items: flex-end; }
+        .msg-row.other .msg-body { align-items: flex-start; }
         .msg-info { font-size: 11px; color: var(--text-gray); margin-bottom: 3px; padding: 0 5px; }
         .bubble {
             padding: 10px 13px; border-radius: 16px; font-size: 14px;
-            word-break: break-word; max-width: 85%;
+            word-break: break-word;
             box-shadow: 0 1px 2px rgba(0,0,0,0.06);
             white-space: pre-wrap;
+            position: relative;
         }
         .me .bubble { background: var(--me-bg); color: #fff; border-bottom-right-radius: 4px; }
         .other .bubble { background: var(--other-bg); color: #111; border-bottom-left-radius: 4px; }
+        .bubble.recalled {
+            background: transparent !important;
+            color: var(--text-gray) !important;
+            font-style: italic;
+            box-shadow: none;
+            padding: 4px 8px;
+        }
+        /* 收回按鈕（hover 顯示）*/
+        .msg-recall-btn {
+            display: none;
+            margin-top: 3px;
+            font-size: 11px;
+            color: var(--text-gray);
+            background: transparent;
+            border: 0;
+            cursor: pointer;
+            padding: 2px 5px;
+        }
+        .msg-row.me .msg-recall-btn { align-self: flex-end; }
+        .msg-row:hover .msg-recall-btn { display: inline-block; }
+        @media (hover: none) {
+            .msg-row .msg-recall-btn { display: inline-block; opacity: 0.6; }
+        }
+
         .chat-input-area {
             padding: 10px 12px; border-top: 1px solid #eee;
             display: flex; gap: 8px; align-items: center; background: #fff;
@@ -266,6 +308,7 @@
             .tab-btn { font-size: 0.82rem; padding: 10px 4px; }
             .page-wrap { padding: 0 10px; }
             .card { padding: 18px; }
+            .msg-body { max-width: 82%; }
         }
     </style>
 </head>
@@ -276,14 +319,14 @@
 
     <div id="app-area" hidden>
         <div class="tab-bar" role="tablist">
-            <button class="tab-btn active" data-page="profile" role="tab">個人檔案</button>
+            <button class="tab-btn" data-page="profile" role="tab">個人檔案</button>
             <button class="tab-btn" data-page="friends" role="tab">好友 <span class="tab-badge" id="tab-badge-requests"></span></button>
-            <button class="tab-btn" data-page="chat" role="tab">聊天室 <span class="tab-badge" id="tab-badge-unread"></span></button>
+            <button class="tab-btn active" data-page="chat" role="tab">聊天室 <span class="tab-badge" id="tab-badge-unread"></span></button>
         </div>
 
         <div class="page-wrap">
             <!-- ===== 個人檔案 ===== -->
-            <section class="page active" id="page-profile">
+            <section class="page" id="page-profile">
                 <div class="page-heading">
                     <h1>個人檔案</h1>
                     <button id="sign-out" class="profile-button secondary" type="button">登出</button>
@@ -370,7 +413,7 @@
             </section>
 
             <!-- ===== 聊天室 ===== -->
-            <section class="page" id="page-chat">
+            <section class="page active" id="page-chat">
                 <div class="chat-panel">
                     <div class="chat-layout">
                         <aside class="chat-sidebar">
@@ -448,12 +491,15 @@
             var currentUser = null;
             var currentUid = '';
             var currentUsername = '';
+            var currentAvatar = fallbackAvatar;
             var chatListeners = [];
             var friendUnreadListeners = [];
             var activeFriendUid = '';
+            var activeFriendName = '';
             var friendsCache = {};
             var unreadCache = {};
             var requestsCount = 0;
+            var chatInitialized = false;
 
             // ===== 工具 =====
             function db() { return window.firebase.database(); }
@@ -485,6 +531,17 @@
             }
             function chatIdFor(a, b) {
                 return [a, b].sort().join('__');
+            }
+            function formatTime(ts) {
+                if (!ts) return '';
+                var d = new Date(ts);
+                var now = new Date();
+                var time = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+                if (d.toDateString() === now.toDateString()) return '今天 ' + time;
+                var yesterday = new Date(now);
+                yesterday.setDate(now.getDate() - 1);
+                if (d.toDateString() === yesterday.toDateString()) return '昨天 ' + time;
+                return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + time;
             }
 
             // ===== 分頁 =====
@@ -539,13 +596,26 @@
                 displayNameInput.value = user.displayName || currentUsername;
 
                 fetchUserProfile(currentUsername, function(profile) {
-                    if (profile && profile.profile && profile.profile.avatar) {
-                        avatarImg.src = profile.profile.avatar;
+                    if (profile && profile.profile) {
+                        if (profile.profile.avatar) {
+                            avatarImg.src = profile.profile.avatar;
+                            currentAvatar = profile.profile.avatar;
+                        }
+                        if (profile.profile.displayName) {
+                            displayNameInput.value = profile.profile.displayName;
+                        }
                     }
                 });
 
                 listenFriendRequests();
                 listenFriends();
+
+                // 一進來先切到聊天室
+                if (!chatInitialized) {
+                    chatInitialized = true;
+                    switchTab('chat');
+                    chatBox.scrollTop = chatBox.scrollHeight;
+                }
             }
 
             // ===== 頭像 =====
@@ -572,6 +642,7 @@
                             return;
                         }
                         avatarImg.src = dataUrl;
+                        currentAvatar = dataUrl;
                         setStatus('avatar-status', '頭像已更新並儲存。', 'ok');
                         refreshFriendsUI();
                     });
@@ -591,6 +662,8 @@
                 setFormDisabled(nameForm, true);
                 setStatus('name-status', '正在儲存…');
                 currentUser.updateProfile({ displayName: name }).then(function() {
+                    return db().ref('users/' + currentUsername + '/profile/displayName').set(name);
+                }).then(function() {
                     return currentUser.reload();
                 }).then(function() {
                     var navAvatar = document.getElementById('user-avatar');
@@ -705,7 +778,7 @@
 
             function sendFriendRequest(toUsername, toUid, toName) {
                 var myName = currentUser.displayName || currentUsername;
-                var myAvatar = currentUser.photoURL || avatarImg.src || fallbackAvatar;
+                var myAvatar = currentAvatar || fallbackAvatar;
                 return db().ref('users/' + toUsername + '/friend_requests/' + currentUsername).set({
                     fromUid: currentUid,
                     fromName: myName,
@@ -772,7 +845,7 @@
 
             function acceptFriendRequest(fromUsername, fromUid, fromName, fromAvatar) {
                 var myName = currentUser.displayName || currentUsername;
-                var myAvatar = currentUser.photoURL || avatarImg.src || fallbackAvatar;
+                var myAvatar = currentAvatar || fallbackAvatar;
                 var updates = {};
                 updates['users/' + currentUsername + '/friends/' + fromUid] = {
                     name: fromName, avatar: fromAvatar, username: fromUsername,
@@ -898,7 +971,7 @@
                             var unread = 0;
                             Object.keys(msgs).forEach(function(id) {
                                 var m = msgs[id];
-                                if (m.from !== currentUid && (m.ts || 0) > lastRead) unread++;
+                                if (m.from !== currentUid && (m.ts || 0) > lastRead && !m.recalled) unread++;
                             });
                             unreadCache[friendUid] = unread;
                             updateUnreadBadges();
@@ -940,6 +1013,7 @@
 
             function openPrivateChat(friendUid, friendName, friendAvatar) {
                 activeFriendUid = friendUid;
+                activeFriendName = friendName;
                 clearChatListeners();
                 chatTitle.textContent = friendName;
                 chatSubtitle.textContent = '私訊對話';
@@ -964,14 +1038,62 @@
                     }
                     chatEmpty.style.display = 'none';
                     list.forEach(function(pair) {
+                        var id = pair[0];
                         var m = pair[1];
                         var isMe = m.from === currentUid;
-                        var div = document.createElement('div');
-                        div.className = 'msg-row ' + (isMe ? 'me' : 'other');
-                        div.innerHTML =
-                            '<div class="msg-info">' + escapeHtml(m.name || (isMe ? currentUsername : friendName)) + ' • ' + formatTime(m.ts) + '</div>' +
-                            '<div class="bubble">' + escapeHtml(m.text) + '</div>';
-                        chatBox.appendChild(div);
+                        var row = document.createElement('div');
+                        row.className = 'msg-row ' + (isMe ? 'me' : 'other');
+
+                        var avatarUrl = m.fromAvatar || (isMe ? currentAvatar : friendAvatar) || fallbackAvatar;
+                        var name = m.name || (isMe ? (currentUser.displayName || currentUsername) : friendName);
+
+                        var avatarEl = document.createElement('img');
+                        avatarEl.className = 'msg-avatar';
+                        avatarEl.src = avatarUrl;
+                        avatarEl.alt = '';
+
+                        var bodyEl = document.createElement('div');
+                        bodyEl.className = 'msg-body';
+
+                        if (m.recalled) {
+                            var info = document.createElement('div');
+                            info.className = 'msg-info';
+                            info.textContent = name + ' • ' + formatTime(m.ts);
+                            bodyEl.appendChild(info);
+                            var recalled = document.createElement('div');
+                            recalled.className = 'bubble recalled';
+                            recalled.textContent = isMe ? '你收回了一則訊息' : (name + ' 收回了一則訊息');
+                            bodyEl.appendChild(recalled);
+                        } else {
+                            var info2 = document.createElement('div');
+                            info2.className = 'msg-info';
+                            info2.textContent = name + ' • ' + formatTime(m.ts);
+                            bodyEl.appendChild(info2);
+                            var bubble = document.createElement('div');
+                            bubble.className = 'bubble';
+                            bubble.textContent = m.text;
+                            bodyEl.appendChild(bubble);
+                        }
+
+                        // 收回按鈕（只有自己發的、且未收回才顯示）
+                        if (isMe && !m.recalled) {
+                            var recallBtn = document.createElement('button');
+                            recallBtn.type = 'button';
+                            recallBtn.className = 'msg-recall-btn';
+                            recallBtn.textContent = '收回';
+                            recallBtn.addEventListener('click', function() {
+                                if (!confirm('確定要收回這則訊息嗎？')) return;
+                                db().ref('private_chats/' + cid + '/msgs/' + id + '/recalled').set(true).catch(function(e) {
+                                    console.error(e);
+                                    alert('收回失敗：' + errorMessage(e));
+                                });
+                            });
+                            bodyEl.appendChild(recallBtn);
+                        }
+
+                        row.appendChild(avatarEl);
+                        row.appendChild(bodyEl);
+                        chatBox.appendChild(row);
                     });
                     chatBox.scrollTop = chatBox.scrollHeight;
                     markChatRead(cid);
@@ -981,7 +1103,6 @@
                     return function() { ref.off('value', handler); };
                 })(msgsRef));
 
-                // 更新選取狀態
                 chatMobileSelect.value = friendUid;
                 refreshFriendsUI();
                 markChatRead(cid);
@@ -1001,6 +1122,7 @@
 
             chatClearFriend.addEventListener('click', function() {
                 activeFriendUid = '';
+                activeFriendName = '';
                 clearChatListeners();
                 chatTitle.textContent = '聊天室';
                 chatSubtitle.textContent = '請選擇一位好友開始聊天。';
@@ -1017,12 +1139,17 @@
             function sendMessage() {
                 if (!activeFriendUid) return;
                 var text = msgInput.value.trim();
-                if (!text) return;
+                if (!text) {
+                    msgInput.focus();
+                    return;
+                }
                 var cid = chatIdFor(currentUid, activeFriendUid);
+                chatSendBtn.disabled = true;
                 db().ref('private_chats/' + cid + '/msgs').push({
                     from: currentUid,
                     to: activeFriendUid,
                     name: currentUser.displayName || currentUsername,
+                    fromAvatar: currentAvatar || fallbackAvatar,
                     text: text,
                     ts: window.firebase.database.ServerValue.TIMESTAMP
                 }).then(function() {
@@ -1031,6 +1158,8 @@
                 }).catch(function(e) {
                     console.error('訊息傳送失敗', e.code, e.message);
                     alert('訊息傳送失敗：' + (e.code || e.message || '未知錯誤'));
+                }).finally(function() {
+                    chatSendBtn.disabled = false;
                 });
             }
 
@@ -1041,18 +1170,6 @@
                     sendMessage();
                 }
             });
-
-            function formatTime(ts) {
-                if (!ts) return '';
-                var d = new Date(ts);
-                var now = new Date();
-                var time = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
-                if (d.toDateString() === now.toDateString()) return '今天 ' + time;
-                var yesterday = new Date(now);
-                yesterday.setDate(now.getDate() - 1);
-                if (d.toDateString() === yesterday.toDateString()) return '昨天 ' + time;
-                return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + time;
-            }
 
             // ===== 啟動 =====
             ready.then(function() {
@@ -1068,7 +1185,7 @@
                     if (u) {
                         initProfile(u);
                     } else {
-                        currentUser = null; currentUid = ''; currentUsername = '';
+                        currentUser = null; currentUid = ''; currentUsername = ''; currentAvatar = fallbackAvatar;
                         appArea.hidden = true;
                         loginRequired.hidden = false;
                         clearChatListeners();
