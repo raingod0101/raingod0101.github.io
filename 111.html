@@ -1291,1172 +1291,671 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove };
   /* ============================================================
    ★★★ 精緻守衛造型（替換原本的醜圓形）★★★
    ============================================================ */
-function drawGuardAnimal(g, biomeIdx, s, time, alert) {
-  const t = time;
-  g.save();
+/* ============================================================
+ * 守卫精致造型系统 —— 每个生物群系独立绘制，绝不重复
+ * 用法：替换原 drawGuardAnimal 函数，或放在其前面作为外挂
+ * ============================================================ */
 
-  // 地面陰影
-  g.globalAlpha = 0.22;
-  g.fillStyle = '#000';
-  g.beginPath();
-  g.ellipse(0, s * 1.5, s * 1.02, s * 0.26, 0, 0, Math.PI * 2);
-  g.fill();
-  g.globalAlpha = 1;
-
-  // 呼吸浮動 + 警戒抖動
-  const bob = Math.sin(t * 2.2) * s * 0.05;
-  const shake = alert ? Math.sin(t * 42) * 0.035 : 0;
-  g.translate(0, bob);
-  g.rotate(shake);
-
-  const fns = [
-    guardChicken, guardHellhound, guardBeluga, guardTRex,
-    guardYeti, guardSkeletonKing, guardSakuraSpirit, guardTitan,
-    guardAngel, guardShadowLord, guardChaosLord, guardVoidDevourer
-  ];
-  const f = fns[((biomeIdx % fns.length) + fns.length) % fns.length];
-  try { f(g, s, t, alert); }
-  catch (e) {
-    g.fillStyle = WORLD.biomes[biomeIdx] ? WORLD.biomes[biomeIdx].color : '#888';
-    g.beginPath(); g.arc(0, 0, s, 0, Math.PI * 2); g.fill();
+const GUARD_DRAWERS = (() => {
+  // ---- 通用绘制小工具 ----
+  function ellipse(g, x, y, rx, ry, rot = 0) {
+    g.beginPath(); g.ellipse(x, y, rx, ry, rot, 0, Math.PI * 2); g.fill();
   }
-  g.restore();
-}
-
-/* ── 0. 森林：公雞守衛 ── */
-function guardChicken(g, s, t, alert) {
-  const flap = Math.sin(t * 6) * (alert ? 1 : 0.35);
-  g.save();
-
-  // 腿
-  g.strokeStyle = '#d99225';
-  g.lineWidth = s * 0.13;
-  g.lineCap = 'round';
-  g.beginPath();
-  g.moveTo(-s * 0.28, s * 0.55); g.lineTo(-s * 0.28, s * 1.15);
-  g.moveTo(s * 0.28, s * 0.55);  g.lineTo(s * 0.28, s * 1.15);
-  g.stroke();
-
-  // 腳爪
-  g.lineWidth = s * 0.1;
-  g.beginPath();
-  [-0.28, 0.28].forEach(fx => {
-    g.moveTo(fx * s, s * 1.15); g.lineTo((fx - 0.16) * s, s * 1.3);
-    g.moveTo(fx * s, s * 1.15); g.lineTo(fx * s, s * 1.32);
-    g.moveTo(fx * s, s * 1.15); g.lineTo((fx + 0.16) * s, s * 1.3);
-  });
-  g.stroke();
-
-  // 尾羽
-  g.fillStyle = '#efe8d2';
-  g.strokeStyle = '#b3a67e';
-  g.lineWidth = s * 0.07;
-  g.beginPath();
-  g.moveTo(-s * 0.72, s * 0.05);
-  g.quadraticCurveTo(-s * 1.35, -s * 0.55, -s * 1.05, -s * 1.0);
-  g.quadraticCurveTo(-s * 0.95, -s * 0.45, -s * 0.5, -s * 0.3);
-  g.closePath();
-  g.fill(); g.stroke();
-
-  // 身體
-  const bodyG = g.createRadialGradient(-s * 0.28, -s * 0.28, s * 0.1, 0, s * 0.05, s * 1.0);
-  bodyG.addColorStop(0, '#ffffff');
-  bodyG.addColorStop(0.62, '#f7f2e3');
-  bodyG.addColorStop(1, '#cec3a1');
-  g.fillStyle = bodyG;
-  g.strokeStyle = '#b0a276';
-  g.lineWidth = s * 0.085;
-  g.beginPath();
-  g.ellipse(0, s * 0.08, s * 0.9, s * 0.76, -0.06, 0, Math.PI * 2);
-  g.fill(); g.stroke();
-
-  // 翅膀
-  g.save();
-  g.translate(-s * 0.5, s * 0.02);
-  g.rotate(-0.4 + flap * 0.55);
-  const wingG = g.createLinearGradient(-s * 0.35, 0, s * 0.35, 0);
-  wingG.addColorStop(0, '#fdf9ec');
-  wingG.addColorStop(1, '#d3c7a3');
-  g.fillStyle = wingG;
-  g.strokeStyle = '#b0a276';
-  g.lineWidth = s * 0.075;
-  g.beginPath();
-  g.ellipse(0, 0, s * 0.34, s * 0.5, 0.28, 0, Math.PI * 2);
-  g.fill(); g.stroke();
-  g.restore();
-
-  // 頭
-  const headG = g.createRadialGradient(s * 0.3, -s * 0.85, s * 0.08, s * 0.42, -s * 0.6, s * 0.55);
-  headG.addColorStop(0, '#ffffff');
-  headG.addColorStop(1, '#f0ead8');
-  g.fillStyle = headG;
-  g.strokeStyle = '#c2b591';
-  g.lineWidth = s * 0.075;
-  g.beginPath();
-  g.arc(s * 0.42, -s * 0.62, s * 0.45, 0, Math.PI * 2);
-  g.fill(); g.stroke();
-
-  // 雞冠
-  g.fillStyle = '#e2372f';
-  g.strokeStyle = '#a51f18';
-  g.lineWidth = s * 0.05;
-  g.beginPath();
-  g.moveTo(s * 0.1, -s * 0.95);
-  g.quadraticCurveTo(s * 0.2, -s * 1.36, s * 0.4, -s * 1.0);
-  g.quadraticCurveTo(s * 0.52, -s * 1.42, s * 0.68, -s * 1.0);
-  g.quadraticCurveTo(s * 0.8, -s * 0.92, s * 0.72, -s * 0.85);
-  g.lineTo(s * 0.12, -s * 0.85);
-  g.closePath();
-  g.fill(); g.stroke();
-
-  // 肉垂
-  g.fillStyle = '#e2372f';
-  g.strokeStyle = '#a51f18';
-  g.lineWidth = s * 0.05;
-  g.beginPath();
-  g.ellipse(s * 0.75, -s * 0.34, s * 0.11, s * 0.17, 0.2, 0, Math.PI * 2);
-  g.fill(); g.stroke();
-
-  // 喙
-  g.fillStyle = '#f2a72a';
-  g.strokeStyle = '#b9761a';
-  g.lineWidth = s * 0.055;
-  g.beginPath();
-  g.moveTo(s * 0.82, -s * 0.68);
-  g.lineTo(s * 1.18, -s * 0.55);
-  g.lineTo(s * 0.82, -s * 0.42);
-  g.closePath();
-  g.fill(); g.stroke();
-
-  // 眼睛
-  g.fillStyle = '#241a10';
-  g.beginPath(); g.arc(s * 0.56, -s * 0.74, s * 0.095, 0, Math.PI * 2); g.fill();
-  g.fillStyle = 'rgba(255,255,255,0.95)';
-  g.beginPath(); g.arc(s * 0.53, -s * 0.78, s * 0.035, 0, Math.PI * 2); g.fill();
-
-  g.restore();
-}
-
-/* ── 1. 火山：地獄犬 ── */
-function guardHellhound(g, s, t, alert) {
-  g.save();
-
-  // 火焰鬃毛
-  for (let i = 0; i < 10; i++) {
-    const a = -Math.PI * 0.95 + (i / 9) * Math.PI * 1.9;
-    const fx = Math.cos(a) * s * 0.95;
-    const fy = Math.sin(a) * s * 0.86 - s * 0.15;
-    const fl = s * (0.42 + Math.sin(t * 9 + i * 1.7) * 0.14);
-    const fg = g.createRadialGradient(fx, fy, 0, fx, fy, fl);
-    fg.addColorStop(0, 'rgba(255,245,170,0.95)');
-    fg.addColorStop(0.4, 'rgba(255,150,40,0.8)');
-    fg.addColorStop(1, 'rgba(220,40,0,0)');
-    g.fillStyle = fg;
-    g.beginPath(); g.arc(fx, fy, fl, 0, Math.PI * 2); g.fill();
+  function strokeEllipse(g, x, y, rx, ry, rot = 0) {
+    g.beginPath(); g.ellipse(x, y, rx, ry, rot, 0, Math.PI * 2); g.stroke();
   }
-
-  // 尾巴
-  g.strokeStyle = '#2a0a0a';
-  g.lineWidth = s * 0.22;
-  g.lineCap = 'round';
-  g.beginPath();
-  g.moveTo(s * 0.6, s * 0.25);
-  g.quadraticCurveTo(s * 1.25, s * 0.1, s * 1.15, -s * 0.45);
-  g.stroke();
-  const tg = g.createRadialGradient(s * 1.15, -s * 0.5, 0, s * 1.15, -s * 0.5, s * 0.3);
-  tg.addColorStop(0, 'rgba(255,230,120,0.95)');
-  tg.addColorStop(1, 'rgba(255,90,0,0)');
-  g.fillStyle = tg;
-  g.beginPath(); g.arc(s * 1.15, -s * 0.5, s * 0.3, 0, Math.PI * 2); g.fill();
-
-  // 身體
-  const bodyG = g.createRadialGradient(-s * 0.2, -s * 0.25, s * 0.1, 0, s * 0.15, s * 1.1);
-  bodyG.addColorStop(0, '#6a2626');
-  bodyG.addColorStop(0.55, '#3a1212');
-  bodyG.addColorStop(1, '#170505');
-  g.fillStyle = bodyG;
-  g.beginPath(); g.ellipse(0, s * 0.18, s * 0.88, s * 0.66, 0, 0, Math.PI * 2); g.fill();
-  g.strokeStyle = 'rgba(255,110,40,0.35)';
-  g.lineWidth = s * 0.05; g.stroke();
-
-  // 腿
-  [-0.48, 0.48].forEach((lx, i) => {
-    g.fillStyle = '#1f0808';
-    g.beginPath();
-    g.ellipse(lx * s, s * 0.92 + Math.sin(t * 3 + i) * s * 0.03, s * 0.17, s * 0.3, 0, 0, Math.PI * 2);
-    g.fill();
-    g.fillStyle = '#401414';
-    g.beginPath(); g.ellipse(lx * s, s * 1.15, s * 0.24, s * 0.12, 0, 0, Math.PI * 2); g.fill();
-  });
-
-  // 耳朵
-  g.fillStyle = '#3a1212';
-  g.beginPath();
-  g.moveTo(-s * 0.58, -s * 0.72); g.lineTo(-s * 0.78, -s * 1.35); g.lineTo(-s * 0.2, -s * 0.9); g.closePath();
-  g.moveTo(s * 0.58, -s * 0.72);  g.lineTo(s * 0.78, -s * 1.35);  g.lineTo(s * 0.2, -s * 0.9);  g.closePath();
-  g.fill();
-
-  // 頭
-  const headG = g.createRadialGradient(-s * 0.15, -s * 0.75, s * 0.08, 0, -s * 0.5, s * 0.72);
-  headG.addColorStop(0, '#7a2e2e');
-  headG.addColorStop(0.6, '#4a1616');
-  headG.addColorStop(1, '#220808');
-  g.fillStyle = headG;
-  g.beginPath(); g.ellipse(0, -s * 0.5, s * 0.6, s * 0.55, 0, 0, Math.PI * 2); g.fill();
-
-  // 口鼻
-  g.fillStyle = '#2a0c0c';
-  g.beginPath(); g.ellipse(0, -s * 0.2, s * 0.36, s * 0.27, 0, 0, Math.PI * 2); g.fill();
-  g.fillStyle = '#0c0303';
-  g.beginPath(); g.ellipse(0, -s * 0.3, s * 0.12, s * 0.085, 0, 0, Math.PI * 2); g.fill();
-
-  // 獠牙
-  g.fillStyle = '#fff6dc';
-  g.beginPath();
-  g.moveTo(-s * 0.21, -s * 0.06); g.lineTo(-s * 0.15, s * 0.11); g.lineTo(-s * 0.07, -s * 0.04); g.closePath();
-  g.moveTo(s * 0.21, -s * 0.06);  g.lineTo(s * 0.15, s * 0.11);  g.lineTo(s * 0.07, -s * 0.04);  g.closePath();
-  g.fill();
-
-  // 眼睛
-  const ec = alert ? '#ff2a08' : '#ff8a20';
-  [-0.26, 0.26].forEach(ex => {
-    g.save();
-    g.shadowBlur = s * 0.55; g.shadowColor = ec;
-    g.fillStyle = ec;
-    g.beginPath(); g.ellipse(ex * s, -s * 0.6, s * 0.115, s * 0.085, 0, 0, Math.PI * 2); g.fill();
-    g.restore();
-    g.fillStyle = '#2a0000';
-    g.beginPath(); g.ellipse(ex * s, -s * 0.6, s * 0.032, s * 0.07, 0, 0, Math.PI * 2); g.fill();
-  });
-
-  g.restore();
-}
-
-/* ── 2. 深淵：白鯨 ── */
-function guardBeluga(g, s, t, alert) {
-  g.save();
-  const sway = Math.sin(t * 1.6) * 0.14;
-
-  // 尾鰭
-  g.save();
-  g.translate(s * 0.72, s * 0.1);
-  g.rotate(sway);
-  const tailG = g.createLinearGradient(0, 0, s * 0.9, 0);
-  tailG.addColorStop(0, '#e6f1fa');
-  tailG.addColorStop(1, '#b7d1e6');
-  g.fillStyle = tailG;
-  g.strokeStyle = '#8fb0c9';
-  g.lineWidth = s * 0.06;
-  g.beginPath();
-  g.moveTo(0, 0);
-  g.quadraticCurveTo(s * 0.45, -s * 0.55, s * 0.9, -s * 0.5);
-  g.quadraticCurveTo(s * 0.55, 0, s * 0.9, s * 0.5);
-  g.quadraticCurveTo(s * 0.45, s * 0.55, 0, 0);
-  g.closePath();
-  g.fill(); g.stroke();
-  g.restore();
-
-  // 身體
-  const bodyG = g.createRadialGradient(-s * 0.3, -s * 0.4, s * 0.1, -s * 0.1, 0, s * 1.25);
-  bodyG.addColorStop(0, '#ffffff');
-  bodyG.addColorStop(0.55, '#eef6fc');
-  bodyG.addColorStop(1, '#b6cfe3');
-  g.fillStyle = bodyG;
-  g.strokeStyle = '#8fb0c9';
-  g.lineWidth = s * 0.075;
-  g.beginPath();
-  g.ellipse(-s * 0.05, 0, s * 1.0, s * 0.7, -0.05, 0, Math.PI * 2);
-  g.fill(); g.stroke();
-
-  // 胸鰭
-  g.save();
-  g.translate(-s * 0.05, s * 0.36);
-  g.rotate(Math.sin(t * 2.4) * 0.18);
-  const finG = g.createLinearGradient(0, 0, -s * 0.5, s * 0.25);
-  finG.addColorStop(0, '#eaf4fb');
-  finG.addColorStop(1, '#c3d9e9');
-  g.fillStyle = finG;
-  g.strokeStyle = '#8fb0c9';
-  g.lineWidth = s * 0.055;
-  g.beginPath();
-  g.ellipse(0, 0, s * 0.4, s * 0.17, -0.55, 0, Math.PI * 2);
-  g.fill(); g.stroke();
-  g.restore();
-
-  // 頭部隆起
-  const headG = g.createRadialGradient(-s * 0.85, -s * 0.45, s * 0.08, -s * 0.62, -s * 0.1, s * 0.72);
-  headG.addColorStop(0, '#ffffff');
-  headG.addColorStop(1, '#d8e8f4');
-  g.fillStyle = headG;
-  g.beginPath(); g.arc(-s * 0.6, -s * 0.08, s * 0.58, 0, Math.PI * 2); g.fill();
-
-  // 眼睛
-  g.fillStyle = '#2c4a63';
-  g.beginPath(); g.arc(-s * 0.86, -s * 0.2, s * 0.085, 0, Math.PI * 2); g.fill();
-  g.fillStyle = 'rgba(255,255,255,0.95)';
-  g.beginPath(); g.arc(-s * 0.89, -s * 0.24, s * 0.03, 0, Math.PI * 2); g.fill();
-
-  // 微笑
-  g.strokeStyle = '#4a6b85';
-  g.lineWidth = s * 0.055;
-  g.lineCap = 'round';
-  g.beginPath();
-  g.moveTo(-s * 1.04, -s * 0.02);
-  g.quadraticCurveTo(-s * 0.9, s * 0.18, -s * 0.74, -s * 0.02);
-  g.stroke();
-
-  // 噴氣孔
-  g.fillStyle = '#a9c4d8';
-  g.beginPath(); g.ellipse(-s * 0.52, -s * 0.6, s * 0.09, s * 0.045, -0.2, 0, Math.PI * 2); g.fill();
-
-  g.restore();
-}
-
-/* ── 3. 史前：暴龍 ── */
-function guardTRex(g, s, t, alert) {
-  g.save();
-
-  // 尾巴
-  const tailG = g.createLinearGradient(s * 0.5, 0, s * 1.6, s * 0.3);
-  tailG.addColorStop(0, '#5c8a38');
-  tailG.addColorStop(1, '#3d6323');
-  g.fillStyle = tailG;
-  g.beginPath();
-  g.moveTo(s * 0.45, -s * 0.35);
-  g.quadraticCurveTo(s * 1.35, -s * 0.2, s * 1.62, s * 0.3);
-  g.quadraticCurveTo(s * 1.15, s * 0.36, s * 0.5, s * 0.42);
-  g.closePath();
-  g.fill();
-
-  // 腿
-  [-0.42, 0.42].forEach((lx, i) => {
-    const off = Math.sin(t * 3 + i * Math.PI) * s * 0.06;
-    g.fillStyle = '#4d7a2e';
-    g.beginPath();
-    g.ellipse(lx * s + off, s * 0.95, s * 0.2, s * 0.34, 0, 0, Math.PI * 2);
-    g.fill();
-    g.fillStyle = '#3a5e22';
-    g.beginPath(); g.ellipse(lx * s + off, s * 1.25, s * 0.26, s * 0.13, 0, 0, Math.PI * 2); g.fill();
-  });
-
-  // 身體
-  const bodyG = g.createRadialGradient(-s * 0.25, -s * 0.35, s * 0.1, 0, s * 0.05, s * 1.2);
-  bodyG.addColorStop(0, '#8dc25a');
-  bodyG.addColorStop(0.55, '#5c8a38');
-  bodyG.addColorStop(1, '#38591f');
-  g.fillStyle = bodyG;
-  g.strokeStyle = '#2d4a18';
-  g.lineWidth = s * 0.07;
-  g.beginPath();
-  g.ellipse(0, s * 0.1, s * 0.88, s * 0.78, 0, 0, Math.PI * 2);
-  g.fill(); g.stroke();
-
-  // 腹部紋路
-  g.strokeStyle = 'rgba(180,220,130,0.6)';
-  g.lineWidth = s * 0.07;
-  g.lineCap = 'round';
-  for (let i = 0; i < 3; i++) {
-    g.beginPath();
-    g.moveTo(-s * 0.35 + i * s * 0.3, s * 0.28);
-    g.quadraticCurveTo(-s * 0.3 + i * s * 0.3, s * 0.48, -s * 0.2 + i * s * 0.3, s * 0.62);
-    g.stroke();
+  function circle(g, x, y, r) { g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill(); }
+  function strokeCircle(g, x, y, r) { g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.stroke(); }
+  function poly(g, pts, close = true) {
+    g.beginPath(); g.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
+    if (close) g.closePath();
   }
-
-  // 小短手
-  g.strokeStyle = '#4d7a2e';
-  g.lineWidth = s * 0.13;
-  g.lineCap = 'round';
-  g.beginPath();
-  g.moveTo(-s * 0.55, s * 0.05); g.lineTo(-s * 0.85, s * 0.2);
-  g.moveTo(s * 0.55, s * 0.05);  g.lineTo(s * 0.85, s * 0.2);
-  g.stroke();
-
-  // 頭
-  const headG = g.createRadialGradient(-s * 0.4, -s * 0.85, s * 0.1, 0, -s * 0.6, s * 1.0);
-  headG.addColorStop(0, '#9ad264');
-  headG.addColorStop(0.6, '#5c8a38');
-  headG.addColorStop(1, '#35561d');
-  g.fillStyle = headG;
-  g.strokeStyle = '#2d4a18';
-  g.lineWidth = s * 0.075;
-  g.beginPath();
-  g.moveTo(-s * 0.72, -s * 0.45);
-  g.quadraticCurveTo(-s * 0.85, -s * 1.15, 0, -s * 1.2);
-  g.quadraticCurveTo(s * 0.7, -s * 1.15, s * 0.95, -s * 0.55);
-  g.quadraticCurveTo(s * 1.15, -s * 0.15, s * 0.72, -s * 0.1);
-  g.quadraticCurveTo(s * 0.2, s * 0.0, -s * 0.5, -s * 0.1);
-  g.closePath();
-  g.fill(); g.stroke();
-
-  // 嘴
-  g.fillStyle = '#2a0e0e';
-  g.beginPath();
-  g.moveTo(-s * 0.55, -s * 0.45);
-  g.quadraticCurveTo(s * 0.25, -s * 0.3, s * 0.95, -s * 0.45);
-  g.quadraticCurveTo(s * 0.4, -s * 0.05, -s * 0.5, -s * 0.2);
-  g.closePath();
-  g.fill();
-
-  // 牙齒
-  g.fillStyle = '#fffdf0';
-  for (let i = 0; i < 7; i++) {
-    const tx = -s * 0.45 + i * s * 0.2;
-    const ty = -s * 0.42 + (i / 7) * s * 0.12;
-    g.beginPath();
-    g.moveTo(tx, ty);
-    g.lineTo(tx + s * 0.06, ty + s * 0.13);
-    g.lineTo(tx + s * 0.12, ty);
-    g.closePath();
-    g.fill();
+  function radial(g, x, y, r0, r1, c0, c1) {
+    const grd = g.createRadialGradient(x, y, r0, x, y, r1);
+    grd.addColorStop(0, c0); grd.addColorStop(1, c1);
+    return grd;
   }
-
-  // 眼睛
-  g.save();
-  g.shadowBlur = s * 0.35; g.shadowColor = alert ? '#ff3a10' : '#ffd030';
-  g.fillStyle = alert ? '#ff5522' : '#ffe25a';
-  g.beginPath(); g.ellipse(s * 0.42, -s * 0.82, s * 0.14, s * 0.11, -0.2, 0, Math.PI * 2); g.fill();
-  g.restore();
-  g.fillStyle = '#1a0d05';
-  g.beginPath(); g.ellipse(s * 0.44, -s * 0.82, s * 0.045, s * 0.085, 0, 0, Math.PI * 2); g.fill();
-
-  // 鼻孔
-  g.fillStyle = '#2a4a15';
-  g.beginPath(); g.ellipse(s * 0.82, -s * 0.72, s * 0.05, s * 0.03, 0, 0, Math.PI * 2); g.fill();
-
-  g.restore();
-}
-
-/* ── 4. 冰河：雪怪 ── */
-function guardYeti(g, s, t, alert) {
-  g.save();
-
-  // 手臂
-  [-1, 1].forEach(dir => {
-    g.save();
-    g.translate(dir * s * 0.7, s * 0.05);
-    g.rotate(dir * (0.3 + Math.sin(t * 2.6 + dir) * 0.2));
-    g.fillStyle = '#dfeaf3';
-    g.strokeStyle = '#9cb4c7';
-    g.lineWidth = s * 0.07;
-    g.beginPath(); g.ellipse(0, 0, s * 0.24, s * 0.55, 0, 0, Math.PI * 2); g.fill(); g.stroke();
-    g.restore();
-  });
-
-  // 腿
-  [-0.35, 0.35].forEach(lx => {
-    g.fillStyle = '#d5e3ef';
-    g.strokeStyle = '#9cb4c7';
-    g.lineWidth = s * 0.07;
-    g.beginPath(); g.ellipse(lx * s, s * 1.0, s * 0.22, s * 0.3, 0, 0, Math.PI * 2); g.fill(); g.stroke();
-    g.fillStyle = '#eef5fa';
-    g.beginPath(); g.ellipse(lx * s, s * 1.3, s * 0.28, s * 0.13, 0, 0, Math.PI * 2); g.fill();
-  });
-
-  // 身體
-  const bodyG = g.createRadialGradient(-s * 0.3, -s * 0.4, s * 0.1, 0, 0, s * 1.25);
-  bodyG.addColorStop(0, '#ffffff');
-  bodyG.addColorStop(0.55, '#e8f2f9');
-  bodyG.addColorStop(1, '#b6cddf');
-  g.fillStyle = bodyG;
-  g.strokeStyle = '#9cb4c7';
-  g.lineWidth = s * 0.075;
-  g.beginPath();
-  g.ellipse(0, s * 0.1, s * 0.92, s * 0.85, 0, 0, Math.PI * 2);
-  g.fill(); g.stroke();
-
-  // 毛絨質感
-  g.strokeStyle = 'rgba(255,255,255,0.7)';
-  g.lineWidth = s * 0.05;
-  g.lineCap = 'round';
-  for (let i = 0; i < 14; i++) {
-    const a = (i / 14) * Math.PI * 2;
-    g.beginPath();
-    g.moveTo(Math.cos(a) * s * 0.72, s * 0.1 + Math.sin(a) * s * 0.65);
-    g.lineTo(Math.cos(a) * s * 0.92, s * 0.1 + Math.sin(a) * s * 0.83);
-    g.stroke();
-  }
-
-  // 頭
-  const headG = g.createRadialGradient(-s * 0.2, -s * 0.85, s * 0.08, 0, -s * 0.6, s * 0.75);
-  headG.addColorStop(0, '#ffffff');
-  headG.addColorStop(1, '#d9e6f0');
-  g.fillStyle = headG;
-  g.strokeStyle = '#9cb4c7';
-  g.lineWidth = s * 0.07;
-  g.beginPath(); g.arc(0, -s * 0.62, s * 0.62, 0, Math.PI * 2); g.fill(); g.stroke();
-
-  // 角
-  g.fillStyle = '#c3d4e0';
-  g.strokeStyle = '#8fa7ba';
-  g.lineWidth = s * 0.05;
-  g.beginPath();
-  g.moveTo(-s * 0.42, -s * 1.05);
-  g.quadraticCurveTo(-s * 0.72, -s * 1.5, -s * 0.24, -s * 1.42);
-  g.quadraticCurveTo(-s * 0.3, -s * 1.2, -s * 0.2, -s * 1.05);
-  g.closePath();
-  g.moveTo(s * 0.42, -s * 1.05);
-  g.quadraticCurveTo(s * 0.72, -s * 1.5, s * 0.24, -s * 1.42);
-  g.quadraticCurveTo(s * 0.3, -s * 1.2, s * 0.2, -s * 1.05);
-  g.closePath();
-  g.fill(); g.stroke();
-
-  // 眼睛
-  g.fillStyle = '#1d3242';
-  g.beginPath(); g.arc(-s * 0.22, -s * 0.7, s * 0.085, 0, Math.PI * 2); g.fill();
-  g.beginPath(); g.arc(s * 0.22, -s * 0.7, s * 0.085, 0, Math.PI * 2); g.fill();
-  g.fillStyle = '#fff';
-  g.beginPath(); g.arc(-s * 0.25, -s * 0.73, s * 0.03, 0, Math.PI * 2); g.fill();
-  g.beginPath(); g.arc(s * 0.19, -s * 0.73, s * 0.03, 0, Math.PI * 2); g.fill();
-
-  // 嘴巴
-  g.fillStyle = '#3d5263';
-  g.beginPath(); g.ellipse(0, -s * 0.35, s * 0.2, s * 0.13, 0, 0, Math.PI * 2); g.fill();
-  g.fillStyle = '#ffffff';
-  g.beginPath();
-  g.moveTo(-s * 0.14, -s * 0.44); g.lineTo(-s * 0.1, -s * 0.26); g.lineTo(-s * 0.04, -s * 0.42); g.closePath();
-  g.moveTo(s * 0.14, -s * 0.44);  g.lineTo(s * 0.1, -s * 0.26);  g.lineTo(s * 0.04, -s * 0.42);  g.closePath();
-  g.fill();
-
-  g.restore();
-}
-
-/* ── 5. 宇宙：骷髏王 ── */
-function guardSkeletonKing(g, s, t, alert) {
-  g.save();
-
-  // 披風
-  const capeG = g.createLinearGradient(0, -s * 0.4, 0, s * 1.4);
-  capeG.addColorStop(0, '#4a2a8a');
-  capeG.addColorStop(1, '#1d0f3a');
-  g.fillStyle = capeG;
-  g.beginPath();
-  g.moveTo(-s * 0.55, -s * 0.25);
-  g.quadraticCurveTo(-s * 1.15, s * 0.6, -s * 0.95, s * 1.35);
-  g.lineTo(s * 0.95, s * 1.35);
-  g.quadraticCurveTo(s * 1.15, s * 0.6, s * 0.55, -s * 0.25);
-  g.closePath();
-  g.fill();
-
-  // 脊椎
-  g.strokeStyle = '#e8e2d0';
-  g.lineWidth = s * 0.14;
-  g.lineCap = 'round';
-  g.beginPath(); g.moveTo(0, -s * 0.15); g.lineTo(0, s * 0.7); g.stroke();
-
-  // 肋骨
-  g.lineWidth = s * 0.09;
-  for (let i = 0; i < 3; i++) {
-    const yy = s * (0.05 + i * 0.2);
-    g.beginPath();
-    g.moveTo(-s * 0.28, yy);
-    g.quadraticCurveTo(0, yy + s * 0.13, s * 0.28, yy);
-    g.stroke();
-  }
-
-  // 手臂
-  g.lineWidth = s * 0.12;
-  g.beginPath();
-  g.moveTo(0, -s * 0.05); g.lineTo(-s * 0.6, s * 0.35);
-  g.moveTo(0, -s * 0.05); g.lineTo(s * 0.6, s * 0.35);
-  g.stroke();
-
-  // 頭骨
-  const skullG = g.createRadialGradient(-s * 0.2, -s * 0.85, s * 0.05, 0, -s * 0.55, s * 0.7);
-  skullG.addColorStop(0, '#ffffff');
-  skullG.addColorStop(1, '#d5cdb4');
-  g.fillStyle = skullG;
-  g.strokeStyle = '#a89e80';
-  g.lineWidth = s * 0.07;
-  g.beginPath();
-  g.moveTo(-s * 0.5, -s * 0.95);
-  g.quadraticCurveTo(-s * 0.62, -s * 0.2, -s * 0.3, -s * 0.12);
-  g.lineTo(s * 0.3, -s * 0.12);
-  g.quadraticCurveTo(s * 0.62, -s * 0.2, s * 0.5, -s * 0.95);
-  g.quadraticCurveTo(0, -s * 1.25, -s * 0.5, -s * 0.95);
-  g.closePath();
-  g.fill(); g.stroke();
-
-  // 眼窩
-  g.fillStyle = '#120818';
-  g.beginPath(); g.ellipse(-s * 0.22, -s * 0.72, s * 0.16, s * 0.19, 0.1, 0, Math.PI * 2); g.fill();
-  g.beginPath(); g.ellipse(s * 0.22, -s * 0.72, s * 0.16, s * 0.19, -0.1, 0, Math.PI * 2); g.fill();
-
-  // 發光眼
-  const eyeC = alert ? '#ff3020' : '#b060ff';
-  g.save();
-  g.shadowBlur = s * 0.6; g.shadowColor = eyeC;
-  g.fillStyle = eyeC;
-  g.beginPath(); g.ellipse(-s * 0.22, -s * 0.72, s * 0.075, s * 0.09, 0, 0, Math.PI * 2); g.fill();
-  g.beginPath(); g.ellipse(s * 0.22, -s * 0.72, s * 0.075, s * 0.09, 0, 0, Math.PI * 2); g.fill();
-  g.restore();
-
-  // 鼻
-  g.fillStyle = '#120818';
-  g.beginPath();
-  g.moveTo(0, -s * 0.55); g.lineTo(-s * 0.06, -s * 0.35); g.lineTo(s * 0.06, -s * 0.35);
-  g.closePath(); g.fill();
-
-  // 牙
-  g.strokeStyle = '#a89e80';
-  g.lineWidth = s * 0.035;
-  for (let i = 0; i < 5; i++) {
-    const xx = -s * 0.2 + i * s * 0.1;
-    g.beginPath(); g.moveTo(xx, -s * 0.2); g.lineTo(xx, -s * 0.06); g.stroke();
-  }
-
-  // 王冠
-  const crownG = g.createLinearGradient(0, -s * 1.6, 0, -s * 0.9);
-  crownG.addColorStop(0, '#ffe880');
-  crownG.addColorStop(0.5, '#e8b820');
-  crownG.addColorStop(1, '#a87a00');
-  g.fillStyle = crownG;
-  g.strokeStyle = '#7a5600';
-  g.lineWidth = s * 0.055;
-  g.beginPath();
-  g.moveTo(-s * 0.48, -s * 1.0);
-  g.lineTo(-s * 0.55, -s * 1.55);
-  g.lineTo(-s * 0.24, -s * 1.25);
-  g.lineTo(0, -s * 1.62);
-  g.lineTo(s * 0.24, -s * 1.25);
-  g.lineTo(s * 0.55, -s * 1.55);
-  g.lineTo(s * 0.48, -s * 1.0);
-  g.closePath();
-  g.fill(); g.stroke();
-
-  // 寶石
-  const gemC = alert ? '#ff2040' : '#40e0ff';
-  g.save();
-  g.shadowBlur = s * 0.4; g.shadowColor = gemC;
-  g.fillStyle = gemC;
-  g.beginPath(); g.arc(0, -s * 1.18, s * 0.085, 0, Math.PI * 2); g.fill();
-  g.restore();
-
-  g.restore();
-}
-
-/* ── 6. 櫻花：櫻花精靈 ── */
-function guardSakuraSpirit(g, s, t, alert) {
-  g.save();
-  g.translate(0, Math.sin(t * 1.8) * s * 0.06);
-
-  // 光暈
-  const haloG = g.createRadialGradient(0, 0, s * 0.4, 0, 0, s * 1.5);
-  haloG.addColorStop(0, 'rgba(255,190,225,0.5)');
-  haloG.addColorStop(1, 'rgba(255,120,190,0)');
-  g.fillStyle = haloG;
-  g.beginPath(); g.arc(0, 0, s * 1.5, 0, Math.PI * 2); g.fill();
-
-  // 花瓣環繞
-  for (let i = 0; i < 10; i++) {
-    const a = (i / 10) * Math.PI * 2 + t * 0.4;
-    const px = Math.cos(a) * s * 1.05;
-    const py = Math.sin(a) * s * 0.75 - s * 0.1;
-    g.save();
-    g.translate(px, py);
-    g.rotate(a + Math.sin(t * 2 + i) * 0.3);
-    g.globalAlpha = 0.85;
-    const pg = g.createLinearGradient(0, -s * 0.3, 0, s * 0.3);
-    pg.addColorStop(0, '#ffd6ec');
-    pg.addColorStop(1, '#ff8ec4');
-    g.fillStyle = pg;
-    g.beginPath();
-    g.ellipse(0, 0, s * 0.3, s * 0.16, 0, 0, Math.PI * 2);
-    g.fill();
-    g.restore();
-  }
-
-  // 身體
-  const bodyG = g.createRadialGradient(-s * 0.2, -s * 0.3, s * 0.08, 0, 0, s * 0.95);
-  bodyG.addColorStop(0, '#ffffff');
-  bodyG.addColorStop(0.5, '#ffe0f0');
-  bodyG.addColorStop(1, '#f2a8ce');
-  g.fillStyle = bodyG;
-  g.strokeStyle = '#e07ab0';
-  g.lineWidth = s * 0.06;
-  g.beginPath();
-  g.moveTo(0, -s * 0.55);
-  g.quadraticCurveTo(-s * 0.65, s * 0.1, -s * 0.35, s * 0.95);
-  g.quadraticCurveTo(0, s * 1.1, s * 0.35, s * 0.95);
-  g.quadraticCurveTo(s * 0.65, s * 0.1, 0, -s * 0.55);
-  g.closePath();
-  g.fill(); g.stroke();
-
-  // 頭
-  const headG = g.createRadialGradient(-s * 0.15, -s * 0.9, s * 0.06, 0, -s * 0.75, s * 0.6);
-  headG.addColorStop(0, '#ffffff');
-  headG.addColorStop(1, '#ffd0e8');
-  g.fillStyle = headG;
-  g.strokeStyle = '#e07ab0';
-  g.lineWidth = s * 0.055;
-  g.beginPath(); g.arc(0, -s * 0.72, s * 0.48, 0, Math.PI * 2); g.fill(); g.stroke();
-
-  // 花瓣髮飾
-  for (let i = 0; i < 5; i++) {
-    const a = -Math.PI * 0.95 + (i / 4) * Math.PI * 0.9;
-    const px = Math.cos(a) * s * 0.55;
-    const py = -s * 0.72 + Math.sin(a) * s * 0.55;
-    g.save();
-    g.translate(px, py);
-    g.rotate(a + Math.PI * 0.5);
-    g.fillStyle = i % 2 ? '#ffb0dc' : '#ff8ac8';
-    g.beginPath(); g.ellipse(0, 0, s * 0.24, s * 0.13, 0, 0, Math.PI * 2); g.fill();
-    g.restore();
-  }
-
-  // 眼睛
-  g.fillStyle = '#6a2a4a';
-  g.beginPath(); g.ellipse(-s * 0.17, -s * 0.75, s * 0.07, s * 0.1, 0, 0, Math.PI * 2); g.fill();
-  g.beginPath(); g.ellipse(s * 0.17, -s * 0.75, s * 0.07, s * 0.1, 0, 0, Math.PI * 2); g.fill();
-  g.fillStyle = '#fff';
-  g.beginPath(); g.arc(-s * 0.19, -s * 0.79, s * 0.028, 0, Math.PI * 2); g.fill();
-  g.beginPath(); g.arc(s * 0.15, -s * 0.79, s * 0.028, 0, Math.PI * 2); g.fill();
-
-  // 腮紅
-  g.fillStyle = 'rgba(255,120,170,0.45)';
-  g.beginPath(); g.ellipse(-s * 0.3, -s * 0.6, s * 0.11, s * 0.06, 0, 0, Math.PI * 2); g.fill();
-  g.beginPath(); g.ellipse(s * 0.3, -s * 0.6, s * 0.11, s * 0.06, 0, 0, Math.PI * 2); g.fill();
-
-  // 嘴巴
-  g.strokeStyle = '#c05a90';
-  g.lineWidth = s * 0.045;
-  g.lineCap = 'round';
-  g.beginPath();
-  g.arc(0, -s * 0.58, s * 0.09, 0.2, Math.PI - 0.2);
-  g.stroke();
-
-  g.restore();
-}
-
-/* ── 7. 泰坦：泰坦巨神 ── */
-function guardTitan(g, s, t, alert) {
-  g.save();
-
-  // 腿
-  [-0.38, 0.38].forEach(lx => {
-    g.fillStyle = '#8e93a8';
-    g.strokeStyle = '#5f6478';
-    g.lineWidth = s * 0.06;
-    g.beginPath();
-    g.roundRect(lx * s - s * 0.2, s * 0.55, s * 0.4, s * 0.7, s * 0.12);
-    g.fill(); g.stroke();
-  });
-
-  // 手臂
-  [-1, 1].forEach(dir => {
-    g.save();
-    g.translate(dir * s * 0.78, -s * 0.15);
-    g.rotate(dir * (0.25 + Math.sin(t * 2 + dir) * 0.06));
-    g.fillStyle = '#9aa0b4';
-    g.strokeStyle = '#5f6478';
-    g.lineWidth = s * 0.06;
-    g.beginPath();
-    g.roundRect(-s * 0.19, -s * 0.15, s * 0.38, s * 0.85, s * 0.16);
-    g.fill(); g.stroke();
-    g.fillStyle = '#b0b6c8';
-    g.beginPath(); g.arc(0, s * 0.72, s * 0.24, 0, Math.PI * 2); g.fill(); g.stroke();
-    g.restore();
-  });
-
-  // 軀幹
-  const bodyG = g.createLinearGradient(0, -s * 0.9, 0, s * 0.8);
-  bodyG.addColorStop(0, '#b9bfd2');
-  bodyG.addColorStop(0.55, '#8e93a8');
-  bodyG.addColorStop(1, '#656a80');
-  g.fillStyle = bodyG;
-  g.strokeStyle = '#4f5468';
-  g.lineWidth = s * 0.07;
-  g.beginPath();
-  g.roundRect(-s * 0.62, -s * 0.85, s * 1.24, s * 1.6, s * 0.24);
-  g.fill(); g.stroke();
-
-  // 胸口核心
-  const coreG = g.createRadialGradient(0, -s * 0.15, s * 0.02, 0, -s * 0.15, s * 0.4);
-  coreG.addColorStop(0, '#ffffff');
-  coreG.addColorStop(0.35, '#ffe680');
-  coreG.addColorStop(1, 'rgba(255,180,20,0)');
-  g.save();
-  g.shadowBlur = s * 0.7; g.shadowColor = '#ffb400';
-  g.fillStyle = coreG;
-  g.beginPath(); g.arc(0, -s * 0.15, s * 0.36, 0, Math.PI * 2); g.fill();
-  g.restore();
-  g.fillStyle = '#fff3b0';
-  g.beginPath(); g.arc(0, -s * 0.15, s * 0.13, 0, Math.PI * 2); g.fill();
-
-  // 頭
-  const headG = g.createLinearGradient(0, -s * 1.5, 0, -s * 0.85);
-  headG.addColorStop(0, '#c6cbdc');
-  headG.addColorStop(1, '#8a8fa4');
-  g.fillStyle = headG;
-  g.strokeStyle = '#4f5468';
-  g.lineWidth = s * 0.07;
-  g.beginPath();
-  g.roundRect(-s * 0.42, -s * 1.45, s * 0.84, s * 0.65, s * 0.16);
-  g.fill(); g.stroke();
-
-  // 眼睛
-  const eyeC = alert ? '#ff4020' : '#ffd040';
-  g.save();
-  g.shadowBlur = s * 0.5; g.shadowColor = eyeC;
-  g.fillStyle = eyeC;
-  g.beginPath(); g.roundRect(-s * 0.28, -s * 1.22, s * 0.18, s * 0.1, s * 0.04); g.fill();
-  g.beginPath(); g.roundRect(s * 0.1, -s * 1.22, s * 0.18, s * 0.1, s * 0.04); g.fill();
-  g.restore();
-
-  // 肩甲
-  g.fillStyle = '#d4d9e8';
-  g.strokeStyle = '#4f5468';
-  g.lineWidth = s * 0.06;
-  g.beginPath(); g.ellipse(-s * 0.72, -s * 0.78, s * 0.28, s * 0.2, -0.3, 0, Math.PI * 2); g.fill(); g.stroke();
-  g.beginPath(); g.ellipse(s * 0.72, -s * 0.78, s * 0.28, s * 0.2, 0.3, 0, Math.PI * 2); g.fill(); g.stroke();
-
-  g.restore();
-}
-
-/* ── 8. 神界：天使 ── */
-function guardAngel(g, s, t, alert) {
-  g.save();
-  g.translate(0, Math.sin(t * 1.6) * s * 0.05);
-
-  // 翅膀
-  [-1, 1].forEach(dir => {
-    g.save();
-    g.translate(dir * s * 0.55, -s * 0.25);
-    g.rotate(dir * (0.25 + Math.sin(t * 2 + dir) * 0.12));
-    g.scale(dir, 1);
-    const wg = g.createLinearGradient(0, -s * 0.9, s * 0.9, s * 0.5);
-    wg.addColorStop(0, '#ffffff');
-    wg.addColorStop(0.6, '#f2f8ff');
-    wg.addColorStop(1, '#c8dcf2');
-    g.fillStyle = wg;
-    g.strokeStyle = '#a8c2dd';
-    g.lineWidth = s * 0.055;
-    for (let i = 0; i < 3; i++) {
-      g.beginPath();
-      g.ellipse(s * 0.22 + i * s * 0.14, -s * 0.28 + i * s * 0.28, s * 0.34, s * 0.16, -0.55 + i * 0.18, 0, Math.PI * 2);
-      g.fill(); g.stroke();
+  // 眼睛：带高光，可闭眼/怒目
+  function eye(g, x, y, r, opts = {}) {
+    const { iris = '#111', sclera = '#fff', angry = false, closed = false, glow = null } = opts;
+    if (closed) {
+      g.strokeStyle = '#222'; g.lineWidth = r * 0.5; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(x - r, y); g.lineTo(x + r, y); g.stroke();
+      return;
     }
-    g.restore();
-  });
-
-  // 光環
-  g.save();
-  g.strokeStyle = '#ffe680';
-  g.lineWidth = s * 0.11;
-  g.shadowBlur = s * 0.6; g.shadowColor = '#ffd040';
-  g.beginPath();
-  g.ellipse(0, -s * 1.42, s * 0.42, s * 0.14, 0, 0, Math.PI * 2);
-  g.stroke();
-  g.restore();
-
-  // 長袍
-  const robeG = g.createLinearGradient(0, -s * 0.5, 0, s * 1.3);
-  robeG.addColorStop(0, '#ffffff');
-  robeG.addColorStop(0.6, '#eef5ff');
-  robeG.addColorStop(1, '#c8dcf2');
-  g.fillStyle = robeG;
-  g.strokeStyle = '#a8c2dd';
-  g.lineWidth = s * 0.065;
-  g.beginPath();
-  g.moveTo(0, -s * 0.55);
-  g.quadraticCurveTo(-s * 0.55, -s * 0.05, -s * 0.72, s * 1.3);
-  g.quadraticCurveTo(0, s * 1.45, s * 0.72, s * 1.3);
-  g.quadraticCurveTo(s * 0.55, -s * 0.05, 0, -s * 0.55);
-  g.closePath();
-  g.fill(); g.stroke();
-
-  // 腰帶
-  g.strokeStyle = '#ffd45a';
-  g.lineWidth = s * 0.09;
-  g.beginPath();
-  g.moveTo(-s * 0.4, s * 0.28);
-  g.quadraticCurveTo(0, s * 0.4, s * 0.4, s * 0.28);
-  g.stroke();
-
-  // 頭
-  const headG = g.createRadialGradient(-s * 0.1, -s * 0.85, s * 0.05, 0, -s * 0.72, s * 0.5);
-  headG.addColorStop(0, '#ffffff');
-  headG.addColorStop(1, '#f2e6d8');
-  g.fillStyle = headG;
-  g.strokeStyle = '#c9b8a4';
-  g.lineWidth = s * 0.055;
-  g.beginPath(); g.arc(0, -s * 0.78, s * 0.42, 0, Math.PI * 2); g.fill(); g.stroke();
-
-  // 頭髮
-  g.fillStyle = '#ffe8a0';
-  g.beginPath();
-  g.arc(0, -s * 0.86, s * 0.44, Math.PI * 1.05, Math.PI * 1.95);
-  g.quadraticCurveTo(s * 0.4, -s * 0.5, 0, -s * 0.55);
-  g.quadraticCurveTo(-s * 0.4, -s * 0.5, -s * 0.42, -s * 0.82);
-  g.closePath();
-  g.fill();
-
-  // 眼睛
-  g.fillStyle = '#3a5a8a';
-  g.beginPath(); g.ellipse(-s * 0.15, -s * 0.78, s * 0.06, s * 0.085, 0, 0, Math.PI * 2); g.fill();
-  g.beginPath(); g.ellipse(s * 0.15, -s * 0.78, s * 0.06, s * 0.085, 0, 0, Math.PI * 2); g.fill();
-  g.fillStyle = '#fff';
-  g.beginPath(); g.arc(-s * 0.17, -s * 0.81, s * 0.024, 0, Math.PI * 2); g.fill();
-  g.beginPath(); g.arc(s * 0.13, -s * 0.81, s * 0.024, 0, Math.PI * 2); g.fill();
-
-  // 嘴
-  g.strokeStyle = '#c98a7a';
-  g.lineWidth = s * 0.04;
-  g.lineCap = 'round';
-  g.beginPath(); g.arc(0, -s * 0.62, s * 0.08, 0.25, Math.PI - 0.25); g.stroke();
-
-  g.restore();
-}
-
-/* ── 9. 暗影：暗影領主 ── */
-function guardShadowLord(g, s, t, alert) {
-  g.save();
-  const pulse = 0.5 + Math.sin(t * 3) * 0.5;
-
-  // 暗影光環
-  const auraG = g.createRadialGradient(0, 0, s * 0.3, 0, 0, s * 1.6);
-  auraG.addColorStop(0, `rgba(140,60,220,${0.28 + pulse * 0.16})`);
-  auraG.addColorStop(1, 'rgba(60,0,120,0)');
-  g.fillStyle = auraG;
-  g.beginPath(); g.arc(0, 0, s * 1.6, 0, Math.PI * 2); g.fill();
-
-  // 披風
-  const capeG = g.createLinearGradient(0, -s * 0.6, 0, s * 1.4);
-  capeG.addColorStop(0, '#2e1050');
-  capeG.addColorStop(1, '#0d0418');
-  g.fillStyle = capeG;
-  g.strokeStyle = '#8a40d0';
-  g.lineWidth = s * 0.05;
-  g.beginPath();
-  g.moveTo(0, -s * 0.7);
-  g.quadraticCurveTo(-s * 1.15, -s * 0.1, -s * 1.0, s * 1.4);
-  g.lineTo(-s * 0.5, s * 1.15);
-  g.lineTo(-s * 0.2, s * 1.4);
-  g.lineTo(0, s * 1.1);
-  g.lineTo(s * 0.2, s * 1.4);
-  g.lineTo(s * 0.5, s * 1.15);
-  g.lineTo(s * 1.0, s * 1.4);
-  g.quadraticCurveTo(s * 1.15, -s * 0.1, 0, -s * 0.7);
-  g.closePath();
-  g.fill(); g.stroke();
-
-  // 軀體
-  const bodyG = g.createLinearGradient(0, -s * 0.8, 0, s * 0.9);
-  bodyG.addColorStop(0, '#4a2080');
-  bodyG.addColorStop(1, '#1a0828');
-  g.fillStyle = bodyG;
-  g.strokeStyle = '#9a50e0';
-  g.lineWidth = s * 0.06;
-  g.beginPath();
-  g.moveTo(0, -s * 0.72);
-  g.quadraticCurveTo(-s * 0.5, -s * 0.2, -s * 0.32, s * 0.85);
-  g.lineTo(s * 0.32, s * 0.85);
-  g.quadraticCurveTo(s * 0.5, -s * 0.2, 0, -s * 0.72);
-  g.closePath();
-  g.fill(); g.stroke();
-
-  // 尖刺肩甲
-  [-1, 1].forEach(dir => {
-    g.fillStyle = '#30103f';
-    g.strokeStyle = '#b060ff';
-    g.lineWidth = s * 0.05;
-    g.beginPath();
-    g.moveTo(dir * s * 0.28, -s * 0.6);
-    g.lineTo(dir * s * 0.82, -s * 1.15);
-    g.lineTo(dir * s * 0.68, -s * 0.42);
-    g.closePath();
-    g.fill(); g.stroke();
-  });
-
-  // 兜帽
-  const hoodG = g.createRadialGradient(0, -s * 0.95, s * 0.05, 0, -s * 0.8, s * 0.62);
-  hoodG.addColorStop(0, '#3a1560');
-  hoodG.addColorStop(1, '#12041f');
-  g.fillStyle = hoodG;
-  g.strokeStyle = '#9a50e0';
-  g.lineWidth = s * 0.055;
-  g.beginPath();
-  g.moveTo(-s * 0.52, -s * 0.55);
-  g.quadraticCurveTo(-s * 0.62, -s * 1.5, 0, -s * 1.55);
-  g.quadraticCurveTo(s * 0.62, -s * 1.5, s * 0.52, -s * 0.55);
-  g.quadraticCurveTo(0, -s * 0.32, -s * 0.52, -s * 0.55);
-  g.closePath();
-  g.fill(); g.stroke();
-
-  // 臉部陰影
-  g.fillStyle = '#0a0212';
-  g.beginPath();
-  g.ellipse(0, -s * 0.88, s * 0.34, s * 0.4, 0, 0, Math.PI * 2);
-  g.fill();
-
-  // 發光眼
-  const eyeC = alert ? '#ff2050' : '#c060ff';
-  g.save();
-  g.shadowBlur = s * 0.9; g.shadowColor = eyeC;
-  g.fillStyle = eyeC;
-  g.beginPath(); g.ellipse(-s * 0.15, -s * 0.92, s * 0.09, s * 0.055, -0.2, 0, Math.PI * 2); g.fill();
-  g.beginPath(); g.ellipse(s * 0.15, -s * 0.92, s * 0.09, s * 0.055, 0.2, 0, Math.PI * 2); g.fill();
-  g.restore();
-
-  g.restore();
-}
-
-/* ── 10. 混沌：混沌之主 ── */
-function guardChaosLord(g, s, t, alert) {
-  g.save();
-
-  // 混沌觸手
-  for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2 + t * 0.5;
-    const len = s * (0.95 + Math.sin(t * 3 + i) * 0.15);
-    const wob = Math.sin(t * 4 + i * 1.3) * s * 0.22;
-    g.save();
-    g.rotate(a);
-    g.strokeStyle = i % 2 ? '#7a2ab0' : '#c040ff';
-    g.lineWidth = s * 0.13;
-    g.lineCap = 'round';
-    g.beginPath();
-    g.moveTo(s * 0.4, 0);
-    g.quadraticCurveTo(len * 0.7, wob, len, wob * 0.4);
-    g.stroke();
-    g.restore();
-  }
-
-  // 混沌核心
-  const coreG = g.createRadialGradient(-s * 0.15, -s * 0.2, s * 0.05, 0, 0, s * 1.0);
-  coreG.addColorStop(0, '#f0a8ff');
-  coreG.addColorStop(0.4, '#a040e0');
-  coreG.addColorStop(0.8, '#4a1080');
-  coreG.addColorStop(1, '#1a0430');
-  g.fillStyle = coreG;
-  g.save();
-  g.shadowBlur = s * 0.8; g.shadowColor = '#c050ff';
-  g.beginPath();
-  for (let i = 0; i < 16; i++) {
-    const a = (i / 16) * Math.PI * 2;
-    const r = s * (0.82 + Math.sin(t * 5 + i * 2.1) * 0.1);
-    const px = Math.cos(a) * r, py = Math.sin(a) * r;
-    if (i === 0) g.moveTo(px, py); else g.lineTo(px, py);
-  }
-  g.closePath();
-  g.fill();
-  g.restore();
-
-  // 內部漩渦
-  g.strokeStyle = 'rgba(255,200,255,0.6)';
-  g.lineWidth = s * 0.05;
-  for (let i = 0; i < 3; i++) {
-    g.beginPath();
-    for (let k = 0; k <= 20; k++) {
-      const th = k / 20 * Math.PI * 2.4;
-      const rr = s * 0.1 + (k / 20) * s * 0.6;
-      const px = Math.cos(th + t * 2 + i * 2.1) * rr;
-      const py = Math.sin(th + t * 2 + i * 2.1) * rr;
-      if (k === 0) g.moveTo(px, py); else g.lineTo(px, py);
+    g.fillStyle = sclera; circle(g, x, y, r);
+    g.fillStyle = iris; circle(g, x, y, r * 0.62);
+    g.fillStyle = '#fff'; circle(g, x - r * 0.28, y - r * 0.28, r * 0.22);
+    if (glow) { g.shadowBlur = r * 3; g.shadowColor = glow; circle(g, x, y, r * 0.5); g.shadowBlur = 0; }
+    if (angry) {
+      g.strokeStyle = '#000'; g.lineWidth = r * 0.45; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(x - r * 1.1, y - r * 0.9); g.lineTo(x + r * 0.6, y - r * 0.3); g.stroke();
     }
-    g.stroke();
+  }
+  // 呼吸/待机浮动
+  function breath(t, amp = 2, spd = 2) { return Math.sin(t * spd) * amp; }
+
+  // ============================================================
+  // 0. 森林 · 巨型公鸡守卫（华丽羽毛 + 鸡冠 + 肉垂 + 尾羽）
+  // ============================================================
+  function drawForestRooster(g, s, t, alert) {
+    const b = breath(t, 1.5, 2);
+    // 尾巴（多层扇形羽毛）
+    for (let i = 0; i < 7; i++) {
+      const a = -Math.PI * 0.75 + i * 0.18;
+      g.save(); g.rotate(a + Math.sin(t * 3 + i) * 0.04);
+      g.fillStyle = i % 2 ? '#1f7a3a' : '#2fa04a';
+      g.beginPath(); g.ellipse(0, -s * 1.1, s * 0.22, s * 0.75, 0, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = '#0f4a22'; g.lineWidth = s * 0.05; g.stroke();
+      g.restore();
+    }
+    // 身体
+    g.fillStyle = radial(g, 0, 0, s * 0.2, s * 1.4, '#e8a020', '#a85a10');
+    ellipse(g, 0, 0, s * 1.05, s * 0.95);
+    // 腹部浅色
+    g.fillStyle = '#f5d890'; ellipse(g, 0, s * 0.25, s * 0.7, s * 0.55);
+    // 翅膀（两侧，带羽毛分层）
+    for (const side of [-1, 1]) {
+      g.save(); g.translate(side * s * 0.75, b - s * 0.1); g.rotate(side * 0.3);
+      g.fillStyle = side < 0 ? '#b06a18' : '#c07a20';
+      ellipse(g, 0, 0, s * 0.42, s * 0.7);
+      g.strokeStyle = '#7a4a10'; g.lineWidth = s * 0.06;
+      for (let i = -1; i <= 1; i++) { g.beginPath(); g.moveTo(-s * 0.2, i * s * 0.25); g.lineTo(s * 0.25, i * s * 0.25); g.stroke(); }
+      g.restore();
+    }
+    // 脖子
+    g.fillStyle = radial(g, 0, -s * 0.6, s * 0.1, s * 0.6, '#ffd040', '#e0a020');
+    ellipse(g, 0, -s * 0.75 + b, s * 0.5, s * 0.55);
+    // 头
+    g.fillStyle = '#ffcc33'; circle(g, 0, -s * 1.15 + b, s * 0.5);
+    // 鸡冠（多瓣）
+    g.fillStyle = '#e02020'; g.strokeStyle = '#a01010'; g.lineWidth = s * 0.04;
+    for (let i = 0; i < 4; i++) {
+      const cx = -s * 0.3 + i * s * 0.2, cy = -s * 1.6 + b - (i % 2) * s * 0.1;
+      g.beginPath(); g.arc(cx, cy, s * 0.16, Math.PI, 0); g.fill(); g.stroke();
+    }
+    // 肉垂
+    g.fillStyle = '#e02020'; g.beginPath(); g.ellipse(0, -s * 0.75 + b, s * 0.14, s * 0.22, 0, 0, Math.PI * 2); g.fill();
+    // 喙
+    g.fillStyle = '#f0a020'; poly(g, [[-s * 0.1, -s * 1.15 + b], [s * 0.1, -s * 1.15 + b], [0, -s * 0.9 + b]]); g.fill();
+    g.strokeStyle = '#a06010'; g.lineWidth = s * 0.04; g.stroke();
+    // 眼睛
+    eye(g, -s * 0.2, -s * 1.25 + b, s * 0.11, { angry: alert, iris: '#2a1a0a' });
+    eye(g, s * 0.2, -s * 1.25 + b, s * 0.11, { angry: alert, iris: '#2a1a0a' });
+    // 脚
+    g.strokeStyle = '#c07a20'; g.lineWidth = s * 0.12; g.lineCap = 'round';
+    for (const side of [-1, 1]) {
+      g.beginPath(); g.moveTo(side * s * 0.25, s * 0.8); g.lineTo(side * s * 0.3, s * 1.15); g.stroke();
+      for (let i = -1; i <= 1; i++) { g.beginPath(); g.moveTo(side * s * 0.3, s * 1.15); g.lineTo(side * s * 0.3 + i * s * 0.1, s * 1.3); g.stroke(); }
+    }
   }
 
-  // 多顆眼睛
-  const eyes = [[-0.32, -0.28], [0.3, -0.34], [0, 0.3], [-0.36, 0.24], [0.34, 0.22]];
-  eyes.forEach(([ex, ey], i) => {
-    const pulse = 0.7 + Math.sin(t * 4 + i) * 0.3;
-    g.save();
-    g.shadowBlur = s * 0.5 * pulse; g.shadowColor = alert ? '#ff2020' : '#ffe040';
-    g.fillStyle = alert ? '#ff3010' : '#ffe860';
-    g.beginPath(); g.ellipse(ex * s, ey * s, s * 0.13, s * 0.09, 0, 0, Math.PI * 2); g.fill();
-    g.restore();
-    g.fillStyle = '#180420';
-    g.beginPath(); g.ellipse(ex * s, ey * s, s * 0.045, s * 0.075, 0, 0, Math.PI * 2); g.fill();
+  // ============================================================
+  // 1. 火山 · 地狱犬（三头犬，熔岩纹，火焰鬃毛）
+  // ============================================================
+  function drawVolcanoHound(g, s, t, alert) {
+    const b = breath(t, 1.2, 3);
+    // 火焰鬃毛
+    for (let i = 0; i < 12; i++) {
+      const a = i / 12 * Math.PI * 2 + t;
+      const flick = 0.7 + Math.random() * 0.4;
+      g.fillStyle = i % 2 ? '#ff6a00' : '#ffcc00';
+      g.globalAlpha = 0.8;
+      g.beginPath(); g.ellipse(Math.cos(a) * s * 0.9, b + Math.sin(a) * s * 0.7, s * 0.18 * flick, s * 0.5, a, 0, Math.PI * 2); g.fill();
+    }
+    g.globalAlpha = 1;
+    // 身体（黑曜石）
+    g.fillStyle = radial(g, 0, 0, s * 0.3, s * 1.3, '#4a2a2a', '#1a0a0a');
+    ellipse(g, 0, 0, s * 1.1, s * 0.85);
+    // 熔岩纹路
+    g.strokeStyle = '#ff5a00'; g.lineWidth = s * 0.07; g.shadowBlur = s * 0.6; g.shadowColor = '#ff4000';
+    for (let i = 0; i < 4; i++) {
+      g.beginPath(); g.moveTo(-s * 0.7 + i * s * 0.4, -s * 0.5);
+      g.quadraticCurveTo(-s * 0.5 + i * s * 0.4, 0, -s * 0.7 + i * s * 0.4, s * 0.5); g.stroke();
+    }
+    g.shadowBlur = 0;
+    // 三条脖子 + 三个头
+    const heads = [
+      { x: -s * 0.55, y: -s * 0.75, lean: -0.35 },
+      { x: 0, y: -s * 1.0, lean: 0 },
+      { x: s * 0.55, y: -s * 0.75, lean: 0.35 },
+    ];
+    for (const h of heads) {
+      // 脖子
+      g.strokeStyle = '#2a1010'; g.lineWidth = s * 0.32; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(h.x * 0.4, -s * 0.4); g.quadraticCurveTo(h.x * 0.7, h.y * 0.4, h.x, h.y); g.stroke();
+      // 头
+      g.save(); g.translate(h.x, h.y + b); g.rotate(h.lean);
+      g.fillStyle = radial(g, 0, 0, s * 0.1, s * 0.45, '#5a2a2a', '#2a0a0a');
+      ellipse(g, 0, 0, s * 0.42, s * 0.36);
+      // 耳朵
+      g.fillStyle = '#3a1010'; poly(g, [[-s * 0.3, -s * 0.25], [-s * 0.42, -s * 0.6], [-s * 0.12, -s * 0.35]]); g.fill();
+      poly(g, [[s * 0.3, -s * 0.25], [s * 0.42, -s * 0.6], [s * 0.12, -s * 0.35]]); g.fill();
+      // 眼睛（发光）
+      eye(g, -s * 0.16, -s * 0.08, s * 0.1, { iris: '#ffdd00', sclera: '#ff4400', angry: alert, glow: '#ff2200' });
+      eye(g, s * 0.16, -s * 0.08, s * 0.1, { iris: '#ffdd00', sclera: '#ff4400', angry: alert, glow: '#ff2200' });
+      // 鼻子
+      g.fillStyle = '#1a0505'; circle(g, 0, s * 0.2, s * 0.09);
+      // 獠牙
+      g.fillStyle = '#fff'; poly(g, [[-s * 0.15, s * 0.28], [-s * 0.1, s * 0.42], [-s * 0.05, s * 0.28]]); g.fill();
+      poly(g, [[s * 0.15, s * 0.28], [s * 0.1, s * 0.42], [s * 0.05, s * 0.28]]); g.fill();
+      g.restore();
+    }
+    // 利爪
+    g.strokeStyle = '#ddd'; g.lineWidth = s * 0.08; g.lineCap = 'round';
+    for (const side of [-1, 1]) {
+      g.beginPath(); g.moveTo(side * s * 0.6, s * 0.75); g.lineTo(side * s * 0.75, s * 1.1); g.stroke();
+      for (let i = -1; i <= 1; i++) { g.beginPath(); g.moveTo(side * s * 0.75, s * 1.1); g.lineTo(side * s * 0.75 + i * s * 0.08, s * 1.25); g.stroke(); }
+    }
+  }
+
+  // ============================================================
+  // 2. 深渊 · 白鲸守卫（流线身躯 + 喷水 + 发光斑点 + 鳍）
+  // ============================================================
+  function drawAbyssWhale(g, s, t, alert) {
+    const b = breath(t, 2, 1.6);
+    // 喷水
+    g.fillStyle = 'rgba(180,230,255,0.7)';
+    for (let i = 0; i < 8; i++) {
+      const a = -Math.PI / 2 + (i - 3.5) * 0.12;
+      const r = s * (0.6 + (Math.sin(t * 3 + i) + 1) * 0.25);
+      circle(g, Math.cos(a) * r * 0.5, -s * 1.1 + Math.sin(a) * r + b, s * 0.06);
+    }
+    // 身体（白鲸流线）
+    g.fillStyle = radial(g, 0, 0, s * 0.3, s * 1.4, '#e8f4ff', '#7ab0d8');
+    g.beginPath();
+    g.ellipse(0, 0, s * 1.15, s * 0.85, 0, 0, Math.PI * 2); g.fill();
+    // 腹部
+    g.fillStyle = '#fff'; g.beginPath(); g.ellipse(0, s * 0.3, s * 0.85, s * 0.45, 0, 0, Math.PI * 2); g.fill();
+    // 发光斑点
+    g.fillStyle = '#80e0ff'; g.shadowBlur = s * 0.6; g.shadowColor = '#40c0ff';
+    for (let i = 0; i < 6; i++) {
+      const px = Math.cos(i * 1.7 + t * 0.5) * s * 0.6, py = Math.sin(i * 2.3 + t * 0.5) * s * 0.4;
+      circle(g, px, py, s * 0.05);
+    }
+    g.shadowBlur = 0;
+    // 背鳍
+    g.fillStyle = '#8ac0e0'; poly(g, [[-s * 0.1, -s * 0.8], [s * 0.1, -s * 0.8], [0, -s * 1.15]]); g.fill();
+    // 侧鳍
+    for (const side of [-1, 1]) {
+      g.fillStyle = '#a0d0ea';
+      g.save(); g.translate(side * s * 0.85, s * 0.1); g.rotate(side * 0.5 + Math.sin(t * 2 + side) * 0.1);
+      ellipse(g, 0, 0, s * 0.35, s * 0.14); g.restore();
+    }
+    // 头（额隆）
+    g.fillStyle = radial(g, 0, -s * 0.5, s * 0.2, s * 0.7, '#ffffff', '#c0e0f0');
+    circle(g, 0, -s * 0.55 + b, s * 0.62);
+    // 眼睛（温和）
+    eye(g, -s * 0.22, -s * 0.6 + b, s * 0.09, { iris: '#0a2a4a', angry: false });
+    eye(g, s * 0.22, -s * 0.6 + b, s * 0.09, { iris: '#0a2a4a', angry: false });
+    // 嘴线
+    g.strokeStyle = '#5a8aaa'; g.lineWidth = s * 0.05; g.lineCap = 'round';
+    g.beginPath(); g.arc(0, -s * 0.35 + b, s * 0.4, 0.2, Math.PI - 0.2); g.stroke();
+  }
+
+  // ============================================================
+  // 3. 史前 · 暴龙守卫（大头 + 利齿 + 短手 + 鳞片 + 尾巴）
+  // ============================================================
+  function drawPrehistoricTrex(g, s, t, alert) {
+    const b = breath(t, 1.5, 2.2);
+    // 尾巴
+    g.strokeStyle = '#6a8a3a'; g.lineWidth = s * 0.5; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(s * 0.8, s * 0.2); g.quadraticCurveTo(s * 1.5, s * 0.1, s * 1.6, -s * 0.5); g.stroke();
+    g.strokeStyle = '#4a6a2a'; g.lineWidth = s * 0.3; g.stroke();
+    // 身体
+    g.fillStyle = radial(g, 0, 0, s * 0.3, s * 1.3, '#8aa84a', '#4a6a2a');
+    ellipse(g, 0, 0, s * 0.95, s * 0.9);
+    // 腹部
+    g.fillStyle = '#c8d890'; ellipse(g, 0, s * 0.25, s * 0.65, s * 0.5);
+    // 鳞片纹理
+    g.strokeStyle = '#3a5a1a'; g.lineWidth = s * 0.04;
+    for (let i = 0; i < 5; i++) {
+      g.beginPath(); g.arc(-s * 0.4 + i * s * 0.2, s * 0.1, s * 0.12, Math.PI, 0); g.stroke();
+    }
+    // 短手
+    for (const side of [-1, 1]) {
+      g.strokeStyle = '#6a8a3a'; g.lineWidth = s * 0.15; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(side * s * 0.7, -s * 0.1); g.lineTo(side * s * 0.9, s * 0.15); g.stroke();
+      g.strokeStyle = '#ddd'; g.lineWidth = s * 0.05;
+      g.beginPath(); g.moveTo(side * s * 0.9, s * 0.15); g.lineTo(side * s * 0.98, s * 0.22); g.stroke();
+    }
+    // 脖子 + 头（大头）
+    g.fillStyle = '#7a9a3a'; ellipse(g, 0, -s * 0.7 + b, s * 0.55, s * 0.5);
+    g.fillStyle = radial(g, 0, -s * 0.9, s * 0.2, s * 0.7, '#9ab85a', '#5a7a2a');
+    ellipse(g, 0, -s * 1.0 + b, s * 0.65, s * 0.5);
+    // 下颚
+    g.fillStyle = '#6a8a3a'; ellipse(g, 0, -s * 0.75 + b, s * 0.55, s * 0.22);
+    // 利齿
     g.fillStyle = '#fff';
-    g.beginPath(); g.arc(ex * s - s * 0.035, ey * s - s * 0.03, s * 0.024, 0, Math.PI * 2); g.fill();
-  });
-
-  g.restore();
-}
-
-/* ── 11. 虛空：虛空吞噬者 ── */
-function guardVoidDevourer(g, s, t, alert) {
-  g.save();
-
-  // 虛空漩渦
-  const vortexG = g.createRadialGradient(0, 0, s * 0.2, 0, 0, s * 1.6);
-  vortexG.addColorStop(0, 'rgba(30,0,50,0.9)');
-  vortexG.addColorStop(0.5, 'rgba(90,20,150,0.55)');
-  vortexG.addColorStop(1, 'rgba(30,0,50,0)');
-  g.fillStyle = vortexG;
-  g.beginPath(); g.arc(0, 0, s * 1.6, 0, Math.PI * 2); g.fill();
-
-  // 漩渦手臂
-  for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * Math.PI * 2 - t * 0.8;
-    g.strokeStyle = `rgba(${120 + i * 15},${40 + i * 10},${200},0.75)`;
-    g.lineWidth = s * 0.1;
-    g.lineCap = 'round';
-    g.beginPath();
-    for (let k = 0; k <= 12; k++) {
-      const th = a + k * 0.28;
-      const rr = s * 0.35 + k * s * 0.1;
-      const px = Math.cos(th) * rr;
-      const py = Math.sin(th) * rr * 0.85;
-      if (k === 0) g.moveTo(px, py); else g.lineTo(px, py);
+    for (let i = 0; i < 6; i++) {
+      const tx = -s * 0.45 + i * s * 0.18;
+      poly(g, [[tx, -s * 0.85 + b], [tx + s * 0.06, -s * 0.72 + b], [tx + s * 0.12, -s * 0.85 + b]]); g.fill();
     }
-    g.stroke();
+    // 眼睛（怒目）
+    eye(g, -s * 0.25, -s * 1.05 + b, s * 0.12, { iris: '#1a1a0a', angry: alert, glow: alert ? '#ff8800' : null });
+    eye(g, s * 0.25, -s * 1.05 + b, s * 0.12, { iris: '#1a1a0a', angry: alert, glow: alert ? '#ff8800' : null });
+    // 鼻孔
+    g.fillStyle = '#2a3a0a'; circle(g, -s * 0.15, -s * 1.2 + b, s * 0.04); circle(g, s * 0.15, -s * 1.2 + b, s * 0.04);
+    // 脚
+    g.strokeStyle = '#4a6a2a'; g.lineWidth = s * 0.22; g.lineCap = 'round';
+    for (const side of [-1, 1]) { g.beginPath(); g.moveTo(side * s * 0.4, s * 0.8); g.lineTo(side * s * 0.45, s * 1.15); g.stroke(); }
   }
 
-  // 本體
-  const bodyG = g.createRadialGradient(-s * 0.2, -s * 0.25, s * 0.05, 0, 0, s * 0.85);
-  bodyG.addColorStop(0, '#6a2ab0');
-  bodyG.addColorStop(0.6, '#2a0a50');
-  bodyG.addColorStop(1, '#0a0218');
-  g.fillStyle = bodyG;
-  g.save();
-  g.shadowBlur = s * 0.7; g.shadowColor = '#a040ff';
-  g.beginPath();
-  for (let i = 0; i < 14; i++) {
-    const a = (i / 14) * Math.PI * 2;
-    const r = s * (0.72 + Math.sin(t * 4 + i * 1.9) * 0.09);
-    const px = Math.cos(a) * r, py = Math.sin(a) * r;
-    if (i === 0) g.moveTo(px, py); else g.lineTo(px, py);
+  // ============================================================
+  // 4. 冰河 · 雪怪守卫（蓬松毛发 + 冰晶 + 大脚 + 蓝眼）
+  // ============================================================
+  function drawIceAgeYeti(g, s, t, alert) {
+    const b = breath(t, 1.8, 1.8);
+    // 寒气光环
+    g.fillStyle = 'rgba(200,240,255,0.15)'; circle(g, 0, 0, s * 1.4);
+    // 蓬松毛发（多层锯齿圆）
+    for (let layer = 0; layer < 3; layer++) {
+      const rr = s * (1.05 - layer * 0.12);
+      g.fillStyle = ['#e8f4ff', '#d0e8f8', '#b8d8ee'][layer];
+      g.beginPath();
+      for (let i = 0; i < 20; i++) {
+        const a = i / 20 * Math.PI * 2;
+        const wob = 1 + Math.sin(t * 2 + i * 2 + layer) * 0.08;
+        const px = Math.cos(a) * rr * wob, py = Math.sin(a) * rr * wob * 0.9 + b;
+        if (i === 0) g.moveTo(px, py); else g.lineTo(px, py);
+      }
+      g.closePath(); g.fill();
+    }
+    // 脸
+    g.fillStyle = '#f0f8ff'; ellipse(g, 0, -s * 0.15 + b, s * 0.5, s * 0.45);
+    // 眼睛（蓝光）
+    eye(g, -s * 0.2, -s * 0.25 + b, s * 0.1, { iris: '#40c0ff', angry: alert, glow: '#80e0ff' });
+    eye(g, s * 0.2, -s * 0.25 + b, s * 0.1, { iris: '#40c0ff', angry: alert, glow: '#80e0ff' });
+    // 眉骨
+    g.fillStyle = '#b8d8ee'; poly(g, [[-s * 0.35, -s * 0.4 + b], [-s * 0.1, -s * 0.35 + b], [-s * 0.2, -s * 0.28 + b]]); g.fill();
+    poly(g, [[s * 0.35, -s * 0.4 + b], [s * 0.1, -s * 0.35 + b], [s * 0.2, -s * 0.28 + b]]); g.fill();
+    // 嘴
+    g.strokeStyle = '#5a7a8a'; g.lineWidth = s * 0.05; g.lineCap = 'round';
+    g.beginPath(); g.arc(0, s * 0.05 + b, s * 0.2, 0.2, Math.PI - 0.2); g.stroke();
+    // 冰晶（头顶）
+    g.fillStyle = '#a0e0ff'; g.shadowBlur = s * 0.5; g.shadowColor = '#40c0ff';
+    for (let i = 0; i < 3; i++) {
+      const cx = -s * 0.3 + i * s * 0.3, cy = -s * 0.9 + b;
+      poly(g, [[cx, cy - s * 0.25], [cx - s * 0.1, cy], [cx + s * 0.1, cy]]); g.fill();
+    }
+    g.shadowBlur = 0;
+    // 大脚
+    for (const side of [-1, 1]) {
+      g.fillStyle = '#d0e8f8'; ellipse(g, side * s * 0.5, s * 0.9, s * 0.28, s * 0.18);
+      g.strokeStyle = '#8ab0c8'; g.lineWidth = s * 0.04;
+      for (let i = -1; i <= 1; i++) { g.beginPath(); g.moveTo(side * s * 0.5 + i * s * 0.1, s * 0.95); g.lineTo(side * s * 0.5 + i * s * 0.12, s * 1.05); g.stroke(); }
+    }
   }
-  g.closePath();
-  g.fill();
-  g.restore();
 
-  // 大嘴
-  g.fillStyle = '#05010a';
-  g.beginPath(); g.ellipse(0, s * 0.12, s * 0.42, s * 0.3, 0, 0, Math.PI * 2); g.fill();
-
-  // 牙齒
-  g.fillStyle = '#e8dcff';
-  for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2;
-    const cx = Math.cos(a) * s * 0.34;
-    const cy = s * 0.12 + Math.sin(a) * s * 0.24;
+  // ============================================================
+  // 5. 宇宙 · 骷髅王守卫（骷髅头 + 星冠 + 披风 + 幽灵火）
+  // ============================================================
+  function drawCosmicSkeletonKing(g, s, t, alert) {
+    const b = breath(t, 2, 1.5);
+    // 幽灵披风
+    g.fillStyle = radial(g, 0, s * 0.2, s * 0.2, s * 1.5, '#4a3a8a', '#1a0a4a');
     g.beginPath();
-    g.moveTo(cx - s * 0.05, cy);
-    g.lineTo(cx, cy + Math.sign(Math.sin(a) || 1) * s * 0.13);
-    g.lineTo(cx + s * 0.05, cy);
-    g.closePath();
-    g.fill();
+    g.moveTo(-s * 0.9, -s * 0.5);
+    g.quadraticCurveTo(-s * 1.4, s * 0.5, -s * 0.6, s * 1.2);
+    g.lineTo(s * 0.6, s * 1.2);
+    g.quadraticCurveTo(s * 1.4, s * 0.5, s * 0.9, -s * 0.5);
+    g.closePath(); g.fill();
+    // 披风星点
+    g.fillStyle = '#fff';
+    for (let i = 0; i < 8; i++) {
+      const px = Math.sin(i * 2.3 + t * 0.5) * s * 0.7, py = s * 0.2 + Math.cos(i * 1.7 + t * 0.5) * s * 0.6;
+      circle(g, px, py, s * 0.03);
+    }
+    // 骨骼身体
+    g.strokeStyle = '#e8e0d0'; g.lineWidth = s * 0.12; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(0, -s * 0.2); g.lineTo(0, s * 0.6); g.stroke();
+    for (let i = 0; i < 4; i++) {
+      g.beginPath(); g.moveTo(-s * 0.35, -s * 0.1 + i * s * 0.18); g.quadraticCurveTo(0, s * 0.05 + i * s * 0.18, s * 0.35, -s * 0.1 + i * s * 0.18); g.stroke();
+    }
+    // 肩甲
+    g.fillStyle = '#8a7aa8'; ellipse(g, -s * 0.5, -s * 0.25, s * 0.28, s * 0.18); ellipse(g, s * 0.5, -s * 0.25, s * 0.28, s * 0.18);
+    // 骷髅头
+    g.fillStyle = '#f0e8d8'; ellipse(g, 0, -s * 0.75 + b, s * 0.55, s * 0.6);
+    // 眼窝
+    g.fillStyle = '#0a0a0a'; ellipse(g, -s * 0.22, -s * 0.8 + b, s * 0.16, s * 0.18); ellipse(g, s * 0.22, -s * 0.8 + b, s * 0.16, s * 0.18);
+    // 幽灵火眼
+    g.fillStyle = alert ? '#ff4020' : '#40c0ff'; g.shadowBlur = s * 0.8; g.shadowColor = alert ? '#ff2000' : '#20a0ff';
+    circle(g, -s * 0.22, -s * 0.8 + b, s * 0.08); circle(g, s * 0.22, -s * 0.8 + b, s * 0.08);
+    g.shadowBlur = 0;
+    // 鼻腔
+    g.fillStyle = '#0a0a0a'; poly(g, [[-s * 0.06, -s * 0.6 + b], [s * 0.06, -s * 0.6 + b], [0, -s * 0.48 + b]]); g.fill();
+    // 牙齿
+    g.strokeStyle = '#0a0a0a'; g.lineWidth = s * 0.04;
+    for (let i = -2; i <= 2; i++) { g.beginPath(); g.moveTo(i * s * 0.1, -s * 0.4 + b); g.lineTo(i * s * 0.1, -s * 0.3 + b); g.stroke(); }
+    // 星冠
+    g.fillStyle = '#ffe040'; g.shadowBlur = s * 0.5; g.shadowColor = '#ffaa00';
+    for (let i = 0; i < 5; i++) {
+      const a = -Math.PI / 2 + (i - 2) * 0.4;
+      const cx = Math.cos(a) * s * 0.6, cy = -s * 1.2 + b + Math.sin(a) * s * 0.2;
+      g.beginPath();
+      for (let k = 0; k < 5; k++) {
+        const aa = k * Math.PI * 2 / 5 - Math.PI / 2;
+        const px = cx + Math.cos(aa) * s * 0.1, py = cy + Math.sin(aa) * s * 0.1;
+        if (k === 0) g.moveTo(px, py); else g.lineTo(px, py);
+        g.lineTo(cx + Math.cos(aa + Math.PI / 5) * s * 0.04, cy + Math.sin(aa + Math.PI / 5) * s * 0.04);
+      }
+      g.closePath(); g.fill();
+    }
+    g.shadowBlur = 0;
   }
 
-  // 眼睛
-  const eyeC = alert ? '#ff2040' : '#40ffe0';
-  for (let i = 0; i < 3; i++) {
-    const a = -Math.PI * 0.9 + i * Math.PI * 0.8;
-    const ex = Math.cos(a) * s * 0.34;
-    const ey = Math.sin(a) * s * 0.34 - s * 0.32;
-    g.save();
-    g.shadowBlur = s * 0.5; g.shadowColor = eyeC;
-    g.fillStyle = eyeC;
-    g.beginPath(); g.arc(ex, ey, s * 0.085, 0, Math.PI * 2); g.fill();
-    g.restore();
-    g.fillStyle = '#0a0218';
-    g.beginPath(); g.arc(ex, ey, s * 0.035, 0, Math.PI * 2); g.fill();
+  // ============================================================
+  // 6. 樱花 · 樱花精灵守卫（花瓣翅膀 + 花冠 + 飘落花瓣）
+  // ============================================================
+  function drawSakuraSpirit(g, s, t, alert) {
+    const b = breath(t, 2.5, 2);
+    // 飘落花瓣
+    for (let i = 0; i < 8; i++) {
+      const px = Math.sin(t * 0.8 + i * 1.3) * s * 1.2;
+      const py = ((t * 20 + i * 40) % (s * 2.5)) - s * 1.2;
+      g.fillStyle = i % 2 ? '#ffb0e0' : '#ff80c0';
+      g.globalAlpha = 0.7;
+      g.save(); g.translate(px, py); g.rotate(t + i);
+      g.beginPath(); g.ellipse(0, 0, s * 0.08, s * 0.05, 0, 0, Math.PI * 2); g.fill(); g.restore();
+    }
+    g.globalAlpha = 1;
+    // 翅膀（花瓣状，半透明）
+    for (const side of [-1, 1]) {
+      for (let i = 0; i < 3; i++) {
+        const a = side * (0.6 + i * 0.35) + Math.sin(t * 3 + i) * 0.1;
+        g.save(); g.rotate(a); g.globalAlpha = 0.55 - i * 0.1;
+        g.fillStyle = i === 0 ? '#ffd0f0' : (i === 1 ? '#ffb0e0' : '#ff90d0');
+        g.beginPath(); g.ellipse(s * 0.8, -s * 0.2, s * 0.45, s * 0.22, 0, 0, Math.PI * 2); g.fill();
+        g.restore();
+      }
+    }
+    g.globalAlpha = 1;
+    // 身体
+    g.fillStyle = radial(g, 0, 0, s * 0.2, s * 1.1, '#fff0f8', '#ffb0d8');
+    ellipse(g, 0, 0, s * 0.7, s * 0.75);
+    // 头
+    g.fillStyle = radial(g, 0, -s * 0.5, s * 0.1, s * 0.6, '#fff8fc', '#ffd0e8');
+    circle(g, 0, -s * 0.65 + b, s * 0.48);
+    // 花冠
+    for (let i = 0; i < 5; i++) {
+      const a = -Math.PI / 2 + (i - 2) * 0.5;
+      const cx = Math.cos(a) * s * 0.5, cy = -s * 1.0 + b + Math.sin(a) * s * 0.2;
+      g.fillStyle = i % 2 ? '#ff80c0' : '#ffb0e0';
+      g.beginPath(); g.ellipse(cx, cy, s * 0.16, s * 0.1, a, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#ffe040'; circle(g, cx, cy, s * 0.05);
+    }
+    // 眼睛（温柔，闭眼时弯月）
+    if (alert) {
+      eye(g, -s * 0.18, -s * 0.65 + b, s * 0.08, { iris: '#c040a0', angry: true });
+      eye(g, s * 0.18, -s * 0.65 + b, s * 0.08, { iris: '#c040a0', angry: true });
+    } else {
+      g.strokeStyle = '#a04080'; g.lineWidth = s * 0.04; g.lineCap = 'round';
+      g.beginPath(); g.arc(-s * 0.18, -s * 0.65 + b, s * 0.08, 0.2, Math.PI - 0.2); g.stroke();
+      g.beginPath(); g.arc(s * 0.18, -s * 0.65 + b, s * 0.08, 0.2, Math.PI - 0.2); g.stroke();
+    }
+    // 嘴
+    g.fillStyle = '#e06090'; circle(g, 0, -s * 0.5 + b, s * 0.03);
   }
 
-  g.restore();
-}
+  // ============================================================
+  // 7. 泰坦 · 泰坦巨神守卫（巨石身躯 + 雷电纹 + 发光核心）
+  // ============================================================
+  function drawTitanColossus(g, s, t, alert) {
+    const b = breath(t, 0.8, 1.2);
+    // 雷电纹（背景）
+    g.strokeStyle = '#80d0ff'; g.lineWidth = s * 0.06; g.shadowBlur = s * 0.8; g.shadowColor = '#40a0ff';
+    for (let i = 0; i < 3; i++) {
+      g.beginPath(); g.moveTo(-s * 0.8, -s * 0.6 + i * s * 0.4);
+      g.lineTo(-s * 0.2, -s * 0.3 + i * s * 0.4); g.lineTo(s * 0.2, -s * 0.5 + i * s * 0.4); g.lineTo(s * 0.8, -s * 0.2 + i * s * 0.4);
+      g.stroke();
+    }
+    g.shadowBlur = 0;
+    // 身躯（石块拼接）
+    g.fillStyle = radial(g, 0, 0, s * 0.3, s * 1.3, '#9a9ab0', '#5a5a7a');
+    g.beginPath();
+    g.moveTo(-s * 0.9, s * 0.8); g.lineTo(-s * 0.7, -s * 0.5); g.lineTo(-s * 0.3, -s * 0.8); g.lineTo(s * 0.3, -s * 0.8);
+    g.lineTo(s * 0.7, -s * 0.5); g.lineTo(s * 0.9, s * 0.8); g.closePath(); g.fill();
+    // 石块纹理
+    g.strokeStyle = '#3a3a5a'; g.lineWidth = s * 0.05;
+    for (let i = 0; i < 3; i++) {
+      g.beginPath(); g.moveTo(-s * 0.6 + i * s * 0.4, -s * 0.4); g.lineTo(-s * 0.4 + i * s * 0.4, s * 0.5); g.stroke();
+    }
+    // 发光核心
+    g.fillStyle = radial(g, 0, -s * 0.1, s * 0.05, s * 0.3, '#fff', '#40a0ff');
+    g.shadowBlur = s * 1.2; g.shadowColor = '#40a0ff'; circle(g, 0, -s * 0.1, s * 0.2); g.shadowBlur = 0;
+    // 头（石冠）
+    g.fillStyle = '#7a7a9a'; ellipse(g, 0, -s * 0.85 + b, s * 0.5, s * 0.4);
+    g.fillStyle = '#4a4a6a'; poly(g, [[-s * 0.5, -s * 1.0 + b], [-s * 0.3, -s * 1.35 + b], [-s * 0.1, -s * 1.0 + b]]); g.fill();
+    poly(g, [[s * 0.5, -s * 1.0 + b], [s * 0.3, -s * 1.35 + b], [s * 0.1, -s * 1.0 + b]]); g.fill();
+    // 眼睛（雷光）
+    eye(g, -s * 0.18, -s * 0.9 + b, s * 0.1, { iris: '#80e0ff', angry: alert, glow: '#40a0ff' });
+    eye(g, s * 0.18, -s * 0.9 + b, s * 0.1, { iris: '#80e0ff', angry: alert, glow: '#40a0ff' });
+    // 手臂
+    for (const side of [-1, 1]) {
+      g.fillStyle = '#8a8aa0'; ellipse(g, side * s * 0.85, -s * 0.1, s * 0.22, s * 0.5);
+      g.fillStyle = '#6a6a8a'; circle(g, side * s * 0.9, s * 0.35, s * 0.2);
+    }
+  }
+
+  // ============================================================
+  // 8. 神界 · 天使守卫（多翼 + 光环 + 圣光 + 长袍）
+  // ============================================================
+  function drawCelestialAngel(g, s, t, alert) {
+    const b = breath(t, 2, 1.6);
+    // 圣光
+    g.fillStyle = radial(g, 0, -s * 0.2, s * 0.1, s * 1.8, 'rgba(255,240,160,0.35)', 'rgba(255,240,160,0)');
+    circle(g, 0, -s * 0.2, s * 1.8);
+    // 翅膀（3 对，从大到小）
+    for (let pair = 2; pair >= 0; pair--) {
+      const scale = 1 - pair * 0.22;
+      for (const side of [-1, 1]) {
+        g.save(); g.rotate(side * (0.5 + pair * 0.35) + Math.sin(t * 2 + pair) * 0.06);
+        g.fillStyle = pair === 0 ? '#fff8e0' : (pair === 1 ? '#ffe8b0' : '#ffe080');
+        g.globalAlpha = 0.85 - pair * 0.15;
+        g.beginPath();
+        g.moveTo(0, -s * 0.1);
+        g.quadraticCurveTo(side * s * 1.2 * scale, -s * 0.9 * scale, side * s * 1.5 * scale, -s * 0.1 * scale);
+        g.quadraticCurveTo(side * s * 1.1 * scale, s * 0.2 * scale, 0, s * 0.1);
+        g.closePath(); g.fill();
+        // 羽毛线
+        g.strokeStyle = '#d0b060'; g.lineWidth = s * 0.03;
+        for (let f = 1; f <= 3; f++) {
+          g.beginPath(); g.moveTo(0, 0); g.lineTo(side * s * 0.4 * f * scale, -s * 0.5 * scale); g.stroke();
+        }
+        g.restore();
+      }
+    }
+    g.globalAlpha = 1;
+    // 长袍
+    g.fillStyle = radial(g, 0, s * 0.3, s * 0.2, s * 1.2, '#fff', '#ffe8c0');
+    g.beginPath();
+    g.moveTo(-s * 0.5, -s * 0.1); g.quadraticCurveTo(-s * 0.8, s * 0.6, -s * 0.6, s * 1.2);
+    g.lineTo(s * 0.6, s * 1.2); g.quadraticCurveTo(s * 0.8, s * 0.6, s * 0.5, -s * 0.1); g.closePath(); g.fill();
+    // 金色腰带
+    g.fillStyle = '#e0b040'; g.fillRect(-s * 0.45, s * 0.3, s * 0.9, s * 0.1);
+    // 头
+    g.fillStyle = radial(g, 0, -s * 0.6, s * 0.1, s * 0.5, '#fff', '#ffd8a0');
+    circle(g, 0, -s * 0.65 + b, s * 0.4);
+    // 光环
+    g.strokeStyle = '#ffe040'; g.lineWidth = s * 0.08; g.shadowBlur = s * 0.8; g.shadowColor = '#ffcc00';
+    g.beginPath(); g.ellipse(0, -s * 1.1 + b, s * 0.45, s * 0.12, 0, 0, Math.PI * 2); g.stroke();
+    g.shadowBlur = 0;
+    // 眼睛（慈悲）
+    eye(g, -s * 0.16, -s * 0.7 + b, s * 0.08, { iris: '#40a0ff', angry: false, glow: '#80c0ff' });
+    eye(g, s * 0.16, -s * 0.7 + b, s * 0.08, { iris: '#40a0ff', angry: false, glow: '#80c0ff' });
+    // 慈笑
+    g.strokeStyle = '#c08060'; g.lineWidth = s * 0.04;
+    g.beginPath(); g.arc(0, -s * 0.55 + b, s * 0.12, 0.2, Math.PI - 0.2); g.stroke();
+  }
+
+  // ============================================================
+  // 9. 暗影 · 暗影领主（暗雾 + 红眼 + 破碎斗篷 + 黑刺）
+  // ============================================================
+  function drawShadowLord(g, s, t, alert) {
+    const b = breath(t, 2.2, 1.4);
+    // 暗雾
+    for (let i = 0; i < 10; i++) {
+      const a = i / 10 * Math.PI * 2 + t * 0.5;
+      const r = s * (0.8 + (Math.sin(t * 2 + i) + 1) * 0.3);
+      g.fillStyle = `rgba(60,20,80,${0.15 + Math.sin(t + i) * 0.05})`;
+      circle(g, Math.cos(a) * r, b + Math.sin(a) * r * 0.7, s * 0.3);
+    }
+    // 破碎斗篷
+    g.fillStyle = radial(g, 0, s * 0.2, s * 0.2, s * 1.4, '#3a1a4a', '#0a0515');
+    g.beginPath();
+    g.moveTo(-s * 1.0, -s * 0.4);
+    g.lineTo(-s * 0.7, s * 1.3); g.lineTo(-s * 0.3, s * 0.9); g.lineTo(0, s * 1.3);
+    g.lineTo(s * 0.3, s * 0.9); g.lineTo(s * 0.7, s * 1.3); g.lineTo(s * 1.0, -s * 0.4);
+    g.quadraticCurveTo(0, -s * 1.0, -s * 1.0, -s * 0.4); g.closePath(); g.fill();
+    // 黑刺
+    g.fillStyle = '#2a0a3a';
+    for (let i = 0; i < 6; i++) {
+      const a = -Math.PI / 2 + (i - 2.5) * 0.4;
+      const cx = Math.cos(a) * s * 0.8, cy = -s * 0.3 + Math.sin(a) * s * 0.6 + b;
+      poly(g, [[cx, cy - s * 0.3], [cx - s * 0.1, cy], [cx + s * 0.1, cy]]); g.fill();
+    }
+    // 头（兜帽）
+    g.fillStyle = '#1a0a2a'; ellipse(g, 0, -s * 0.5 + b, s * 0.55, s * 0.6);
+    g.fillStyle = '#0a0515'; ellipse(g, 0, -s * 0.35 + b, s * 0.4, s * 0.45);
+    // 红眼
+    g.fillStyle = alert ? '#ff2000' : '#ff4060'; g.shadowBlur = s * 1.2; g.shadowColor = '#ff0000';
+    ellipse(g, -s * 0.18, -s * 0.45 + b, s * 0.1, s * 0.06, 0.1); ellipse(g, s * 0.18, -s * 0.45 + b, s * 0.1, s * 0.06, -0.1);
+    g.shadowBlur = 0;
+    // 利爪
+    g.strokeStyle = '#3a1a4a'; g.lineWidth = s * 0.08; g.lineCap = 'round';
+    for (const side of [-1, 1]) {
+      g.beginPath(); g.moveTo(side * s * 0.6, s * 0.3); g.lineTo(side * s * 0.9, s * 0.8); g.stroke();
+      for (let i = -1; i <= 1; i++) { g.beginPath(); g.moveTo(side * s * 0.9, s * 0.8); g.lineTo(side * s * 0.9 + i * s * 0.1, s * 0.95); g.stroke(); }
+    }
+  }
+
+  // ============================================================
+  // 10. 混沌 · 混沌之主（螺旋触手 + 多眼 + 扭曲光环）
+  // ============================================================
+  function drawChaosLord(g, s, t, alert) {
+    const b = breath(t, 2.5, 1.8);
+    // 扭曲光环
+    for (let i = 0; i < 3; i++) {
+      g.strokeStyle = ['#c040ff', '#ff40c0', '#8040ff'][i]; g.lineWidth = s * 0.06; g.globalAlpha = 0.6;
+      g.beginPath();
+      for (let a = 0; a < Math.PI * 2; a += 0.1) {
+        const r = s * (1.0 + i * 0.2) + Math.sin(a * 5 + t * 3 + i) * s * 0.1;
+        const px = Math.cos(a) * r, py = Math.sin(a) * r * 0.8 + b;
+        if (a === 0) g.moveTo(px, py); else g.lineTo(px, py);
+      }
+      g.closePath(); g.stroke();
+    }
+    g.globalAlpha = 1;
+    // 螺旋触手
+    for (let i = 0; i < 6; i++) {
+      const a = i / 6 * Math.PI * 2 + t * 0.3;
+      g.strokeStyle = i % 2 ? '#a040e0' : '#e040a0'; g.lineWidth = s * 0.12; g.lineCap = 'round';
+      g.beginPath();
+      for (let k = 0; k <= 12; k++) {
+        const tt = k / 12;
+        const r = s * (0.5 + tt * 0.9);
+        const ang = a + tt * 2.5;
+        const px = Math.cos(ang) * r, py = Math.sin(ang) * r * 0.7 + b + tt * s * 0.3;
+        if (k === 0) g.moveTo(px, py); else g.lineTo(px, py);
+      }
+      g.stroke();
+    }
+    // 身体（混沌球）
+    g.fillStyle = radial(g, 0, 0, s * 0.1, s * 1.2, '#ff40ff', '#4a0a6a');
+    circle(g, 0, 0, s * 0.8);
+    g.fillStyle = radial(g, -s * 0.2, -s * 0.2, s * 0.05, s * 0.6, '#fff', '#c040ff');
+    circle(g, 0, 0, s * 0.5);
+    // 多眼
+    const eyes = [[-0.3, -0.3], [0.3, -0.3], [0, 0.2], [-0.4, 0.3], [0.4, 0.3]];
+    for (const [ex, ey] of eyes) {
+      g.fillStyle = '#0a0a0a'; circle(g, ex * s, ey * s, s * 0.13);
+      g.fillStyle = alert ? '#ff2000' : '#ffdd00'; g.shadowBlur = s * 0.5; g.shadowColor = '#ff8800';
+      circle(g, ex * s, ey * s, s * 0.07); g.shadowBlur = 0;
+    }
+    // 巨口
+    g.strokeStyle = '#1a0a2a'; g.lineWidth = s * 0.06;
+    g.beginPath(); g.arc(0, s * 0.5, s * 0.3, 0.1, Math.PI - 0.1); g.stroke();
+  }
+
+  // ============================================================
+  // 11. 虚空 · 虚空吞噬者（深渊巨口 + 虚空漩涡 + 漂浮碎片）
+  // ============================================================
+  function drawVoidDevourer(g, s, t, alert) {
+    const b = breath(t, 3, 1.2);
+    // 虚空漩涡
+    for (let i = 0; i < 4; i++) {
+      g.strokeStyle = `rgba(120,60,200,${0.5 - i * 0.1})`; g.lineWidth = s * 0.08;
+      g.beginPath();
+      for (let a = 0; a < Math.PI * 2; a += 0.15) {
+        const r = s * (0.6 + i * 0.25) * (1 + Math.sin(a * 3 + t * 2 + i) * 0.1);
+        const px = Math.cos(a + t * 0.5) * r, py = Math.sin(a + t * 0.5) * r * 0.8 + b;
+        if (a === 0) g.moveTo(px, py); else g.lineTo(px, py);
+      }
+      g.closePath(); g.stroke();
+    }
+    // 漂浮碎片
+    g.fillStyle = '#a060ff';
+    for (let i = 0; i < 8; i++) {
+      const a = i / 8 * Math.PI * 2 + t * 0.7;
+      const r = s * (1.1 + Math.sin(t * 2 + i) * 0.2);
+      g.save(); g.translate(Math.cos(a) * r, b + Math.sin(a) * r * 0.7); g.rotate(t + i);
+      poly(g, [[-s * 0.08, -s * 0.08], [s * 0.08, 0], [-s * 0.08, s * 0.08]]); g.fill();
+      g.restore();
+    }
+    // 核心巨口
+    g.fillStyle = radial(g, 0, 0, s * 0.1, s * 1.0, '#1a0a2a', '#000');
+    circle(g, 0, 0, s * 0.9);
+    // 牙齿
+    g.fillStyle = '#e0d0ff';
+    for (let i = 0; i < 12; i++) {
+      const a = i / 12 * Math.PI * 2;
+      const r0 = s * 0.75, r1 = s * 0.95;
+      const px = Math.cos(a) * r0, py = Math.sin(a) * r0;
+      const tx = Math.cos(a) * r1, ty = Math.sin(a) * r1;
+      poly(g, [[px - s * 0.06, py], [tx, ty], [px + s * 0.06, py]]); g.fill();
+    }
+    // 深渊之眼
+    g.fillStyle = alert ? '#ff2000' : '#c040ff'; g.shadowBlur = s * 1.2; g.shadowColor = alert ? '#ff0000' : '#8020ff';
+    ellipse(g, 0, -s * 0.2, s * 0.35, s * 0.2); g.shadowBlur = 0;
+    g.fillStyle = '#fff'; ellipse(g, 0, -s * 0.2, s * 0.12, s * 0.1);
+    // 暗触须
+    g.strokeStyle = '#3a1a5a'; g.lineWidth = s * 0.08; g.lineCap = 'round';
+    for (let i = 0; i < 6; i++) {
+      const a = Math.PI * 0.5 + (i - 2.5) * 0.3;
+      g.beginPath();
+      g.moveTo(Math.cos(a) * s * 0.8, Math.sin(a) * s * 0.8);
+      g.quadraticCurveTo(Math.cos(a) * s * 1.2, Math.sin(a) * s * 1.2 + b, Math.cos(a) * s * 1.3, Math.sin(a) * s * 1.6 + b);
+      g.stroke();
+    }
+  }
+
+  // 导出
+  return [
+    drawForestRooster,
+    drawVolcanoHound,
+    drawAbyssWhale,
+    drawPrehistoricTrex,
+    drawIceAgeYeti,
+    drawCosmicSkeletonKing,
+    drawSakuraSpirit,
+    drawTitanColossus,
+    drawCelestialAngel,
+    drawShadowLord,
+    drawChaosLord,
+    drawVoidDevourer,
+  ];
+})();
+
+// 覆盖全局绘制函数（characters.js 若未定义，则使用此版本）
+window.__raingodDrawGuardAnimal = function (g, biomeIdx, s, time, alert) {
+  const fn = GUARD_DRAWERS[biomeIdx];
+  if (fn) fn(g, s, time, alert);
+  else {
+    // 兜底：至少不是圆形
+    g.fillStyle = '#888'; circle(g, 0, 0, s);
+  }
+};
   function drawStickFigure(g, cx, cy, r, time, facing, walkPhase, swingPhase) {
     const fn = window.__raingodDrawStickFigure;
     if (fn) return fn(g, cx, cy, r, time, facing, walkPhase, swingPhase);
