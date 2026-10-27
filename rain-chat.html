@@ -3,299 +3,1100 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>雨神聊天室 | Raingod</title>
+    <title>好友聊天室 | 雨神</title>
+    <link rel="stylesheet" href="menu.css">
     <style>
-        :root { --me-bg: #007aff; --other-bg: #f2f2f7; --danger: #ff3b30; --text-gray: #8e8e93; }
-        body { font-family: -apple-system, sans-serif; background: #000; margin: 0; display: flex; justify-content: center; height: 100vh; overflow: hidden; -webkit-user-select: text; user-select: text; }
-        #app { width: 100%; max-width: 500px; background: white; display: flex; flex-direction: column; height: 100vh; position: relative; }
-        
-        /* Header */
-        .header { height: 60px; padding: 0 15px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; background: #fff; z-index: 10; }
-        .header-btns { display: flex; gap: 8px; }
-        
-        #chat-box { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 15px; background: #fff; }
-        
-        /* Messages */
+        :root {
+            --me-bg: #007aff;
+            --other-bg: #f2f2f7;
+            --danger: #ff3b30;
+            --text-gray: #8e8e93;
+            --success: #34c759;
+            --border: #e2e6ed;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: #f3f5f8;
+            color: #1d1d1f;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            overflow-x: hidden;
+        }
+        #nav_bar { position: relative; z-index: 10; }
+
+        .tab-bar {
+            display: flex;
+            gap: 4px;
+            max-width: 860px;
+            margin: 20px auto 0;
+            padding: 5px;
+            background: #e8ecf2;
+            border-radius: 12px;
+            width: calc(100% - 32px);
+        }
+        .tab-btn {
+            flex: 1;
+            padding: 11px 8px;
+            border: 0;
+            border-radius: 9px;
+            background: transparent;
+            color: #5b6470;
+            font: inherit;
+            font-size: 0.92rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s;
+            position: relative;
+        }
+        .tab-btn.active {
+            background: #fff;
+            color: #1d1d1f;
+            box-shadow: 0 1px 4px rgba(25, 40, 60, 0.12);
+        }
+        .tab-btn .tab-badge {
+            display: none;
+            min-width: 17px;
+            height: 17px;
+            padding: 0 4px;
+            margin-left: 4px;
+            border-radius: 9px;
+            background: var(--danger);
+            color: #fff;
+            font-size: 10px;
+            font-weight: 700;
+            line-height: 17px;
+            text-align: center;
+            vertical-align: middle;
+        }
+        .tab-btn .tab-badge.show { display: inline-block; }
+
+        .page-wrap {
+            max-width: 860px;
+            margin: 18px auto 40px;
+            padding: 0 16px;
+        }
+        .page { display: none; }
+        .page.active { display: block; }
+
+        .card {
+            margin-bottom: 18px;
+            padding: 24px;
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            background: #fff;
+            box-shadow: 0 8px 24px rgba(25, 40, 60, 0.06);
+        }
+        .card h2 { margin: 0 0 8px; font-size: 1.1rem; }
+        .card h3 { margin: 18px 0 8px; font-size: 0.95rem; }
+        .profile-help, .profile-status {
+            color: #606a78; font-size: 0.88rem; line-height: 1.5;
+        }
+        .profile-status { min-height: 1.4em; margin: 10px 0 0; }
+        .profile-status.error { color: #b42318; }
+        .profile-status.ok { color: var(--success); }
+
+        .page-heading {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 12px; margin-bottom: 18px;
+        }
+        .page-heading h1 { margin: 0; font-size: 1.55rem; }
+
+        .profile-avatar-row { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+        .avatar-wrap { position: relative; width: 104px; height: 104px; flex: 0 0 auto; }
+        .profile-avatar {
+            width: 104px; height: 104px; border: 2px solid var(--border);
+            border-radius: 50%; object-fit: cover; background: #fff;
+        }
+        .avatar-edit-btn {
+            position: absolute; right: -2px; bottom: -2px;
+            width: 34px; height: 34px; border-radius: 50%;
+            border: 2px solid #fff; background: var(--me-bg); color: #fff;
+            font-size: 16px; cursor: pointer; display: flex;
+            align-items: center; justify-content: center;
+        }
+
+        .profile-form { display: grid; gap: 14px; margin-top: 16px; }
+        .profile-form label { display: grid; gap: 7px; font-size: 0.9rem; font-weight: 600; }
+        .profile-form input {
+            width: 100%; padding: 11px 12px; border: 1px solid #cbd2dc;
+            border-radius: 8px; font: inherit;
+        }
+        .profile-form input:focus {
+            border-color: #4285f4; outline: 2px solid rgba(66, 133, 244, 0.18);
+        }
+        .profile-button {
+            width: fit-content; padding: 10px 16px; border: 0;
+            border-radius: 8px; background: #2878e3; color: #fff;
+            font: inherit; font-weight: 600; cursor: pointer;
+        }
+        .profile-button:disabled { cursor: wait; opacity: 0.65; }
+        .profile-button.secondary { background: #687385; }
+        .profile-button.danger { background: var(--danger); }
+
+        .search-row { display: flex; gap: 8px; }
+        .search-row input {
+            flex: 1; padding: 10px 12px; border: 1px solid #cbd2dc;
+            border-radius: 8px; font: inherit;
+        }
+        .friend-list, .request-list, .search-results {
+            list-style: none; margin: 0; padding: 0;
+            display: flex; flex-direction: column; gap: 8px;
+        }
+        .friend-item, .request-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px; border-radius: 12px; background: #f7f9fc;
+            border: 1px solid transparent;
+        }
+        .friend-item.active { border-color: var(--me-bg); background: #eaf2ff; }
+        .friend-avatar {
+            width: 42px; height: 42px; border-radius: 50%;
+            object-fit: cover; background: #fff; flex: 0 0 auto;
+            border: 1px solid var(--border);
+        }
+        .friend-name {
+            flex: 1; font-weight: 600; font-size: 0.95rem;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .friend-unread {
+            min-width: 18px; height: 18px; padding: 0 5px;
+            border-radius: 9px; background: var(--danger); color: #fff;
+            font-size: 11px; font-weight: 700; line-height: 18px; text-align: center;
+            display: none;
+        }
+        .friend-unread.show { display: inline-block; }
+        .friend-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+        .mini-btn {
+            padding: 6px 11px; border-radius: 7px; border: 1px solid #ccc;
+            background: #fff; font-size: 12px; font-weight: 600; cursor: pointer;
+        }
+        .mini-btn.primary { background: var(--me-bg); color: #fff; border-color: var(--me-bg); }
+        .mini-btn.success { background: var(--success); color: #fff; border-color: var(--success); }
+        .mini-btn.danger { background: #fff0f0; color: var(--danger); border-color: #ffc9c9; }
+
+        .chat-panel {
+            display: flex; flex-direction: column;
+            background: #fff; border-radius: 16px; overflow: hidden;
+            border: 1px solid var(--border);
+            box-shadow: 0 8px 24px rgba(25, 40, 60, 0.06);
+            height: calc(100vh - 190px);
+            min-height: 460px;
+        }
+        .chat-layout { display: flex; height: 100%; }
+        .chat-sidebar {
+            width: 210px; flex-shrink: 0; border-right: 1px solid #eee;
+            overflow-y: auto; background: #fafbfd;
+        }
+        .chat-sidebar-title {
+            padding: 12px 14px 6px; font-size: 12px; font-weight: 700;
+            color: var(--text-gray); letter-spacing: 0.4px;
+        }
+        .chat-sidebar .friend-item { border-radius: 0; border: 0; background: transparent; }
+        .chat-sidebar .friend-item.active { background: #eaf2ff; }
+        .chat-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+        /* 手機版好友選擇下拉選單 */
+        .chat-mobile-picker {
+            display: none;
+            padding: 10px 12px;
+            border-bottom: 1px solid #eee;
+            background: #fff;
+            flex-shrink: 0;
+        }
+        .chat-mobile-picker select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #cbd2dc;
+            border-radius: 9px;
+            font: inherit;
+            background: #fff;
+            color: #1d1d1f;
+        }
+
+        .chat-header {
+            padding: 13px 16px; border-bottom: 1px solid #eee;
+            display: flex; justify-content: space-between; align-items: center;
+            background: #fff; flex-shrink: 0;
+        }
+        .chat-header .title { font-weight: 700; }
+        .chat-header .sub { font-size: 12px; color: var(--text-gray); }
+        .chat-header-actions { display: flex; gap: 8px; }
+        .chat-box {
+            flex: 1; overflow-y: auto; padding: 15px;
+            display: flex; flex-direction: column; gap: 12px;
+            background: #fbfcfe;
+        }
+        .chat-empty {
+            margin: auto; text-align: center; color: var(--text-gray);
+            font-size: 0.92rem; padding: 30px;
+        }
         .msg-row { display: flex; flex-direction: column; width: 100%; }
         .msg-row.me { align-items: flex-end; }
         .msg-row.other { align-items: flex-start; }
-        
-        .msg-info { font-size: 11px; color: var(--text-gray); margin-bottom: 4px; padding: 0 5px; }
-        .bubble { padding: 12px; border-radius: 18px; font-size: 15px; word-break: break-all; max-width: 85%; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.1); -webkit-user-select: text; user-select: text; }
-        .me .bubble { background: var(--me-bg); color: white; border-bottom-right-radius: 4px; }
-        .other .bubble { background: var(--other-bg); color: black; border-bottom-left-radius: 4px; }
-        
-        /* Media */
-        .chat-img { max-width: 100%; border-radius: 10px; display: block; margin-bottom: 5px; }
-        .file-card { background: rgba(0,0,0,0.05); padding: 10px; border-radius: 12px; border: 1px solid rgba(0,0,0,0.1); min-width: 160px; }
-        .me .file-card { background: rgba(255,255,255,0.2); border-color: rgba(255,255,255,0.3); }
-        .dl-btn { background: var(--me-bg); color: white; border: none; padding: 8px; border-radius: 8px; font-size: 12px; cursor: pointer; width: 100%; margin-top: 8px; font-weight: bold; }
-        
-        /* Lightbox */
-        #lightbox { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 1000; }
-        
-        /* Input */
-        .input-area { padding: 10px 15px 35px; border-top: 1px solid #eee; display: flex; gap: 10px; align-items: center; background: #fff; }
-        input[type="text"] { flex: 1; padding: 12px 16px; border: none; background: #f2f2f7; border-radius: 25px; outline: none; font-size: 16px; }
-        
-        /* Shortcut Buttons */
-        .shortcut-area { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 10px; }
-        .shortcut-btn { padding: 8px 16px; background: #f2f2f7; color: #333; border: 1px solid #ddd; border-radius: 12px; font-size: 14px; font-weight: bold; cursor: pointer; }
-        .shortcut-btn:hover { background: var(--me-bg); color: white; border-color: var(--me-bg); }
+        .msg-info { font-size: 11px; color: var(--text-gray); margin-bottom: 3px; padding: 0 5px; }
+        .bubble {
+            padding: 10px 13px; border-radius: 16px; font-size: 14px;
+            word-break: break-word; max-width: 85%;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+            white-space: pre-wrap;
+        }
+        .me .bubble { background: var(--me-bg); color: #fff; border-bottom-right-radius: 4px; }
+        .other .bubble { background: var(--other-bg); color: #111; border-bottom-left-radius: 4px; }
+        .chat-input-area {
+            padding: 10px 12px; border-top: 1px solid #eee;
+            display: flex; gap: 8px; align-items: center; background: #fff;
+        }
+        .chat-input-area input[type="text"] {
+            flex: 1; padding: 11px 14px; border: none; background: #f2f2f7;
+            border-radius: 22px; outline: none; font-size: 15px;
+        }
+        .chat-send-btn {
+            border: none; background: var(--me-bg); color: #fff;
+            font-weight: 700; padding: 10px 16px; border-radius: 20px;
+            cursor: pointer; font-size: 14px; flex-shrink: 0;
+        }
+        .chat-send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
         .hidden { display: none !important; }
-        .btn-sm { padding: 6px 12px; border-radius: 8px; border: 1px solid #ddd; background: none; font-size: 12px; cursor: pointer; font-weight: bold; }
+
+        @media (max-width: 640px) {
+            .chat-sidebar { display: none; }
+            .chat-mobile-picker { display: block; }
+            .chat-panel { height: calc(100vh - 210px); }
+            .tab-btn { font-size: 0.82rem; padding: 10px 4px; }
+            .page-wrap { padding: 0 10px; }
+            .card { padding: 18px; }
+        }
     </style>
 </head>
 <body>
-<link rel="stylesheet" href="menu.css">
+    <div id="nav_bar"></div>
 
-<div id="nav_bar"></div>
+    <p id="login-required" class="profile-help" style="text-align:center;margin:24px;" hidden>請先登入帳號，再管理個人檔案與好友。</p>
 
-<script src="menu.js"></script>
-<div id="app">
-    <div id="lightbox" onclick="this.style.display='none'">
-        <img id="lb-img" style="max-width:95%; max-height:80%; object-fit:contain;">
-        <button id="lb-dl" class="dl-btn" style="width:auto; padding:10px 40px; margin-top:25px;">下載圖片</button>
-    </div>
+    <div id="app-area" hidden>
+        <div class="tab-bar" role="tablist">
+            <button class="tab-btn active" data-page="profile" role="tab">個人檔案</button>
+            <button class="tab-btn" data-page="friends" role="tab">好友 <span class="tab-badge" id="tab-badge-requests"></span></button>
+            <button class="tab-btn" data-page="chat" role="tab">聊天室 <span class="tab-badge" id="tab-badge-unread"></span></button>
+        </div>
 
-    <div id="auth-required" class="hidden" style="padding:40px; text-align:center; flex:1; flex-direction:column; justify-content:center; gap:15px;">
-        <h2 style="color:var(--me-bg);">聊天室需要登入</h2>
-        <p>請先登入雨神帳號，才能使用聊天室。</p>
-        <button onclick="document.getElementById('login-btn')?.click()" style="padding:16px; background:var(--me-bg); color:white; border:none; border-radius:15px; font-weight:bold; cursor:pointer;">前往登入</button>
-    </div>
+        <div class="page-wrap">
+            <!-- ===== 個人檔案 ===== -->
+            <section class="page active" id="page-profile">
+                <div class="page-heading">
+                    <h1>個人檔案</h1>
+                    <button id="sign-out" class="profile-button secondary" type="button">登出</button>
+                </div>
 
-    <div id="login-view" class="hidden" style="padding: 40px; text-align: center; flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 15px;">
-        <h2 style="color: var(--me-bg); font-size: 32px; margin: 0;">雨神聊天室</h2>
-        
-        <input type="text" id="nick-input" placeholder="設定暱稱 (可不填，自動生成)">
-        <input type="text" id="room-input" placeholder="房號 (705)">
-        <button onclick="handleJoin()" style="padding:16px; background:var(--me-bg); color:white; border:none; border-radius:15px; font-weight:bold; cursor:pointer;">進入房間</button>
-        
-        <!-- 捷徑房間區塊 -->
-        <div style="margin-top: 15px;">
-            <div style="font-size: 13px; color: var(--text-gray); margin-bottom: 8px;">快捷進房：</div>
-            <div class="shortcut-area" id="shortcut-box"></div>
+                <section class="card">
+                    <h2>個人頭像</h2>
+                    <div class="profile-avatar-row">
+                        <div class="avatar-wrap">
+                            <img id="profile-avatar" class="profile-avatar" src="https://raingod0101.github.io/catdragon.png" alt="個人頭像">
+                            <button id="avatar-edit-btn" class="avatar-edit-btn" type="button" title="更換頭像">✎</button>
+                        </div>
+                        <div>
+                            <p class="profile-help">點擊右下角鉛筆更換頭像，儲存後會同步到帳號資料庫。</p>
+                            <input id="avatar-file-input" type="file" accept="image/*" class="hidden">
+                        </div>
+                    </div>
+                    <p id="avatar-status" class="profile-status" role="status"></p>
+                </section>
+
+                <section class="card">
+                    <h2>顯示名稱</h2>
+                    <form id="name-form" class="profile-form">
+                        <label>
+                            名稱
+                            <input id="display-name" type="text" maxlength="40" autocomplete="nickname" required>
+                        </label>
+                        <button class="profile-button" type="submit">儲存名稱</button>
+                    </form>
+                    <p id="name-status" class="profile-status" role="status"></p>
+                </section>
+
+                <section class="card">
+                    <h2>變更密碼</h2>
+                    <p class="profile-help">為保護帳號安全，變更密碼時需要驗證目前密碼。</p>
+                    <form id="password-form" class="profile-form">
+                        <label>
+                            目前密碼
+                            <input id="current-password" type="password" autocomplete="current-password" required>
+                        </label>
+                        <label>
+                            新密碼（至少 6 個字元）
+                            <input id="new-password" type="password" minlength="6" autocomplete="new-password" required>
+                        </label>
+                        <label>
+                            確認新密碼
+                            <input id="confirm-password" type="password" minlength="6" autocomplete="new-password" required>
+                        </label>
+                        <button class="profile-button" type="submit">變更密碼</button>
+                    </form>
+                    <p id="password-status" class="profile-status" role="status"></p>
+                </section>
+            </section>
+
+            <!-- ===== 好友 ===== -->
+            <section class="page" id="page-friends">
+                <div class="page-heading">
+                    <h1>好友</h1>
+                </div>
+
+                <section class="card">
+                    <h2>搜尋好友</h2>
+                    <p class="profile-help">輸入對方帳號（@ 前面的名稱）送出好友申請。</p>
+                    <div class="search-row">
+                        <input id="friend-search-input" type="text" placeholder="輸入帳號搜尋" autocomplete="off">
+                        <button id="friend-search-btn" class="profile-button" type="button" style="width:auto;padding:10px 16px;">搜尋</button>
+                    </div>
+                    <ul id="search-results" class="search-results" style="margin-top:12px;"></ul>
+                </section>
+
+                <section class="card">
+                    <h2>好友申請</h2>
+                    <ul id="request-list" class="request-list">
+                        <li class="profile-help" id="request-empty">目前沒有待處理的好友申請。</li>
+                    </ul>
+                </section>
+
+                <section class="card">
+                    <h2>好友列表</h2>
+                    <ul id="friend-list" class="friend-list">
+                        <li class="profile-help" id="friend-empty">尚未加入任何好友。</li>
+                    </ul>
+                </section>
+            </section>
+
+            <!-- ===== 聊天室 ===== -->
+            <section class="page" id="page-chat">
+                <div class="chat-panel">
+                    <div class="chat-layout">
+                        <aside class="chat-sidebar">
+                            <div class="chat-sidebar-title">好友對話</div>
+                            <ul id="chat-sidebar-friends" style="list-style:none;margin:0;padding:0;"></ul>
+                        </aside>
+                        <div class="chat-main">
+                            <!-- 手機版好友選擇器 -->
+                            <div class="chat-mobile-picker">
+                                <select id="chat-mobile-select">
+                                    <option value="">選擇好友開始聊天…</option>
+                                </select>
+                            </div>
+                            <div class="chat-header">
+                                <div>
+                                    <div class="title" id="chat-title">聊天室</div>
+                                    <div class="sub" id="chat-subtitle">請選擇一位好友開始聊天。</div>
+                                </div>
+                                <div class="chat-header-actions">
+                                    <button id="chat-clear-friend" class="mini-btn" type="button" hidden>關閉對話</button>
+                                </div>
+                            </div>
+                            <div class="chat-box" id="chat-box">
+                                <div class="chat-empty" id="chat-empty">請選擇一位好友開始聊天。</div>
+                            </div>
+                            <div class="chat-input-area">
+                                <input type="text" id="msg-input" placeholder="輸入訊息..." disabled>
+                                <button class="chat-send-btn" id="chat-send-btn" type="button" disabled>傳送</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
         </div>
     </div>
 
-    <div id="chat-view" class="hidden" style="display:flex; flex-direction:column; height:100%;">
-        <div class="header">
-            <div><b id="room-title"></b> <small id="online-text" style="color:var(--me-bg)"></small></div>
-            <div class="header-btns">
-                <button id="del-btn" class="btn-sm hidden" style="color:var(--danger); border-color:var(--danger);" onclick="destroyRoom()">銷毀房間</button>
-                <button class="btn-sm" onclick="location.reload()">退出</button>
-            </div>
-        </div>
-        <div id="chat-box"></div>
-        <div class="input-area">
-            <input type="file" id="file-selector" class="hidden" onchange="sendFile(this)">
-            <button onclick="document.getElementById('file-selector').click()" style="font-size:24px; border:none; background:none;">📎</button>
-            <input type="text" id="msg-input" placeholder="輸入訊息..." onkeypress="if(event.key==='Enter') doSend()">
-            <button onclick="doSend()" style="color:var(--me-bg); font-weight:bold; border:none; background:none;">傳送</button>
-        </div>
-    </div>
-</div>
+    <script src="menu.js"></script>
+    <script>
+        (function() {
+            var ready = window.raingodFirebaseReady || Promise.resolve();
+            var authReady = window.raingodAuthReady || Promise.resolve(null);
 
-<script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getDatabase, ref, set, push, onValue, remove, get, update, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+            // ===== DOM =====
+            var fallbackAvatar = 'https://raingod0101.github.io/catdragon.png';
+            var loginRequired = document.getElementById('login-required');
+            var appArea = document.getElementById('app-area');
 
-    const firebaseConfig = { apiKey: "AIzaSyDHb0o6ahdNnvlL3-QQy_yRO_mg4XMqtJk", databaseURL: "https://chat-73802-default-rtdb.firebaseio.com" };
-    const app = initializeApp(firebaseConfig, 'rainChat');
-    const db = getDatabase(app);
-    await window.raingodFirebaseReady;
-    await window.raingodAuthReady;
-    let uid = '';
-    let currentRoom = "", myNick = "";
-    
-    // --- 1. 自動讀取與設定暱稱 ---
-    let savedNick = localStorage.getItem('chat_nick') || '';
-    document.getElementById('nick-input').value = savedNick;
-    window.raingodBindStorage('rain-chat-profile', ['chat_nick'], { chat_nick: savedNick }, data => {
-        if (!data.chat_nick) return;
-        savedNick = data.chat_nick;
-        myNick = savedNick;
-        document.getElementById('nick-input').value = savedNick;
-    });
-    window.raingodOnAuthStateChanged(user => {
-        document.getElementById('auth-required').classList.toggle('hidden', !!user);
-        document.getElementById('login-view').classList.toggle('hidden', !user);
-        if (!user) {
-            uid = '';
-            myNick = '';
-            currentRoom = '';
-            document.getElementById('chat-view').classList.add('hidden');
-            return;
-        }
+            var avatarImg = document.getElementById('profile-avatar');
+            var avatarEditBtn = document.getElementById('avatar-edit-btn');
+            var avatarFileInput = document.getElementById('avatar-file-input');
+            var nameForm = document.getElementById('name-form');
+            var displayNameInput = document.getElementById('display-name');
+            var passwordForm = document.getElementById('password-form');
+            var signOutButton = document.getElementById('sign-out');
+            var friendSearchInput = document.getElementById('friend-search-input');
+            var friendSearchBtn = document.getElementById('friend-search-btn');
+            var searchResults = document.getElementById('search-results');
+            var requestList = document.getElementById('request-list');
+            var friendList = document.getElementById('friend-list');
+            var chatSidebarFriends = document.getElementById('chat-sidebar-friends');
+            var chatMobileSelect = document.getElementById('chat-mobile-select');
 
-        uid = user.uid;
-        if (!savedNick) {
-            savedNick = user.email ? user.email.split('@')[0] : '雨神玩家';
-            myNick = savedNick;
-            document.getElementById('nick-input').value = savedNick;
-            localStorage.setItem('chat_nick', savedNick);
-        }
-    });
+            var chatTitle = document.getElementById('chat-title');
+            var chatSubtitle = document.getElementById('chat-subtitle');
+            var chatBox = document.getElementById('chat-box');
+            var chatEmpty = document.getElementById('chat-empty');
+            var msgInput = document.getElementById('msg-input');
+            var chatSendBtn = document.getElementById('chat-send-btn');
+            var chatClearFriend = document.getElementById('chat-clear-friend');
 
-    // --- 2. 快捷房間設定 (可自由增加或修改) ---
-    const quickRooms = ["feedback", "705", "666"]; 
-    const shortcutBox = document.getElementById('shortcut-box');
-    quickRooms.forEach(room => {
-        const btn = document.createElement('button');
-        btn.className = 'shortcut-btn';
-        btn.innerText = `🚪 ${room}`;
-        btn.onclick = () => handleJoin(room);
-        shortcutBox.appendChild(btn);
-    });
+            var tabBadgeRequests = document.getElementById('tab-badge-requests');
+            var tabBadgeUnread = document.getElementById('tab-badge-unread');
 
-    // 格式化時間
-    function formatTime(timestamp) {
-        if (!timestamp) return "";
-        const date = new Date(timestamp);
-        const now = new Date();
-        const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
-        const timeStr = date.getHours().toString().padStart(2, '0') + ":" + date.getMinutes().toString().padStart(2, '0');
-        if (diffDays === 0 && date.getDate() === now.getDate()) return `今天 ${timeStr}`;
-        if (diffDays === 1 || (diffDays === 0 && date.getDate() !== now.getDate())) return `昨天 ${timeStr}`;
-        if (diffDays < 7) {
-            const weeks = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
-            return `${weeks[date.getDay()]} ${timeStr}`;
-        }
-        return `${date.getFullYear()}年${date.getMonth()+1}月${date.getDate()}日 ${timeStr}`;
-    }
+            // ===== 狀態 =====
+            var currentUser = null;
+            var currentUid = '';
+            var currentUsername = '';
+            var chatListeners = [];
+            var friendUnreadListeners = [];
+            var activeFriendUid = '';
+            var friendsCache = {};
+            var unreadCache = {};
+            var requestsCount = 0;
 
-    // 全域下載功能
-    window.downloadFile = (dataUrl, fileName, mime) => {
-        const parts = dataUrl.split(',');
-        const byteString = atob(parts[1]);
-        const ab = new ArrayBuffer(byteString.length);
-        const ia = new Uint8Array(ab);
-        for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
-        const blob = new Blob([ab], { type: mime });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url; a.download = fileName;
-        document.body.appendChild(a); a.click();
-        document.body.removeChild(a); URL.revokeObjectURL(url);
-    };
-
-    // 收回訊息功能
-    window.deleteMsg = async (msgId) => {
-        if (!uid || !firebase.auth().currentUser) return;
-        if(confirm('確定要收回訊息嗎？')) {
-            try {
-                await remove(ref(db, `rooms/${currentRoom}/msgs/${msgId}`));
-            } catch (e) {
-                alert("收回失敗");
+            // ===== 工具 =====
+            function db() { return window.firebase.database(); }
+            function setStatus(id, message, type) {
+                var el = document.getElementById(id);
+                if (!el) return;
+                el.textContent = message;
+                el.classList.remove('error', 'ok');
+                if (type) el.classList.add(type);
             }
-        }
-    };
+            function setFormDisabled(form, disabled) {
+                var els = form.querySelectorAll('button, input');
+                for (var i = 0; i < els.length; i++) els[i].disabled = disabled;
+            }
+            function errorMessage(error) {
+                if (!error) return '操作失敗，請稍後再試。';
+                if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential')
+                    return '目前密碼不正確，請確認後再試。';
+                if (error.code === 'auth/requires-recent-login')
+                    return '登入時間過久，請重新登入後再變更密碼。';
+                if (error.code === 'auth/email-already-in-use')
+                    return '該帳號名稱已被使用。';
+                return error.message || '操作失敗，請稍後再試。';
+            }
+            function escapeHtml(str) {
+                return String(str == null ? '' : str).replace(/[&<>"']/g, function(s) {
+                    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s];
+                });
+            }
+            function chatIdFor(a, b) {
+                return [a, b].sort().join('__');
+            }
 
-    // 進入房間 (可傳入指定房號或讀取輸入框)
-    window.handleJoin = async (targetRoom) => {
-        if (!uid || !firebase.auth().currentUser) {
-            alert("請先登入帳號才能使用聊天室。");
-            document.getElementById('login-btn')?.click();
-            return;
-        }
-        const inputNick = document.getElementById('nick-input').value.trim();
-        if (inputNick) {
-            myNick = inputNick;
-            localStorage.setItem('chat_nick', myNick);
-        }
-
-        const r = (targetRoom || document.getElementById('room-input').value).trim().toUpperCase();
-        if(!r) { alert("請輸入房號"); return; }
-        
-        const roomRef = ref(db, `rooms/${r}`);
-        const snap = await get(roomRef);
-        if(!snap.exists()){
-            const oSnap = await get(ref(db, `owners/${uid}`));
-            if(oSnap.exists()){ alert("你已有房間："+oSnap.val()); return; }
-            await set(ref(db, `rooms/${r}/meta`), { owner: uid });
-            await set(ref(db, `owners/${uid}`), r);
-        }
-        currentRoom = r;
-        document.getElementById('login-view').classList.add('hidden');
-        document.getElementById('chat-view').classList.remove('hidden');
-        document.getElementById('room-title').innerText = r;
-        initChat();
-    };
-
-    window.sendFile = (el) => {
-        if (!uid || !firebase.auth().currentUser) return;
-        const file = el.files[0]; if(!file) return;
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            push(ref(db, `rooms/${currentRoom}/msgs`), {
-                type: file.type.split('/')[0] === 'image' ? 'image' : (file.name.toLowerCase().endsWith('.mp3') ? 'audio' : 'file'),
-                content: e.target.result,
-                fileName: file.name,
-                mime: file.type || 'application/octet-stream',
-                uid: uid, name: myNick, ts: serverTimestamp()
-            });
-        };
-        reader.readAsDataURL(file);
-    };
-
-    window.doSend = () => {
-        if (!uid || !firebase.auth().currentUser) return;
-        const inp = document.getElementById('msg-input'); if(!inp.value.trim()) return;
-        push(ref(db, `rooms/${currentRoom}/msgs`), { type:'text', content: inp.value, uid: uid, name: myNick, ts: serverTimestamp() });
-        inp.value = "";
-    };
-
-    window.destroyRoom = async () => {
-        if (!uid || !firebase.auth().currentUser) return;
-        if(confirm("⚠ 注意：銷毀後所有訊息將消失，且你會釋放房主名額。確定嗎？")){
-            const up = {}; up[`/rooms/${currentRoom}`] = null; up[`/owners/${uid}`] = null;
-            await update(ref(db), up); location.reload();
-        }
-    };
-
-    function initChat() {
-        onValue(ref(db, `rooms/${currentRoom}/meta`), s => {
-            if(!s.exists()){ alert("房間已銷毀"); location.reload(); }
-            if(s.val().owner === uid) document.getElementById('del-btn').classList.remove('hidden');
-        });
-        
-        onValue(ref(db, `rooms/${currentRoom}/msgs`), snap => {
-            const box = document.getElementById('chat-box'); box.innerHTML = "";
-            snap.forEach(child => {
-                const d = child.val(); 
-                const isMe = d.uid === uid;
-                
-                let body = "";
-                if(d.type === 'image'){
-                    body = `<img src="${d.content}" class="chat-img" onclick="event.stopPropagation(); window.showLB('${d.content}','${d.fileName}','${d.mime}')">`;
-                } else if(d.type === 'audio'){
-                    body = `<div class="file-card">🎵 ${d.fileName}<audio controls src="${d.content}" style="width:100%; height:30px; margin:5px 0;"></audio>
-                            <button class="dl-btn" onclick="event.stopPropagation(); downloadFile('${d.content}','${d.fileName}','${d.mime}')">下載音檔</button></div>`;
-                } else if(d.type === 'file'){
-                    body = `<div class="file-card">📄 ${d.fileName}<button class="dl-btn" onclick="event.stopPropagation(); downloadFile('${d.content}','${d.fileName}','${d.mime}')">下載檔案</button></div>`;
-                } else {
-                    body = `<div style="white-space:pre-wrap;">${d.content}</div>`;
+            // ===== 分頁 =====
+            var tabBtns = document.querySelectorAll('.tab-btn');
+            for (var i = 0; i < tabBtns.length; i++) {
+                (function(btn) {
+                    btn.addEventListener('click', function() {
+                        var all = document.querySelectorAll('.tab-btn');
+                        for (var j = 0; j < all.length; j++) all[j].classList.remove('active');
+                        var pages = document.querySelectorAll('.page');
+                        for (var k = 0; k < pages.length; k++) pages[k].classList.remove('active');
+                        btn.classList.add('active');
+                        var page = document.getElementById('page-' + btn.dataset.page);
+                        if (page) page.classList.add('active');
+                        if (btn.dataset.page === 'chat') {
+                            chatBox.scrollTop = chatBox.scrollHeight;
+                        }
+                    });
+                })(tabBtns[i]);
+            }
+            function switchTab(name) {
+                var all = document.querySelectorAll('.tab-btn');
+                for (var i = 0; i < all.length; i++) {
+                    all[i].classList.toggle('active', all[i].dataset.page === name);
                 }
-                
-                const timeLabel = formatTime(d.ts);
-                const div = document.createElement('div');
-                div.className = `msg-row ${isMe?'me':'other'}`;
-                div.innerHTML = `
-                    <div class="msg-info">${d.name} • ${timeLabel}</div>
-                    <div class="bubble" ondblclick="${isMe ? `deleteMsg('${child.key}')` : ''}">${body}</div>
-                `;
-                box.appendChild(div);
-            });
-            box.scrollTop = box.scrollHeight;
-        });
-    }
+                var pages = document.querySelectorAll('.page');
+                for (var j = 0; j < pages.length; j++) {
+                    pages[j].classList.toggle('active', pages[j].id === 'page-' + name);
+                }
+            }
 
-    window.showLB = (src, name, mime) => {
-        document.getElementById('lb-img').src = src;
-        document.getElementById('lightbox').style.display = 'flex';
-        document.getElementById('lb-dl').onclick = (e) => { e.stopPropagation(); downloadFile(src, name, mime); };
-    };
-</script>
+            // ===== 使用者資料 =====
+            function fetchUserProfile(username, cb) {
+                db().ref('users/' + username).once('value', function(snap) {
+                    cb(snap.exists() ? snap.val() : null);
+                }, function(err) {
+                    console.warn('讀取使用者資料失敗', err);
+                    cb(null);
+                });
+            }
+
+            // ===== 初始化 =====
+            function initProfile(user) {
+                currentUser = user;
+                currentUid = user.uid;
+                currentUsername = user.email ? user.email.split('@')[0] : '';
+
+                loginRequired.hidden = true;
+                appArea.hidden = false;
+
+                avatarImg.src = user.photoURL || fallbackAvatar;
+                displayNameInput.value = user.displayName || currentUsername;
+
+                fetchUserProfile(currentUsername, function(profile) {
+                    if (profile && profile.profile && profile.profile.avatar) {
+                        avatarImg.src = profile.profile.avatar;
+                    }
+                });
+
+                listenFriendRequests();
+                listenFriends();
+            }
+
+            // ===== 頭像 =====
+            avatarEditBtn.addEventListener('click', function() { avatarFileInput.click(); });
+            avatarFileInput.addEventListener('change', function() {
+                var file = avatarFileInput.files && avatarFileInput.files[0];
+                if (!file) return;
+                if (file.type.indexOf('image/') !== 0) {
+                    setStatus('avatar-status', '請選擇圖片檔案。', 'error');
+                    return;
+                }
+                if (file.size > 2 * 1024 * 1024) {
+                    setStatus('avatar-status', '圖片大小需小於 2MB。', 'error');
+                    return;
+                }
+                setStatus('avatar-status', '正在上傳頭像…');
+                var reader = new FileReader();
+                reader.onload = function() {
+                    var dataUrl = reader.result;
+                    db().ref('users/' + currentUsername + '/profile/avatar').set(dataUrl, function(err) {
+                        if (err) {
+                            console.error('頭像儲存失敗', err);
+                            setStatus('avatar-status', '頭像儲存失敗：' + errorMessage(err), 'error');
+                            return;
+                        }
+                        avatarImg.src = dataUrl;
+                        setStatus('avatar-status', '頭像已更新並儲存。', 'ok');
+                        refreshFriendsUI();
+                    });
+                    avatarFileInput.value = '';
+                };
+                reader.readAsDataURL(file);
+            });
+
+            // ===== 名稱 =====
+            nameForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                var name = displayNameInput.value.trim();
+                if (!name) {
+                    setStatus('name-status', '請輸入顯示名稱。', 'error');
+                    return;
+                }
+                setFormDisabled(nameForm, true);
+                setStatus('name-status', '正在儲存…');
+                currentUser.updateProfile({ displayName: name }).then(function() {
+                    return currentUser.reload();
+                }).then(function() {
+                    var navAvatar = document.getElementById('user-avatar');
+                    if (navAvatar) navAvatar.title = '個人檔案：' + name;
+                    setStatus('name-status', '顯示名稱已更新。', 'ok');
+                }).catch(function(err) {
+                    setStatus('name-status', errorMessage(err), 'error');
+                }).finally(function() {
+                    setFormDisabled(nameForm, false);
+                });
+            });
+
+            // ===== 密碼 =====
+            passwordForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                if (!currentUser || !currentUser.email) return;
+                var cur = document.getElementById('current-password').value;
+                var nw = document.getElementById('new-password').value;
+                var cf = document.getElementById('confirm-password').value;
+                if (nw.length < 6) {
+                    setStatus('password-status', '新密碼至少需要 6 個字元。', 'error');
+                    return;
+                }
+                if (nw !== cf) {
+                    setStatus('password-status', '兩次輸入的新密碼不一致。', 'error');
+                    return;
+                }
+                setFormDisabled(passwordForm, true);
+                setStatus('password-status', '正在變更密碼…');
+                var cred = window.firebase.auth.EmailAuthProvider.credential(currentUser.email, cur);
+                currentUser.reauthenticateWithCredential(cred).then(function() {
+                    return currentUser.updatePassword(nw);
+                }).then(function() {
+                    passwordForm.reset();
+                    setStatus('password-status', '密碼已成功變更。', 'ok');
+                }).catch(function(err) {
+                    setStatus('password-status', errorMessage(err), 'error');
+                }).finally(function() {
+                    setFormDisabled(passwordForm, false);
+                });
+            });
+
+            // ===== 登出 =====
+            signOutButton.addEventListener('click', function() {
+                signOutButton.disabled = true;
+                window.firebase.auth().signOut().then(function() {
+                    if (typeof window.raingodClearLocalAccountData === 'function') {
+                        window.raingodClearLocalAccountData();
+                    }
+                    window.location.href = 'index.html';
+                }).catch(function(err) {
+                    signOutButton.disabled = false;
+                    alert('登出失敗：' + err.message);
+                });
+            });
+
+            // ===== 好友搜尋 =====
+            friendSearchBtn.addEventListener('click', function() {
+                var keyword = friendSearchInput.value.trim().toLowerCase();
+                searchResults.innerHTML = '';
+                if (!keyword) {
+                    searchResults.innerHTML = '<li class="profile-help">請輸入帳號關鍵字。</li>';
+                    return;
+                }
+                if (keyword === currentUsername) {
+                    searchResults.innerHTML = '<li class="profile-help">不能加入自己為好友。</li>';
+                    return;
+                }
+                fetchUserProfile(keyword, function(profile) {
+                    if (!profile) {
+                        searchResults.innerHTML = '<li class="profile-help">找不到此帳號。</li>';
+                        return;
+                    }
+                    db().ref('users/' + currentUsername + '/friends/' + profile.uid).once('value').then(function(friendSnap) {
+                        return db().ref('users/' + keyword + '/friend_requests/' + currentUsername).once('value').then(function(reqSnap) {
+                            var isFriend = friendSnap.exists();
+                            var requestSent = reqSnap.exists();
+                            var name = (profile.profile && profile.profile.displayName) || keyword;
+                            var avatar = (profile.profile && profile.profile.avatar) || fallbackAvatar;
+                            var li = document.createElement('li');
+                            li.className = 'friend-item';
+                            var actionHtml = isFriend ? '<span class="profile-help">已是好友</span>' :
+                                requestSent ? '<span class="profile-help">已送出申請</span>' :
+                                '<button class="mini-btn primary" data-uid="' + escapeHtml(profile.uid) + '" data-name="' + escapeHtml(name) + '" data-username="' + escapeHtml(keyword) + '">加好友</button>';
+                            li.innerHTML =
+                                '<img class="friend-avatar" src="' + escapeHtml(avatar) + '" alt="">' +
+                                '<div class="friend-name">' + escapeHtml(name) + ' <small style="color:var(--text-gray);font-weight:400;">@' + escapeHtml(keyword) + '</small></div>' +
+                                '<div class="friend-actions">' + actionHtml + '</div>';
+                            searchResults.appendChild(li);
+                            var addBtn = li.querySelector('button[data-uid]');
+                            if (addBtn) {
+                                addBtn.addEventListener('click', function() {
+                                    addBtn.disabled = true;
+                                    addBtn.textContent = '送出中…';
+                                    sendFriendRequest(keyword, profile.uid, name).then(function() {
+                                        addBtn.textContent = '已送出';
+                                    }).catch(function(e) {
+                                        console.error(e);
+                                        addBtn.disabled = false;
+                                        addBtn.textContent = '加好友';
+                                        alert('送出好友申請失敗：' + errorMessage(e));
+                                    });
+                                });
+                            }
+                        });
+                    }).catch(function(e) {
+                        console.error(e);
+                        searchResults.innerHTML = '<li class="profile-help">查詢好友狀態失敗。</li>';
+                    });
+                });
+            });
+
+            function sendFriendRequest(toUsername, toUid, toName) {
+                var myName = currentUser.displayName || currentUsername;
+                var myAvatar = currentUser.photoURL || avatarImg.src || fallbackAvatar;
+                return db().ref('users/' + toUsername + '/friend_requests/' + currentUsername).set({
+                    fromUid: currentUid,
+                    fromName: myName,
+                    fromUsername: currentUsername,
+                    fromAvatar: myAvatar,
+                    ts: window.firebase.database.ServerValue.TIMESTAMP
+                });
+            }
+
+            // ===== 好友申請監聽 =====
+            function listenFriendRequests() {
+                db().ref('users/' + currentUsername + '/friend_requests').on('value', function(snap) {
+                    var val = snap.val() || {};
+                    var entries = Object.keys(val).map(function(k) { return [k, val[k]]; });
+                    requestList.innerHTML = '';
+                    requestsCount = entries.length;
+                    updateTabBadges();
+                    if (!entries.length) {
+                        requestList.innerHTML = '<li class="profile-help" id="request-empty">目前沒有待處理的好友申請。</li>';
+                        return;
+                    }
+                    entries.forEach(function(pair) {
+                        var fromUsername = pair[0];
+                        var req = pair[1];
+                        var li = document.createElement('li');
+                        li.className = 'request-item';
+                        li.innerHTML =
+                            '<img class="friend-avatar" src="' + escapeHtml(req.fromAvatar || fallbackAvatar) + '" alt="">' +
+                            '<div class="friend-name">' + escapeHtml(req.fromName || fromUsername) + '</div>' +
+                            '<div class="friend-actions">' +
+                                '<button class="mini-btn success" data-accept="' + escapeHtml(fromUsername) + '" data-uid="' + escapeHtml(req.fromUid) + '" data-name="' + escapeHtml(req.fromName || fromUsername) + '" data-avatar="' + escapeHtml(req.fromAvatar || fallbackAvatar) + '">接受</button>' +
+                                '<button class="mini-btn danger" data-reject="' + escapeHtml(fromUsername) + '">拒絕</button>' +
+                            '</div>';
+                        requestList.appendChild(li);
+                    });
+                    var acceptBtns = requestList.querySelectorAll('[data-accept]');
+                    for (var i = 0; i < acceptBtns.length; i++) {
+                        (function(btn) {
+                            btn.addEventListener('click', function() {
+                                btn.disabled = true;
+                                acceptFriendRequest(btn.dataset.accept, btn.dataset.uid, btn.dataset.name, btn.dataset.avatar).catch(function(e) {
+                                    console.error(e);
+                                    alert('接受好友申請失敗：' + errorMessage(e));
+                                    btn.disabled = false;
+                                });
+                            });
+                        })(acceptBtns[i]);
+                    }
+                    var rejectBtns = requestList.querySelectorAll('[data-reject]');
+                    for (var j = 0; j < rejectBtns.length; j++) {
+                        (function(btn) {
+                            btn.addEventListener('click', function() {
+                                btn.disabled = true;
+                                rejectFriendRequest(btn.dataset.reject).catch(function(e) {
+                                    console.error(e);
+                                    alert('拒絕好友申請失敗：' + errorMessage(e));
+                                    btn.disabled = false;
+                                });
+                            });
+                        })(rejectBtns[j]);
+                    }
+                });
+            }
+
+            function acceptFriendRequest(fromUsername, fromUid, fromName, fromAvatar) {
+                var myName = currentUser.displayName || currentUsername;
+                var myAvatar = currentUser.photoURL || avatarImg.src || fallbackAvatar;
+                var updates = {};
+                updates['users/' + currentUsername + '/friends/' + fromUid] = {
+                    name: fromName, avatar: fromAvatar, username: fromUsername,
+                    since: window.firebase.database.ServerValue.TIMESTAMP
+                };
+                updates['users/' + fromUsername + '/friends/' + currentUid] = {
+                    name: myName, avatar: myAvatar, username: currentUsername,
+                    since: window.firebase.database.ServerValue.TIMESTAMP
+                };
+                updates['users/' + currentUsername + '/friend_requests/' + fromUsername] = null;
+                return db().ref().update(updates);
+            }
+
+            function rejectFriendRequest(fromUsername) {
+                return db().ref('users/' + currentUsername + '/friend_requests/' + fromUsername).remove();
+            }
+
+            // ===== 好友列表 =====
+            function listenFriends() {
+                db().ref('users/' + currentUsername + '/friends').on('value', function(snap) {
+                    friendsCache = snap.val() || {};
+                    refreshFriendsUI();
+                    listenAllUnread();
+                });
+            }
+
+            function refreshFriendsUI() {
+                friendList.innerHTML = '';
+                var entries = Object.keys(friendsCache).map(function(k) { return [k, friendsCache[k]]; });
+                if (!entries.length) {
+                    friendList.innerHTML = '<li class="profile-help" id="friend-empty">尚未加入任何好友。</li>';
+                } else {
+                    entries.forEach(function(pair) {
+                        var uid = pair[0];
+                        var f = pair[1];
+                        var li = document.createElement('li');
+                        li.className = 'friend-item' + (uid === activeFriendUid ? ' active' : '');
+                        li.innerHTML =
+                            '<img class="friend-avatar" src="' + escapeHtml(f.avatar || fallbackAvatar) + '" alt="">' +
+                            '<div class="friend-name">' + escapeHtml(f.name || f.username || '好友') + '</div>' +
+                            '<span class="friend-unread" data-uid="' + escapeHtml(uid) + '"></span>' +
+                            '<div class="friend-actions">' +
+                                '<button class="mini-btn primary" data-chat-uid="' + escapeHtml(uid) + '" data-chat-name="' + escapeHtml(f.name || f.username || '好友') + '" data-chat-avatar="' + escapeHtml(f.avatar || fallbackAvatar) + '">私訊</button>' +
+                            '</div>';
+                        friendList.appendChild(li);
+                    });
+                    var chatBtns = friendList.querySelectorAll('[data-chat-uid]');
+                    for (var i = 0; i < chatBtns.length; i++) {
+                        (function(btn) {
+                            btn.addEventListener('click', function() {
+                                openPrivateChat(btn.dataset.chatUid, btn.dataset.chatName, btn.dataset.chatAvatar);
+                                switchTab('chat');
+                            });
+                        })(chatBtns[i]);
+                    }
+                }
+
+                // 聊天室側邊欄（桌面）
+                chatSidebarFriends.innerHTML = '';
+                if (!entries.length) {
+                    chatSidebarFriends.innerHTML = '<li class="profile-help" style="padding:12px;">尚無好友</li>';
+                } else {
+                    entries.forEach(function(pair) {
+                        var uid = pair[0];
+                        var f = pair[1];
+                        var li = document.createElement('li');
+                        li.className = 'friend-item' + (uid === activeFriendUid ? ' active' : '');
+                        li.style.cursor = 'pointer';
+                        li.innerHTML =
+                            '<img class="friend-avatar" src="' + escapeHtml(f.avatar || fallbackAvatar) + '" alt="">' +
+                            '<div class="friend-name">' + escapeHtml(f.name || f.username || '好友') + '</div>' +
+                            '<span class="friend-unread" data-uid="' + escapeHtml(uid) + '"></span>';
+                        li.addEventListener('click', (function(u, ff) {
+                            return function() {
+                                openPrivateChat(u, ff.name || ff.username || '好友', ff.avatar || fallbackAvatar);
+                            };
+                        })(uid, f));
+                        chatSidebarFriends.appendChild(li);
+                    });
+                }
+
+                // 手機版好友選擇器
+                refreshMobileSelect(entries);
+                updateUnreadBadges();
+            }
+
+            function refreshMobileSelect(entries) {
+                var currentVal = activeFriendUid;
+                chatMobileSelect.innerHTML = '<option value="">選擇好友開始聊天…</option>';
+                entries.forEach(function(pair) {
+                    var uid = pair[0];
+                    var f = pair[1];
+                    var opt = document.createElement('option');
+                    opt.value = uid;
+                    opt.textContent = (f.name || f.username || '好友') + (unreadCache[uid] ? ' (' + unreadCache[uid] + ')' : '');
+                    if (uid === currentVal) opt.selected = true;
+                    chatMobileSelect.appendChild(opt);
+                });
+            }
+
+            chatMobileSelect.addEventListener('change', function() {
+                var uid = chatMobileSelect.value;
+                if (!uid) return;
+                var f = friendsCache[uid];
+                if (!f) return;
+                openPrivateChat(uid, f.name || f.username || '好友', f.avatar || fallbackAvatar);
+            });
+
+            // ===== 未讀 =====
+            function listenAllUnread() {
+                for (var i = 0; i < friendUnreadListeners.length; i++) friendUnreadListeners[i]();
+                friendUnreadListeners = [];
+                unreadCache = {};
+
+                Object.keys(friendsCache).forEach(function(friendUid) {
+                    var cid = chatIdFor(currentUid, friendUid);
+                    var msgsRef = db().ref('private_chats/' + cid + '/msgs');
+                    var readRef = db().ref('private_chats/' + cid + '/read/' + currentUid);
+                    var handler = function(snap) {
+                        var msgs = snap.val() || {};
+                        readRef.once('value').then(function(readSnap) {
+                            var lastRead = readSnap.val() || 0;
+                            var unread = 0;
+                            Object.keys(msgs).forEach(function(id) {
+                                var m = msgs[id];
+                                if (m.from !== currentUid && (m.ts || 0) > lastRead) unread++;
+                            });
+                            unreadCache[friendUid] = unread;
+                            updateUnreadBadges();
+                            refreshMobileSelect(Object.keys(friendsCache).map(function(k) { return [k, friendsCache[k]]; }));
+                        }).catch(function() {});
+                    };
+                    msgsRef.on('value', handler);
+                    friendUnreadListeners.push((function(ref) {
+                        return function() { ref.off('value', handler); };
+                    })(msgsRef));
+                });
+            }
+
+            function updateUnreadBadges() {
+                var unreadEls = document.querySelectorAll('.friend-unread');
+                for (var i = 0; i < unreadEls.length; i++) {
+                    var uid = unreadEls[i].dataset.uid;
+                    var count = unreadCache[uid] || 0;
+                    unreadEls[i].textContent = count > 99 ? '99+' : String(count);
+                    unreadEls[i].classList.toggle('show', count > 0);
+                }
+                var total = 0;
+                Object.keys(unreadCache).forEach(function(k) { total += unreadCache[k] || 0; });
+                tabBadgeUnread.textContent = total > 99 ? '99+' : String(total);
+                tabBadgeUnread.classList.toggle('show', total > 0);
+                updateTabBadges();
+            }
+
+            function updateTabBadges() {
+                tabBadgeRequests.textContent = requestsCount > 99 ? '99+' : String(requestsCount);
+                tabBadgeRequests.classList.toggle('show', requestsCount > 0);
+            }
+
+            // ===== 聊天室 =====
+            function clearChatListeners() {
+                for (var i = 0; i < chatListeners.length; i++) chatListeners[i]();
+                chatListeners = [];
+            }
+
+            function openPrivateChat(friendUid, friendName, friendAvatar) {
+                activeFriendUid = friendUid;
+                clearChatListeners();
+                chatTitle.textContent = friendName;
+                chatSubtitle.textContent = '私訊對話';
+                chatClearFriend.hidden = false;
+                msgInput.disabled = false;
+                chatSendBtn.disabled = false;
+                chatEmpty.style.display = 'none';
+                var oldRows = chatBox.querySelectorAll('.msg-row');
+                for (var i = 0; i < oldRows.length; i++) oldRows[i].remove();
+
+                var cid = chatIdFor(currentUid, friendUid);
+                var msgsRef = db().ref('private_chats/' + cid + '/msgs');
+                var handler = function(snap) {
+                    var msgs = snap.val() || {};
+                    var list = Object.keys(msgs).map(function(id) { return [id, msgs[id]]; });
+                    list.sort(function(a, b) { return (a[1].ts || 0) - (b[1].ts || 0); });
+                    var rows = chatBox.querySelectorAll('.msg-row');
+                    for (var r = 0; r < rows.length; r++) rows[r].remove();
+                    if (!list.length) {
+                        chatEmpty.style.display = 'block';
+                        return;
+                    }
+                    chatEmpty.style.display = 'none';
+                    list.forEach(function(pair) {
+                        var m = pair[1];
+                        var isMe = m.from === currentUid;
+                        var div = document.createElement('div');
+                        div.className = 'msg-row ' + (isMe ? 'me' : 'other');
+                        div.innerHTML =
+                            '<div class="msg-info">' + escapeHtml(m.name || (isMe ? currentUsername : friendName)) + ' • ' + formatTime(m.ts) + '</div>' +
+                            '<div class="bubble">' + escapeHtml(m.text) + '</div>';
+                        chatBox.appendChild(div);
+                    });
+                    chatBox.scrollTop = chatBox.scrollHeight;
+                    markChatRead(cid);
+                };
+                msgsRef.on('value', handler);
+                chatListeners.push((function(ref) {
+                    return function() { ref.off('value', handler); };
+                })(msgsRef));
+
+                // 更新選取狀態
+                chatMobileSelect.value = friendUid;
+                refreshFriendsUI();
+                markChatRead(cid);
+            }
+
+            function markChatRead(cid) {
+                if (!currentUid) return;
+                db().ref('private_chats/' + cid + '/read/' + currentUid).set(window.firebase.database.ServerValue.TIMESTAMP).then(function() {
+                    if (activeFriendUid) {
+                        unreadCache[activeFriendUid] = 0;
+                        updateUnreadBadges();
+                    }
+                }).catch(function(e) {
+                    console.warn('標記已讀失敗', e);
+                });
+            }
+
+            chatClearFriend.addEventListener('click', function() {
+                activeFriendUid = '';
+                clearChatListeners();
+                chatTitle.textContent = '聊天室';
+                chatSubtitle.textContent = '請選擇一位好友開始聊天。';
+                chatClearFriend.hidden = true;
+                msgInput.disabled = true;
+                chatSendBtn.disabled = true;
+                var rows = chatBox.querySelectorAll('.msg-row');
+                for (var i = 0; i < rows.length; i++) rows[i].remove();
+                chatEmpty.style.display = 'block';
+                chatMobileSelect.value = '';
+                refreshFriendsUI();
+            });
+
+            function sendMessage() {
+                if (!activeFriendUid) return;
+                var text = msgInput.value.trim();
+                if (!text) return;
+                var cid = chatIdFor(currentUid, activeFriendUid);
+                db().ref('private_chats/' + cid + '/msgs').push({
+                    from: currentUid,
+                    to: activeFriendUid,
+                    name: currentUser.displayName || currentUsername,
+                    text: text,
+                    ts: window.firebase.database.ServerValue.TIMESTAMP
+                }).then(function() {
+                    msgInput.value = '';
+                    msgInput.focus();
+                }).catch(function(e) {
+                    console.error('訊息傳送失敗', e.code, e.message);
+                    alert('訊息傳送失敗：' + (e.code || e.message || '未知錯誤'));
+                });
+            }
+
+            chatSendBtn.addEventListener('click', sendMessage);
+            msgInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
+
+            function formatTime(ts) {
+                if (!ts) return '';
+                var d = new Date(ts);
+                var now = new Date();
+                var time = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+                if (d.toDateString() === now.toDateString()) return '今天 ' + time;
+                var yesterday = new Date(now);
+                yesterday.setDate(now.getDate() - 1);
+                if (d.toDateString() === yesterday.toDateString()) return '昨天 ' + time;
+                return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + time;
+            }
+
+            // ===== 啟動 =====
+            ready.then(function() {
+                return authReady;
+            }).then(function(user) {
+                if (!user) {
+                    loginRequired.hidden = false;
+                    appArea.hidden = true;
+                    return;
+                }
+                initProfile(user);
+                window.firebase.auth().onAuthStateChanged(function(u) {
+                    if (u) {
+                        initProfile(u);
+                    } else {
+                        currentUser = null; currentUid = ''; currentUsername = '';
+                        appArea.hidden = true;
+                        loginRequired.hidden = false;
+                        clearChatListeners();
+                        for (var i = 0; i < friendUnreadListeners.length; i++) friendUnreadListeners[i]();
+                        friendUnreadListeners = [];
+                        friendsCache = {};
+                        unreadCache = {};
+                        requestList.innerHTML = '';
+                        friendList.innerHTML = '';
+                        chatSidebarFriends.innerHTML = '';
+                        searchResults.innerHTML = '';
+                        chatMobileSelect.innerHTML = '<option value="">選擇好友開始聊天…</option>';
+                        var rows = chatBox.querySelectorAll('.msg-row');
+                        for (var j = 0; j < rows.length; j++) rows[j].remove();
+                        chatEmpty.style.display = 'block';
+                        chatClearFriend.hidden = true;
+                        msgInput.disabled = true;
+                        chatSendBtn.disabled = true;
+                        updateUnreadBadges();
+                    }
+                });
+            }).catch(function(e) {
+                console.error('初始化失敗', e);
+                loginRequired.hidden = false;
+                loginRequired.textContent = '載入個人檔案失敗：' + errorMessage(e);
+                loginRequired.classList.add('error');
+            });
+        })();
+    </script>
 </body>
 </html>
