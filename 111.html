@@ -1201,7 +1201,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
   }
   let adInterval = null;
   function normalizeUrl(s){ return s.trim().toLowerCase().replace(/^https?:\/\//,'').replace(/^www\./,'').replace(/\/+$/,''); }
-  function showAdModal(type){
+    function showAdModal(type){
     if(S.adPlaying) return;
     let step, mult, multLabel;
     if (type === '2x')  { step = S.ad2Step;  mult = 2;  multLabel = '2×'; }
@@ -1211,25 +1211,40 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
     else if (type === '32x') { step = S.ad32Step; mult = 32; multLabel = '32×'; }
     else return;
     if(step >= AD_STEPS_TOTAL){ showToast(`✅ 你已完成所有 ${multLabel} 跑步機速度獎勵！`, '#3a8a3a', '#2a6a2a'); return; }
-    S.adPlaying = true; S.adType = type; for(const k in keys) keys[k] = false; S.input.x = 0; S.input.y = 0;
-    const modal = document.getElementById('adModal'); const title = document.getElementById('adTitle'); const sub = document.getElementById('adSub');
-    const cdEl = document.getElementById('adCountdown'); const inputWrap = document.getElementById('adInputWrap'); const errEl = document.getElementById('adError');
-    const claimBtn = document.getElementById('adClaimBtn'); const input = document.getElementById('adInput'); const urlDisplay = document.getElementById('adUrlDisplay'); const urlHint = document.getElementById('adUrlHint');
-    urlDisplay.classList.remove('hidden-url'); urlHint.textContent = '📺 看完廣告後請輸入上方黃色網址';
-    const reward = '跑步機速度'; title.textContent = `🎬 ${multLabel} 跑步機速度 第 ${step+1}/${AD_STEPS_TOTAL} 步`; sub.textContent = `本次獎勵：${mult}× ${reward}`;
-    modal.classList.add('open'); inputWrap.style.display = 'none'; errEl.textContent = ''; input.value = ''; cdEl.textContent = '5';
-    if(adInterval) clearInterval(adInterval);
-    let cd = 5;
-    adInterval = setInterval(() => {
-      cd--;
-      if(cd > 0){ cdEl.textContent = cd; } else {
-        clearInterval(adInterval); adInterval = null; cdEl.textContent = '✓'; urlDisplay.classList.add('hidden-url'); urlHint.textContent = '🧠 請憑記憶輸入剛剛看到的網址！';
-        inputWrap.style.display = 'flex'; setTimeout(() => { try{ input.focus(); }catch(e){} }, 50);
-      }
-    }, 1000);
-    claimBtn.onclick = () => {
-      const normalized = normalizeUrl(input.value);
-      if(normalized !== AD_URL){ errEl.textContent = '❌ 網址不正確，請仔細回想剛剛的黃色大字'; return; }
+    S.adPlaying = true; S.adType = type;
+    for(const k in keys) keys[k] = false; S.input.x = 0; S.input.y = 0;
+
+    const modal      = document.getElementById('adModal');
+    const title      = document.getElementById('adTitle');
+    const sub        = document.getElementById('adSub');
+    const cdEl       = document.getElementById('adCountdown');
+    const inputWrap  = document.getElementById('adInputWrap');
+    const errEl      = document.getElementById('adError');
+    const claimBtn   = document.getElementById('adClaimBtn');
+    const input      = document.getElementById('adInput');
+    const urlDisplay = document.getElementById('adUrlDisplay');
+    const urlText    = document.getElementById('adUrlText');
+    const urlHint    = document.getElementById('adUrlHint');
+
+    // ── 重置所有狀態 ──
+    if(adInterval){ clearInterval(adInterval); adInterval = null; }
+    urlDisplay.style.display = '';
+    urlDisplay.classList.remove('hidden-url');
+    cdEl.style.display = '';
+    inputWrap.style.display = 'none';
+    claimBtn.style.display = '';
+    claimBtn.disabled = false;
+    claimBtn.style.opacity = '1';
+    input.style.display = '';
+    input.value = '';
+    errEl.textContent = '';
+    errEl.style.color = '#cc0000';
+
+    const reward = '跑步機速度';
+    title.textContent = `🎬 ${multLabel} 跑步機速度 第 ${step+1}/${AD_STEPS_TOTAL} 步`;
+
+    // ── 領取獎勵（統一入口）──
+    const grantReward = () => {
       if (type === '2x')       { if (S.ad2Step  < AD_STEPS_TOTAL) S.ad2Step++;  if (S.ad2Step  >= AD_STEPS_TOTAL) S.doubleSpeed = true; }
       else if (type === '4x')  { if (S.ad4Step  < AD_STEPS_TOTAL) S.ad4Step++;  if (S.ad4Step  >= AD_STEPS_TOTAL) S.quadSpeed   = true; }
       else if (type === '8x')  { if (S.ad8Step  < AD_STEPS_TOTAL) S.ad8Step++;  }
@@ -1238,6 +1253,103 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
       showToast(`🎉 已獲得【${mult}× ${reward}】！`, '#3a8a3a', '#2a6a2a');
       S.adPlaying = false; modal.classList.remove('open'); updateUI(); saveGame(true);
     };
+
+    modal.classList.add('open');
+
+    if (type === '2x') {
+      // ═══ X2：需要登入 + 按領取 ═══
+      sub.textContent = '登入後即可領取 2× 跑步機速度獎勵';
+      urlDisplay.style.display = 'none';
+      cdEl.style.display = 'none';
+      inputWrap.style.display = 'flex';
+      input.style.display = 'none';
+
+      let isLoggedIn = false;
+      try { isLoggedIn = !!(firebase.auth().currentUser); } catch(e) {}
+
+      if (!isLoggedIn) {
+        errEl.style.color = '#aa0000';
+        errEl.innerHTML = '❌ 請先登入後才能領取此獎勵<br><span style="font-size:.72rem; color:#8a2020;">請點擊畫面底部「👤 玩家」進行登入，登入後再回來領取</span>';
+        claimBtn.textContent = '🔒 請先登入';
+        claimBtn.disabled = true;
+        claimBtn.style.opacity = '0.5';
+        claimBtn.onclick = null;
+      } else {
+        errEl.style.color = '#2a6a2a';
+        errEl.textContent = '✅ 已登入！點擊下方按鈕領取獎勵';
+        claimBtn.textContent = '✅ 領取獎勵';
+        claimBtn.disabled = false;
+        claimBtn.style.opacity = '1';
+        claimBtn.onclick = () => grantReward();
+      }
+
+    } else if (type === '4x') {
+      // ═══ X4：維持原本流程（5 秒倒數 → 隱藏網址 → 輸入）═══
+      sub.textContent = '觀看廣告並記住網址，看完後輸入即可領取';
+      urlText.textContent = AD_URL;
+      urlHint.textContent = '📺 看完廣告後請輸入上方黃色網址';
+      cdEl.textContent = '5';
+      let cd = 5;
+      adInterval = setInterval(() => {
+        cd--;
+        if(cd > 0){
+          cdEl.textContent = cd;
+        } else {
+          clearInterval(adInterval); adInterval = null;
+          cdEl.textContent = '✓';
+          urlDisplay.classList.add('hidden-url');
+          urlHint.textContent = '🧠 請憑記憶輸入剛剛看到的網址！';
+          inputWrap.style.display = 'flex';
+          setTimeout(() => { try{ input.focus(); }catch(e){} }, 50);
+        }
+      }, 1000);
+      claimBtn.textContent = '✅ 領取獎勵';
+      claimBtn.onclick = () => {
+        const normalized = normalizeUrl(input.value);
+        if(normalized !== AD_URL){ errEl.textContent = '❌ 網址不正確，請仔細回想剛剛的黃色大字'; return; }
+        grantReward();
+      };
+
+    } else {
+      // ═══ X8 / X16 / X32：feedback 連結，點過才能領 ═══
+      sub.textContent = '點擊連結提供意見回饋後，按領取即可獲得獎勵';
+      cdEl.style.display = 'none';
+      inputWrap.style.display = 'flex';
+      input.style.display = 'none';
+
+      urlText.innerHTML = '<a href="./feedback.html" target="_blank" rel="noopener" style="color:#4a2200; text-decoration:none; font-family:\'Segoe UI\',system-ui,sans-serif; font-size:1.3rem; line-height:1.4; display:inline-block; padding:4px 6px;">📝 你可以在這裡提供意見回饋！</a>';
+      urlHint.textContent = '👆 點擊上方文字前往回饋頁面';
+
+      let visited = false;
+      claimBtn.textContent = '🔒 請先點擊上方連結';
+      claimBtn.disabled = true;
+      claimBtn.style.opacity = '0.5';
+      errEl.style.color = '#8a5a00';
+      errEl.textContent = '⚠️ 點擊上方連結後才能領取獎勵';
+
+      setTimeout(() => {
+        const link = urlText.querySelector('a');
+        if (link) {
+          link.addEventListener('click', () => {
+            visited = true;
+            claimBtn.textContent = '✅ 領取獎勵';
+            claimBtn.disabled = false;
+            claimBtn.style.opacity = '1';
+            errEl.style.color = '#2a6a2a';
+            errEl.textContent = '✅ 感謝你的回饋！現在可以領取獎勵了';
+          });
+        }
+      }, 0);
+
+      claimBtn.onclick = () => {
+        if (!visited) {
+          errEl.style.color = '#aa0000';
+          errEl.textContent = '⚠️ 請先點擊上方連結前往回饋頁面';
+          return;
+        }
+        grantReward();
+      };
+    }
   }
   function closeAdModal(){ if(!S.adPlaying) return; S.adPlaying = false; if(adInterval){ clearInterval(adInterval); adInterval = null; } document.getElementById('adModal').classList.remove('open'); showToast('❌ 已取消觀看廣告', '#8a2a2a', '#5a0a0a'); }
   let __tessWorker = null, __tessLoading = false;
