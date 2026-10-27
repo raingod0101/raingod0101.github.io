@@ -25,7 +25,6 @@
         }
         #nav_bar { position: relative; z-index: 10; }
 
-        /* ===== 頁籤導覽 ===== */
         .tab-bar {
             display: flex;
             gap: 4px;
@@ -72,7 +71,6 @@
         }
         .tab-btn .tab-badge.show { display: inline-block; }
 
-        /* ===== 頁面容器 ===== */
         .page-wrap {
             max-width: 860px;
             margin: 18px auto 40px;
@@ -81,7 +79,6 @@
         .page { display: none; }
         .page.active { display: block; }
 
-        /* ===== 共用卡片 ===== */
         .card {
             margin-bottom: 18px;
             padding: 24px;
@@ -105,7 +102,6 @@
         }
         .page-heading h1 { margin: 0; font-size: 1.55rem; }
 
-        /* ===== 頭像 ===== */
         .profile-avatar-row { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
         .avatar-wrap { position: relative; width: 104px; height: 104px; flex: 0 0 auto; }
         .profile-avatar {
@@ -128,7 +124,6 @@
             display: none;
         }
 
-        /* ===== 表單 ===== */
         .profile-form { display: grid; gap: 14px; margin-top: 16px; }
         .profile-form label { display: grid; gap: 7px; font-size: 0.9rem; font-weight: 600; }
         .profile-form input {
@@ -147,7 +142,6 @@
         .profile-button.secondary { background: #687385; }
         .profile-button.danger { background: var(--danger); }
 
-        /* ===== 好友 ===== */
         .search-row { display: flex; gap: 8px; }
         .search-row input {
             flex: 1; padding: 10px 12px; border: 1px solid #cbd2dc;
@@ -188,7 +182,6 @@
         .mini-btn.success { background: var(--success); color: #fff; border-color: var(--success); }
         .mini-btn.danger { background: #fff0f0; color: var(--danger); border-color: #ffc9c9; }
 
-        /* ===== 聊天室 ===== */
         .chat-panel {
             display: flex; flex-direction: column;
             background: #fff; border-radius: 16px; overflow: hidden;
@@ -270,7 +263,6 @@
     <p id="login-required" class="profile-help" style="text-align:center;margin:24px;" hidden>請先登入帳號，再管理個人檔案與好友。</p>
 
     <div id="app-area" hidden>
-        <!-- 分頁導覽 -->
         <div class="tab-bar" role="tablist">
             <button class="tab-btn active" data-page="profile" role="tab">個人檔案</button>
             <button class="tab-btn" data-page="friends" role="tab">好友 <span class="tab-badge" id="tab-badge-requests"></span></button>
@@ -278,7 +270,7 @@
         </div>
 
         <div class="page-wrap">
-            <!-- ===== 頁面一：個人檔案 ===== -->
+            <!-- ===== 個人檔案 ===== -->
             <section class="page active" id="page-profile">
                 <div class="page-heading">
                     <h1>個人檔案</h1>
@@ -335,7 +327,7 @@
                 </section>
             </section>
 
-            <!-- ===== 頁面二：好友 ===== -->
+            <!-- ===== 好友 ===== -->
             <section class="page" id="page-friends">
                 <div class="page-heading">
                     <h1>好友</h1>
@@ -366,7 +358,7 @@
                 </section>
             </section>
 
-            <!-- ===== 頁面三：聊天室 ===== -->
+            <!-- ===== 聊天室 ===== -->
             <section class="page" id="page-chat">
                 <div class="chat-panel">
                     <div class="chat-layout">
@@ -399,668 +391,689 @@
     </div>
 
     <script src="menu.js"></script>
-    <script type="module">
-        import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getDatabase, ref, set, push, onValue, remove, get, update, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+    <script>
+        (function() {
+            // 等待 menu.js 的 Firebase 初始化
+            var ready = window.raingodFirebaseReady || Promise.resolve();
+            var authReady = window.raingodAuthReady || Promise.resolve(null);
 
-        // 等待 menu.js 完成 Firebase 初始化
-        if (window.raingodFirebaseReady) await window.raingodFirebaseReady;
-        if (window.raingodAuthReady) await window.raingodAuthReady;
-
-        const firebaseConfig = {
-            apiKey: "AIzaSyDHb0o6ahdNnvlL3-QQy_yRO_mg4XMqtJk",
-            databaseURL: "https://chat-73802-default-rtdb.firebaseio.com"
-        };
-        let chatApp = getApps().find(a => a.name === 'rainChat');
-        if (!chatApp) chatApp = initializeApp(firebaseConfig, 'rainChat');
-        const chatDb = getDatabase(chatApp);
-
-        const compatAuth = () => window.firebase?.auth ? window.firebase.auth() : null;
-        const compatDb = () => window.firebase?.database ? window.firebase.database() : null;
-
-        // ===== DOM =====
-        const fallbackAvatar = 'https://raingod0101.github.io/catdragon.png';
-        const loginRequired = document.getElementById('login-required');
-        const appArea = document.getElementById('app-area');
-
-        const avatarImg = document.getElementById('profile-avatar');
-        const avatarBadge = document.getElementById('avatar-unread-badge');
-        const avatarEditBtn = document.getElementById('avatar-edit-btn');
-        const avatarFileInput = document.getElementById('avatar-file-input');
-        const nameForm = document.getElementById('name-form');
-        const displayNameInput = document.getElementById('display-name');
-        const passwordForm = document.getElementById('password-form');
-        const signOutButton = document.getElementById('sign-out');
-        const friendSearchInput = document.getElementById('friend-search-input');
-        const friendSearchBtn = document.getElementById('friend-search-btn');
-        const searchResults = document.getElementById('search-results');
-        const requestList = document.getElementById('request-list');
-        const friendList = document.getElementById('friend-list');
-        const chatSidebarFriends = document.getElementById('chat-sidebar-friends');
-
-        const chatTitle = document.getElementById('chat-title');
-        const chatSubtitle = document.getElementById('chat-subtitle');
-        const chatBox = document.getElementById('chat-box');
-        const chatEmpty = document.getElementById('chat-empty');
-        const msgInput = document.getElementById('msg-input');
-        const chatSendBtn = document.getElementById('chat-send-btn');
-        const chatClearFriend = document.getElementById('chat-clear-friend');
-
-        const tabBadgeRequests = document.getElementById('tab-badge-requests');
-        const tabBadgeUnread = document.getElementById('tab-badge-unread');
-
-        // ===== 狀態 =====
-        let currentUser = null;
-        let currentUid = '';
-        let currentUsername = '';
-        let chatListeners = [];
-        let friendUnreadListeners = [];
-        let activeFriendUid = '';
-        let friendsCache = {};
-        let unreadCache = {};
-        let requestsCount = 0;
-
-        // ===== 通用 =====
-        function setStatus(id, message, type = '') {
-            const el = document.getElementById(id);
-            if (!el) return;
-            el.textContent = message;
-            el.classList.remove('error', 'ok');
-            if (type) el.classList.add(type);
-        }
-        function setFormDisabled(form, disabled) {
-            form.querySelectorAll('button, input').forEach(el => el.disabled = disabled);
-        }
-        function errorMessage(error) {
-            if (error?.code === 'auth/wrong-password' || error?.code === 'auth/invalid-credential')
-                return '目前密碼不正確，請確認後再試。';
-            if (error?.code === 'auth/requires-recent-login')
-                return '登入時間過久，請重新登入後再變更密碼。';
-            if (error?.code === 'auth/email-already-in-use')
-                return '該帳號名稱已被使用。';
-            return error?.message || '操作失敗，請稍後再試。';
-        }
-        function escapeHtml(str) {
-            return String(str ?? '').replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
-        }
-        function chatIdFor(a, b) { return [a, b].sort().join('__'); }
-
-        // ===== 分頁切換 =====
-        document.querySelectorAll('.tab-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-                document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-                btn.classList.add('active');
-                const page = document.getElementById('page-' + btn.dataset.page);
-                if (page) page.classList.add('active');
-                // 切到聊天室時，若有選取好友則滾到底部
-                if (btn.dataset.page === 'chat') {
-                    chatBox.scrollTop = chatBox.scrollHeight;
+            ready.then(function() {
+                return authReady;
+            }).then(function(user) {
+                if (!user) {
+                    document.getElementById('login-required').hidden = false;
+                    document.getElementById('app-area').hidden = true;
                 }
             });
-        });
 
-        // ===== 取得使用者資料 =====
-        async function fetchUserProfile(username) {
-            const db = compatDb();
-            if (!db) return null;
-            try {
-                const snap = await db.ref(`users/${username}`).once('value');
-                return snap.exists() ? snap.val() : null;
-            } catch (e) {
-                console.warn('讀取使用者資料失敗', e);
-                return null;
+            // ===== DOM =====
+            var fallbackAvatar = 'https://raingod0101.github.io/catdragon.png';
+            var loginRequired = document.getElementById('login-required');
+            var appArea = document.getElementById('app-area');
+
+            var avatarImg = document.getElementById('profile-avatar');
+            var avatarBadge = document.getElementById('avatar-unread-badge');
+            var avatarEditBtn = document.getElementById('avatar-edit-btn');
+            var avatarFileInput = document.getElementById('avatar-file-input');
+            var nameForm = document.getElementById('name-form');
+            var displayNameInput = document.getElementById('display-name');
+            var passwordForm = document.getElementById('password-form');
+            var signOutButton = document.getElementById('sign-out');
+            var friendSearchInput = document.getElementById('friend-search-input');
+            var friendSearchBtn = document.getElementById('friend-search-btn');
+            var searchResults = document.getElementById('search-results');
+            var requestList = document.getElementById('request-list');
+            var friendList = document.getElementById('friend-list');
+            var chatSidebarFriends = document.getElementById('chat-sidebar-friends');
+
+            var chatTitle = document.getElementById('chat-title');
+            var chatSubtitle = document.getElementById('chat-subtitle');
+            var chatBox = document.getElementById('chat-box');
+            var chatEmpty = document.getElementById('chat-empty');
+            var msgInput = document.getElementById('msg-input');
+            var chatSendBtn = document.getElementById('chat-send-btn');
+            var chatClearFriend = document.getElementById('chat-clear-friend');
+
+            var tabBadgeRequests = document.getElementById('tab-badge-requests');
+            var tabBadgeUnread = document.getElementById('tab-badge-unread');
+
+            // ===== 狀態 =====
+            var currentUser = null;
+            var currentUid = '';
+            var currentUsername = '';
+            var chatListeners = [];
+            var friendUnreadListeners = [];
+            var activeFriendUid = '';
+            var friendsCache = {};
+            var unreadCache = {};
+            var requestsCount = 0;
+
+            // ===== 工具 =====
+            function db() { return window.firebase.database(); }
+            function setStatus(id, message, type) {
+                var el = document.getElementById(id);
+                if (!el) return;
+                el.textContent = message;
+                el.classList.remove('error', 'ok');
+                if (type) el.classList.add(type);
             }
-        }
-
-        // ===== 初始化 =====
-        async function initProfile(user) {
-            currentUser = user;
-            currentUid = user.uid;
-            currentUsername = user.email ? user.email.split('@')[0] : '';
-
-            loginRequired.hidden = true;
-            appArea.hidden = false;
-
-            avatarImg.src = user.photoURL || fallbackAvatar;
-            displayNameInput.value = user.displayName || currentUsername;
-
-            const profile = await fetchUserProfile(currentUsername);
-            if (profile?.profile?.avatar && !user.photoURL) {
-                avatarImg.src = profile.profile.avatar;
+            function setFormDisabled(form, disabled) {
+                var els = form.querySelectorAll('button, input');
+                for (var i = 0; i < els.length; i++) els[i].disabled = disabled;
+            }
+            function errorMessage(error) {
+                if (!error) return '操作失敗，請稍後再試。';
+                if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential')
+                    return '目前密碼不正確，請確認後再試。';
+                if (error.code === 'auth/requires-recent-login')
+                    return '登入時間過久，請重新登入後再變更密碼。';
+                if (error.code === 'auth/email-already-in-use')
+                    return '該帳號名稱已被使用。';
+                return error.message || '操作失敗，請稍後再試。';
+            }
+            function escapeHtml(str) {
+                return String(str == null ? '' : str).replace(/[&<>"']/g, function(s) {
+                    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s];
+                });
+            }
+            function chatIdFor(a, b) {
+                return [a, b].sort().join('__');
             }
 
-            listenFriendRequests();
-            listenFriends();
-        }
+            // ===== 分頁 =====
+            var tabBtns = document.querySelectorAll('.tab-btn');
+            for (var i = 0; i < tabBtns.length; i++) {
+                (function(btn) {
+                    btn.addEventListener('click', function() {
+                        var all = document.querySelectorAll('.tab-btn');
+                        for (var j = 0; j < all.length; j++) all[j].classList.remove('active');
+                        var pages = document.querySelectorAll('.page');
+                        for (var k = 0; k < pages.length; k++) pages[k].classList.remove('active');
+                        btn.classList.add('active');
+                        var page = document.getElementById('page-' + btn.dataset.page);
+                        if (page) page.classList.add('active');
+                        if (btn.dataset.page === 'chat') {
+                            chatBox.scrollTop = chatBox.scrollHeight;
+                        }
+                    });
+                })(tabBtns[i]);
+            }
+            function switchTab(name) {
+                var all = document.querySelectorAll('.tab-btn');
+                for (var i = 0; i < all.length; i++) {
+                    all[i].classList.toggle('active', all[i].dataset.page === name);
+                }
+                var pages = document.querySelectorAll('.page');
+                for (var j = 0; j < pages.length; j++) {
+                    pages[j].classList.toggle('active', pages[j].id === 'page-' + name);
+                }
+            }
 
-        // ===== 頭像 =====
-        avatarEditBtn.addEventListener('click', () => avatarFileInput.click());
-        avatarFileInput.addEventListener('change', async () => {
-            const file = avatarFileInput.files?.[0];
-            if (!file) return;
-            if (!file.type.startsWith('image/')) {
-                setStatus('avatar-status', '請選擇圖片檔案。', 'error');
-                return;
+            // ===== 使用者資料 =====
+            function fetchUserProfile(username, cb) {
+                db().ref('users/' + username).once('value', function(snap) {
+                    cb(snap.exists() ? snap.val() : null);
+                }, function(err) {
+                    console.warn('讀取使用者資料失敗', err);
+                    cb(null);
+                });
             }
-            if (file.size > 2 * 1024 * 1024) {
-                setStatus('avatar-status', '圖片大小需小於 2MB。', 'error');
-                return;
-            }
-            setStatus('avatar-status', '正在上傳頭像…');
-            const reader = new FileReader();
-            reader.onload = async () => {
-                const dataUrl = reader.result;
-                try {
-                    const db = compatDb();
-                    if (!db) throw new Error('Firebase 未就緒');
-                    await db.ref(`users/${currentUsername}/profile/avatar`).set(dataUrl);
-                    if (currentUser && typeof currentUser.updateProfile === 'function') {
-                        await currentUser.updateProfile({ photoURL: dataUrl });
-                        await currentUser.reload();
+
+            // ===== 初始化 =====
+            function initProfile(user) {
+                currentUser = user;
+                currentUid = user.uid;
+                currentUsername = user.email ? user.email.split('@')[0] : '';
+
+                loginRequired.hidden = true;
+                appArea.hidden = false;
+
+                avatarImg.src = user.photoURL || fallbackAvatar;
+                displayNameInput.value = user.displayName || currentUsername;
+
+                fetchUserProfile(currentUsername, function(profile) {
+                    if (profile && profile.profile && profile.profile.avatar && !user.photoURL) {
+                        avatarImg.src = profile.profile.avatar;
                     }
-                    avatarImg.src = dataUrl;
-                    setStatus('avatar-status', '頭像已更新並儲存。', 'ok');
-                    refreshFriendsUI();
-                } catch (e) {
-                    console.error(e);
-                    setStatus('avatar-status', '頭像儲存失敗：' + errorMessage(e), 'error');
-                } finally {
-                    avatarFileInput.value = '';
+                });
+
+                listenFriendRequests();
+                listenFriends();
+            }
+
+            // ===== 頭像 =====
+            avatarEditBtn.addEventListener('click', function() { avatarFileInput.click(); });
+            avatarFileInput.addEventListener('change', function() {
+                var file = avatarFileInput.files && avatarFileInput.files[0];
+                if (!file) return;
+                if (file.type.indexOf('image/') !== 0) {
+                    setStatus('avatar-status', '請選擇圖片檔案。', 'error');
+                    return;
                 }
-            };
-            reader.readAsDataURL(file);
-        });
-
-        // ===== 名稱 =====
-        nameForm.addEventListener('submit', async e => {
-            e.preventDefault();
-            const name = displayNameInput.value.trim();
-            if (!name) {
-                setStatus('name-status', '請輸入顯示名稱。', 'error');
-                return;
-            }
-            setFormDisabled(nameForm, true);
-            setStatus('name-status', '正在儲存…');
-            try {
-                await currentUser.updateProfile({ displayName: name });
-                await currentUser.reload();
-                const navAvatar = document.getElementById('user-avatar');
-                if (navAvatar) navAvatar.title = `個人檔案：${name}`;
-                setStatus('name-status', '顯示名稱已更新。', 'ok');
-            } catch (err) {
-                setStatus('name-status', errorMessage(err), 'error');
-            } finally {
-                setFormDisabled(nameForm, false);
-            }
-        });
-
-        // ===== 密碼 =====
-        passwordForm.addEventListener('submit', async e => {
-            e.preventDefault();
-            if (!currentUser?.email) return;
-            const cur = document.getElementById('current-password').value;
-            const nw = document.getElementById('new-password').value;
-            const cf = document.getElementById('confirm-password').value;
-            if (nw.length < 6) {
-                setStatus('password-status', '新密碼至少需要 6 個字元。', 'error');
-                return;
-            }
-            if (nw !== cf) {
-                setStatus('password-status', '兩次輸入的新密碼不一致。', 'error');
-                return;
-            }
-            setFormDisabled(passwordForm, true);
-            setStatus('password-status', '正在變更密碼…');
-            try {
-                const cred = window.firebase.auth.EmailAuthProvider.credential(currentUser.email, cur);
-                await currentUser.reauthenticateWithCredential(cred);
-                await currentUser.updatePassword(nw);
-                passwordForm.reset();
-                setStatus('password-status', '密碼已成功變更。', 'ok');
-            } catch (err) {
-                setStatus('password-status', errorMessage(err), 'error');
-            } finally {
-                setFormDisabled(passwordForm, false);
-            }
-        });
-
-        // ===== 登出 =====
-        signOutButton.addEventListener('click', async () => {
-            signOutButton.disabled = true;
-            try {
-                await window.firebase.auth().signOut();
-                if (typeof window.raingodClearLocalAccountData === 'function') {
-                    window.raingodClearLocalAccountData();
+                if (file.size > 2 * 1024 * 1024) {
+                    setStatus('avatar-status', '圖片大小需小於 2MB。', 'error');
+                    return;
                 }
-                window.location.href = 'index.html';
-            } catch (err) {
-                signOutButton.disabled = false;
-                alert(`登出失敗：${err.message}`);
-            }
-        });
-
-        // ===== 好友搜尋 =====
-        friendSearchBtn.addEventListener('click', async () => {
-            const keyword = friendSearchInput.value.trim().toLowerCase();
-            searchResults.innerHTML = '';
-            if (!keyword) {
-                searchResults.innerHTML = '<li class="profile-help">請輸入帳號關鍵字。</li>';
-                return;
-            }
-            if (keyword === currentUsername) {
-                searchResults.innerHTML = '<li class="profile-help">不能加入自己為好友。</li>';
-                return;
-            }
-            const profile = await fetchUserProfile(keyword);
-            if (!profile) {
-                searchResults.innerHTML = '<li class="profile-help">找不到此帳號。</li>';
-                return;
-            }
-            const db = compatDb();
-            const friendSnap = await db.ref(`users/${currentUsername}/friends/${profile.uid}`).once('value').catch(() => null);
-            const isFriend = friendSnap?.exists();
-            const reqSnap = await db.ref(`users/${keyword}/friend_requests/${currentUsername}`).once('value').catch(() => null);
-            const requestSent = reqSnap?.exists();
-
-            const name = profile.profile?.displayName || keyword;
-            const avatar = profile.profile?.avatar || fallbackAvatar;
-            const li = document.createElement('li');
-            li.className = 'friend-item';
-            li.innerHTML = `
-                <img class="friend-avatar" src="${escapeHtml(avatar)}" alt="">
-                <div class="friend-name">${escapeHtml(name)} <small style="color:var(--text-gray);font-weight:400;">@${escapeHtml(keyword)}</small></div>
-                <div class="friend-actions">
-                    ${isFriend ? '<span class="profile-help">已是好友</span>' :
-                        requestSent ? '<span class="profile-help">已送出申請</span>' :
-                        `<button class="mini-btn primary" data-uid="${escapeHtml(profile.uid)}" data-name="${escapeHtml(name)}" data-username="${escapeHtml(keyword)}">加好友</button>`}
-                </div>`;
-            searchResults.appendChild(li);
-
-            const addBtn = li.querySelector('button[data-uid]');
-            if (addBtn) {
-                addBtn.addEventListener('click', async () => {
-                    addBtn.disabled = true;
-                    addBtn.textContent = '送出中…';
+                setStatus('avatar-status', '正在上傳頭像…');
+                var reader = new FileReader();
+                reader.onload = function() {
+                    var dataUrl = reader.result;
                     try {
-                        await sendFriendRequest(keyword, profile.uid, name);
-                        addBtn.textContent = '已送出';
+                        db().ref('users/' + currentUsername + '/profile/avatar').set(dataUrl, function(err) {
+                            if (err) {
+                                console.error('頭像儲存失敗', err);
+                                setStatus('avatar-status', '頭像儲存失敗：' + errorMessage(err), 'error');
+                                return;
+                            }
+                            avatarImg.src = dataUrl;
+                            setStatus('avatar-status', '頭像已更新並儲存。', 'ok');
+                            refreshFriendsUI();
+                        });
                     } catch (e) {
                         console.error(e);
-                        addBtn.disabled = false;
-                        addBtn.textContent = '加好友';
-                        alert('送出好友申請失敗：' + errorMessage(e));
+                        setStatus('avatar-status', '頭像儲存失敗：' + errorMessage(e), 'error');
+                    } finally {
+                        avatarFileInput.value = '';
+                    }
+                };
+                reader.readAsDataURL(file);
+            });
+
+            // ===== 名稱 =====
+            nameForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                var name = displayNameInput.value.trim();
+                if (!name) {
+                    setStatus('name-status', '請輸入顯示名稱。', 'error');
+                    return;
+                }
+                setFormDisabled(nameForm, true);
+                setStatus('name-status', '正在儲存…');
+                currentUser.updateProfile({ displayName: name }).then(function() {
+                    return currentUser.reload();
+                }).then(function() {
+                    var navAvatar = document.getElementById('user-avatar');
+                    if (navAvatar) navAvatar.title = '個人檔案：' + name;
+                    setStatus('name-status', '顯示名稱已更新。', 'ok');
+                }).catch(function(err) {
+                    setStatus('name-status', errorMessage(err), 'error');
+                }).finally(function() {
+                    setFormDisabled(nameForm, false);
+                });
+            });
+
+            // ===== 密碼 =====
+            passwordForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                if (!currentUser || !currentUser.email) return;
+                var cur = document.getElementById('current-password').value;
+                var nw = document.getElementById('new-password').value;
+                var cf = document.getElementById('confirm-password').value;
+                if (nw.length < 6) {
+                    setStatus('password-status', '新密碼至少需要 6 個字元。', 'error');
+                    return;
+                }
+                if (nw !== cf) {
+                    setStatus('password-status', '兩次輸入的新密碼不一致。', 'error');
+                    return;
+                }
+                setFormDisabled(passwordForm, true);
+                setStatus('password-status', '正在變更密碼…');
+                var cred = window.firebase.auth.EmailAuthProvider.credential(currentUser.email, cur);
+                currentUser.reauthenticateWithCredential(cred).then(function() {
+                    return currentUser.updatePassword(nw);
+                }).then(function() {
+                    passwordForm.reset();
+                    setStatus('password-status', '密碼已成功變更。', 'ok');
+                }).catch(function(err) {
+                    setStatus('password-status', errorMessage(err), 'error');
+                }).finally(function() {
+                    setFormDisabled(passwordForm, false);
+                });
+            });
+
+            // ===== 登出 =====
+            signOutButton.addEventListener('click', function() {
+                signOutButton.disabled = true;
+                window.firebase.auth().signOut().then(function() {
+                    if (typeof window.raingodClearLocalAccountData === 'function') {
+                        window.raingodClearLocalAccountData();
+                    }
+                    window.location.href = 'index.html';
+                }).catch(function(err) {
+                    signOutButton.disabled = false;
+                    alert('登出失敗：' + err.message);
+                });
+            });
+
+            // ===== 好友搜尋 =====
+            friendSearchBtn.addEventListener('click', function() {
+                var keyword = friendSearchInput.value.trim().toLowerCase();
+                searchResults.innerHTML = '';
+                if (!keyword) {
+                    searchResults.innerHTML = '<li class="profile-help">請輸入帳號關鍵字。</li>';
+                    return;
+                }
+                if (keyword === currentUsername) {
+                    searchResults.innerHTML = '<li class="profile-help">不能加入自己為好友。</li>';
+                    return;
+                }
+                fetchUserProfile(keyword, function(profile) {
+                    if (!profile) {
+                        searchResults.innerHTML = '<li class="profile-help">找不到此帳號。</li>';
+                        return;
+                    }
+                    db().ref('users/' + currentUsername + '/friends/' + profile.uid).once('value').then(function(friendSnap) {
+                        return db().ref('users/' + keyword + '/friend_requests/' + currentUsername).once('value').then(function(reqSnap) {
+                            var isFriend = friendSnap.exists();
+                            var requestSent = reqSnap.exists();
+                            var name = (profile.profile && profile.profile.displayName) || keyword;
+                            var avatar = (profile.profile && profile.profile.avatar) || fallbackAvatar;
+                            var li = document.createElement('li');
+                            li.className = 'friend-item';
+                            var actionHtml = isFriend ? '<span class="profile-help">已是好友</span>' :
+                                requestSent ? '<span class="profile-help">已送出申請</span>' :
+                                '<button class="mini-btn primary" data-uid="' + escapeHtml(profile.uid) + '" data-name="' + escapeHtml(name) + '" data-username="' + escapeHtml(keyword) + '">加好友</button>';
+                            li.innerHTML =
+                                '<img class="friend-avatar" src="' + escapeHtml(avatar) + '" alt="">' +
+                                '<div class="friend-name">' + escapeHtml(name) + ' <small style="color:var(--text-gray);font-weight:400;">@' + escapeHtml(keyword) + '</small></div>' +
+                                '<div class="friend-actions">' + actionHtml + '</div>';
+                            searchResults.appendChild(li);
+                            var addBtn = li.querySelector('button[data-uid]');
+                            if (addBtn) {
+                                addBtn.addEventListener('click', function() {
+                                    addBtn.disabled = true;
+                                    addBtn.textContent = '送出中…';
+                                    sendFriendRequest(keyword, profile.uid, name).then(function() {
+                                        addBtn.textContent = '已送出';
+                                    }).catch(function(e) {
+                                        console.error(e);
+                                        addBtn.disabled = false;
+                                        addBtn.textContent = '加好友';
+                                        alert('送出好友申請失敗：' + errorMessage(e));
+                                    });
+                                });
+                            }
+                        });
+                    }).catch(function(e) {
+                        console.error(e);
+                        searchResults.innerHTML = '<li class="profile-help">查詢好友狀態失敗。</li>';
+                    });
+                });
+            });
+
+            function sendFriendRequest(toUsername, toUid, toName) {
+                var myName = currentUser.displayName || currentUsername;
+                var myAvatar = currentUser.photoURL || avatarImg.src || fallbackAvatar;
+                return db().ref('users/' + toUsername + '/friend_requests/' + currentUsername).set({
+                    fromUid: currentUid,
+                    fromName: myName,
+                    fromUsername: currentUsername,
+                    fromAvatar: myAvatar,
+                    ts: window.firebase.database.ServerValue.TIMESTAMP
+                });
+            }
+
+            // ===== 好友申請監聽 =====
+            function listenFriendRequests() {
+                db().ref('users/' + currentUsername + '/friend_requests').on('value', function(snap) {
+                    var val = snap.val() || {};
+                    var entries = Object.keys(val).map(function(k) { return [k, val[k]]; });
+                    requestList.innerHTML = '';
+                    requestsCount = entries.length;
+                    updateTabBadges();
+                    if (!entries.length) {
+                        requestList.innerHTML = '<li class="profile-help" id="request-empty">目前沒有待處理的好友申請。</li>';
+                        return;
+                    }
+                    entries.forEach(function(pair) {
+                        var fromUsername = pair[0];
+                        var req = pair[1];
+                        var li = document.createElement('li');
+                        li.className = 'request-item';
+                        li.innerHTML =
+                            '<img class="friend-avatar" src="' + escapeHtml(req.fromAvatar || fallbackAvatar) + '" alt="">' +
+                            '<div class="friend-name">' + escapeHtml(req.fromName || fromUsername) + '</div>' +
+                            '<div class="friend-actions">' +
+                                '<button class="mini-btn success" data-accept="' + escapeHtml(fromUsername) + '" data-uid="' + escapeHtml(req.fromUid) + '" data-name="' + escapeHtml(req.fromName || fromUsername) + '" data-avatar="' + escapeHtml(req.fromAvatar || fallbackAvatar) + '">接受</button>' +
+                                '<button class="mini-btn danger" data-reject="' + escapeHtml(fromUsername) + '">拒絕</button>' +
+                            '</div>';
+                        requestList.appendChild(li);
+                    });
+                    var acceptBtns = requestList.querySelectorAll('[data-accept]');
+                    for (var i = 0; i < acceptBtns.length; i++) {
+                        (function(btn) {
+                            btn.addEventListener('click', function() {
+                                btn.disabled = true;
+                                acceptFriendRequest(btn.dataset.accept, btn.dataset.uid, btn.dataset.name, btn.dataset.avatar).catch(function(e) {
+                                    console.error(e);
+                                    alert('接受好友申請失敗：' + errorMessage(e));
+                                    btn.disabled = false;
+                                });
+                            });
+                        })(acceptBtns[i]);
+                    }
+                    var rejectBtns = requestList.querySelectorAll('[data-reject]');
+                    for (var j = 0; j < rejectBtns.length; j++) {
+                        (function(btn) {
+                            btn.addEventListener('click', function() {
+                                btn.disabled = true;
+                                rejectFriendRequest(btn.dataset.reject).catch(function(e) {
+                                    console.error(e);
+                                    alert('拒絕好友申請失敗：' + errorMessage(e));
+                                    btn.disabled = false;
+                                });
+                            });
+                        })(rejectBtns[j]);
                     }
                 });
             }
-        });
 
-        async function sendFriendRequest(toUsername, toUid, toName) {
-            const db = compatDb();
-            if (!db) throw new Error('Firebase 未就緒');
-            const myName = currentUser.displayName || currentUsername;
-            const myAvatar = currentUser.photoURL || avatarImg.src || fallbackAvatar;
-            await db.ref(`users/${toUsername}/friend_requests/${currentUsername}`).set({
-                fromUid: currentUid,
-                fromName: myName,
-                fromUsername: currentUsername,
-                fromAvatar: myAvatar,
-                ts: window.firebase.database.ServerValue.TIMESTAMP
-            });
-        }
+            function acceptFriendRequest(fromUsername, fromUid, fromName, fromAvatar) {
+                var myName = currentUser.displayName || currentUsername;
+                var myAvatar = currentUser.photoURL || avatarImg.src || fallbackAvatar;
+                var updates = {};
+                updates['users/' + currentUsername + '/friends/' + fromUid] = {
+                    name: fromName, avatar: fromAvatar, username: fromUsername,
+                    since: window.firebase.database.ServerValue.TIMESTAMP
+                };
+                updates['users/' + fromUsername + '/friends/' + currentUid] = {
+                    name: myName, avatar: myAvatar, username: currentUsername,
+                    since: window.firebase.database.ServerValue.TIMESTAMP
+                };
+                updates['users/' + currentUsername + '/friend_requests/' + fromUsername] = null;
+                return db().ref().update(updates);
+            }
 
-        // ===== 好友申請監聽 =====
-        function listenFriendRequests() {
-            const db = compatDb();
-            if (!db) return;
-            const ref = db.ref(`users/${currentUsername}/friend_requests`);
-            ref.on('value', snap => {
-                const val = snap.val() || {};
-                const entries = Object.entries(val);
-                requestList.innerHTML = '';
-                requestsCount = entries.length;
-                updateTabBadges();
+            function rejectFriendRequest(fromUsername) {
+                return db().ref('users/' + currentUsername + '/friend_requests/' + fromUsername).remove();
+            }
+
+            // ===== 好友列表 =====
+            function listenFriends() {
+                db().ref('users/' + currentUsername + '/friends').on('value', function(snap) {
+                    friendsCache = snap.val() || {};
+                    refreshFriendsUI();
+                    listenAllUnread();
+                });
+            }
+
+            function refreshFriendsUI() {
+                friendList.innerHTML = '';
+                var entries = Object.keys(friendsCache).map(function(k) { return [k, friendsCache[k]]; });
                 if (!entries.length) {
-                    requestList.innerHTML = '<li class="profile-help" id="request-empty">目前沒有待處理的好友申請。</li>';
-                    return;
+                    friendList.innerHTML = '<li class="profile-help" id="friend-empty">尚未加入任何好友。</li>';
+                } else {
+                    entries.forEach(function(pair) {
+                        var uid = pair[0];
+                        var f = pair[1];
+                        var li = document.createElement('li');
+                        li.className = 'friend-item' + (uid === activeFriendUid ? ' active' : '');
+                        li.innerHTML =
+                            '<img class="friend-avatar" src="' + escapeHtml(f.avatar || fallbackAvatar) + '" alt="">' +
+                            '<div class="friend-name">' + escapeHtml(f.name || f.username || '好友') + '</div>' +
+                            '<span class="friend-unread" data-uid="' + escapeHtml(uid) + '"></span>' +
+                            '<div class="friend-actions">' +
+                                '<button class="mini-btn primary" data-chat-uid="' + escapeHtml(uid) + '" data-chat-name="' + escapeHtml(f.name || f.username || '好友') + '" data-chat-avatar="' + escapeHtml(f.avatar || fallbackAvatar) + '">私訊</button>' +
+                            '</div>';
+                        friendList.appendChild(li);
+                    });
+                    var chatBtns = friendList.querySelectorAll('[data-chat-uid]');
+                    for (var i = 0; i < chatBtns.length; i++) {
+                        (function(btn) {
+                            btn.addEventListener('click', function() {
+                                openPrivateChat(btn.dataset.chatUid, btn.dataset.chatName, btn.dataset.chatAvatar);
+                                switchTab('chat');
+                            });
+                        })(chatBtns[i]);
+                    }
                 }
-                entries.forEach(([fromUsername, req]) => {
-                    const li = document.createElement('li');
-                    li.className = 'request-item';
-                    li.innerHTML = `
-                        <img class="friend-avatar" src="${escapeHtml(req.fromAvatar || fallbackAvatar)}" alt="">
-                        <div class="friend-name">${escapeHtml(req.fromName || fromUsername)}</div>
-                        <div class="friend-actions">
-                            <button class="mini-btn success" data-accept="${escapeHtml(fromUsername)}" data-uid="${escapeHtml(req.fromUid)}" data-name="${escapeHtml(req.fromName || fromUsername)}" data-avatar="${escapeHtml(req.fromAvatar || fallbackAvatar)}">接受</button>
-                            <button class="mini-btn danger" data-reject="${escapeHtml(fromUsername)}">拒絕</button>
-                        </div>`;
-                    requestList.appendChild(li);
-                });
-                requestList.querySelectorAll('[data-accept]').forEach(btn => {
-                    btn.addEventListener('click', async () => {
-                        btn.disabled = true;
-                        try {
-                            await acceptFriendRequest(btn.dataset.accept, btn.dataset.uid, btn.dataset.name, btn.dataset.avatar);
-                        } catch (e) {
-                            console.error(e);
-                            alert('接受好友申請失敗：' + errorMessage(e));
-                            btn.disabled = false;
-                        }
+
+                // 聊天室側邊欄
+                chatSidebarFriends.innerHTML = '';
+                if (!entries.length) {
+                    chatSidebarFriends.innerHTML = '<li class="profile-help" style="padding:12px;">尚無好友</li>';
+                } else {
+                    entries.forEach(function(pair) {
+                        var uid = pair[0];
+                        var f = pair[1];
+                        var li = document.createElement('li');
+                        li.className = 'friend-item' + (uid === activeFriendUid ? ' active' : '');
+                        li.style.cursor = 'pointer';
+                        li.innerHTML =
+                            '<img class="friend-avatar" src="' + escapeHtml(f.avatar || fallbackAvatar) + '" alt="">' +
+                            '<div class="friend-name">' + escapeHtml(f.name || f.username || '好友') + '</div>' +
+                            '<span class="friend-unread" data-uid="' + escapeHtml(uid) + '"></span>';
+                        li.addEventListener('click', (function(u, ff) {
+                            return function() {
+                                openPrivateChat(u, ff.name || ff.username || '好友', ff.avatar || fallbackAvatar);
+                            };
+                        })(uid, f));
+                        chatSidebarFriends.appendChild(li);
                     });
-                });
-                requestList.querySelectorAll('[data-reject]').forEach(btn => {
-                    btn.addEventListener('click', async () => {
-                        btn.disabled = true;
-                        try {
-                            await rejectFriendRequest(btn.dataset.reject);
-                        } catch (e) {
-                            console.error(e);
-                            alert('拒絕好友申請失敗：' + errorMessage(e));
-                            btn.disabled = false;
-                        }
-                    });
-                });
-            });
-        }
+                }
+                updateUnreadBadges();
+            }
 
-        async function acceptFriendRequest(fromUsername, fromUid, fromName, fromAvatar) {
-            const db = compatDb();
-            const myName = currentUser.displayName || currentUsername;
-            const myAvatar = currentUser.photoURL || avatarImg.src || fallbackAvatar;
-            const updates = {};
-            updates[`users/${currentUsername}/friends/${fromUid}`] = {
-                name: fromName, avatar: fromAvatar, username: fromUsername,
-                since: window.firebase.database.ServerValue.TIMESTAMP
-            };
-            updates[`users/${fromUsername}/friends/${currentUid}`] = {
-                name: myName, avatar: myAvatar, username: currentUsername,
-                since: window.firebase.database.ServerValue.TIMESTAMP
-            };
-            updates[`users/${currentUsername}/friend_requests/${fromUsername}`] = null;
-            await db.ref().update(updates);
-        }
+            // ===== 未讀 =====
+            function listenAllUnread() {
+                for (var i = 0; i < friendUnreadListeners.length; i++) friendUnreadListeners[i]();
+                friendUnreadListeners = [];
+                unreadCache = {};
 
-        async function rejectFriendRequest(fromUsername) {
-            const db = compatDb();
-            await db.ref(`users/${currentUsername}/friend_requests/${fromUsername}`).remove();
-        }
-
-        // ===== 好友列表 =====
-        function listenFriends() {
-            const db = compatDb();
-            if (!db) return;
-            const ref = db.ref(`users/${currentUsername}/friends`);
-            ref.on('value', snap => {
-                friendsCache = snap.val() || {};
-                refreshFriendsUI();
-                listenAllUnread();
-            });
-        }
-
-        function refreshFriendsUI() {
-            // 好友頁列表
-            friendList.innerHTML = '';
-            const entries = Object.entries(friendsCache);
-            if (!entries.length) {
-                friendList.innerHTML = '<li class="profile-help" id="friend-empty">尚未加入任何好友。</li>';
-            } else {
-                entries.forEach(([uid, f]) => {
-                    const li = document.createElement('li');
-                    li.className = 'friend-item' + (uid === activeFriendUid ? ' active' : '');
-                    li.innerHTML = `
-                        <img class="friend-avatar" src="${escapeHtml(f.avatar || fallbackAvatar)}" alt="">
-                        <div class="friend-name">${escapeHtml(f.name || f.username || '好友')}</div>
-                        <span class="friend-unread" data-uid="${escapeHtml(uid)}"></span>
-                        <div class="friend-actions">
-                            <button class="mini-btn primary" data-chat-uid="${escapeHtml(uid)}" data-chat-name="${escapeHtml(f.name || f.username || '好友')}" data-chat-avatar="${escapeHtml(f.avatar || fallbackAvatar)}">私訊</button>
-                        </div>`;
-                    friendList.appendChild(li);
-                });
-                friendList.querySelectorAll('[data-chat-uid]').forEach(btn => {
-                    btn.addEventListener('click', () => {
-                        openPrivateChat(btn.dataset.chatUid, btn.dataset.chatName, btn.dataset.chatAvatar);
-                        // 切到聊天室頁籤
-                        switchTab('chat');
-                    });
+                Object.keys(friendsCache).forEach(function(friendUid) {
+                    var cid = chatIdFor(currentUid, friendUid);
+                    var msgsRef = db().ref('private_chats/' + cid + '/msgs');
+                    var readRef = db().ref('private_chats/' + cid + '/read/' + currentUid);
+                    var handler = function(snap) {
+                        var msgs = snap.val() || {};
+                        readRef.once('value').then(function(readSnap) {
+                            var lastRead = readSnap.val() || 0;
+                            var unread = 0;
+                            Object.keys(msgs).forEach(function(id) {
+                                var m = msgs[id];
+                                if (m.from !== currentUid && (m.ts || 0) > lastRead) unread++;
+                            });
+                            unreadCache[friendUid] = unread;
+                            updateUnreadBadges();
+                        }).catch(function() {});
+                    };
+                    msgsRef.on('value', handler);
+                    friendUnreadListeners.push((function(ref) {
+                        return function() { ref.off('value', handler); };
+                    })(msgsRef));
                 });
             }
 
-            // 聊天室側邊欄
-            chatSidebarFriends.innerHTML = '';
-            if (!entries.length) {
-                chatSidebarFriends.innerHTML = '<li class="profile-help" style="padding:12px;">尚無好友</li>';
-            } else {
-                entries.forEach(([uid, f]) => {
-                    const li = document.createElement('li');
-                    li.className = 'friend-item' + (uid === activeFriendUid ? ' active' : '');
-                    li.style.cursor = 'pointer';
-                    li.innerHTML = `
-                        <img class="friend-avatar" src="${escapeHtml(f.avatar || fallbackAvatar)}" alt="">
-                        <div class="friend-name">${escapeHtml(f.name || f.username || '好友')}</div>
-                        <span class="friend-unread" data-uid="${escapeHtml(uid)}"></span>`;
-                    li.addEventListener('click', () => {
-                        openPrivateChat(uid, f.name || f.username || '好友', f.avatar || fallbackAvatar);
-                    });
-                    chatSidebarFriends.appendChild(li);
-                });
+            function updateUnreadBadges() {
+                var unreadEls = document.querySelectorAll('.friend-unread');
+                for (var i = 0; i < unreadEls.length; i++) {
+                    var uid = unreadEls[i].dataset.uid;
+                    var count = unreadCache[uid] || 0;
+                    unreadEls[i].textContent = count > 99 ? '99+' : String(count);
+                    unreadEls[i].classList.toggle('show', count > 0);
+                }
+                var total = 0;
+                Object.keys(unreadCache).forEach(function(k) { total += unreadCache[k] || 0; });
+                if (total > 0) {
+                    avatarBadge.textContent = total > 99 ? '99+' : String(total);
+                    avatarBadge.style.display = 'block';
+                } else {
+                    avatarBadge.style.display = 'none';
+                }
+                tabBadgeUnread.textContent = total > 99 ? '99+' : String(total);
+                tabBadgeUnread.classList.toggle('show', total > 0);
+                updateTabBadges();
             }
 
-            updateUnreadBadges();
-        }
+            function updateTabBadges() {
+                tabBadgeRequests.textContent = requestsCount > 99 ? '99+' : String(requestsCount);
+                tabBadgeRequests.classList.toggle('show', requestsCount > 0);
+            }
 
-        // ===== 未讀 =====
-        function listenAllUnread() {
-            friendUnreadListeners.forEach(fn => fn());
-            friendUnreadListeners = [];
-            unreadCache = {};
-            const db = compatDb();
-            if (!db) return;
+            // ===== 聊天室 =====
+            function clearChatListeners() {
+                for (var i = 0; i < chatListeners.length; i++) chatListeners[i]();
+                chatListeners = [];
+            }
 
-            Object.keys(friendsCache).forEach(friendUid => {
-                const cid = chatIdFor(currentUid, friendUid);
-                const readRef = db.ref(`private_chats/${cid}/read/${currentUid}`);
-                const msgsRef = db.ref(`private_chats/${cid}/msgs`);
-                const handler = snap => {
-                    const msgs = snap.val() || {};
-                    readRef.once('value').then(readSnap => {
-                        const lastRead = readSnap.val() || 0;
-                        let unread = 0;
-                        Object.values(msgs).forEach(m => {
-                            if (m.from !== currentUid && (m.ts || 0) > lastRead) unread++;
-                        });
-                        unreadCache[friendUid] = unread;
-                        updateUnreadBadges();
-                    }).catch(() => {});
+            function openPrivateChat(friendUid, friendName, friendAvatar) {
+                activeFriendUid = friendUid;
+                clearChatListeners();
+                chatTitle.textContent = friendName;
+                chatSubtitle.textContent = '私訊對話';
+                chatClearFriend.hidden = false;
+                msgInput.disabled = false;
+                chatSendBtn.disabled = false;
+                chatEmpty.style.display = 'none';
+                var oldRows = chatBox.querySelectorAll('.msg-row');
+                for (var i = 0; i < oldRows.length; i++) oldRows[i].remove();
+
+                var cid = chatIdFor(currentUid, friendUid);
+                var msgsRef = db().ref('private_chats/' + cid + '/msgs');
+                var handler = function(snap) {
+                    var msgs = snap.val() || {};
+                    var list = Object.keys(msgs).map(function(id) { return [id, msgs[id]]; });
+                    list.sort(function(a, b) { return (a[1].ts || 0) - (b[1].ts || 0); });
+                    var rows = chatBox.querySelectorAll('.msg-row');
+                    for (var r = 0; r < rows.length; r++) rows[r].remove();
+                    if (!list.length) {
+                        chatEmpty.style.display = 'block';
+                        return;
+                    }
+                    chatEmpty.style.display = 'none';
+                    list.forEach(function(pair) {
+                        var m = pair[1];
+                        var isMe = m.from === currentUid;
+                        var div = document.createElement('div');
+                        div.className = 'msg-row ' + (isMe ? 'me' : 'other');
+                        div.innerHTML =
+                            '<div class="msg-info">' + escapeHtml(m.name || (isMe ? currentUsername : friendName)) + ' • ' + formatTime(m.ts) + '</div>' +
+                            '<div class="bubble">' + escapeHtml(m.text) + '</div>';
+                        chatBox.appendChild(div);
+                    });
+                    chatBox.scrollTop = chatBox.scrollHeight;
+                    markChatRead(cid);
                 };
                 msgsRef.on('value', handler);
-                friendUnreadListeners.push(() => msgsRef.off('value', handler));
-            });
-        }
+                chatListeners.push((function(ref) {
+                    return function() { ref.off('value', handler); };
+                })(msgsRef));
 
-        function updateUnreadBadges() {
-            // 好友列表與側邊欄紅點
-            document.querySelectorAll('.friend-unread').forEach(el => {
-                const uid = el.dataset.uid;
-                const count = unreadCache[uid] || 0;
-                el.textContent = count > 99 ? '99+' : String(count);
-                el.classList.toggle('show', count > 0);
-            });
-            // 頭像總未讀
-            const total = Object.values(unreadCache).reduce((s, n) => s + n, 0);
-            if (total > 0) {
-                avatarBadge.textContent = total > 99 ? '99+' : String(total);
-                avatarBadge.style.display = 'block';
-            } else {
-                avatarBadge.style.display = 'none';
-            }
-            // 頁籤徽章
-            tabBadgeUnread.textContent = total > 99 ? '99+' : String(total);
-            tabBadgeUnread.classList.toggle('show', total > 0);
-            updateTabBadges();
-        }
-
-        function updateTabBadges() {
-            tabBadgeRequests.textContent = requestsCount > 99 ? '99+' : String(requestsCount);
-            tabBadgeRequests.classList.toggle('show', requestsCount > 0);
-        }
-
-        // ===== 聊天室 =====
-        function switchTab(name) {
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.page === name));
-            document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + name));
-        }
-
-        function clearChatListeners() {
-            chatListeners.forEach(fn => fn());
-            chatListeners = [];
-        }
-
-        async function openPrivateChat(friendUid, friendName, friendAvatar) {
-            activeFriendUid = friendUid;
-            clearChatListeners();
-            chatTitle.textContent = friendName;
-            chatSubtitle.textContent = '私訊對話';
-            chatClearFriend.hidden = false;
-            msgInput.disabled = false;
-            chatSendBtn.disabled = false;
-            chatEmpty.style.display = 'none';
-            chatBox.querySelectorAll('.msg-row').forEach(el => el.remove());
-
-            const cid = chatIdFor(currentUid, friendUid);
-            const msgsRef = ref(chatDb, `private_chats/${cid}/msgs`);
-            const unsub = onValue(msgsRef, snap => {
-                const msgs = snap.val() || {};
-                const list = Object.entries(msgs).sort((a, b) => (a[1].ts || 0) - (b[1].ts || 0));
-                chatBox.querySelectorAll('.msg-row').forEach(el => el.remove());
-                if (!list.length) {
-                    chatEmpty.style.display = 'block';
-                    return;
-                }
-                chatEmpty.style.display = 'none';
-                list.forEach(([id, m]) => {
-                    const isMe = m.from === currentUid;
-                    const div = document.createElement('div');
-                    div.className = `msg-row ${isMe ? 'me' : 'other'}`;
-                    div.innerHTML = `
-                        <div class="msg-info">${escapeHtml(m.name || (isMe ? currentUsername : friendName))} • ${formatTime(m.ts)}</div>
-                        <div class="bubble">${escapeHtml(m.text)}</div>`;
-                    chatBox.appendChild(div);
-                });
-                chatBox.scrollTop = chatBox.scrollHeight;
+                refreshFriendsUI();
                 markChatRead(cid);
-            });
-            chatListeners.push(unsub);
-            refreshFriendsUI();
-            markChatRead(cid);
-        }
-
-        async function markChatRead(cid) {
-            if (!chatDb || !currentUid) return;
-            try {
-                await set(ref(chatDb, `private_chats/${cid}/read/${currentUid}`), serverTimestamp());
-                if (activeFriendUid) {
-                    unreadCache[activeFriendUid] = 0;
-                    updateUnreadBadges();
-                }
-            } catch (e) {
-                console.warn('標記已讀失敗', e);
             }
-        }
 
-        chatClearFriend.addEventListener('click', () => {
-            activeFriendUid = '';
-            clearChatListeners();
-            chatTitle.textContent = '聊天室';
-            chatSubtitle.textContent = '請從好友列表選擇一位好友開始聊天。';
-            chatClearFriend.hidden = true;
-            msgInput.disabled = true;
-            chatSendBtn.disabled = true;
-            chatBox.querySelectorAll('.msg-row').forEach(el => el.remove());
-            chatEmpty.style.display = 'block';
-            refreshFriendsUI();
-        });
+            function markChatRead(cid) {
+                if (!currentUid) return;
+                db().ref('private_chats/' + cid + '/read/' + currentUid).set(window.firebase.database.ServerValue.TIMESTAMP).then(function() {
+                    if (activeFriendUid) {
+                        unreadCache[activeFriendUid] = 0;
+                        updateUnreadBadges();
+                    }
+                }).catch(function(e) {
+                    console.warn('標記已讀失敗', e);
+                });
+            }
 
-        async function sendMessage() {
-            if (!activeFriendUid || !chatDb) return;
-            const text = msgInput.value.trim();
-            if (!text) return;
-            const cid = chatIdFor(currentUid, activeFriendUid);
-            try {
-                await push(ref(chatDb, `private_chats/${cid}/msgs`), {
+            chatClearFriend.addEventListener('click', function() {
+                activeFriendUid = '';
+                clearChatListeners();
+                chatTitle.textContent = '聊天室';
+                chatSubtitle.textContent = '請從好友列表選擇一位好友開始聊天。';
+                chatClearFriend.hidden = true;
+                msgInput.disabled = true;
+                chatSendBtn.disabled = true;
+                var rows = chatBox.querySelectorAll('.msg-row');
+                for (var i = 0; i < rows.length; i++) rows[i].remove();
+                chatEmpty.style.display = 'block';
+                refreshFriendsUI();
+            });
+
+            function sendMessage() {
+                if (!activeFriendUid) return;
+                var text = msgInput.value.trim();
+                if (!text) return;
+                var cid = chatIdFor(currentUid, activeFriendUid);
+                db().ref('private_chats/' + cid + '/msgs').push({
                     from: currentUid,
                     to: activeFriendUid,
                     name: currentUser.displayName || currentUsername,
-                    text,
-                    ts: serverTimestamp()
+                    text: text,
+                    ts: window.firebase.database.ServerValue.TIMESTAMP
+                }).then(function() {
+                    msgInput.value = '';
+                    msgInput.focus();
+                }).catch(function(e) {
+                    console.error('訊息傳送失敗', e.code, e.message);
+                    alert('訊息傳送失敗：' + (e.code || e.message || '未知錯誤'));
                 });
-                msgInput.value = '';
-                msgInput.focus();
-            } catch (e) {
-                console.error(e);
-                alert('訊息傳送失敗：' + (e.message || '未知錯誤'));
             }
-        }
 
-        chatSendBtn.addEventListener('click', sendMessage);
-        msgInput.addEventListener('keydown', e => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage();
-            }
-        });
-
-        function formatTime(ts) {
-            if (!ts) return '';
-            const d = new Date(ts);
-            const now = new Date();
-            const time = d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
-            if (d.toDateString() === now.toDateString()) return '今天 ' + time;
-            const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1);
-            if (d.toDateString() === yesterday.toDateString()) return '昨天 ' + time;
-            return `${d.getMonth()+1}/${d.getDate()} ${time}`;
-        }
-
-        // ===== 初始化 =====
-        (async function init() {
-            try {
-                if (window.raingodFirebaseReady) await window.raingodFirebaseReady;
-                const user = await window.raingodAuthReady;
-                if (!user) {
-                    loginRequired.hidden = false;
-                    appArea.hidden = true;
-                    return;
+            chatSendBtn.addEventListener('click', sendMessage);
+            msgInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
                 }
-                await initProfile(user);
+            });
 
-                window.firebase.auth().onAuthStateChanged(async u => {
-                    if (u) {
-                        await initProfile(u);
-                    } else {
-                        currentUser = null; currentUid = ''; currentUsername = '';
-                        appArea.hidden = true;
-                        loginRequired.hidden = false;
-                        clearChatListeners();
-                        friendUnreadListeners.forEach(fn => fn());
-                        friendUnreadListeners = [];
-                        friendsCache = {};
-                        unreadCache = {};
-                        requestList.innerHTML = ''; friendList.innerHTML = '';
-                        chatSidebarFriends.innerHTML = '';
-                        searchResults.innerHTML = '';
-                        chatBox.querySelectorAll('.msg-row').forEach(el => el.remove());
-                        chatEmpty.style.display = 'block';
-                        chatClearFriend.hidden = true;
-                        msgInput.disabled = true;
-                        chatSendBtn.disabled = true;
-                        updateUnreadBadges();
-                    }
-                });
-            } catch (e) {
-                console.error('初始化失敗', e);
-                loginRequired.hidden = false;
-                loginRequired.textContent = '載入個人檔案失敗：' + errorMessage(e);
-                loginRequired.classList.add('error');
+            function formatTime(ts) {
+                if (!ts) return '';
+                var d = new Date(ts);
+                var now = new Date();
+                var time = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+                if (d.toDateString() === now.toDateString()) return '今天 ' + time;
+                var yesterday = new Date(now);
+                yesterday.setDate(now.getDate() - 1);
+                if (d.toDateString() === yesterday.toDateString()) return '昨天 ' + time;
+                return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + time;
             }
+
+            // ===== 啟動 =====
+            (function init() {
+                var p = window.raingodFirebaseReady || Promise.resolve();
+                p.then(function() {
+                    return window.raingodAuthReady || Promise.resolve(null);
+                }).then(function(user) {
+                    if (!user) {
+                        loginRequired.hidden = false;
+                        appArea.hidden = true;
+                        return;
+                    }
+                    initProfile(user);
+                    window.firebase.auth().onAuthStateChanged(function(u) {
+                        if (u) {
+                            initProfile(u);
+                        } else {
+                            currentUser = null; currentUid = ''; currentUsername = '';
+                            appArea.hidden = true;
+                            loginRequired.hidden = false;
+                            clearChatListeners();
+                            for (var i = 0; i < friendUnreadListeners.length; i++) friendUnreadListeners[i]();
+                            friendUnreadListeners = [];
+                            friendsCache = {};
+                            unreadCache = {};
+                            requestList.innerHTML = '';
+                            friendList.innerHTML = '';
+                            chatSidebarFriends.innerHTML = '';
+                            searchResults.innerHTML = '';
+                            var rows = chatBox.querySelectorAll('.msg-row');
+                            for (var j = 0; j < rows.length; j++) rows[j].remove();
+                            chatEmpty.style.display = 'block';
+                            chatClearFriend.hidden = true;
+                            msgInput.disabled = true;
+                            chatSendBtn.disabled = true;
+                            updateUnreadBadges();
+                        }
+                    });
+                }).catch(function(e) {
+                    console.error('初始化失敗', e);
+                    loginRequired.hidden = false;
+                    loginRequired.textContent = '載入個人檔案失敗：' + errorMessage(e);
+                    loginRequired.classList.add('error');
+                });
+            })();
         })();
     </script>
 </body>
