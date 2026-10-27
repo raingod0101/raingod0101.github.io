@@ -195,7 +195,6 @@
         .chat-sidebar .friend-item.active { background: #eaf2ff; }
         .chat-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 
-        /* 手機版好友選擇下拉選單 */
         .chat-mobile-picker {
             display: none;
             padding: 10px 12px;
@@ -231,7 +230,6 @@
             font-size: 0.92rem; padding: 30px;
         }
 
-        /* ===== 訊息列（含頭像）===== */
         .msg-row {
             display: flex;
             align-items: flex-end;
@@ -267,7 +265,6 @@
             box-shadow: none;
             padding: 4px 8px;
         }
-        /* 收回按鈕（hover 顯示）*/
         .msg-recall-btn {
             display: none;
             margin-top: 3px;
@@ -421,7 +418,6 @@
                             <ul id="chat-sidebar-friends" style="list-style:none;margin:0;padding:0;"></ul>
                         </aside>
                         <div class="chat-main">
-                            <!-- 手機版好友選擇器 -->
                             <div class="chat-mobile-picker">
                                 <select id="chat-mobile-select">
                                     <option value="">選擇好友開始聊天…</option>
@@ -501,6 +497,9 @@
             var requestsCount = 0;
             var chatInitialized = false;
 
+            // 好友頭像監聽
+            var friendAvatarRefs = {};
+
             // ===== 工具 =====
             function db() { return window.firebase.database(); }
             function setStatus(id, message, type) {
@@ -542,6 +541,10 @@
                 yesterday.setDate(now.getDate() - 1);
                 if (d.toDateString() === yesterday.toDateString()) return '昨天 ' + time;
                 return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + time;
+            }
+            function friendAvatarOf(uid) {
+                var f = friendsCache[uid];
+                return (f && f.avatar) || fallbackAvatar;
             }
 
             // ===== 分頁 =====
@@ -607,10 +610,17 @@
                     }
                 });
 
+                // 監聽自己的頭像（確保 currentAvatar 是最新的）
+                db().ref('users/' + currentUsername + '/profile/avatar').on('value', function(snap) {
+                    var url = snap.val();
+                    currentAvatar = url || fallbackAvatar;
+                    avatarImg.src = currentAvatar;
+                    updateMyMessageAvatars();
+                });
+
                 listenFriendRequests();
                 listenFriends();
 
-                // 一進來先切到聊天室
                 if (!chatInitialized) {
                     chatInitialized = true;
                     switchTab('chat');
@@ -645,6 +655,7 @@
                         currentAvatar = dataUrl;
                         setStatus('avatar-status', '頭像已更新並儲存。', 'ok');
                         refreshFriendsUI();
+                        updateMyMessageAvatars();
                     });
                     avatarFileInput.value = '';
                 };
@@ -863,12 +874,44 @@
                 return db().ref('users/' + currentUsername + '/friend_requests/' + fromUsername).remove();
             }
 
+            // ===== 好友頭像即時監聽 =====
+            function stopFriendAvatarWatchers() {
+                Object.keys(friendAvatarRefs).forEach(function(uid) {
+                    var item = friendAvatarRefs[uid];
+                    try { item.ref.off('value', item.handler); } catch (e) {}
+                });
+                friendAvatarRefs = {};
+            }
+
+            function watchFriendAvatars() {
+                stopFriendAvatarWatchers();
+                Object.keys(friendsCache).forEach(function(uid) {
+                    var f = friendsCache[uid];
+                    var username = f.username;
+                    if (!username) return;
+                    var ref = db().ref('users/' + username + '/profile/avatar');
+                    var handler = function(snap) {
+                        var url = snap.val();
+                        if (url) {
+                            friendsCache[uid].avatar = url;
+                        }
+                        // 更新好友列表、側邊欄、手機選單
+                        refreshFriendsUI();
+                        // 更新聊天泡泡頭像
+                        updateMessageAvatars();
+                    };
+                    ref.on('value', handler);
+                    friendAvatarRefs[uid] = { ref: ref, handler: handler };
+                });
+            }
+
             // ===== 好友列表 =====
             function listenFriends() {
                 db().ref('users/' + currentUsername + '/friends').on('value', function(snap) {
                     friendsCache = snap.val() || {};
                     refreshFriendsUI();
                     listenAllUnread();
+                    watchFriendAvatars();
                 });
             }
 
@@ -903,7 +946,6 @@
                     }
                 }
 
-                // 聊天室側邊欄（桌面）
                 chatSidebarFriends.innerHTML = '';
                 if (!entries.length) {
                     chatSidebarFriends.innerHTML = '<li class="profile-help" style="padding:12px;">尚無好友</li>';
@@ -927,7 +969,6 @@
                     });
                 }
 
-                // 手機版好友選擇器
                 refreshMobileSelect(entries);
                 updateUnreadBadges();
             }
@@ -1044,7 +1085,13 @@
                         var row = document.createElement('div');
                         row.className = 'msg-row ' + (isMe ? 'me' : 'other');
 
-                        var avatarUrl = m.fromAvatar || (isMe ? currentAvatar : friendAvatar) || fallbackAvatar;
+                        var avatarUrl;
+                        if (isMe) {
+                            avatarUrl = currentAvatar || fallbackAvatar;
+                        } else {
+                            // 優先使用 friendsCache（已被即時監聽更新），再 fallback 到訊息當時的頭像
+                            avatarUrl = friendAvatarOf(friendUid) || m.fromAvatar || friendAvatar || fallbackAvatar;
+                        }
                         var name = m.name || (isMe ? (currentUser.displayName || currentUsername) : friendName);
 
                         var avatarEl = document.createElement('img');
@@ -1055,27 +1102,23 @@
                         var bodyEl = document.createElement('div');
                         bodyEl.className = 'msg-body';
 
+                        var info = document.createElement('div');
+                        info.className = 'msg-info';
+                        info.textContent = name + ' • ' + formatTime(m.ts);
+                        bodyEl.appendChild(info);
+
                         if (m.recalled) {
-                            var info = document.createElement('div');
-                            info.className = 'msg-info';
-                            info.textContent = name + ' • ' + formatTime(m.ts);
-                            bodyEl.appendChild(info);
                             var recalled = document.createElement('div');
                             recalled.className = 'bubble recalled';
                             recalled.textContent = isMe ? '你收回了一則訊息' : (name + ' 收回了一則訊息');
                             bodyEl.appendChild(recalled);
                         } else {
-                            var info2 = document.createElement('div');
-                            info2.className = 'msg-info';
-                            info2.textContent = name + ' • ' + formatTime(m.ts);
-                            bodyEl.appendChild(info2);
                             var bubble = document.createElement('div');
                             bubble.className = 'bubble';
                             bubble.textContent = m.text;
                             bodyEl.appendChild(bubble);
                         }
 
-                        // 收回按鈕（只有自己發的、且未收回才顯示）
                         if (isMe && !m.recalled) {
                             var recallBtn = document.createElement('button');
                             recallBtn.type = 'button';
@@ -1106,6 +1149,24 @@
                 chatMobileSelect.value = friendUid;
                 refreshFriendsUI();
                 markChatRead(cid);
+            }
+
+            // 即時更新目前對話的頭像（好友換頭像時）
+            function updateMessageAvatars() {
+                if (!activeFriendUid) return;
+                var otherAvatars = chatBox.querySelectorAll('.msg-row.other .msg-avatar');
+                var url = friendAvatarOf(activeFriendUid);
+                for (var i = 0; i < otherAvatars.length; i++) {
+                    otherAvatars[i].src = url;
+                }
+                updateMyMessageAvatars();
+            }
+
+            function updateMyMessageAvatars() {
+                var mine = chatBox.querySelectorAll('.msg-row.me .msg-avatar');
+                for (var i = 0; i < mine.length; i++) {
+                    mine[i].src = currentAvatar || fallbackAvatar;
+                }
             }
 
             function markChatRead(cid) {
@@ -1191,6 +1252,7 @@
                         clearChatListeners();
                         for (var i = 0; i < friendUnreadListeners.length; i++) friendUnreadListeners[i]();
                         friendUnreadListeners = [];
+                        stopFriendAvatarWatchers();
                         friendsCache = {};
                         unreadCache = {};
                         requestList.innerHTML = '';
