@@ -846,42 +846,205 @@
         if (!container) return;
 
         fetch(`${baseUrl}menu.html?v=${v}`).then(r => r.text()).then(html => {
-            container.innerHTML = html;
-            
-            const brandA = container.querySelector('.brand');
-            if (brandA && !brandA.querySelector('img')) {
-                const img = document.createElement('img');
-                img.src = `${baseUrl}catdragon.png`;
-                img.style.cssText = "height: 24px; width: 24px; object-fit: contain; margin-right: 8px; border-radius: 4px;";
-                brandA.prepend(img);
+    container.innerHTML = html;
+
+    const brandA = container.querySelector('.brand');
+    if (brandA && !brandA.querySelector('img')) {
+        const img = document.createElement('img');
+        img.src = `${baseUrl}catdragon.png`;
+        img.style.cssText = "height: 24px; width: 24px; object-fit: contain; margin-right: 8px; border-radius: 4px;";
+        brandA.prepend(img);
+    }
+
+    const loginBtn = document.getElementById('login-btn');
+    const userInfo = document.getElementById('user-info');
+    const userAvatar = document.getElementById('user-avatar');
+
+    // ===== 導覽列頭像 badge（數字）=====
+    let navBadge = null;
+    if (userAvatar && userAvatar.parentElement) {
+        const wrap = userAvatar.parentElement;
+        if (!wrap.querySelector('.nav-avatar-badge')) {
+            // 確保父層可定位
+            if (getComputedStyle(wrap).position === 'static') {
+                wrap.style.position = 'relative';
+            }
+            navBadge = document.createElement('span');
+            navBadge.className = 'nav-avatar-badge';
+            navBadge.textContent = '0';
+            navBadge.style.cssText = [
+                'position:absolute',
+                'top:-4px',
+                'right:-4px',
+                'min-width:17px',
+                'height:17px',
+                'padding:0 4px',
+                'border-radius:9px',
+                'background:#ff3b30',
+                'color:#fff',
+                'font-size:10px',
+                'font-weight:700',
+                'line-height:17px',
+                'text-align:center',
+                'box-sizing:border-box',
+                'display:none',
+                'pointer-events:none',
+                'z-index:5',
+                'box-shadow:0 0 0 2px #fff'
+            ].join(';');
+            wrap.appendChild(navBadge);
+        } else {
+            navBadge = wrap.querySelector('.nav-avatar-badge');
+        }
+    }
+
+    // ===== 導覽列數字監聽管理 =====
+    let navListeners = [];
+    let navTotalCount = 0;
+    let navCurrentUsername = '';
+
+    function clearNavListeners() {
+        navListeners.forEach(fn => { try { fn(); } catch (e) {} });
+        navListeners = [];
+        navTotalCount = 0;
+        updateNavBadge(0);
+    }
+
+    function updateNavBadge(count) {
+        navTotalCount = count;
+        if (!navBadge) return;
+        navBadge.textContent = count > 99 ? '99+' : String(count);
+        navBadge.style.display = count > 0 ? 'inline-block' : 'none';
+    }
+
+    function addNavCount(n) {
+        navTotalCount += (n || 0);
+        updateNavBadge(navTotalCount);
+    }
+
+    // 好友申請數 + 所有好友對話未讀數
+    function listenNavCounts(username, uid) {
+        clearNavListeners();
+        navCurrentUsername = username;
+
+        // 好友申請
+        const reqRef = firebase.database().ref(`users/${username}/friend_requests`);
+        const reqHandler = snap => {
+            const val = snap.val() || {};
+            const cnt = Object.keys(val).length;
+            // 用一個屬性記錄，避免重複累加
+            navCounts.requests = cnt;
+            recomputeNavTotal();
+        };
+        reqRef.on('value', reqHandler);
+        navListeners.push(() => reqRef.off('value', reqHandler));
+
+        // 好友列表 → 每個好友對話未讀
+        const friendsRef = firebase.database().ref(`users/${username}/friends`);
+        navCounts.unread = {};
+        const friendsHandler = snap => {
+            const friends = snap.val() || {};
+            // 先清掉舊的未讀監聽
+            (navListeners.filter(x => x.__isUnread).forEach(fn => { try { fn(); } catch (e) {} }));
+            navListeners = navListeners.filter(x => !x.__isUnread);
+            navCounts.unread = {};
+
+            Object.keys(friends).forEach(friendUid => {
+                const cid = [uid, friendUid].sort().join('__');
+                const msgsRef = firebase.database().ref(`private_chats/${cid}/msgs`);
+                const readRef = firebase.database().ref(`private_chats/${cid}/read/${uid}`);
+                const handler = msgSnap => {
+                    const msgs = msgSnap.val() || {};
+                    readRef.once('value').then(readSnap => {
+                        const lastRead = readSnap.val() || 0;
+                        let unread = 0;
+                        Object.keys(msgs).forEach(id => {
+                            const m = msgs[id];
+                            if (m.from !== uid && (m.ts || 0) > lastRead) unread++;
+                        });
+                        navCounts.unread[friendUid] = unread;
+                        recomputeNavTotal();
+                    }).catch(() => {});
+                };
+                msgsRef.on('value', handler);
+                const offFn = () => msgsRef.off('value', handler);
+                offFn.__isUnread = true;
+                navListeners.push(offFn);
+            });
+            recomputeNavTotal();
+        };
+        friendsRef.on('value', friendsHandler);
+        navListeners.push(() => friendsRef.off('value', friendsHandler));
+
+        // 監聽管理：把 friendsHandler 也算進去
+    }
+
+    // 用一個物件暫存，避免閉包混亂
+    const navCounts = { requests: 0, unread: {} };
+
+    function recomputeNavTotal() {
+        let total = navCounts.requests || 0;
+        Object.keys(navCounts.unread || {}).forEach(k => { total += navCounts.unread[k] || 0; });
+        updateNavBadge(total);
+    }
+
+    // ===== 頭像同步（讀 users/{username}/profile/avatar）=====
+    let avatarProfileRef = null;
+    let avatarProfileHandler = null;
+    function stopAvatarWatch() {
+        if (avatarProfileRef && avatarProfileHandler) {
+            try { avatarProfileRef.off('value', avatarProfileHandler); } catch (e) {}
+        }
+        avatarProfileRef = null;
+        avatarProfileHandler = null;
+    }
+    function watchProfileAvatar(username) {
+        stopAvatarWatch();
+        if (!userAvatar) return;
+        avatarProfileRef = firebase.database().ref(`users/${username}/profile/avatar`);
+        avatarProfileHandler = snap => {
+            const url = snap.val();
+            if (url) {
+                userAvatar.src = url;
+            } else {
+                const u = firebase.auth().currentUser;
+                userAvatar.src = (u && u.photoURL) || `${baseUrl}catdragon.png`;
+            }
+        };
+        avatarProfileRef.on('value', avatarProfileHandler);
+    }
+
+    firebase.auth().onAuthStateChanged(user => {
+        if (user) {
+            if (loginBtn) loginBtn.style.setProperty('display', 'none', 'important');
+            if (userInfo) userInfo.style.setProperty('display', 'flex', 'important');
+
+            const username = user.email ? user.email.split('@')[0] : '';
+            const displayUsername = user.displayName || username || 'User';
+
+            if (userAvatar) {
+                userAvatar.src = user.photoURL || `${baseUrl}catdragon.png`;
+                userAvatar.title = "個人檔案：" + displayUsername;
+                watchProfileAvatar(username);
             }
 
-            const loginBtn = document.getElementById('login-btn');
-            const userInfo = document.getElementById('user-info');
-            const userAvatar = document.getElementById('user-avatar');
+            // 導覽列數字
+            listenNavCounts(username, user.uid);
 
-            firebase.auth().onAuthStateChanged(user => {
-                if (user) {
-                    if (loginBtn) loginBtn.style.setProperty('display', 'none', 'important');
-                    if (userInfo) userInfo.style.setProperty('display', 'flex', 'important');
-                    if (userAvatar) {
-                        userAvatar.src = user.photoURL || `${baseUrl}catdragon.png`;
-                        const displayUsername = user.displayName || (user.email ? user.email.split('@')[0] : 'User');
-                        userAvatar.title = "個人檔案：" + displayUsername;
-                    }
-                    syncData(user);
-                } else {
-                    if (loginBtn) {
-                        loginBtn.style.setProperty('display', 'flex', 'important');
-                        loginBtn.onclick = handleCustomAuth;
-                    }
-                    if (userInfo) userInfo.style.setProperty('display', 'none', 'important');
-                    syncData(null);
-                }
-            });
+            syncData(user);
+        } else {
+            if (loginBtn) {
+                loginBtn.style.setProperty('display', 'flex', 'important');
+                loginBtn.onclick = handleCustomAuth;
+            }
+            if (userInfo) userInfo.style.setProperty('display', 'none', 'important');
+            stopAvatarWatch();
+            clearNavListeners();
+            syncData(null);
+        }
+    });
 
-            // --- 原本的強制黑色主題已經刪除 ---
-            // 顏色現在交由你的 CSS (包含節慶主題) 來控制，選單就不會爆開了！
-        });
+    // --- 原本的強制黑色主題已經刪除 ---
+});
     }
 })();
