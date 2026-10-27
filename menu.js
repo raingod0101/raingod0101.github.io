@@ -32,69 +32,69 @@
 
     const baseUrl = "https://raingod0101.github.io/";
     const v = new Date().getTime();
-    let currentIp = "Unknown_IP"; 
+    let currentIp = "Unknown_IP";
 
-    js:// --- 節慶主題自動切換 (陣列化優雅升級版) ---
-(function applyFestivalTheme() {
-    // 測試用開關：想測試什麼主題就填入字串（例如 'stpatrick'、'diwali' 等），測完改回 null
-    const testTheme = null; 
-    
-    let theme = '';
+    // --- 節慶主題自動切換 (陣列化優雅升級版) ---
+    (function applyFestivalTheme() {
+        // 測試用開關：想測試什麼主題就填入字串（例如 'stpatrick'、'diwali' 等），測完改回 null
+        const testTheme = null;
 
-    if (testTheme) {
-        theme = 'theme-' + testTheme;
-    } else {
-        const now = new Date();
-        const m = now.getMonth() + 1; // 1-12
-        const d = now.getDate();
-        const md = m * 100 + d; // 例如 317 代表 3月17日
+        let theme = '';
 
-        // 集中管理全部 20 個節慶與日期區間
-        const festivals = [
-            // 原有 8 個
-            { name: 'newyear',    start: 120,  end: 209 },  // 🧨 農曆新年 (1/20 - 2/9)
-            { name: 'valentine',  start: 210,  end: 216 },  // 💝 情人節 (2/10 - 2/16)
-            { name: 'sakura',     start: 320,  end: 405 },  // 🌸 櫻花季 (3/20 - 4/5)
-            { name: 'dragonboat', start: 601,  end: 610 },  // 🐉 端午節 (6/1 - 6/10)
-            { name: 'midautumn',  start: 915,  end: 1005 }, // 🌕 中秋節 (9/15 - 10/5)
-            { name: 'halloween',  start: 1024, end: 1101 }, // 🎃 萬聖節 (10/24 - 11/1)
-            { name: 'shopping',   start: 1110, end: 1112 }, // 🛍️ 雙11購物節 (11/10 - 11/12)
-            { name: 'christmas',  start: 1218, end: 1226 }, // 🎄 聖誕節 (12/18 - 12/26)
+        if (testTheme) {
+            theme = 'theme-' + testTheme;
+        } else {
+            const now = new Date();
+            const m = now.getMonth() + 1; // 1-12
+            const d = now.getDate();
+            const md = m * 100 + d; // 例如 317 代表 3月17日
 
-            // 新增 12 個
-            { name: 'stpatrick',  start: 315,  end: 318 },  // 🍀 聖派翠克節 (3/15 - 3/18)
-            { name: 'diwali',     start: 1025, end: 1105 }, // 🪔 印度排燈節 (10/25 - 11/5)
-            { name: 'dayofdead',  start: 1101, end: 1102 }, // 💀 墨西哥亡靈節 (11/1 - 11/2)
-            { name: 'backtoschool',start: 901, end: 910 },  // ⚾ 開學季 (9/1 - 9/10)
-            { name: 'summer',     start: 701,  end: 715 },  // 🌊 盛夏海洋季 (7/1 - 7/15)
-            { name: 'thanksgiving',start: 1120, end: 1130 }, // 🍁 感恩節/楓葉季 (11/20 - 11/30)
-            { name: 'nye',        start: 1231, end: 102 },  // 🎆 跨年迎曙光 (12/31 - 1/2，跨年度比對需注意或簡化)
-            { name: 'lantern',    start: 217,  end: 225 },  // 🏮 元宵燈會 (2/17 - 2/25)
-            { name: 'earthday',   start: 420,  end: 424 },  // 🌍 世界地球日 (4/20 - 4/24)
-            { name: 'graduation', start: 525,  end: 615 }   // 🎓 畢業季 (5/25 - 6/15)
-        ];
+            // 集中管理全部 20 個節慶與日期區間
+            const festivals = [
+                // 原有 8 個
+                { name: 'newyear',    start: 120,  end: 209 },  // 🧨 農曆新年 (1/20 - 2/9)
+                { name: 'valentine',  start: 210,  end: 216 },  // 💝 情人節 (2/10 - 2/16)
+                { name: 'sakura',     start: 320,  end: 405 },  // 🌸 櫻花季 (3/20 - 4/5)
+                { name: 'dragonboat', start: 601,  end: 610 },  // 🐉 端午節 (6/1 - 6/10)
+                { name: 'midautumn',  start: 915,  end: 1005 }, // 🌕 中秋節 (9/15 - 10/5)
+                { name: 'halloween',  start: 1024, end: 1101 }, // 🎃 萬聖節 (10/24 - 11/1)
+                { name: 'shopping',   start: 1110, end: 1112 }, // 🛍️ 雙11購物節 (11/10 - 11/12)
+                { name: 'christmas',  start: 1218, end: 1226 }, // 🎄 聖誕節 (12/18 - 12/26)
 
-        // 迴圈比對當前日期是否落在區間內
-        for (const f of festivals) {
-            // 簡單處理跨年度（如 1231 到 102）
-            if (f.start > f.end) {
-                if (md >= f.start || md <= f.end) {
-                    theme = 'theme-' + f.name;
-                    break;
-                }
-            } else {
-                if (md >= f.start && md <= f.end) {
-                    theme = 'theme-' + f.name;
-                    break;
+                // 新增 12 個
+                { name: 'stpatrick',  start: 315,  end: 318 },  // 🍀 聖派翠克節 (3/15 - 3/18)
+                { name: 'diwali',     start: 1025, end: 1105 }, // 🪔 印度排燈節 (10/25 - 11/5)
+                { name: 'dayofdead',  start: 1101, end: 1102 }, // 💀 墨西哥亡靈節 (11/1 - 11/2)
+                { name: 'backtoschool',start: 901, end: 910 },  // ⚾ 開學季 (9/1 - 9/10)
+                { name: 'summer',     start: 701,  end: 715 },  // 🌊 盛夏海洋季 (7/1 - 7/15)
+                { name: 'thanksgiving',start: 1120, end: 1130 }, // 🍁 感恩節/楓葉季 (11/20 - 11/30)
+                { name: 'nye',        start: 1231, end: 102 },  // 🎆 跨年迎曙光 (12/31 - 1/2，跨年度比對需注意或簡化)
+                { name: 'lantern',    start: 217,  end: 225 },  // 🏮 元宵燈會 (2/17 - 2/25)
+                { name: 'earthday',   start: 420,  end: 424 },  // 🌍 世界地球日 (4/20 - 4/24)
+                { name: 'graduation', start: 525,  end: 615 }   // 🎓 畢業季 (5/25 - 6/15)
+            ];
+
+            // 迴圈比對當前日期是否落在區間內
+            for (const f of festivals) {
+                // 簡單處理跨年度（如 1231 到 102）
+                if (f.start > f.end) {
+                    if (md >= f.start || md <= f.end) {
+                        theme = 'theme-' + f.name;
+                        break;
+                    }
+                } else {
+                    if (md >= f.start && md <= f.end) {
+                        theme = 'theme-' + f.name;
+                        break;
+                    }
                 }
             }
         }
-    }
 
-    if (theme) {
-        document.body.classList.add(theme);
-    }
-})();
+        if (theme) {
+            document.body.classList.add(theme);
+        }
+    })();
 
     // --- 0. 設定網頁 Icon ---
     function setFavicon() {
@@ -417,7 +417,7 @@
         for (const res of resources) {
             await new Promise((resolve) => {
                 let el = res.type === 'js' ? document.createElement('script') : document.createElement('link');
-                if (res.type === 'js') el.src = res.url; 
+                if (res.type === 'js') el.src = res.url;
                 else { el.rel = 'stylesheet'; el.href = res.url; }
                 el.onload = resolve;
                 document.head.appendChild(el);
@@ -439,10 +439,10 @@
             console.error("raingodSave 錯誤：必須指定 gameId (例如 'game_a')");
             return false;
         }
-        
+
         // 1. 本地更新
         localStorage.setItem(`raingod_save_${gameId}`, JSON.stringify(gameData));
-        
+
         // 2. 雲端同步
         await window.raingodFirebaseReady;
         await window.raingodAuthReady;
@@ -454,7 +454,7 @@
                     const gameRef = firebase.database().ref(`users/${username}/games/${gameId}`);
                     const snap = await gameRef.once('value');
                     const cloudData = snap.val();
-                    
+
                     // 如果雲端有資料，且雲端更新時間比現在還要新（例如其他裝置剛存過），就放棄覆蓋
                     if (cloudData && cloudData.updated_at && cloudData.updated_at > Date.now() - 5000) {
                         console.warn("存檔衝突：雲端版本較新，放棄覆蓋。");
@@ -532,7 +532,7 @@
                 // 【首次遊玩】帳號下無該遊戲紀錄 -> 將目前的本地資料（或預設值）上傳至雲端建檔
                 const localSave = localStorage.getItem(`raingod_save_${gameId}`);
                 const initialData = localSave ? JSON.parse(localSave) : defaultLocalData;
-                
+
                 await gameRef.set({
                     data: initialData,
                     updated_at: firebase.database.ServerValue.TIMESTAMP
@@ -679,7 +679,7 @@
         ref.once('value', (snapshot) => {
             const oldData = snapshot.val() || {};
             const firstSeen = oldData.first_seen || now;
-            
+
             ref.update({
                 ip: ip,
                 device: device,
@@ -845,206 +845,193 @@
         const container = document.getElementById('nav_bar');
         if (!container) return;
 
-        fetch(`${baseUrl}menu.html?v=${v}`).then(r => r.text()).then(html => {
-    container.innerHTML = html;
+        // ===== 導覽列 badge 與頭像監聽（作用域限於 initSystem）=====
+        let navBadge = null;
+        let navListeners = [];
+        const navCounts = { requests: 0, unread: {} };
+        let navTotalCount = 0;
+        let navCurrentUsername = '';
 
-    const brandA = container.querySelector('.brand');
-    if (brandA && !brandA.querySelector('img')) {
-        const img = document.createElement('img');
-        img.src = `${baseUrl}catdragon.png`;
-        img.style.cssText = "height: 24px; width: 24px; object-fit: contain; margin-right: 8px; border-radius: 4px;";
-        brandA.prepend(img);
-    }
-
-    const loginBtn = document.getElementById('login-btn');
-    const userInfo = document.getElementById('user-info');
-    const userAvatar = document.getElementById('user-avatar');
-
-    // ===== 導覽列頭像 badge（數字）=====
-    let navBadge = null;
-    if (userAvatar && userAvatar.parentElement) {
-        const wrap = userAvatar.parentElement;
-        if (!wrap.querySelector('.nav-avatar-badge')) {
-            // 確保父層可定位
-            if (getComputedStyle(wrap).position === 'static') {
-                wrap.style.position = 'relative';
-            }
-            navBadge = document.createElement('span');
-            navBadge.className = 'nav-avatar-badge';
-            navBadge.textContent = '0';
-            navBadge.style.cssText = [
-                'position:absolute',
-                'top:-4px',
-                'right:-4px',
-                'min-width:17px',
-                'height:17px',
-                'padding:0 4px',
-                'border-radius:9px',
-                'background:#ff3b30',
-                'color:#fff',
-                'font-size:10px',
-                'font-weight:700',
-                'line-height:17px',
-                'text-align:center',
-                'box-sizing:border-box',
-                'display:none',
-                'pointer-events:none',
-                'z-index:5',
-                'box-shadow:0 0 0 2px #fff'
-            ].join(';');
-            wrap.appendChild(navBadge);
-        } else {
-            navBadge = wrap.querySelector('.nav-avatar-badge');
-        }
-    }
-
-    // ===== 導覽列數字監聽管理 =====
-    let navListeners = [];
-    let navTotalCount = 0;
-    let navCurrentUsername = '';
-
-    function clearNavListeners() {
-        navListeners.forEach(fn => { try { fn(); } catch (e) {} });
-        navListeners = [];
-        navTotalCount = 0;
-        updateNavBadge(0);
-    }
-
-    function updateNavBadge(count) {
-        navTotalCount = count;
-        if (!navBadge) return;
-        navBadge.textContent = count > 99 ? '99+' : String(count);
-        navBadge.style.display = count > 0 ? 'inline-block' : 'none';
-    }
-
-    function addNavCount(n) {
-        navTotalCount += (n || 0);
-        updateNavBadge(navTotalCount);
-    }
-
-    // 好友申請數 + 所有好友對話未讀數
-    function listenNavCounts(username, uid) {
-        clearNavListeners();
-        navCurrentUsername = username;
-
-        // 好友申請
-        const reqRef = firebase.database().ref(`users/${username}/friend_requests`);
-        const reqHandler = snap => {
-            const val = snap.val() || {};
-            const cnt = Object.keys(val).length;
-            // 用一個屬性記錄，避免重複累加
-            navCounts.requests = cnt;
-            recomputeNavTotal();
-        };
-        reqRef.on('value', reqHandler);
-        navListeners.push(() => reqRef.off('value', reqHandler));
-
-        // 好友列表 → 每個好友對話未讀
-        const friendsRef = firebase.database().ref(`users/${username}/friends`);
-        navCounts.unread = {};
-        const friendsHandler = snap => {
-            const friends = snap.val() || {};
-            // 先清掉舊的未讀監聽
-            (navListeners.filter(x => x.__isUnread).forEach(fn => { try { fn(); } catch (e) {} }));
-            navListeners = navListeners.filter(x => !x.__isUnread);
+        function clearNavListeners() {
+            navListeners.forEach(fn => { try { fn(); } catch (e) {} });
+            navListeners = [];
+            navTotalCount = 0;
+            navCounts.requests = 0;
             navCounts.unread = {};
-
-            Object.keys(friends).forEach(friendUid => {
-                const cid = [uid, friendUid].sort().join('__');
-                const msgsRef = firebase.database().ref(`private_chats/${cid}/msgs`);
-                const readRef = firebase.database().ref(`private_chats/${cid}/read/${uid}`);
-                const handler = msgSnap => {
-                    const msgs = msgSnap.val() || {};
-                    readRef.once('value').then(readSnap => {
-                        const lastRead = readSnap.val() || 0;
-                        let unread = 0;
-                        Object.keys(msgs).forEach(id => {
-                            const m = msgs[id];
-                            if (m.from !== uid && (m.ts || 0) > lastRead) unread++;
-                        });
-                        navCounts.unread[friendUid] = unread;
-                        recomputeNavTotal();
-                    }).catch(() => {});
-                };
-                msgsRef.on('value', handler);
-                const offFn = () => msgsRef.off('value', handler);
-                offFn.__isUnread = true;
-                navListeners.push(offFn);
-            });
-            recomputeNavTotal();
-        };
-        friendsRef.on('value', friendsHandler);
-        navListeners.push(() => friendsRef.off('value', friendsHandler));
-
-        // 監聽管理：把 friendsHandler 也算進去
-    }
-
-    // 用一個物件暫存，避免閉包混亂
-    const navCounts = { requests: 0, unread: {} };
-
-    function recomputeNavTotal() {
-        let total = navCounts.requests || 0;
-        Object.keys(navCounts.unread || {}).forEach(k => { total += navCounts.unread[k] || 0; });
-        updateNavBadge(total);
-    }
-
-    // ===== 頭像同步（讀 users/{username}/profile/avatar）=====
-    let avatarProfileRef = null;
-    let avatarProfileHandler = null;
-    function stopAvatarWatch() {
-        if (avatarProfileRef && avatarProfileHandler) {
-            try { avatarProfileRef.off('value', avatarProfileHandler); } catch (e) {}
+            updateNavBadge(0);
         }
-        avatarProfileRef = null;
-        avatarProfileHandler = null;
-    }
-    function watchProfileAvatar(username) {
-        stopAvatarWatch();
-        if (!userAvatar) return;
-        avatarProfileRef = firebase.database().ref(`users/${username}/profile/avatar`);
-        avatarProfileHandler = snap => {
-            const url = snap.val();
-            if (url) {
-                userAvatar.src = url;
-            } else {
-                const u = firebase.auth().currentUser;
-                userAvatar.src = (u && u.photoURL) || `${baseUrl}catdragon.png`;
-            }
-        };
-        avatarProfileRef.on('value', avatarProfileHandler);
-    }
 
-    firebase.auth().onAuthStateChanged(user => {
-        if (user) {
-            if (loginBtn) loginBtn.style.setProperty('display', 'none', 'important');
-            if (userInfo) userInfo.style.setProperty('display', 'flex', 'important');
+        function updateNavBadge(count) {
+            navTotalCount = count;
+            if (!navBadge) return;
+            navBadge.textContent = count > 99 ? '99+' : String(count);
+            navBadge.style.display = count > 0 ? 'inline-block' : 'none';
+        }
 
-            const username = user.email ? user.email.split('@')[0] : '';
-            const displayUsername = user.displayName || username || 'User';
+        function recomputeNavTotal() {
+            let total = navCounts.requests || 0;
+            Object.keys(navCounts.unread || {}).forEach(k => { total += navCounts.unread[k] || 0; });
+            updateNavBadge(total);
+        }
 
-            if (userAvatar) {
-                userAvatar.src = user.photoURL || `${baseUrl}catdragon.png`;
-                userAvatar.title = "個人檔案：" + displayUsername;
-                watchProfileAvatar(username);
-            }
-
-            // 導覽列數字
-            listenNavCounts(username, user.uid);
-
-            syncData(user);
-        } else {
-            if (loginBtn) {
-                loginBtn.style.setProperty('display', 'flex', 'important');
-                loginBtn.onclick = handleCustomAuth;
-            }
-            if (userInfo) userInfo.style.setProperty('display', 'none', 'important');
-            stopAvatarWatch();
+        function listenNavCounts(username, uid) {
             clearNavListeners();
-            syncData(null);
-        }
-    });
+            navCurrentUsername = username;
 
-    // --- 原本的強制黑色主題已經刪除 ---
-});
+            const reqRef = firebase.database().ref(`users/${username}/friend_requests`);
+            const reqHandler = snap => {
+                const val = snap.val() || {};
+                navCounts.requests = Object.keys(val).length;
+                recomputeNavTotal();
+            };
+            reqRef.on('value', reqHandler);
+            navListeners.push(() => reqRef.off('value', reqHandler));
+
+            navCounts.unread = {};
+            const friendsRef = firebase.database().ref(`users/${username}/friends`);
+            const friendsHandler = snap => {
+                const friends = snap.val() || {};
+                navListeners.filter(x => x.__isUnread).forEach(fn => { try { fn(); } catch (e) {} });
+                navListeners = navListeners.filter(x => !x.__isUnread);
+                navCounts.unread = {};
+
+                Object.keys(friends).forEach(friendUid => {
+                    const cid = [uid, friendUid].sort().join('__');
+                    const msgsRef = firebase.database().ref(`private_chats/${cid}/msgs`);
+                    const readRef = firebase.database().ref(`private_chats/${cid}/read/${uid}`);
+                    const handler = msgSnap => {
+                        const msgs = msgSnap.val() || {};
+                        readRef.once('value').then(readSnap => {
+                            const lastRead = readSnap.val() || 0;
+                            let unread = 0;
+                            Object.keys(msgs).forEach(id => {
+                                const m = msgs[id];
+                                if (m.from !== uid && (m.ts || 0) > lastRead) unread++;
+                            });
+                            navCounts.unread[friendUid] = unread;
+                            recomputeNavTotal();
+                        }).catch(() => {});
+                    };
+                    msgsRef.on('value', handler);
+                    const offFn = () => msgsRef.off('value', handler);
+                    offFn.__isUnread = true;
+                    navListeners.push(offFn);
+                });
+                recomputeNavTotal();
+            };
+            friendsRef.on('value', friendsHandler);
+            navListeners.push(() => friendsRef.off('value', friendsHandler));
+        }
+
+        let avatarProfileRef = null;
+        let avatarProfileHandler = null;
+        function stopAvatarWatch() {
+            if (avatarProfileRef && avatarProfileHandler) {
+                try { avatarProfileRef.off('value', avatarProfileHandler); } catch (e) {}
+            }
+            avatarProfileRef = null;
+            avatarProfileHandler = null;
+        }
+        function watchProfileAvatar(username, userAvatarEl) {
+            stopAvatarWatch();
+            if (!userAvatarEl) return;
+            avatarProfileRef = firebase.database().ref(`users/${username}/profile/avatar`);
+            avatarProfileHandler = snap => {
+                const url = snap.val();
+                if (url) {
+                    userAvatarEl.src = url;
+                } else {
+                    const u = firebase.auth().currentUser;
+                    userAvatarEl.src = (u && u.photoURL) || `${baseUrl}catdragon.png`;
+                }
+            };
+            avatarProfileRef.on('value', avatarProfileHandler);
+        }
+        // ===== 以上為導覽列 badge 與頭像監聽 =====
+
+        fetch(`${baseUrl}menu.html?v=${v}`).then(r => r.text()).then(html => {
+            container.innerHTML = html;
+
+            const brandA = container.querySelector('.brand');
+            if (brandA && !brandA.querySelector('img')) {
+                const img = document.createElement('img');
+                img.src = `${baseUrl}catdragon.png`;
+                img.style.cssText = "height: 24px; width: 24px; object-fit: contain; margin-right: 8px; border-radius: 4px;";
+                brandA.prepend(img);
+            }
+
+            const loginBtn = document.getElementById('login-btn');
+            const userInfo = document.getElementById('user-info');
+            const userAvatar = document.getElementById('user-avatar');
+
+            // ===== 建立導覽列頭像 badge（數字）=====
+            if (userAvatar && userAvatar.parentElement) {
+                const wrap = userAvatar.parentElement;
+                if (!wrap.querySelector('.nav-avatar-badge')) {
+                    if (getComputedStyle(wrap).position === 'static') {
+                        wrap.style.position = 'relative';
+                    }
+                    navBadge = document.createElement('span');
+                    navBadge.className = 'nav-avatar-badge';
+                    navBadge.textContent = '0';
+                    navBadge.style.cssText = [
+                        'position:absolute',
+                        'top:-4px',
+                        'right:-4px',
+                        'min-width:17px',
+                        'height:17px',
+                        'padding:0 4px',
+                        'border-radius:9px',
+                        'background:#ff3b30',
+                        'color:#fff',
+                        'font-size:10px',
+                        'font-weight:700',
+                        'line-height:17px',
+                        'text-align:center',
+                        'box-sizing:border-box',
+                        'display:none',
+                        'pointer-events:none',
+                        'z-index:5',
+                        'box-shadow:0 0 0 2px #fff'
+                    ].join(';');
+                    wrap.appendChild(navBadge);
+                } else {
+                    navBadge = wrap.querySelector('.nav-avatar-badge');
+                }
+            }
+            // ===== 導覽列 badge 建立完成 =====
+
+            firebase.auth().onAuthStateChanged(user => {
+                if (user) {
+                    if (loginBtn) loginBtn.style.setProperty('display', 'none', 'important');
+                    if (userInfo) userInfo.style.setProperty('display', 'flex', 'important');
+
+                    const username = user.email ? user.email.split('@')[0] : '';
+                    const displayUsername = user.displayName || username || 'User';
+
+                    if (userAvatar) {
+                        userAvatar.src = user.photoURL || `${baseUrl}catdragon.png`;
+                        userAvatar.title = "個人檔案：" + displayUsername;
+                        watchProfileAvatar(username, userAvatar);
+                    }
+
+                    listenNavCounts(username, user.uid);
+
+                    syncData(user);
+                } else {
+                    if (loginBtn) {
+                        loginBtn.style.setProperty('display', 'flex', 'important');
+                        loginBtn.onclick = handleCustomAuth;
+                    }
+                    if (userInfo) userInfo.style.setProperty('display', 'none', 'important');
+                    stopAvatarWatch();
+                    clearNavListeners();
+                    syncData(null);
+                }
+            });
+
+            // --- 原本的強制黑色主題已經刪除 ---
+            // 顏色現在交由你的 CSS (包含節慶主題) 來控制，選單就不會爆開了！
+        });
     }
 })();
