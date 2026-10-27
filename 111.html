@@ -1432,142 +1432,222 @@ function saveGame(silent){
 
   const REMOTE_PLAYERS = new Map();
 
-  function initMultiplayer(){
-    const { db, ref, set, onValue, onDisconnect, serverTimestamp, remove } = window.__FB;
-    if(!db){ console.warn('Firebase 未初始化'); return; }
-    const meRef = ref(db, 'players/' + PLAYER_ID);
-    let serverOffset = 0;
-    onValue(ref(db, '.info/serverTimeOffset'), snap => { serverOffset = snap.val() || 0; });
+  const REMOTE_PLAYERS = new Map();
 
-    const pushMe = ()=>{
-      set(meRef, { name: S.playerName, baseIdx: S.myBaseIdx, x: Math.round(S.player.x), y: Math.round(S.player.y),
-        displaySpeed: S.player.displaySpeed, biomeIdx: S.biomeIdx, cash: Math.round(S.cash),
-        carry: S.player.carry ? { biomeIdx: S.player.carry.biomeIdx, petIdx: S.player.carry.petIdx, size: S.player.carry.size } : null,
-        equippedStick: S.equippedStick, equippedTrail: S.equippedTrail,
-        pets: S.pets.slice(0,20).map(p=>({name:p.name,biomeIdx:p.biomeIdx,petIdx:p.petIdx,size:p.size,rar:p.rar,inc:p.inc})),
-        online: true, lastSeen: serverTimestamp() }).catch(e=>console.warn('set fail',e));
+function initMultiplayer(){
+  const { db, ref, set, onValue, onDisconnect, serverTimestamp, remove } = window.__FB;
+  if(!db){ console.warn('Firebase 未初始化'); return; }
+
+  const mePosRef   = ref(db, 'players/' + PLAYER_ID + '/pos');
+  const meInfoRef  = ref(db, 'players/' + PLAYER_ID + '/info');
+  const meStateRef = ref(db, 'players/' + PLAYER_ID + '/state');
+  const meRootRef  = ref(db, 'players/' + PLAYER_ID);
+
+  let serverOffset = 0;
+  onValue(ref(db, '.info/serverTimeOffset'), snap => { serverOffset = snap.val() || 0; });
+
+  // ── 位置：高頻（200ms），極簡 ──
+  setInterval(() => {
+    if (!S.player) return;
+    set(mePosRef, {
+      x: Math.round(S.player.x),
+      y: Math.round(S.player.y),
+      t: serverTimestamp()
+    }).catch(() => {});
+  }, 200);
+
+  // ── 靜態資料：只有變動才寫（1s 檢查一次 hash）──
+  let lastInfoHash = '';
+  function pushInfo(force) {
+    const info = {
+      name: S.playerName,
+      baseIdx: S.myBaseIdx,
+      displaySpeed: Math.round(S.player.displaySpeed),
+      biomeIdx: S.biomeIdx,
+      pets: S.pets.slice(0, 20).map(p => ({ name: p.name, biomeIdx: p.biomeIdx, petIdx: p.petIdx, size: p.size, rar: p.rar, inc: p.inc })),
+      online: true,
+      lastSeen: serverTimestamp()
     };
-    pushMe();
-    onDisconnect(meRef).update({ online:false });
-    setInterval(pushMe, 1500);
-
-    const HEARTBEAT_TIMEOUT = 90 * 1000;
-    let rawPlayersCache = {};
-
-    onValue(ref(db, 'players'), snap=>{
-      const data = snap.val() || {};
-      rawPlayersCache = data;
-      const now = Date.now() + serverOffset;
-      const newRemoteList = [];
-      const seenIds = new Set();
-      for (const [id, p] of Object.entries(data)) {
-        if (id === PLAYER_ID) continue;
-        if (!p) continue;
-        if (!p.online) continue;
-        if (typeof p.lastSeen === 'number' && now - p.lastSeen > HEARTBEAT_TIMEOUT) continue;
-        seenIds.add(id);
-        let entry = REMOTE_PLAYERS.get(id);
-        if (!entry) { entry = { id, cur: { x: p.x, y: p.y }, target: { x: p.x, y: p.y }, data: p }; REMOTE_PLAYERS.set(id, entry); }
-        else { entry.target.x = p.x; entry.target.y = p.y; entry.data = p; }
-        newRemoteList.push(entry);
-      }
-      for (const id of Array.from(REMOTE_PLAYERS.keys())) { if (!seenIds.has(id)) REMOTE_PLAYERS.delete(id); }
-      S.remotePlayers = newRemoteList.map(e => ({ ...e.data, x: e.cur.x, y: e.cur.y }));
-
-            let conflict = false;
-      S.remotePlayers.forEach(rp => { if (rp.baseIdx === S.myBaseIdx) conflict = true; });
-      
-      // ★ 防抖與冷卻機制：防止無限衝突死循環
-      if (conflict && !window.__resolvingBaseConflict) {
-        window.__resolvingBaseConflict = true;
-        
-        // 隨機等待 1~3 秒，讓同時衝突的玩家錯開，不會同時搶同一個新基地
-        setTimeout(() => {
-          window.__resolvingBaseConflict = false;
-          
-          // 延遲後再次確認是否還在衝突（可能這期間別人已經走了）
-          let stillConflict = false;
-          S.remotePlayers.forEach(rp => { if (rp.baseIdx === S.myBaseIdx) stillConflict = true; });
-          if (!stillConflict) return;
-
-          let used = new Set(S.remotePlayers.map(r => r.baseIdx));
-          let available = [];
-          for(let i=0; i<5; i++) { if (!used.has(i)) available.push(i); }
-          
-          if (available.length > 0) {
-            // 從空基地中隨機選擇一個，避免大家一直選到同一個
-            const newBase = available[Math.floor(Math.random() * available.length)];
-            S.myBaseIdx = newBase;
-            localStorage.setItem('my_base_idx', S.myBaseIdx);
-            S.player.x = getBasePos(S.myBaseIdx).x;
-            showToast('🔄 基地發生衝突，已自動更換至空基地', '#3a8a3a', '#2a6a2a');
-            pushMe();
-          } else {
-            // 如果基地全滿 (5人以上)，先不要動，避免無限迴圈
-            console.warn('所有基地已滿，無法更換');
-          }
-        }, 1000 + Math.random() * 2000);
-      }
-
-      const oc=document.getElementById('onlineCount'); if(oc) oc.textContent='👥 '+(S.remotePlayers.length+1);
-      const testPanel = document.getElementById('testPanel');
-      if (testPanel && testPanel.classList.contains('open')) {
-        const targetSel = document.getElementById('testTargetSelect'); const currentVal = targetSel.value;
-        targetSel.innerHTML = '<option value="self">自己</option>';
-        S.remotePlayers.forEach(rp => { const opt = document.createElement('option'); opt.value = rp.id; opt.textContent = rp.name || '玩家'; targetSel.appendChild(opt); });
-        targetSel.value = currentVal;
-      }
-    });
-
-    setInterval(() => {
-      const now = Date.now() + serverOffset;
-      for (const [id, p] of Object.entries(rawPlayersCache)) {
-        if (id === PLAYER_ID) continue;
-        if (!p || typeof p.lastSeen !== 'number') continue;
-        if (now - p.lastSeen <= HEARTBEAT_TIMEOUT) continue;
-        const playerRef = ref(db, 'players/' + id);
-        playerRef.once('value').then(s => {
-          const cur = s.val();
-          if (!cur) return;
-          const curNow = Date.now() + serverOffset;
-          if (typeof cur.lastSeen === 'number' && curNow - cur.lastSeen > HEARTBEAT_TIMEOUT) { remove(playerRef); }
-        });
-      }
-    }, 30000);
-
-    onValue(ref(db, 'admin/' + PLAYER_ID), snap=>{
-      const v = snap.val();
-      if(v && Date.now()-(v.t||0) < 5000){
-        if(v.setCash !== undefined) S.cash = v.setCash;
-        if(v.setSpeed !== undefined) S.player.displaySpeed = v.setSpeed;
-        if(v.setSpeedLv !== undefined) S.player.tsLv = v.setSpeedLv;
-        if(v.addPetBag){ const { bi, pi } = v.addPetBag; const b = WORLD.biomes[bi]; S.bag.push({ id: Math.random().toString(36).slice(2), name: b.petNames[pi], inc: WORLD.petIncome[bi][pi], rar: WORLD.petRarity[bi][pi], biomeIdx: bi, petIdx: pi, size: 'normal', mutations: {} }); buildBagUI(); }
-        if(v.addPetFarm){
-          const { bi, pi } = v.addPetFarm; const b = WORLD.biomes[bi]; const usedSlots = new Set(S.pets.map(p=>p.slot)); let slot = -1;
-          for(let j=0;j<FARM_OFFSETS.length;j++){ if(!usedSlots.has(j)){ slot = j; break; } }
-          if(slot !== -1){ const basePos = getBasePos(S.myBaseIdx); S.pets.push({ id: Math.random().toString(36).slice(2), name: b.petNames[pi], inc: WORLD.petIncome[bi][pi], rar: WORLD.petRarity[bi][pi], biomeIdx: bi, petIdx: pi, size: 'normal', x: basePos.x + rnd(-35, 35), y: basePos.y + rnd(-40, 365), wanderTargetX: basePos.x, wanderTargetY: basePos.y, wanderTimer: 0, selected: false, slot, state: 'farm', mutations: {} }); S.cps = S.pets.reduce((s, pt) => s + pt.inc, 0); }
-          else { S.bag.push({ id: Math.random().toString(36).slice(2), name: b.petNames[pi], inc: WORLD.petIncome[bi][pi], rar: WORLD.petRarity[bi][pi], biomeIdx: bi, petIdx: pi, size: 'normal', mutations: {} }); }
-        }
-        if(v.giveStick) { S.sticks['god_stick'] = true; STICK_DEFS.forEach(s => S.sticks[s.id] = true); }
-        if(v.giveTrail) { S.trails[v.giveTrail] = true; S.equippedTrail = v.giveTrail; }
-        updateUI(); saveGame(true);
-      }
-    });
-
-    onValue(ref(db, 'hits/' + PLAYER_ID), snap=>{
-      const v = snap.val();
-      if(!v || Date.now()-(v.t||0) > 3000) return;
-      if(v.fx !== undefined || v.fy !== undefined) triggerKnockback(v.fx||400, v.fy||-400);
-      if(v.stealEgg && S.player.carry){
-        const drop = S.player.carry; S.player.carry = null; S.tensionActive = false;
-        const dropX = clamp(S.player.x + rnd(-40, 40), 30, WORLD_W - 30); const dropY = clamp(S.player.y + rnd(-40, 40), MIN_Y, MAX_Y);
-        S.eggs.push({ ...drop, x: dropX, y: dropY, collected: false, origX: dropX, origY: dropY });
-        showToast(`💥 ${v.by || '玩家'} 用【${v.byStickName || '棒子'}】搶走了你的蛋！\n🥚 蛋掉在地上了！`, '#8a2a2a', '#5a0a0a');
-        updateUI(); saveGame(true); return;
-      }
-      if(v.fx !== undefined || v.fy !== undefined) showToast(`💥 你被 ${v.by || '玩家'} 打飛了！`, '#8a2a2a', '#5a0a0a');
-    });
+    const hash = JSON.stringify(info);
+    if (force || hash !== lastInfoHash) {
+      lastInfoHash = hash;
+      set(meInfoRef, info).catch(() => {});
+    }
   }
+  pushInfo(true);
+  setInterval(() => pushInfo(false), 1000);
+
+  // ── 狀態：中等頻率（500ms hash 檢查）──
+  let lastStateHash = '';
+  function pushState(force) {
+    const st = {
+      carry: S.player.carry ? { biomeIdx: S.player.carry.biomeIdx, petIdx: S.player.carry.petIdx, size: S.player.carry.size, eggId: S.player.carry.eggId || null } : null,
+      equippedStick: S.equippedStick,
+      equippedTrail: S.equippedTrail,
+      facing: S.player.facing || 1
+    };
+    const hash = JSON.stringify(st);
+    if (force || hash !== lastStateHash) {
+      lastStateHash = hash;
+      set(meStateRef, st).catch(() => {});
+    }
+  }
+  pushState(true);
+  setInterval(() => pushState(false), 500);
+
+  onDisconnect(meInfoRef).update({ online: false });
+  onDisconnect(mePosRef).remove();
+
+  // ── 監聽全量（Firebase RTDB 特性，但我們只增量更新，不重建陣列）──
+  const HEARTBEAT_TIMEOUT = 90 * 1000;
+  let rawPlayersCache = {};
+
+  onValue(ref(db, 'players'), snap => {
+    const data = snap.val() || {};
+    rawPlayersCache = data;
+    const now = Date.now() + serverOffset;
+    const seenIds = new Set();
+
+    for (const [id, p] of Object.entries(data)) {
+      if (id === PLAYER_ID) continue;
+      if (!p || !p.info) continue;
+      if (!p.info.online) continue;
+      if (typeof p.info.lastSeen === 'number' && now - p.info.lastSeen > HEARTBEAT_TIMEOUT) continue;
+      seenIds.add(id);
+
+      let entry = REMOTE_PLAYERS.get(id);
+      if (!entry) {
+        entry = {
+          id,
+          cur: { x: p.pos ? p.pos.x : 0, y: p.pos ? p.pos.y : 0 },
+          target: { x: p.pos ? p.pos.x : 0, y: p.pos ? p.pos.y : 0 },
+          data: { ...p.info, ...(p.state || {}), x: 0, y: 0 }
+        };
+        REMOTE_PLAYERS.set(id, entry);
+      } else {
+        // 增量覆蓋，不重建物件（減少 GC）
+        Object.assign(entry.data, p.info);
+        if (p.state) Object.assign(entry.data, p.state);
+        if (p.pos && typeof p.pos.x === 'number') {
+          entry.target.x = p.pos.x;
+          entry.target.y = p.pos.y;
+        }
+      }
+    }
+    // 移除離線
+    for (const id of Array.from(REMOTE_PLAYERS.keys())) {
+      if (!seenIds.has(id)) REMOTE_PLAYERS.delete(id);
+    }
+
+    // S.remotePlayers 只做「輕量映射」，不 spread 每個物件
+    S.remotePlayers = Array.from(REMOTE_PLAYERS.values()).map(e => e.data);
+
+    // 基地衝突處理（保留原邏輯，但加防抖）
+    let conflict = false;
+    S.remotePlayers.forEach(rp => { if (rp.baseIdx === S.myBaseIdx) conflict = true; });
+    if (conflict && !window.__resolvingBaseConflict) {
+      window.__resolvingBaseConflict = true;
+      setTimeout(() => {
+        window.__resolvingBaseConflict = false;
+        let stillConflict = false;
+        S.remotePlayers.forEach(rp => { if (rp.baseIdx === S.myBaseIdx) stillConflict = true; });
+        if (!stillConflict) return;
+        let used = new Set(S.remotePlayers.map(r => r.baseIdx));
+        let available = [];
+        for (let i = 0; i < 5; i++) { if (!used.has(i)) available.push(i); }
+        if (available.length > 0) {
+          const newBase = available[Math.floor(Math.random() * available.length)];
+          S.myBaseIdx = newBase;
+          localStorage.setItem('my_base_idx', S.myBaseIdx);
+          S.player.x = getBasePos(S.myBaseIdx).x;
+          showToast('🔄 基地發生衝突，已自動更換至空基地', '#3a8a3a', '#2a6a2a');
+          pushInfo(true);
+        }
+      }, 1000 + Math.random() * 2000);
+    }
+
+    const oc = document.getElementById('onlineCount');
+    if (oc) oc.textContent = '👥 ' + (S.remotePlayers.length + 1);
+    const testPanel = document.getElementById('testPanel');
+    if (testPanel && testPanel.classList.contains('open')) {
+      const targetSel = document.getElementById('testTargetSelect');
+      const currentVal = targetSel.value;
+      targetSel.innerHTML = '<option value="self">自己</option>';
+      S.remotePlayers.forEach(rp => { const opt = document.createElement('option'); opt.value = rp.id; opt.textContent = rp.name || '玩家'; targetSel.appendChild(opt); });
+      targetSel.value = currentVal;
+    }
+  });
+
+  // ── 清理超時玩家（30s 檢查一次）──
+  setInterval(() => {
+    const now = Date.now() + serverOffset;
+    for (const [id, p] of Object.entries(rawPlayersCache)) {
+      if (id === PLAYER_ID) continue;
+      if (!p || !p.info || typeof p.info.lastSeen !== 'number') continue;
+      if (now - p.info.lastSeen <= HEARTBEAT_TIMEOUT) continue;
+      const playerRef = ref(db, 'players/' + id);
+      playerRef.once('value').then(s => {
+        const cur = s.val();
+        if (!cur) return;
+        const curNow = Date.now() + serverOffset;
+        if (!cur.info || (typeof cur.info.lastSeen === 'number' && curNow - cur.info.lastSeen > HEARTBEAT_TIMEOUT)) {
+          remove(playerRef);
+        }
+      });
+    }
+  }, 30000);
+
+  // ── admin 指令監聽（原樣保留）──
+  onValue(ref(db, 'admin/' + PLAYER_ID), snap => {
+    const v = snap.val();
+    if (v && Date.now() - (v.t || 0) < 5000) {
+      if (v.setCash !== undefined) S.cash = v.setCash;
+      if (v.setSpeed !== undefined) S.player.displaySpeed = v.setSpeed;
+      if (v.setSpeedLv !== undefined) S.player.tsLv = v.setSpeedLv;
+      if (v.addPetBag) {
+        const { bi, pi } = v.addPetBag; const b = WORLD.biomes[bi];
+        S.bag.push({ id: Math.random().toString(36).slice(2), name: b.petNames[pi], inc: WORLD.petIncome[bi][pi], rar: WORLD.petRarity[bi][pi], biomeIdx: bi, petIdx: pi, size: 'normal', mutations: {} });
+        buildBagUI();
+      }
+      if (v.addPetFarm) {
+        const { bi, pi } = v.addPetFarm; const b = WORLD.biomes[bi];
+        const usedSlots = new Set(S.pets.map(p => p.slot)); let slot = -1;
+        for (let j = 0; j < FARM_OFFSETS.length; j++) { if (!usedSlots.has(j)) { slot = j; break; } }
+        if (slot !== -1) {
+          const basePos = getBasePos(S.myBaseIdx);
+          S.pets.push({ id: Math.random().toString(36).slice(2), name: b.petNames[pi], inc: WORLD.petIncome[bi][pi], rar: WORLD.petRarity[bi][pi], biomeIdx: bi, petIdx: pi, size: 'normal', x: basePos.x + rnd(-35, 35), y: basePos.y + rnd(-40, 365), wanderTargetX: basePos.x, wanderTargetY: basePos.y, wanderTimer: 0, selected: false, slot, state: 'farm', mutations: {} });
+          S.cps = S.pets.reduce((s, pt) => s + pt.inc, 0);
+        } else {
+          S.bag.push({ id: Math.random().toString(36).slice(2), name: b.petNames[pi], inc: WORLD.petIncome[bi][pi], rar: WORLD.petRarity[bi][pi], biomeIdx: bi, petIdx: pi, size: 'normal', mutations: {} });
+        }
+      }
+      if (v.giveStick) { S.sticks['god_stick'] = true; STICK_DEFS.forEach(s => S.sticks[s.id] = true); }
+      if (v.giveTrail) { S.trails[v.giveTrail] = true; S.equippedTrail = v.giveTrail; }
+      updateUI(); saveGame(true);
+    }
+  });
+
+  // ── hits 監聽（原樣保留）──
+  onValue(ref(db, 'hits/' + PLAYER_ID), snap => {
+    const v = snap.val();
+    if (!v || Date.now() - (v.t || 0) > 3000) return;
+    if (v.fx !== undefined || v.fy !== undefined) triggerKnockback(v.fx || 400, v.fy || -400);
+    if (v.stealEgg && S.player.carry) {
+      const drop = S.player.carry; S.player.carry = null; S.tensionActive = false;
+      const dropX = clamp(S.player.x + rnd(-40, 40), 30, WORLD_W - 30);
+      const dropY = clamp(S.player.y + rnd(-40, 40), MIN_Y, MAX_Y);
+      S.eggs.push({ ...drop, x: dropX, y: dropY, collected: false, origX: dropX, origY: dropY });
+      // ★ 被搶的蛋重新變成「未被拿」→ 同步回 Firebase
+      try {
+        const { db: _db, ref: _ref, set: _set } = window.__FB;
+        if (drop.eggId) _set(_ref(_db, 'global_eggs/' + drop.eggId), { collected: false, bi: drop.biomeIdx, t: Date.now() });
+      } catch (e) {}
+      showToast(`💥 ${v.by || '玩家'} 用【${v.byStickName || '棒子'}】搶走了你的蛋！\n🥚 蛋掉在地上了！`, '#8a2a2a', '#5a0a0a');
+      updateUI(); saveGame(true); return;
+    }
+    if (v.fx !== undefined || v.fy !== undefined) showToast(`💥 你被 ${v.by || '玩家'} 打飛了！`, '#8a2a2a', '#5a0a0a');
+  });
+}
 
   function updateRemoteInterp(dt){
     for (const entry of REMOTE_PLAYERS.values()) {
@@ -1756,8 +1836,10 @@ for(let bi=0;bi<WORLD.biomes.length;bi++){ spawnEggsForBiome(bi, refreshSlot); s
     const now = Date.now(); const fiveMin = 5 * 60 * 1000; const currentSlot = Math.floor(now / fiveMin);
     if(S.lastRefreshTime === 0){ S.lastRefreshTime = currentSlot; S.eggRefreshTimer = (now % fiveMin) / 1000; return; }
     if(currentSlot > S.lastRefreshTime){
-      S.lastRefreshTime = currentSlot; S.eggRefreshTimer = 0;
-      respawnAllEggs();
+  S.lastRefreshTime = currentSlot; S.eggRefreshTimer = 0;
+  respawnAllEggs();
+  publishGlobalEggs();   // 確保新蛋已發布
+  
       const p=S.player;
       if(p.carry || p.y < S.safeLineY){
         if(p.carry){ showToast('⏰ 刷新時間到！你的蛋被丟掉了！','#8a3a3a','#6a1a1a'); p.carry=null; }
@@ -2255,8 +2337,19 @@ for(let bi=0;bi<WORLD.biomes.length;bi++){ spawnEggsForBiome(bi, refreshSlot); s
         if(egg.collected) continue;
         if(dist(w.x, w.y, egg.x, egg.y) < egg.r + 40){
           if(dist(S.player.x, S.player.y, egg.x, egg.y) < 120){
-            egg.collected = true; S.player.carry = {...egg}; S.tensionActive = true;
-            for(const g of S.guards){ if(g.biomeIdx===egg.biomeIdx && g.sleeping){ g.wakeTimer=0.2; } } updateUI(); return;
+  // ★ 先遠端搶，搶到才本機生效
+  tryCollectEggRemote(egg.eggId, S.playerName).then(ok => {
+    if (!ok) {
+      showToast('🥚 這顆蛋已經被別人搶走了！', '#8a2a2a', '#5a0a0a');
+      egg.collected = true;
+      return;
+    }
+    egg.collected = true; S.player.carry = {...egg}; S.tensionActive = true;
+    for(const g of S.guards){ if(g.biomeIdx===egg.biomeIdx && g.sleeping){ g.wakeTimer=0.2; } }
+    updateUI();
+  });
+  return;
+}
           } else { showToast('⚠️ 離蛋太遠，請站近一點再點擊', '#8a2a2a', '#5a0a0a'); return; }
         }
       }
@@ -2494,7 +2587,8 @@ setTimeout(() => {
   __saveEnabled = true;   // ★ 失敗保底：允許存檔，避免永遠不能存
   fireInitOnce();
 });
-
+initEggSync();
+publishGlobalEggs();   // 首次發布本機算出的蛋
 initMultiplayer();
 requestAnimationFrame(loop);
 setInterval(updateUI,150);
