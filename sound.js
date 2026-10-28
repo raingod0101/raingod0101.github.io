@@ -6,7 +6,7 @@
   'use strict';
 
   /* ==== 唯一需要你改的地方 ==== */
-  let BGM_URL       = ''; // ← 平常背景音樂連結（留空 = 不播）
+  let BGM_URL       = 'raingod0101.github.io/Aventure - A Beautiful Garden (freetouse.com).mp3'; // ← 平常背景音樂連結（留空 = 不播）
   let BGM_HALLOWEEN = ''; // ← 萬聖節活動音樂連結（留空 = 不播）
 
   /* ==== 音量設定 ==== */
