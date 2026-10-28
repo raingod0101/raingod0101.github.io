@@ -1,1102 +1,2326 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="zh-TW">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>個人檔案 × 好友 × 聊天室 | 雨神</title>
-    <link rel="stylesheet" href="menu.css">
-    <style>
-        :root {
-            --me-bg: #007aff;
-            --other-bg: #f2f2f7;
-            --danger: #ff3b30;
-            --text-gray: #8e8e93;
-            --success: #34c759;
-            --border: #e2e6ed;
-        }
-        * { box-sizing: border-box; }
-        body {
-            margin: 0;
-            min-height: 100vh;
-            background: #f3f5f8;
-            color: #1d1d1f;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            overflow-x: hidden;
-        }
-        #nav_bar { position: relative; z-index: 10; }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>雨神大亨 | Raingod</title>
+<style>
+    * { touch-action: none; user-select: none; box-sizing: border-box; }
+    body { margin: 0; background: #020617; overflow: hidden; font-family: 'Segoe UI', system-ui, sans-serif; }
+    #ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
 
-        .tab-bar {
-            display: flex;
-            gap: 4px;
-            max-width: 860px;
-            margin: 20px auto 0;
-            padding: 5px;
-            background: #e8ecf2;
+    .top-bar {
+        position: absolute !important;
+        top: 110px !important;
+        left: 50% !important;
+        transform: translateX(-50%) !important;
+        background: rgba(15, 23, 42, 0.92);
+        border: 1px solid #38bdf8;
+        box-shadow: 0 0 20px rgba(56, 189, 248, 0.2);
+        padding: 8px 20px;
+        border-radius: 30px;
+        pointer-events: auto;
+        backdrop-filter: blur(8px);
+        display: flex;
+        gap: 16px;
+        align-items: center;
+        white-space: nowrap;
+        z-index: 999 !important;
+    }
+    .hud-item { font-size: 12px; font-weight: bold; color: #f8fafc; }
+    .money { color: #4ade80; font-size: 16px; font-weight: 900; }
+    .dark-matter { color: #c084fc; font-size: 12px; }
+
+    .skill-bar {
+        position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%);
+        display: flex; gap: 8px; pointer-events: auto;
+    }
+    .skill-btn {
+        background: rgba(15, 23, 42, 0.9); border: 1px solid #38bdf8; color: #fff;
+        padding: 7px 10px; border-radius: 8px; font-size: 11px; font-weight: bold; cursor: pointer;
+        display: flex; flex-direction: column; align-items: center; gap: 2px; transition: all 0.2s;
+        min-width: 72px;
+    }
+    .skill-btn:hover:not(:disabled) { background: #0284c7; }
+    .skill-btn:disabled, .skill-btn.cooling { opacity: 0.45; border-color: #475569; cursor: not-allowed; }
+    .sk-ico { font-size: 15px; line-height: 1; }
+    .sk-cd { font-size: 9px; color: #f59e0b; }
+
+    .panel {
+        position: absolute; bottom: 15px; right: 15px;
+        width: 330px; max-height: 78vh; overflow-y: auto;
+        background: rgba(15, 23, 42, 0.95); border: 1px solid #334155; border-radius: 12px;
+        pointer-events: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8); backdrop-filter: blur(8px);
+    }
+    .panel::-webkit-scrollbar { width: 4px; }
+    .panel::-webkit-scrollbar-thumb { background: #38bdf8; border-radius: 4px; }
+
+    .tabs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin-bottom: 2px; }
+    .tab-btn {
+        background: #1e293b; color: #94a3b8; border: none; padding: 7px 2px;
+        font-size: 10px; font-weight: bold; border-radius: 6px; cursor: pointer;
+        display: flex; flex-direction: column; align-items: center; gap: 2px;
+    }
+    .tab-btn.active { background: #0284c7; color: #fff; }
+
+    .btn {
+        background: linear-gradient(135deg, #1e293b, #0f172a); color: #fff; border: 1px solid #38bdf8;
+        padding: 8px 10px; font-weight: bold; font-size: 11px; border-radius: 8px; cursor: pointer;
+        display: flex; justify-content: space-between; align-items: center; transition: all 0.2s;
+        gap: 8px; text-align: left;
+    }
+    .btn:hover:not(:disabled) { background: linear-gradient(135deg, #0284c7, #0369a1); border-color: #38bdf8; }
+    .btn:disabled { opacity: 0.35; border-color: #475569; cursor: not-allowed; }
+    .rebirth-btn { background: linear-gradient(135deg, #7e22ce, #581c87); border-color: #c084fc; }
+    .btn .desc { font-size: 9px; color: #94a3b8; font-weight: normal; display: block; margin-top: 2px; }
+
+    .quest-box {
+        background: rgba(30, 41, 59, 0.6); border: 1px dashed #38bdf8; padding: 6px 8px;
+        border-radius: 6px; font-size: 10px; color: #e2e8f0; margin-bottom: 2px;
+    }
+    .inspector {
+        background: rgba(8, 47, 73, 0.7); border: 1px solid #0ea5e9; border-radius: 8px;
+        padding: 8px; font-size: 11px; color: #e0f2fe; display: flex; flex-direction: column; gap: 6px;
+    }
+    .inspector .row { display: flex; gap: 6px; }
+    .inspector .row .btn { flex: 1; justify-content: center; font-size: 10px; padding: 6px; }
+    .ach-row { font-size: 10px; color: #cbd5e1; display: flex; justify-content: space-between; padding: 4px 2px; border-bottom: 1px dashed #1e293b; }
+    .ach-row.done { color: #4ade80; }
+
+    #tycoon-leaderboard-button { position: absolute; top: 160px; right: 15px; z-index: 20; pointer-events: auto; padding: 9px 14px; border: 1px solid #38bdf8; border-radius: 20px; color: #fff; background: rgba(15,23,42,0.9); font-weight: bold; cursor: pointer; }
+    #tycoon-leaderboard { position: fixed; inset: 0; z-index: 2000; display: none; align-items: center; justify-content: center; padding: 16px; background: rgba(2,6,23,0.94); color: #fff; }
+    .tycoon-leaderboard-card { width: min(520px, 100%); max-height: 80vh; overflow-y: auto; padding: 20px; border: 1px solid #38bdf8; border-radius: 16px; background: #0b1020; }
+    .tycoon-leaderboard-row { display: flex; justify-content: space-between; gap: 12px; padding: 10px 4px; border-bottom: 1px solid #26334a; }
+    .mobile-shop-toggle, .mobile-panel-close { display: none; }
+
+    @media (max-width: 700px), (max-height: 500px) and (pointer: coarse) {
+        .nav-content { gap: 6px; padding: 0 8px !important; }
+        .brand { flex: 0 0 auto; white-space: nowrap; }
+        .nav-links { flex: 1; min-width: 0; justify-content: space-evenly; gap: 0 !important; margin-left: 4px !important; }
+        .nav-item { padding: 6px 3px !important; font-size: 11px !important; white-space: nowrap; }
+        .login-btn { flex: 0 0 auto; padding: 6px 8px !important; white-space: nowrap; }
+
+        .top-bar {
+            top: calc(60px + env(safe-area-inset-top)) !important;
+            left: 8px !important;
+            width: calc(100% - 16px) !important;
+            transform: none !important;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4px 8px;
+            padding: 7px 10px;
             border-radius: 12px;
-            width: calc(100% - 32px);
+            white-space: normal;
         }
-        .tab-btn {
-            flex: 1;
-            padding: 11px 8px;
-            border: 0;
-            border-radius: 9px;
-            background: transparent;
-            color: #5b6470;
-            font: inherit;
-            font-size: 0.92rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background 0.15s, color 0.15s;
-            position: relative;
-        }
-        .tab-btn.active {
-            background: #fff;
-            color: #1d1d1f;
-            box-shadow: 0 1px 4px rgba(25, 40, 60, 0.12);
-        }
-        .tab-btn .tab-badge {
-            display: none;
-            min-width: 17px;
-            height: 17px;
-            padding: 0 4px;
-            margin-left: 4px;
-            border-radius: 9px;
-            background: var(--danger);
-            color: #fff;
-            font-size: 10px;
-            font-weight: 700;
-            line-height: 17px;
-            text-align: center;
-            vertical-align: middle;
-        }
-        .tab-btn .tab-badge.show { display: inline-block; }
+        .hud-item { font-size: 10px; }
+        .money { font-size: 13px; }
+        .dark-matter { font-size: 10px; }
 
-        .page-wrap {
-            max-width: 860px;
-            margin: 18px auto 40px;
-            padding: 0 16px;
-        }
-        .page { display: none; }
-        .page.active { display: block; }
+        #tycoon-leaderboard-button { top: 146px; right: 8px; max-width: 46%; padding: 8px 10px; font-size: 11px; }
 
-        .card {
-            margin-bottom: 18px;
-            padding: 24px;
-            border: 1px solid var(--border);
-            border-radius: 16px;
-            background: #fff;
-            box-shadow: 0 8px 24px rgba(25, 40, 60, 0.06);
+        .skill-bar {
+            bottom: max(8px, env(safe-area-inset-bottom));
+            left: 8px; right: 8px; transform: none; gap: 5px;
         }
-        .card h2 { margin: 0 0 8px; font-size: 1.1rem; }
-        .card h3 { margin: 18px 0 8px; font-size: 0.95rem; }
-        .profile-help, .profile-status {
-            color: #606a78; font-size: 0.88rem; line-height: 1.5;
-        }
-        .profile-status { min-height: 1.4em; margin: 10px 0 0; }
-        .profile-status.error { color: #b42318; }
-        .profile-status.ok { color: var(--success); }
+        .skill-btn { flex: 1; min-width: 0; padding: 6px 2px; font-size: 8px; }
+        .sk-ico { font-size: 13px; }
+        .sk-cd { font-size: 8px; }
 
-        .page-heading {
-            display: flex; align-items: center; justify-content: space-between;
-            gap: 12px; margin-bottom: 18px;
+        .panel {
+            display: none; left: 0; right: 0; bottom: 0; width: 100%;
+            max-height: 56dvh;
+            padding: 10px max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+            border-radius: 14px 14px 0 0;
+            touch-action: pan-y; -webkit-overflow-scrolling: touch;
         }
-        .page-heading h1 { margin: 0; font-size: 1.55rem; }
+        #ui.shop-open .panel { display: flex; }
+        #ui.shop-open .skill-bar { display: none; }
+        .mobile-panel-close {
+            display: block; align-self: flex-end; padding: 7px 12px; border: 1px solid #64748b;
+            border-radius: 8px; background: #1e293b; color: #fff; font-weight: bold; touch-action: manipulation;
+        }
+        .mobile-shop-toggle {
+            display: block; position: absolute; right: 10px;
+            bottom: calc(62px + env(safe-area-inset-bottom)); z-index: 15;
+            padding: 9px 13px; border: 1px solid #38bdf8; border-radius: 20px;
+            background: rgba(15, 23, 42, 0.95); color: #fff; font-weight: bold;
+            pointer-events: auto; touch-action: manipulation;
+        }
+        #ui.shop-open .mobile-shop-toggle { display: none; }
 
-        .profile-avatar-row { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
-        .avatar-wrap { position: relative; width: 104px; height: 104px; flex: 0 0 auto; }
-        .profile-avatar {
-            width: 104px; height: 104px; border: 2px solid var(--border);
-            border-radius: 50%; object-fit: cover; background: #fff;
-        }
-        .avatar-edit-btn {
-            position: absolute; right: -2px; bottom: -2px;
-            width: 34px; height: 34px; border-radius: 50%;
-            border: 2px solid #fff; background: var(--me-bg); color: #fff;
-            font-size: 16px; cursor: pointer; display: flex;
-            align-items: center; justify-content: center;
-        }
-
-        .profile-form { display: grid; gap: 14px; margin-top: 16px; }
-        .profile-form label { display: grid; gap: 7px; font-size: 0.9rem; font-weight: 600; }
-        .profile-form input {
-            width: 100%; padding: 11px 12px; border: 1px solid #cbd2dc;
-            border-radius: 8px; font: inherit;
-        }
-        .profile-form input:focus {
-            border-color: #4285f4; outline: 2px solid rgba(66, 133, 244, 0.18);
-        }
-        .profile-button {
-            width: fit-content; padding: 10px 16px; border: 0;
-            border-radius: 8px; background: #2878e3; color: #fff;
-            font: inherit; font-weight: 600; cursor: pointer;
-        }
-        .profile-button:disabled { cursor: wait; opacity: 0.65; }
-        .profile-button.secondary { background: #687385; }
-        .profile-button.danger { background: var(--danger); }
-
-        .search-row { display: flex; gap: 8px; }
-        .search-row input {
-            flex: 1; padding: 10px 12px; border: 1px solid #cbd2dc;
-            border-radius: 8px; font: inherit;
-        }
-        .friend-list, .request-list, .search-results {
-            list-style: none; margin: 0; padding: 0;
-            display: flex; flex-direction: column; gap: 8px;
-        }
-        .friend-item, .request-item {
-            display: flex; align-items: center; gap: 10px;
-            padding: 10px; border-radius: 12px; background: #f7f9fc;
-            border: 1px solid transparent;
-        }
-        .friend-item.active { border-color: var(--me-bg); background: #eaf2ff; }
-        .friend-avatar {
-            width: 42px; height: 42px; border-radius: 50%;
-            object-fit: cover; background: #fff; flex: 0 0 auto;
-            border: 1px solid var(--border);
-        }
-        .friend-name {
-            flex: 1; font-weight: 600; font-size: 0.95rem;
-            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-        }
-        .friend-unread {
-            min-width: 18px; height: 18px; padding: 0 5px;
-            border-radius: 9px; background: var(--danger); color: #fff;
-            font-size: 11px; font-weight: 700; line-height: 18px; text-align: center;
-            display: none;
-        }
-        .friend-unread.show { display: inline-block; }
-        .friend-actions { display: flex; gap: 6px; flex-wrap: wrap; }
-        .mini-btn {
-            padding: 6px 11px; border-radius: 7px; border: 1px solid #ccc;
-            background: #fff; font-size: 12px; font-weight: 600; cursor: pointer;
-        }
-        .mini-btn.primary { background: var(--me-bg); color: #fff; border-color: var(--me-bg); }
-        .mini-btn.success { background: var(--success); color: #fff; border-color: var(--success); }
-        .mini-btn.danger { background: #fff0f0; color: var(--danger); border-color: #ffc9c9; }
-
-        .chat-panel {
-            display: flex; flex-direction: column;
-            background: #fff; border-radius: 16px; overflow: hidden;
-            border: 1px solid var(--border);
-            box-shadow: 0 8px 24px rgba(25, 40, 60, 0.06);
-            height: calc(100vh - 190px);
-            min-height: 460px;
-        }
-        .chat-layout { display: flex; height: 100%; }
-        .chat-sidebar {
-            width: 210px; flex-shrink: 0; border-right: 1px solid #eee;
-            overflow-y: auto; background: #fafbfd;
-        }
-        .chat-sidebar-title {
-            padding: 12px 14px 6px; font-size: 12px; font-weight: 700;
-            color: var(--text-gray); letter-spacing: 0.4px;
-        }
-        .chat-sidebar .friend-item { border-radius: 0; border: 0; background: transparent; }
-        .chat-sidebar .friend-item.active { background: #eaf2ff; }
-        .chat-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-
-        /* 手機版好友選擇下拉選單 */
-        .chat-mobile-picker {
-            display: none;
-            padding: 10px 12px;
-            border-bottom: 1px solid #eee;
-            background: #fff;
-            flex-shrink: 0;
-        }
-        .chat-mobile-picker select {
-            width: 100%;
-            padding: 10px 12px;
-            border: 1px solid #cbd2dc;
-            border-radius: 9px;
-            font: inherit;
-            background: #fff;
-            color: #1d1d1f;
-        }
-
-        .chat-header {
-            padding: 13px 16px; border-bottom: 1px solid #eee;
-            display: flex; justify-content: space-between; align-items: center;
-            background: #fff; flex-shrink: 0;
-        }
-        .chat-header .title { font-weight: 700; }
-        .chat-header .sub { font-size: 12px; color: var(--text-gray); }
-        .chat-header-actions { display: flex; gap: 8px; }
-        .chat-box {
-            flex: 1; overflow-y: auto; padding: 15px;
-            display: flex; flex-direction: column; gap: 12px;
-            background: #fbfcfe;
-        }
-        .chat-empty {
-            margin: auto; text-align: center; color: var(--text-gray);
-            font-size: 0.92rem; padding: 30px;
-        }
-        .msg-row { display: flex; flex-direction: column; width: 100%; }
-        .msg-row.me { align-items: flex-end; }
-        .msg-row.other { align-items: flex-start; }
-        .msg-info { font-size: 11px; color: var(--text-gray); margin-bottom: 3px; padding: 0 5px; }
-        .bubble {
-            padding: 10px 13px; border-radius: 16px; font-size: 14px;
-            word-break: break-word; max-width: 85%;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.06);
-            white-space: pre-wrap;
-        }
-        .me .bubble { background: var(--me-bg); color: #fff; border-bottom-right-radius: 4px; }
-        .other .bubble { background: var(--other-bg); color: #111; border-bottom-left-radius: 4px; }
-        .chat-input-area {
-            padding: 10px 12px; border-top: 1px solid #eee;
-            display: flex; gap: 8px; align-items: center; background: #fff;
-        }
-        .chat-input-area input[type="text"] {
-            flex: 1; padding: 11px 14px; border: none; background: #f2f2f7;
-            border-radius: 22px; outline: none; font-size: 15px;
-        }
-        .chat-send-btn {
-            border: none; background: var(--me-bg); color: #fff;
-            font-weight: 700; padding: 10px 16px; border-radius: 20px;
-            cursor: pointer; font-size: 14px; flex-shrink: 0;
-        }
-        .chat-send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-        .hidden { display: none !important; }
-
-        @media (max-width: 640px) {
-            .chat-sidebar { display: none; }
-            .chat-mobile-picker { display: block; }
-            .chat-panel { height: calc(100vh - 210px); }
-            .tab-btn { font-size: 0.82rem; padding: 10px 4px; }
-            .page-wrap { padding: 0 10px; }
-            .card { padding: 18px; }
-        }
-    </style>
+        .tab-btn { min-height: 40px; font-size: 9px; }
+        .btn { min-height: 40px; font-size: 11px; touch-action: manipulation; }
+        #tycoon-leaderboard { padding: max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom)); }
+        .tycoon-leaderboard-card { max-height: 85dvh; padding: 14px; touch-action: pan-y; -webkit-overflow-scrolling: touch; }
+        .tycoon-leaderboard-row { flex-direction: column; gap: 4px; }
+    }
+</style>
 </head>
 <body>
-    <div id="nav_bar"></div>
+<link rel="stylesheet" href="menu.css">
 
-    <p id="login-required" class="profile-help" style="text-align:center;margin:24px;" hidden>請先登入帳號，再管理個人檔案與好友。</p>
+<div id="nav_bar"></div>
 
-    <div id="app-area" hidden>
-        <div class="tab-bar" role="tablist">
-            <button class="tab-btn active" data-page="profile" role="tab">個人檔案</button>
-            <button class="tab-btn" data-page="friends" role="tab">好友 <span class="tab-badge" id="tab-badge-requests"></span></button>
-            <button class="tab-btn" data-page="chat" role="tab">聊天室 <span class="tab-badge" id="tab-badge-unread"></span></button>
-        </div>
-
-        <div class="page-wrap">
-            <!-- ===== 個人檔案 ===== -->
-            <section class="page active" id="page-profile">
-                <div class="page-heading">
-                    <h1>個人檔案</h1>
-                    <button id="sign-out" class="profile-button secondary" type="button">登出</button>
-                </div>
-
-                <section class="card">
-                    <h2>個人頭像</h2>
-                    <div class="profile-avatar-row">
-                        <div class="avatar-wrap">
-                            <img id="profile-avatar" class="profile-avatar" src="https://raingod0101.github.io/catdragon.png" alt="個人頭像">
-                            <button id="avatar-edit-btn" class="avatar-edit-btn" type="button" title="更換頭像">✎</button>
-                        </div>
-                        <div>
-                            <p class="profile-help">點擊右下角鉛筆更換頭像，儲存後會同步到帳號資料庫。</p>
-                            <input id="avatar-file-input" type="file" accept="image/*" class="hidden">
-                        </div>
-                    </div>
-                    <p id="avatar-status" class="profile-status" role="status"></p>
-                </section>
-
-                <section class="card">
-                    <h2>顯示名稱</h2>
-                    <form id="name-form" class="profile-form">
-                        <label>
-                            名稱
-                            <input id="display-name" type="text" maxlength="40" autocomplete="nickname" required>
-                        </label>
-                        <button class="profile-button" type="submit">儲存名稱</button>
-                    </form>
-                    <p id="name-status" class="profile-status" role="status"></p>
-                </section>
-
-                <section class="card">
-                    <h2>變更密碼</h2>
-                    <p class="profile-help">為保護帳號安全，變更密碼時需要驗證目前密碼。</p>
-                    <form id="password-form" class="profile-form">
-                        <label>
-                            目前密碼
-                            <input id="current-password" type="password" autocomplete="current-password" required>
-                        </label>
-                        <label>
-                            新密碼（至少 6 個字元）
-                            <input id="new-password" type="password" minlength="6" autocomplete="new-password" required>
-                        </label>
-                        <label>
-                            確認新密碼
-                            <input id="confirm-password" type="password" minlength="6" autocomplete="new-password" required>
-                        </label>
-                        <button class="profile-button" type="submit">變更密碼</button>
-                    </form>
-                    <p id="password-status" class="profile-status" role="status"></p>
-                </section>
-            </section>
-
-            <!-- ===== 好友 ===== -->
-            <section class="page" id="page-friends">
-                <div class="page-heading">
-                    <h1>好友</h1>
-                </div>
-
-                <section class="card">
-                    <h2>搜尋好友</h2>
-                    <p class="profile-help">輸入對方帳號（@ 前面的名稱）送出好友申請。</p>
-                    <div class="search-row">
-                        <input id="friend-search-input" type="text" placeholder="輸入帳號搜尋" autocomplete="off">
-                        <button id="friend-search-btn" class="profile-button" type="button" style="width:auto;padding:10px 16px;">搜尋</button>
-                    </div>
-                    <ul id="search-results" class="search-results" style="margin-top:12px;"></ul>
-                </section>
-
-                <section class="card">
-                    <h2>好友申請</h2>
-                    <ul id="request-list" class="request-list">
-                        <li class="profile-help" id="request-empty">目前沒有待處理的好友申請。</li>
-                    </ul>
-                </section>
-
-                <section class="card">
-                    <h2>好友列表</h2>
-                    <ul id="friend-list" class="friend-list">
-                        <li class="profile-help" id="friend-empty">尚未加入任何好友。</li>
-                    </ul>
-                </section>
-            </section>
-
-            <!-- ===== 聊天室 ===== -->
-            <section class="page" id="page-chat">
-                <div class="chat-panel">
-                    <div class="chat-layout">
-                        <aside class="chat-sidebar">
-                            <div class="chat-sidebar-title">好友對話</div>
-                            <ul id="chat-sidebar-friends" style="list-style:none;margin:0;padding:0;"></ul>
-                        </aside>
-                        <div class="chat-main">
-                            <!-- 手機版好友選擇器 -->
-                            <div class="chat-mobile-picker">
-                                <select id="chat-mobile-select">
-                                    <option value="">選擇好友開始聊天…</option>
-                                </select>
-                            </div>
-                            <div class="chat-header">
-                                <div>
-                                    <div class="title" id="chat-title">聊天室</div>
-                                    <div class="sub" id="chat-subtitle">請選擇一位好友開始聊天。</div>
-                                </div>
-                                <div class="chat-header-actions">
-                                    <button id="chat-clear-friend" class="mini-btn" type="button" hidden>關閉對話</button>
-                                </div>
-                            </div>
-                            <div class="chat-box" id="chat-box">
-                                <div class="chat-empty" id="chat-empty">請選擇一位好友開始聊天。</div>
-                            </div>
-                            <div class="chat-input-area">
-                                <input type="text" id="msg-input" placeholder="輸入訊息..." disabled>
-                                <button class="chat-send-btn" id="chat-send-btn" type="button" disabled>傳送</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-        </div>
+<script src="menu.js"></script>
+<canvas id="c"></canvas>
+<div id="ui">
+    <div class="top-bar">
+        <div class="hud-item">$<span id="m" class="money">0</span></div>
+        <div class="hud-item dark-matter">🌌 <span id="dm">0</span></div>
+        <div class="hud-item" style="color: #ef4444;">⚔️ 第 <span id="waveNum">1</span> 波</div>
+        <div class="hud-item" style="color: #fb7185;">👾 <span id="enemyCount">0</span></div>
+        <div class="hud-item" style="color:#fbbf24;">🔥 <span id="comboNum">0</span></div>
+        <div class="hud-item" style="color:#22d3ee;">⏱ <span id="waveTimer">20s</span></div>
     </div>
 
-    <script src="menu.js"></script>
-    <script>
-        (function() {
-            var ready = window.raingodFirebaseReady || Promise.resolve();
-            var authReady = window.raingodAuthReady || Promise.resolve(null);
+    <div class="skill-bar">
+        <button class="skill-btn" data-skill="1"><span class="sk-ico">⚡</span><span>超頻</span><span class="sk-cd" id="cd1">就緒</span></button>
+        <button class="skill-btn" data-skill="2"><span class="sk-ico">💥</span><span>軌道砲</span><span class="sk-cd" id="cd2">就緒</span></button>
+        <button class="skill-btn" data-skill="3"><span class="sk-ico">❄️</span><span>時間凍結</span><span class="sk-cd" id="cd3">就緒</span></button>
+        <button class="skill-btn" data-skill="4"><span class="sk-ico">🌀</span><span>引力奇點</span><span class="sk-cd" id="cd4">就緒</span></button>
+    </div>
 
-            // ===== DOM =====
-            var fallbackAvatar = 'https://raingod0101.github.io/catdragon.png';
-            var loginRequired = document.getElementById('login-required');
-            var appArea = document.getElementById('app-area');
+    <div class="panel" id="tycoon-panel">
+        <button class="mobile-panel-close" type="button" onclick="toggleTycoonShop(false)">收起商店 ▲</button>
+        <div class="quest-box">🎯 任務：<span id="questText">載入中...</span> (<span id="questProg">0/0</span>)</div>
+        <div id="turret-inspector" class="inspector" style="display:none;"></div>
 
-            var avatarImg = document.getElementById('profile-avatar');
-            var avatarEditBtn = document.getElementById('avatar-edit-btn');
-            var avatarFileInput = document.getElementById('avatar-file-input');
-            var nameForm = document.getElementById('name-form');
-            var displayNameInput = document.getElementById('display-name');
-            var passwordForm = document.getElementById('password-form');
-            var signOutButton = document.getElementById('sign-out');
-            var friendSearchInput = document.getElementById('friend-search-input');
-            var friendSearchBtn = document.getElementById('friend-search-btn');
-            var searchResults = document.getElementById('search-results');
-            var requestList = document.getElementById('request-list');
-            var friendList = document.getElementById('friend-list');
-            var chatSidebarFriends = document.getElementById('chat-sidebar-friends');
-            var chatMobileSelect = document.getElementById('chat-mobile-select');
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="tab-turret"><span>⚔️</span>武器塔</button>
+            <button class="tab-btn" data-tab="tab-prod"><span>🏭</span>工廠</button>
+            <button class="tab-btn" data-tab="tab-upg"><span>⚙️</span>升級</button>
+            <button class="tab-btn" data-tab="tab-tech"><span>🌌</span>天賦</button>
+            <button class="tab-btn" data-tab="tab-more"><span>🎯</span>挑戰</button>
+        </div>
 
-            var chatTitle = document.getElementById('chat-title');
-            var chatSubtitle = document.getElementById('chat-subtitle');
-            var chatBox = document.getElementById('chat-box');
-            var chatEmpty = document.getElementById('chat-empty');
-            var msgInput = document.getElementById('msg-input');
-            var chatSendBtn = document.getElementById('chat-send-btn');
-            var chatClearFriend = document.getElementById('chat-clear-friend');
+        <div id="tab-turret">
+            <div id="turret-list" style="display:flex; flex-direction:column; gap:6px;"></div>
+            <button class="btn" style="background: linear-gradient(135deg, #b91c1c, #991b1b); border-color: #f87171; margin-top:4px;" onclick="triggerNextWave()">
+                <span>⚠️ 立即召喚下一波敵人</span>
+            </button>
+        </div>
 
-            var tabBadgeRequests = document.getElementById('tab-badge-requests');
-            var tabBadgeUnread = document.getElementById('tab-badge-unread');
+        <div id="tab-prod" style="display:none;">
+            <button class="btn" data-unlock="2"><span>🔓 矽晶/晶片廠<div class="desc">解鎖晶片生產線</div></span><span style="color:#4ade80">$2,500</span></button>
+            <button class="btn" data-unlock="3"><span>🔓 鈾能/電池中心<div class="desc">解鎖核電池</div></span><span style="color:#4ade80">$25,000</span></button>
+            <button class="btn" data-unlock="4"><span>🔓 量子合成廠<div class="desc">解鎖量子核心</div></span><span style="color:#4ade80">$200,000</span></button>
+            <button class="btn" data-unlock="5"><span>🔓 反物質研究所<div class="desc">解鎖反物質</div></span><span style="color:#4ade80">$2,000,000</span></button>
+        </div>
 
-            // ===== 狀態 =====
-            var currentUser = null;
-            var currentUid = '';
-            var currentUsername = '';
-            var chatListeners = [];
-            var friendUnreadListeners = [];
-            var activeFriendUid = '';
-            var friendsCache = {};
-            var unreadCache = {};
-            var requestsCount = 0;
+        <div id="tab-upg" style="display:none;">
+            <button class="btn" onclick="buyBot()"><span>🤖 雇用運輸機兵<div class="desc">自動搬運礦物</div></span><span style="color:#4ade80" id="bCost">$500</span></button>
+            <button class="btn" onclick="upgrade('miner')"><span>⚙️ 採礦速率 Lv.<span id="minerLv">0</span></span><span style="color:#4ade80" id="mCost">$1,000</span></button>
+            <button class="btn" onclick="upgrade('capacity')"><span>🎒 機兵容量 Lv.<span id="capLv">4</span></span><span style="color:#4ade80" id="cCost">$1,500</span></button>
+            <button class="btn" onclick="upgrade('playerDamage')"><span>⚔️ 玩家傷害 Lv.<span id="playerDamageLv">0</span><div class="desc">每級 +25%</div></span><span style="color:#4ade80" id="playerDamageCost">$1,000</span></button>
+            <button class="btn" onclick="upgrade('turretDamage')"><span>🛡️ 防衛塔傷害 Lv.<span id="turretDamageLv">0</span><div class="desc">每級 +20%</div></span><span style="color:#4ade80" id="turretDamageCost">$1,500</span></button>
+        </div>
 
-            // ===== 工具 =====
-            function db() { return window.firebase.database(); }
-            function setStatus(id, message, type) {
-                var el = document.getElementById(id);
-                if (!el) return;
-                el.textContent = message;
-                el.classList.remove('error', 'ok');
-                if (type) el.classList.add(type);
-            }
-            function setFormDisabled(form, disabled) {
-                var els = form.querySelectorAll('button, input');
-                for (var i = 0; i < els.length; i++) els[i].disabled = disabled;
-            }
-            function errorMessage(error) {
-                if (!error) return '操作失敗，請稍後再試。';
-                if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential')
-                    return '目前密碼不正確，請確認後再試。';
-                if (error.code === 'auth/requires-recent-login')
-                    return '登入時間過久，請重新登入後再變更密碼。';
-                if (error.code === 'auth/email-already-in-use')
-                    return '該帳號名稱已被使用。';
-                return error.message || '操作失敗，請稍後再試。';
-            }
-            function escapeHtml(str) {
-                return String(str == null ? '' : str).replace(/[&<>"']/g, function(s) {
-                    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s];
-                });
-            }
-            function chatIdFor(a, b) {
-                return [a, b].sort().join('__');
-            }
+        <div id="tab-tech" style="display:none;">
+            <button class="btn rebirth-btn" data-talent="dmg"><span>🧬 基因傷害 +20%</span><span style="color:#c084fc" id="tDmgCost">5 DM</span></button>
+            <button class="btn rebirth-btn" data-talent="spd"><span>🤖 機兵速度 +15%</span><span style="color:#c084fc" id="tSpdCost">5 DM</span></button>
+            <button class="btn rebirth-btn" data-talent="range"><span>🎯 全體射程 +10%</span><span style="color:#c084fc" id="tRangeCost">5 DM</span></button>
+            <button class="btn rebirth-btn" data-talent="crit"><span>💢 暴擊率 +5%</span><span style="color:#c084fc" id="tCritCost">5 DM</span></button>
+            <button class="btn rebirth-btn" data-talent="money"><span>💰 金錢收益 +25%</span><span style="color:#c084fc" id="tMoneyCost">5 DM</span></button>
+            <button class="btn rebirth-btn" style="margin-top:8px;" onclick="triggerRebirth()">
+                <span>🌌 暗物質量子轉生</span><span style="color:#c084fc" id="rebirthGain">+0 DM</span>
+            </button>
+        </div>
 
-            // ===== 分頁 =====
-            var tabBtns = document.querySelectorAll('.tab-btn');
-            for (var i = 0; i < tabBtns.length; i++) {
-                (function(btn) {
-                    btn.addEventListener('click', function() {
-                        var all = document.querySelectorAll('.tab-btn');
-                        for (var j = 0; j < all.length; j++) all[j].classList.remove('active');
-                        var pages = document.querySelectorAll('.page');
-                        for (var k = 0; k < pages.length; k++) pages[k].classList.remove('active');
-                        btn.classList.add('active');
-                        var page = document.getElementById('page-' + btn.dataset.page);
-                        if (page) page.classList.add('active');
-                        if (btn.dataset.page === 'chat') {
-                            chatBox.scrollTop = chatBox.scrollHeight;
-                        }
-                    });
-                })(tabBtns[i]);
-            }
-            function switchTab(name) {
-                var all = document.querySelectorAll('.tab-btn');
-                for (var i = 0; i < all.length; i++) {
-                    all[i].classList.toggle('active', all[i].dataset.page === name);
-                }
-                var pages = document.querySelectorAll('.page');
-                for (var j = 0; j < pages.length; j++) {
-                    pages[j].classList.toggle('active', pages[j].id === 'page-' + name);
-                }
-            }
+        <div id="tab-more" style="display:none;">
+            <div style="font-size:10px; color:#94a3b8; margin-bottom:2px;">🏆 成就</div>
+            <div id="ach-list"></div>
+        </div>
+    </div>
+    <button class="mobile-shop-toggle" type="button" aria-controls="tycoon-panel" aria-expanded="false" onclick="toggleTycoonShop()">🛠️ 建造 / 升級</button>
+</div>
 
-            // ===== 使用者資料 =====
-            function fetchUserProfile(username, cb) {
-                db().ref('users/' + username).once('value', function(snap) {
-                    cb(snap.exists() ? snap.val() : null);
-                }, function(err) {
-                    console.warn('讀取使用者資料失敗', err);
-                    cb(null);
-                });
-            }
+<button id="tycoon-leaderboard-button" onclick="openTycoonLeaderboard()">🏆 登入後查看排行榜</button>
+<div id="tycoon-leaderboard">
+    <div class="tycoon-leaderboard-card">
+        <h2 style="color:#38bdf8; margin-top:0;">🏆 雨神大亨排行榜</h2>
+        <p id="tycoon-leaderboard-status" style="color:#aaa;">請登入帳號後查看。</p>
+        <div id="tycoon-leaderboard-list"></div>
+        <div style="display:flex; gap:8px; justify-content:center; margin-top:14px;">
+            <button class="btn" onclick="refreshTycoonLeaderboard()">重新整理</button>
+            <button class="btn" onclick="closeTycoonLeaderboard()">關閉</button>
+        </div>
+    </div>
+</div>
 
-            // ===== 初始化 =====
-            function initProfile(user) {
-                currentUser = user;
-                currentUid = user.uid;
-                currentUsername = user.email ? user.email.split('@')[0] : '';
+<script>
+/* =========================================================
+   雨神大亨 · 全面進化版
+   ========================================================= */
+const cvs = document.getElementById('c');
+const ctx = cvs.getContext('2d');
+const SAVE_KEY = 'raingod_tycoon_save';
+const TYCOON_LEADERBOARD_URL = 'https://game-24b43-default-rtdb.firebaseio.com/raingod_tycoon_leaderboard';
 
-                loginRequired.hidden = true;
-                appArea.hidden = false;
+/* ---- roundRect polyfill ---- */
+if (!CanvasRenderingContext2D.prototype.roundRect) {
+    CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
+        if (typeof r === 'number') r = [r, r, r, r];
+        const [tl, tr, br, bl] = r;
+        this.beginPath();
+        this.moveTo(x + tl, y);
+        this.lineTo(x + w - tr, y); this.quadraticCurveTo(x + w, y, x + w, y + tr);
+        this.lineTo(x + w, y + h - br); this.quadraticCurveTo(x + w, y + h, x + w - br, y + h);
+        this.lineTo(x + bl, y + h); this.quadraticCurveTo(x, y + h, x, y + h - bl);
+        this.lineTo(x, y + tl); this.quadraticCurveTo(x, y, x + tl, y);
+        this.closePath();
+        return this;
+    };
+}
 
-                avatarImg.src = user.photoURL || fallbackAvatar;
-                displayNameInput.value = user.displayName || currentUsername;
+/* ---- 畫布尺寸 / DPR ---- */
+let W = window.innerWidth, H = window.innerHeight, DPR = Math.min(window.devicePixelRatio || 1, 2);
+const resize = () => {
+    W = window.innerWidth; H = window.innerHeight;
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    cvs.width = Math.floor(W * DPR);
+    cvs.height = Math.floor(H * DPR);
+    cvs.style.width = W + 'px';
+    cvs.style.height = H + 'px';
+};
+window.addEventListener('resize', resize);
+resize();
 
-                fetchUserProfile(currentUsername, function(profile) {
-                    if (profile && profile.profile && profile.profile.avatar) {
-                        avatarImg.src = profile.profile.avatar;
-                    }
-                });
+/* =========================================================
+   資料定義
+   ========================================================= */
+const ITEMS = {
+    RAW:     { name: '原礦',   val: 10,     color: '#ef4444' },
+    STEEL:   { name: '鋼鐵',   val: 50,     color: '#f59e0b' },
+    SILICON: { name: '矽晶',   val: 80,     color: '#0284c7' },
+    CHIP:    { name: '晶片',   val: 300,    color: '#3b82f6' },
+    URANIUM: { name: '鈾礦',   val: 500,    color: '#10b981' },
+    BATTERY: { name: '核電池', val: 2500,   color: '#22c55e' },
+    CORE:    { name: '量子核心', val: 12000, color: '#a855f7' },
+    ANTIM:   { name: '反物質', val: 100000, color: '#e11d48' }
+};
 
-                listenFriendRequests();
-                listenFriends();
-            }
+const TURRET_DEFS = {
+    gatling:  { name: '機槍塔',   icon: '🔫', cost: 1000,   range: 240, cd: 8,   dmg: 18,  color: '#f59e0b', desc: '高射速單體' },
+    laser:    { name: '雷射塔',   icon: '⚡', cost: 5000,   range: 350, cd: 26,  dmg: 62,  color: '#3b82f6', desc: '超遠射程光束' },
+    mortar:   { name: '迫擊砲塔', icon: '💥', cost: 20000,  range: 270, cd: 50,  dmg: 150, splash: 92, color: '#a855f7', desc: '範圍濺射' },
+    frost:    { name: '冰霜塔',   icon: '❄️', cost: 50000,  range: 220, cd: 14,  dmg: 6,   slow: 0.45, color: '#0284c7', desc: '凍結減速' },
+    venom:    { name: '毒液塔',   icon: '🧪', cost: 120000, range: 240, cd: 22,  dmg: 22,  poison: 14, color: '#84cc16', desc: '持續中毒傷害' },
+    tesla:    { name: '電磁塔',   icon: '🌩️', cost: 220000, range: 210, cd: 38,  dmg: 78,  chain: 3, color: '#facc15', desc: '連鎖閃電' },
+    blackhole:{ name: '黑洞塔',   icon: '🌌', cost: 420000, range: 280, cd: 5,   dmg: 10,  pull: true, color: '#c084fc', desc: '牽引持續傷害' },
+    missile:  { name: '導彈塔',   icon: '🚀', cost: 750000, range: 420, cd: 92,  dmg: 340, splash: 110, color: '#fb7185', desc: '追蹤範圍爆炸' },
+    railgun:  { name: '軌道砲',   icon: '🛰️', cost: 1600000,range: 620, cd: 150, dmg: 950, beam: true, color: '#22d3ee', desc: '穿透直線砲擊' }
+};
+const TURRET_ORDER = ['gatling', 'laser', 'mortar', 'frost', 'venom', 'tesla', 'blackhole', 'missile', 'railgun'];
 
-            // ===== 頭像 =====
-            avatarEditBtn.addEventListener('click', function() { avatarFileInput.click(); });
-            avatarFileInput.addEventListener('change', function() {
-                var file = avatarFileInput.files && avatarFileInput.files[0];
-                if (!file) return;
-                if (file.type.indexOf('image/') !== 0) {
-                    setStatus('avatar-status', '請選擇圖片檔案。', 'error');
-                    return;
-                }
-                if (file.size > 2 * 1024 * 1024) {
-                    setStatus('avatar-status', '圖片大小需小於 2MB。', 'error');
-                    return;
-                }
-                setStatus('avatar-status', '正在上傳頭像…');
-                var reader = new FileReader();
-                reader.onload = function() {
-                    var dataUrl = reader.result;
-                    db().ref('users/' + currentUsername + '/profile/avatar').set(dataUrl, function(err) {
-                        if (err) {
-                            console.error('頭像儲存失敗', err);
-                            setStatus('avatar-status', '頭像儲存失敗：' + errorMessage(err), 'error');
-                            return;
-                        }
-                        avatarImg.src = dataUrl;
-                        setStatus('avatar-status', '頭像已更新並儲存。', 'ok');
-                        refreshFriendsUI();
-                    });
-                    avatarFileInput.value = '';
-                };
-                reader.readAsDataURL(file);
+const ENEMY_DEFS = {
+    crawler:  { name: '異形蟲',  shape: 'bug',     hp: 55,   spd: 1.5, reward: 80,   color: '#ef4444', size: 15, bob: 0 },
+    runner:   { name: '疾風蟲',  shape: 'dart',    hp: 32,   spd: 3.0, reward: 95,   color: '#f59e0b', size: 12, bob: 1.5 },
+    tank:     { name: '裝甲蟲',  shape: 'hex',     hp: 240,  spd: 0.7, reward: 160,  color: '#64748b', size: 22, bob: 0 },
+    bomber:   { name: '爆裂蟲',  shape: 'diamond', hp: 48,   spd: 2.0, reward: 105,  color: '#22c55e', size: 14, bob: 2 },
+    splitter: { name: '分裂蟲',  shape: 'blob',    hp: 130,  spd: 1.2, reward: 190,  color: '#a855f7', size: 18, bob: 2.5, split: true },
+    healer:   { name: '治癒蟲',  shape: 'star',    hp: 160,  spd: 1.0, reward: 210,  color: '#14b8a6', size: 17, bob: 2, heal: true },
+    shield:   { name: '護盾蟲',  shape: 'ring',    hp: 210,  spd: 0.9, reward: 260,  color: '#0ea5e9', size: 20, bob: 0, shield: 180 },
+    phantom:  { name: '幽靈蟲',  shape: 'ghost',   hp: 110,  spd: 2.3, reward: 230,  color: '#c084fc', size: 16, bob: 3, alpha: 0.6 },
+    boss:     { name: '異形母巢', shape: 'boss',   hp: 2200, spd: 0.5, reward: 4200, color: '#e11d48', size: 38, bob: 0, glow: 26 }
+};
+
+const WAVE_MODS = [
+    { id: 'none',    name: '常規波次', icon: '⚔️', desc: '無特殊效果' },
+    { id: 'swarm',   name: '蜂群',     icon: '🐝', desc: '敵人數量 +50%，但更脆弱', hpMul: 0.7, countMul: 1.5 },
+    { id: 'armored', name: '裝甲',     icon: '🛡️', desc: '敵人生命 +60%', hpMul: 1.6, countMul: 0.9 },
+    { id: 'swift',   name: '疾風',     icon: '💨', desc: '敵人速度 +50%', spdMul: 1.5, countMul: 0.9 },
+    { id: 'horde',   name: '獸潮',     icon: '🌊', desc: '敵人數量翻倍', countMul: 2, hpMul: 0.8 },
+    { id: 'elite',   name: '精英',     icon: '👑', desc: '出現更多強力敵人', elite: true }
+];
+
+const ACHIEVEMENTS = [
+    { id: 'wave10',  name: '初露鋒芒',   desc: '到達第 10 波',  reward: 5,  check: s => s.bestWave >= 10 },
+    { id: 'wave25',  name: '雨神降臨',   desc: '到達第 25 波',  reward: 15, check: s => s.bestWave >= 25 },
+    { id: 'wave50',  name: '天災化身',   desc: '到達第 50 波',  reward: 40, check: s => s.bestWave >= 50 },
+    { id: 'kill500', name: '蟲族噩夢',   desc: '累計擊殺 500',  reward: 10, check: s => s.totalKills >= 500 },
+    { id: 'kill5000',name: '滅絕者',     desc: '累計擊殺 5000', reward: 35, check: s => s.totalKills >= 5000 },
+    { id: 'combo50', name: '連擊大師',   desc: '達成 50 連擊',  reward: 12, check: s => s.maxCombo >= 50 },
+    { id: 'tower20', name: '鋼鐵防線',   desc: '同時擁有 20 座塔', reward: 15, check: s => s.turretCount >= 20 },
+    { id: 'money1m', name: '百萬富翁',   desc: '持有 $1,000,000', reward: 20, check: s => s.money >= 1000000 }
+];
+
+/* =========================================================
+   遊戲狀態
+   ========================================================= */
+let money = 2000, darkMatter = 0, frame = 0;
+let bestWave = 0, totalKills = 0, maxCombo = 0;
+let minerLevel = 0, capacity = 4, techTier = 1;
+let playerDamageLevel = 0, turretDamageLevel = 0;
+
+let p = { x: 350, y: 350, r: 18, tx: 350, ty: 350, bag: [], atkRange: 220, cooldown: 0, angle: 0 };
+
+let bots = [], items = [], floatTexts = [], particles = [], bullets = [], beams = [], shocks = [], enemies = [], turrets = [];
+
+let shakeTime = 0;
+let talents = { dmgLv: 0, spdLv: 0, rangeLv: 0, critLv: 0, moneyLv: 0 };
+let wave = 1, waveTimer = 20 * 60, isWaveActive = false;
+let waveMod = WAVE_MODS[0];
+let skillCd = [0, 0, 0, 0];
+let isOverclocked = false, overclockTimer = 0;
+let freezeTimer = 0, singularityTimer = 0;
+let combo = 0, comboTimer = 0;
+let quest = { type: 'kill', target: 20, current: 0, reward: 1500, desc: '擊殺 20 隻異形蟲' };
+let achievements = {};
+let storageReady = false;
+let placingTurret = null;
+let selectedTurret = null;
+let mouseX = 0, mouseY = 0;
+
+/* =========================================================
+   存檔 / 讀檔
+   ========================================================= */
+function saveGame() {
+    if (!storageReady) return;
+    try {
+        localStorage.setItem(SAVE_KEY, JSON.stringify({
+            money, darkMatter, minerLevel, capacity, techTier, playerDamageLevel, turretDamageLevel,
+            player: { x: p.x, y: p.y, bag: [] },
+            bots: bots.map(b => ({ x: b.x, y: b.y, bag: [] })),
+            turrets: turrets.map(t => ({ x: t.x, y: t.y, type: t.type, lv: t.lv })),
+            talents, wave, bestWave, waveTimer, isWaveActive: false,
+            skillCd, isOverclocked, overclockTimer, quest, achievements, totalKills, maxCombo
+        }));
+    } catch (e) { /* ignore */ }
+}
+
+function loadGame(data) {
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return;
+    const num = (v, f) => Number.isFinite(Number(v)) ? Number(v) : f;
+    const arr = v => Array.isArray(v) ? v.filter(o => o && typeof o === 'object').slice(0, 2000) : [];
+
+    money = Math.max(0, num(data.money, money));
+    darkMatter = Math.max(0, num(data.darkMatter, darkMatter));
+    minerLevel = Math.max(0, Math.floor(num(data.minerLevel, minerLevel)));
+    capacity = Math.max(1, Math.floor(num(data.capacity, capacity)));
+    techTier = Math.min(5, Math.max(1, Math.floor(num(data.techTier, techTier))));
+    playerDamageLevel = Math.max(0, Math.floor(num(data.playerDamageLevel, playerDamageLevel)));
+    turretDamageLevel = Math.max(0, Math.floor(num(data.turretDamageLevel, turretDamageLevel)));
+    if (data.player && typeof data.player === 'object') {
+        if (Number.isFinite(Number(data.player.x))) p.x = Number(data.player.x);
+        if (Number.isFinite(Number(data.player.y))) p.y = Number(data.player.y);
+    }
+    p.tx = p.x; p.ty = p.y;
+
+    bots = arr(data.bots).map(b => ({
+        x: num(b.x, 120), y: num(b.y, H / 2), bag: [], speed: 4.5,
+        phase: Math.random() * Math.PI * 2
+    }));
+    turrets = arr(data.turrets)
+        .filter(t => TURRET_DEFS[t.type])
+        .map(t => ({
+            x: num(t.x, 300), y: num(t.y, 300), type: t.type,
+            lv: Math.max(1, Math.floor(num(t.lv, 1))),
+            cd: 0, angle: 0, flash: 0
+        }));
+
+    if (data.talents && typeof data.talents === 'object') {
+        Object.keys(talents).forEach(k => { talents[k] = Math.max(0, Math.floor(num(data.talents[k], talents[k]))); });
+    }
+    wave = Math.max(1, Math.floor(num(data.wave, wave)));
+    bestWave = Math.max(0, Math.floor(num(data.bestWave, bestWave)));
+    totalKills = Math.max(0, Math.floor(num(data.totalKills, totalKills)));
+    maxCombo = Math.max(0, Math.floor(num(data.maxCombo, maxCombo)));
+    waveTimer = Math.max(0, Math.floor(num(data.waveTimer, waveTimer)));
+    isWaveActive = false;
+    if (Array.isArray(data.skillCd) && data.skillCd.length >= 4) {
+        skillCd = data.skillCd.slice(0, 4).map(v => Math.max(0, num(v, 0)));
+    }
+    isOverclocked = data.isOverclocked === true;
+    overclockTimer = Math.max(0, Math.floor(num(data.overclockTimer, overclockTimer)));
+    if (data.quest && typeof data.quest === 'object') quest = { ...quest, ...data.quest };
+    if (data.achievements && typeof data.achievements === 'object') achievements = { ...data.achievements };
+}
+
+/* =========================================================
+   Firebase / 排行榜（保留原有整合）
+   ========================================================= */
+async function openTycoonLeaderboard() {
+    if (!await window.raingodRequireAuth('排行榜')) return;
+    document.getElementById('tycoon-leaderboard').style.display = 'flex';
+    await refreshTycoonLeaderboard();
+}
+function closeTycoonLeaderboard() {
+    document.getElementById('tycoon-leaderboard').style.display = 'none';
+}
+async function refreshTycoonLeaderboard() {
+    const status = document.getElementById('tycoon-leaderboard-status');
+    const list = document.getElementById('tycoon-leaderboard-list');
+    if (!await window.raingodRequireAuth('排行榜')) return;
+    const uid = window.raingodCurrentUser.uid;
+    status.textContent = '排行榜載入中…';
+    try {
+        const response = await fetch(`${TYCOON_LEADERBOARD_URL}.json`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        if (window.raingodCurrentUser?.uid !== uid) return;
+        const rows = await response.json() || {};
+        const entries = Object.entries(rows)
+            .filter(([, row]) => row && Number.isFinite(Number(row.wave)))
+            .sort((a, b) => Number(b[1].wave) - Number(a[1].wave) || Number(b[1].darkMatter || 0) - Number(a[1].darkMatter || 0))
+            .slice(0, 50);
+        list.replaceChildren();
+        entries.forEach(([entryUid, row], index) => {
+            const item = document.createElement('div');
+            item.className = 'tycoon-leaderboard-row';
+            const name = document.createElement('span');
+            name.textContent = `${index + 1}. ${row.name || '玩家'}${entryUid === uid ? '（你）' : ''}`;
+            const value = document.createElement('strong');
+            value.textContent = `第 ${Math.floor(Number(row.wave))} 波 · ${Math.floor(Number(row.darkMatter) || 0)} 暗物質`;
+            item.append(name, value);
+            list.appendChild(item);
+        });
+        status.textContent = entries.length ? `已載入 ${entries.length} 位玩家，依最高波數排序。` : '目前還沒有排行榜資料。';
+    } catch (error) {
+        console.error('載入雨神大亨排行榜失敗：', error);
+        status.textContent = '排行榜載入失敗，請稍後重試。';
+    }
+}
+async function uploadTycoonLeaderboardScore() {
+    const currentUser = window.raingodCurrentUser;
+    if (!currentUser) return;
+    const uid = currentUser.uid;
+    const scoreWave = Math.max(1, bestWave, wave);
+    const scoreDarkMatter = Math.floor(darkMatter);
+    const entryUrl = `${TYCOON_LEADERBOARD_URL}/${encodeURIComponent(uid)}.json`;
+    try {
+        const previousResponse = await fetch(entryUrl);
+        if (!previousResponse.ok) throw new Error(`HTTP ${previousResponse.status}`);
+        const previous = await previousResponse.json();
+        if (window.raingodCurrentUser?.uid !== uid) return;
+        if (previous && (Number(previous.wave) > scoreWave ||
+            (Number(previous.wave) === scoreWave && Number(previous.darkMatter) >= scoreDarkMatter))) return;
+        const response = await fetch(entryUrl, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: currentUser.displayName || (currentUser.email ? currentUser.email.split('@')[0] : '雨神玩家'),
+                wave: scoreWave,
+                darkMatter: scoreDarkMatter,
+                updatedAt: Date.now()
+            })
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    } catch (error) {
+        console.error('上傳雨神大亨排行榜失敗：', error);
+    }
+}
+async function initializeTycoon() {
+    await window.raingodFirebaseReady;
+    await window.raingodAuthReady;
+    await window.raingodBindStorage('raingod-tycoon', [SAVE_KEY], { [SAVE_KEY]: null }, data => {
+        loadGame(data[SAVE_KEY]);
+        storageReady = true;
+        saveGame();
+        if (window.raingodCurrentUser) uploadTycoonLeaderboardScore();
+    });
+    window.raingodOnAuthStateChanged(currentUser => {
+        const button = document.getElementById('tycoon-leaderboard-button');
+        button.textContent = currentUser ? '🏆 排行榜' : '🏆 登入後查看排行榜';
+        if (currentUser) uploadTycoonLeaderboardScore();
+        else {
+            closeTycoonLeaderboard();
+            document.getElementById('tycoon-leaderboard-list').replaceChildren();
+            document.getElementById('tycoon-leaderboard-status').textContent = '請登入帳號後查看。';
+        }
+    });
+    requestAnimationFrame(draw);
+}
+
+/* =========================================================
+   UI 建構
+   ========================================================= */
+function buildTurretListUI() {
+    const wrap = document.getElementById('turret-list');
+    wrap.replaceChildren();
+    TURRET_ORDER.forEach(id => {
+        const d = TURRET_DEFS[id];
+        const btn = document.createElement('button');
+        btn.className = 'btn';
+        btn.dataset.turret = id;
+        btn.innerHTML = `<span>${d.icon} ${d.name}<div class="desc">${d.desc}</div></span>
+                         <span style="color:${d.color}" data-cost="${id}">$${d.cost.toLocaleString()}</span>`;
+        btn.addEventListener('click', () => beginPlacement(id));
+        wrap.appendChild(btn);
+    });
+}
+
+function buildAchListUI() {
+    const wrap = document.getElementById('ach-list');
+    wrap.replaceChildren();
+    ACHIEVEMENTS.forEach(a => {
+        const row = document.createElement('div');
+        row.className = 'ach-row' + (achievements[a.id] ? ' done' : '');
+        row.dataset.ach = a.id;
+        row.innerHTML = `<span>${achievements[a.id] ? '✅' : '⬜'} ${a.name} · ${a.desc}</span><span>+${a.reward} DM</span>`;
+        wrap.appendChild(row);
+    });
+}
+
+function refreshAchUI() {
+    ACHIEVEMENTS.forEach(a => {
+        const row = document.querySelector(`.ach-row[data-ach="${a.id}"]`);
+        if (!row) return;
+        const done = !!achievements[a.id];
+        row.classList.toggle('done', done);
+        row.innerHTML = `<span>${done ? '✅' : '⬜'} ${a.name} · ${a.desc}</span><span>+${a.reward} DM</span>`;
+    });
+}
+
+function switchTab(tabId) {
+    document.querySelectorAll('.panel > div[id^="tab-"]').forEach(d => d.style.display = 'none');
+    const el = document.getElementById(tabId);
+    if (el) el.style.display = 'block';
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tabId));
+}
+
+function toggleTycoonShop(open) {
+    const ui = document.getElementById('ui');
+    const toggle = document.querySelector('.mobile-shop-toggle');
+    if (open === undefined) open = !ui.classList.contains('shop-open');
+    ui.classList.toggle('shop-open', open);
+    toggle.setAttribute('aria-expanded', String(open));
+}
+
+/* =========================================================
+   建築位置
+   ========================================================= */
+function getBuildings() {
+    const startX = 80, startY = 100;
+    const b = {
+        extractor: { x: startX, y: startY, w: 110, h: 70, color: '#ef4444', label: '採礦塔', kind: 'mine' },
+        smelter:   { x: startX, y: startY + 110, w: 110, h: 70, color: '#f59e0b', label: '鋼鐵廠', kind: 'smelt' },
+        hub:       { x: startX, y: H - 150, w: 140, h: 100, color: '#38bdf8', label: '總部基地', kind: 'hub' }
+    };
+    if (techTier >= 2) b.chipFab = { x: startX, y: startY + 220, w: 110, h: 70, color: '#3b82f6', label: '晶片廠', kind: 'chip' };
+    if (techTier >= 3) b.nukeFab = { x: startX, y: startY + 330, w: 110, h: 70, color: '#22c55e', label: '鈾能廠', kind: 'nuke' };
+    if (techTier >= 4) b.qFab    = { x: startX, y: startY + 440, w: 110, h: 70, color: '#a855f7', label: '量子合成', kind: 'quantum' };
+    if (techTier >= 5) b.antiFab = { x: startX, y: startY + 550, w: 110, h: 70, color: '#e11d48', label: '反物質所', kind: 'anti' };
+    return b;
+}
+
+/* =========================================================
+   工具函式
+   ========================================================= */
+const rnd = (a, b) => a + Math.random() * (b - a);
+const dist = (ax, ay, bx, by) => Math.hypot(ax - bx, ay - by);
+
+function triggerShake(d) { shakeTime = Math.max(shakeTime, d); }
+
+function addFloat(x, y, text, color, size) {
+    if (floatTexts.length > 90) floatTexts.shift();
+    floatTexts.push({ x, y, text, color: color || '#4ade80', alpha: 1, size: size || 14, vy: -0.9 });
+}
+
+function addParticles(x, y, color, count, speed) {
+    if (particles.length > 420) count = Math.min(count, 4);
+    const sp = speed || 8;
+    for (let i = 0; i < count; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const v = rnd(0.4, 1) * sp;
+        particles.push({
+            x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v,
+            size: rnd(1.5, 4.5), color, alpha: 1, decay: rnd(0.02, 0.05)
+        });
+    }
+}
+
+function addShock(x, y, color, r, maxR, life) {
+    shocks.push({ x, y, color, r: r || 4, maxR: maxR || 80, life: life || 1 });
+}
+
+function addBeam(x1, y1, x2, y2, color, width, life) {
+    beams.push({ x1, y1, x2, y2, color, width: width || 3, life: life || 12, maxLife: life || 12 });
+}
+
+function getTurretCost(type) {
+    const owned = turrets.filter(t => t.type === type).length;
+    return Math.floor(TURRET_DEFS[type].cost * Math.pow(1.32, owned));
+}
+
+/* =========================================================
+   塔的建造 / 升級 / 出售
+   ========================================================= */
+function beginPlacement(type) {
+    const cost = getTurretCost(type);
+    if (money < cost) {
+        addFloat(W / 2, H / 2, '金錢不足！', '#ef4444', 16);
+        return;
+    }
+    placingTurret = type;
+    selectedTurret = null;
+    updateInspector();
+}
+
+function cancelPlacement() { placingTurret = null; }
+
+function placeTurret(type, x, y) {
+    const cost = getTurretCost(type);
+    if (money < cost) { placingTurret = null; return; }
+    // 避免和已有塔重疊
+    if (turrets.some(t => dist(t.x, t.y, x, y) < 32)) {
+        addFloat(x, y, '位置重疊', '#ef4444');
+        return;
+    }
+    if (x < 200 && y < 620) { /* 允許 */ }
+    money -= cost;
+    turrets.push({ x, y, type, lv: 1, cd: 0, angle: 0, flash: 0 });
+    addParticles(x, y, TURRET_DEFS[type].color, 14, 9);
+    addShock(x, y, TURRET_DEFS[type].color, 6, 60, 1);
+    addFloat(x, y - 24, '建造完成！', TURRET_DEFS[type].color, 13);
+    placingTurret = null;
+    saveGame();
+}
+
+function upgradeCost(t) {
+    const base = TURRET_DEFS[t.type].cost;
+    return Math.floor(base * 0.6 * Math.pow(1.55, t.lv - 1));
+}
+
+function sellValue(t) {
+    const base = TURRET_DEFS[t.type].cost;
+    return Math.floor(base * 0.5 * (1 + (t.lv - 1) * 0.3));
+}
+
+function selectTurretAt(x, y) {
+    let found = null, bestD = 34;
+    turrets.forEach(t => {
+        const d = dist(t.x, t.y, x, y);
+        if (d < bestD) { bestD = d; found = t; }
+    });
+    selectedTurret = found;
+    updateInspector();
+}
+
+function updateInspector() {
+    const box = document.getElementById('turret-inspector');
+    if (!selectedTurret || !turrets.includes(selectedTurret)) {
+        box.style.display = 'none';
+        selectedTurret = null;
+        return;
+    }
+    const t = selectedTurret;
+    const d = TURRET_DEFS[t.type];
+    const upCost = upgradeCost(t);
+    const sellV = sellValue(t);
+    box.style.display = 'flex';
+    box.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <strong style="color:${d.color}">${d.icon} ${d.name} Lv.${t.lv}</strong>
+            <span style="font-size:9px;color:#7dd3fc">射程 ${Math.round(d.range * (1 + talents.rangeLv * 0.1) * (1 + (t.lv - 1) * 0.06))}</span>
+        </div>
+        <div class="row">
+            <button class="btn" onclick="doUpgradeSelected()" ${money < upCost ? 'disabled' : ''}>升級 $${upCost.toLocaleString()}</button>
+            <button class="btn" style="border-color:#f87171" onclick="doSellSelected()">出售 +$${sellV.toLocaleString()}</button>
+        </div>
+        <div class="row">
+            <button class="btn" style="justify-content:center" onclick="deselectTurret()">取消選取</button>
+        </div>`;
+}
+
+function doUpgradeSelected() {
+    const t = selectedTurret;
+    if (!t) return;
+    const c = upgradeCost(t);
+    if (money < c) return;
+    money -= c;
+    t.lv++;
+    addParticles(t.x, t.y, TURRET_DEFS[t.type].color, 10, 7);
+    addFloat(t.x, t.y - 24, `Lv.${t.lv}`, TURRET_DEFS[t.type].color);
+    updateInspector();
+    saveGame();
+}
+
+function doSellSelected() {
+    const t = selectedTurret;
+    if (!t) return;
+    const v = sellValue(t);
+    money += v;
+    addFloat(t.x, t.y - 20, `+$${v.toLocaleString()}`, '#4ade80');
+    addParticles(t.x, t.y, '#94a3b8', 12, 6);
+    turrets = turrets.filter(x => x !== t);
+    selectedTurret = null;
+    updateInspector();
+    saveGame();
+}
+
+function deselectTurret() {
+    selectedTurret = null;
+    updateInspector();
+}
+
+/* =========================================================
+   技能
+   ========================================================= */
+function useSkill(n) {
+    if (skillCd[n - 1] > 0) return;
+    if (n === 1) {
+        isOverclocked = true; overclockTimer = 600; skillCd[0] = 1800;
+        addFloat(p.x, p.y - 30, '⚡ 系統超頻！', '#f59e0b', 16);
+        addShock(p.x, p.y, '#f59e0b', 8, 120, 1);
+    } else if (n === 2) {
+        skillCd[1] = 2400;
+        triggerShake(26);
+        addShock(W / 2, H / 2, '#e11d48', 10, Math.max(W, H), 1.6);
+        addFloat(W / 2, H / 2 - 60, '💥 軌道離子砲全螢幕打擊！', '#e11d48', 18);
+        enemies.slice().forEach(e => {
+            damageEnemy(e, 320 + wave * 70, '#e11d48', false);
+            addParticles(e.x, e.y, '#e11d48', 10, 10);
+        });
+    } else if (n === 3) {
+        freezeTimer = 300; skillCd[2] = 2100;
+        addFloat(W / 2, H / 2, '❄️ 時間凍結 5 秒！', '#7dd3fc', 17);
+        addShock(W / 2, H / 2, '#7dd3fc', 10, Math.max(W, H) * 0.8, 1.4);
+    } else if (n === 4) {
+        singularityTimer = 240; skillCd[3] = 2700;
+        addFloat(W / 2, H / 2, '🌀 引力奇點展開！', '#c084fc', 17);
+        addShock(W / 2, H / 2, '#c084fc', 10, Math.max(W, H) * 0.7, 1.4);
+    }
+}
+
+/* =========================================================
+   波次
+   ========================================================= */
+function pickWaveModifier() {
+    if (wave <= 3) return WAVE_MODS[0];
+    return WAVE_MODS[Math.floor(Math.random() * WAVE_MODS.length)];
+}
+
+function spawnWave() {
+    isWaveActive = true;
+    bestWave = Math.max(bestWave, wave);
+    waveMod = pickWaveModifier();
+
+    const isBossWave = (wave % 5 === 0);
+    let baseCount = 8 + wave * 4;
+    let count = Math.round(baseCount * (waveMod.countMul || 1));
+    count = Math.min(count, 90);
+
+    if (waveMod.name !== '常規波次') {
+        addFloat(W / 2, 130, `${waveMod.icon} ${waveMod.name}：${waveMod.desc}`, '#fbbf24', 15);
+    }
+
+    const hpMul = waveMod.hpMul || 1;
+    const spdMul = waveMod.spdMul || 1;
+
+    for (let i = 0; i < count; i++) {
+        setTimeout(() => {
+            if (!isWaveActive) return;
+            const r = Math.random();
+            let type = 'crawler';
+            if (r < 0.16) type = 'runner';
+            else if (r < 0.34) type = 'tank';
+            else if (r < 0.48) type = 'bomber';
+            else if (r < 0.62) type = 'splitter';
+            else if (r < 0.72) type = 'healer';
+            else if (r < 0.82) type = 'shield';
+            else if (r < 0.92) type = 'phantom';
+
+            if (waveMod.elite && r > 0.72) type = Math.random() < 0.5 ? 'shield' : 'tank';
+            if (isBossWave && i === count - 1) type = 'boss';
+
+            spawnEnemy(type, hpMul, spdMul);
+        }, i * 380);
+    }
+    saveGame();
+    uploadTycoonLeaderboardScore();
+}
+
+function spawnEnemy(type, hpMul, spdMul) {
+    const d = ENEMY_DEFS[type];
+    const scale = 1 + (wave - 1) * 0.22;
+    const hp = (d.hp + wave * 42) * scale * (hpMul || 1);
+    const e = {
+        type, x: W + 50 + Math.random() * 120,
+        y: rnd(90, H - 90),
+        hp, maxHp: hp,
+        shield: d.shield ? d.shield * scale : 0,
+        maxShield: d.shield ? d.shield * scale : 0,
+        speed: d.spd * (spdMul || 1) * (1 + Math.min(wave * 0.012, 0.5)),
+        baseSpeed: d.spd * (spdMul || 1) * (1 + Math.min(wave * 0.012, 0.5)),
+        reward: (d.reward + wave * 32),
+        seed: Math.random() * Math.PI * 2,
+        hitFlash: 0, slowT: 0, slowFactor: 1,
+        poison: 0, poisonDmg: 0,
+        dead: false, wave: 0
+    };
+    enemies.push(e);
+}
+
+/* =========================================================
+   傷害 / 擊殺
+   ========================================================= */
+function damageEnemy(e, dmg, color, crit) {
+    if (!e || e.dead) return;
+    let remain = dmg;
+    if (e.shield > 0) {
+        const absorbed = Math.min(e.shield, remain);
+        e.shield -= absorbed;
+        remain -= absorbed;
+        if (absorbed > 0) addParticles(e.x, e.y, '#38bdf8', 2, 5);
+    }
+    e.hp -= remain;
+    e.hitFlash = 4;
+    if (dmg >= 25 || crit) {
+        addFloat(e.x + rnd(-6, 6), e.y - 18, Math.round(dmg).toString(), crit ? '#fbbf24' : (color || '#fff'), crit ? 15 : 11);
+    }
+    if (e.hp <= 0) killEnemy(e);
+}
+
+function killEnemy(e) {
+    if (e.dead) return;
+    e.dead = true;
+
+    combo++; comboTimer = 200;
+    maxCombo = Math.max(maxCombo, combo);
+    totalKills++;
+
+    const comboMul = 1 + Math.min(combo, 60) * 0.015;
+    const moneyMul = (1 + darkMatter * 0.08) * (1 + talents.moneyLv * 0.25) * comboMul;
+    const gain = e.reward * moneyMul;
+    money += gain;
+
+    addFloat(e.x, e.y - 10, `+$${Math.floor(gain).toLocaleString()}`, '#4ade80', 12);
+    addParticles(e.x, e.y, ENEMY_DEFS[e.type].color, e.type === 'boss' ? 34 : 10, e.type === 'boss' ? 14 : 8);
+    if (e.type === 'boss') {
+        addShock(e.x, e.y, '#e11d48', 8, 160, 1.3);
+        triggerShake(20);
+    }
+
+    // 分裂
+    if (ENEMY_DEFS[e.type].split) {
+        for (let i = 0; i < 2; i++) {
+            const c = {
+                type: 'crawler', x: e.x + rnd(-14, 14), y: e.y + rnd(-14, 14),
+                hp: e.maxHp * 0.22, maxHp: e.maxHp * 0.22, shield: 0, maxShield: 0,
+                speed: e.baseSpeed * 1.3, baseSpeed: e.baseSpeed * 1.3,
+                reward: e.reward * 0.28, seed: Math.random() * 6.28,
+                hitFlash: 0, slowT: 0, slowFactor: 1, poison: 0, poisonDmg: 0, dead: false, wave: 0
+            };
+            enemies.push(c);
+        }
+    }
+
+    updateQuests('kill', 1);
+}
+
+/* =========================================================
+   任務 / 成就
+   ========================================================= */
+function updateQuests(type, amount) {
+    if (quest.type === type) {
+        quest.current += amount;
+        if (quest.current >= quest.target) {
+            money += quest.reward;
+            addFloat(W / 2, 150, `🎉 完成任務！+$${quest.reward}`, '#f59e0b', 16);
+            const targets = [30, 50, 80, 120];
+            const t = targets[Math.floor(Math.random() * targets.length)];
+            quest = { type: 'kill', target: t, current: 0, reward: t * 140, desc: `擊殺 ${t} 隻異形蟲` };
+        }
+    }
+}
+
+function checkAchievements() {
+    const snapshot = {
+        bestWave, totalKills, maxCombo, money,
+        turretCount: turrets.length
+    };
+    let changed = false;
+    ACHIEVEMENTS.forEach(a => {
+        if (achievements[a.id]) return;
+        if (a.check(snapshot)) {
+            achievements[a.id] = true;
+            darkMatter += a.reward;
+            changed = true;
+            addFloat(W / 2, 180, `🏆 成就達成：${a.name} +${a.reward} DM`, '#fbbf24', 15);
+            addParticles(W / 2, 180, '#fbbf24', 20, 10);
+        }
+    });
+    if (changed) { refreshAchUI(); saveGame(); }
+}
+
+/* =========================================================
+   購買 / 升級
+   ========================================================= */
+function buyBot() {
+    const cost = Math.floor(500 * Math.pow(1.3, bots.length));
+    if (money < cost) return;
+    money -= cost;
+    bots.push({
+        x: 120, y: H / 2, bag: [], speed: 4.5,
+        phase: Math.random() * Math.PI * 2
+    });
+    addParticles(120, H / 2, '#38bdf8', 10);
+    saveGame();
+}
+
+function upgrade(type) {
+    if (type === 'miner') {
+        const cost = Math.floor(1000 * Math.pow(1.5, minerLevel));
+        if (money < cost) return;
+        money -= cost; minerLevel++;
+    } else if (type === 'capacity') {
+        const cost = Math.floor(1500 * (capacity / 2));
+        if (money < cost) return;
+        money -= cost; capacity += 2;
+    } else if (type === 'playerDamage') {
+        const cost = Math.floor(1000 * Math.pow(1.6, playerDamageLevel));
+        if (money < cost) return;
+        money -= cost; playerDamageLevel++;
+    } else if (type === 'turretDamage') {
+        const cost = Math.floor(1500 * Math.pow(1.6, turretDamageLevel));
+        if (money < cost) return;
+        money -= cost; turretDamageLevel++;
+    }
+    saveGame();
+}
+
+function buyTalent(type) {
+    const key = type + 'Lv';
+    if (!(key in talents)) return;
+    const cost = (talents[key] + 1) * 5;
+    if (darkMatter < cost) return;
+    darkMatter -= cost;
+    talents[key]++;
+    addParticles(p.x, p.y, '#c084fc', 12);
+    saveGame();
+}
+
+function unlockTier(tier) {
+    const costs = { 2: 2500, 3: 25000, 4: 200000, 5: 2000000 };
+    if (techTier === tier - 1 && money >= costs[tier]) {
+        money -= costs[tier];
+        techTier = tier;
+        addFloat(W / 2, 150, `🔓 工廠升級至 Tier ${tier}`, '#38bdf8', 15);
+        saveGame();
+    }
+}
+
+function triggerRebirth() {
+    const earnedDM = Math.floor(money / 100000);
+    if (earnedDM <= 0 && money < 100000) {
+        addFloat(W / 2, H / 2, '至少需要 $100,000 才能轉生', '#ef4444', 15);
+        return;
+    }
+    darkMatter += Math.max(1, earnedDM);
+    money = 2000; minerLevel = 0; capacity = 4; techTier = 1;
+    playerDamageLevel = 0; turretDamageLevel = 0;
+    p.bag = []; bots = []; items = []; turrets = []; enemies = [];
+    bullets = []; beams = []; particles = []; shocks = []; selectedTurret = null;
+    wave = 1; waveTimer = 20 * 60; isWaveActive = false; combo = 0;
+    updateInspector();
+    addFloat(W / 2, H / 2, `🌌 量子轉生成功！+${Math.max(1, earnedDM)} DM`, '#c084fc', 20);
+    addShock(W / 2, H / 2, '#c084fc', 10, Math.max(W, H), 1.6);
+    triggerShake(30);
+    saveGame();
+}
+
+function triggerNextWave() {
+    if (!isWaveActive) { waveTimer = 0; saveGame(); }
+}
+
+/* =========================================================
+   輸入
+   ========================================================= */
+window.addEventListener('pointermove', e => {
+    mouseX = e.clientX; mouseY = e.clientY;
+    if (e.pointerType !== 'touch') { p.tx = e.clientX; p.ty = e.clientY; }
+});
+
+cvs.addEventListener('pointerdown', e => {
+    mouseX = e.clientX; mouseY = e.clientY;
+
+    if (placingTurret) {
+        placeTurret(placingTurret, e.clientX, e.clientY);
+        return;
+    }
+    // 嘗試選取塔
+    selectTurretAt(e.clientX, e.clientY);
+    if (!selectedTurret && e.pointerType === 'touch') { p.tx = e.clientX; p.ty = e.clientY; }
+});
+
+cvs.addEventListener('pointermove', e => {
+    if (e.pointerType === 'touch' && !placingTurret) { p.tx = e.clientX; p.ty = e.clientY; }
+});
+
+window.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { placingTurret = null; deselectTurret(); }
+    if (e.key >= '1' && e.key <= '4') useSkill(parseInt(e.key, 10));
+});
+
+document.querySelectorAll('.skill-btn').forEach(btn => {
+    btn.addEventListener('click', () => useSkill(parseInt(btn.dataset.skill, 10)));
+});
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+});
+
+document.getElementById('tab-prod').addEventListener('click', e => {
+    const b = e.target.closest('[data-unlock]');
+    if (b) unlockTier(parseInt(b.dataset.unlock, 10));
+});
+
+document.getElementById('tab-tech').addEventListener('click', e => {
+    const b = e.target.closest('[data-talent]');
+    if (b) buyTalent(b.dataset.talent);
+});
+
+/* =========================================================
+   更新邏輯
+   ========================================================= */
+function update() {
+    frame++;
+    const b = getBuildings();
+
+    // 玩家移動
+    p.x += (p.tx - p.x) * 0.18;
+    p.y += (p.ty - p.y) * 0.18;
+    p.atkRange = 220 * (1 + talents.rangeLv * 0.1);
+
+    // 冷卻
+    for (let i = 0; i < skillCd.length; i++) if (skillCd[i] > 0) skillCd[i]--;
+    if (overclockTimer > 0) { overclockTimer--; if (overclockTimer === 0) isOverclocked = false; }
+    if (freezeTimer > 0) freezeTimer--;
+    if (singularityTimer > 0) singularityTimer--;
+    if (comboTimer > 0) { comboTimer--; if (comboTimer === 0) combo = 0; }
+
+    // 波次
+    if (!isWaveActive) {
+        waveTimer--;
+        if (waveTimer <= 0) spawnWave();
+    } else if (enemies.length === 0) {
+        isWaveActive = false;
+        wave++;
+        waveTimer = 20 * 60;
+        const bonus = 1500 * wave * (1 + talents.moneyLv * 0.25);
+        money += bonus;
+        darkMatter += 1;
+        addFloat(W / 2, H / 2, `🎉 第 ${wave - 1} 波完成！+$${Math.floor(bonus).toLocaleString()}`, '#f59e0b', 18);
+        addShock(W / 2, H / 2, '#f59e0b', 10, 220, 1.4);
+        saveGame();
+        uploadTycoonLeaderboardScore();
+    }
+
+    // 產礦
+    const spawnInterval = isOverclocked ? 4 : Math.max(6, 35 - minerLevel * 4);
+    if (frame % spawnInterval === 0 && items.length < 50) {
+        items.push({
+            x: b.extractor.x + b.extractor.w + 15,
+            y: b.extractor.y + b.extractor.h / 2 + rnd(-18, 18),
+            type: 'RAW', bob: Math.random() * 6.28
+        });
+    }
+
+    // 機兵 AI
+    bots.forEach(bot => {
+        const speed = bot.speed * (1 + talents.spdLv * 0.15) * (isOverclocked ? 1.8 : 1);
+        let target;
+        if (bot.bag.length === 0) {
+            const it = items[0];
+            target = it ? { x: it.x, y: it.y } : { x: b.extractor.x + b.extractor.w + 15, y: b.extractor.y + b.extractor.h / 2 };
+        } else {
+            const top = bot.bag[bot.bag.length - 1];
+            if (top.type === 'RAW') target = center(b.smelter);
+            else if (top.type === 'STEEL' && b.chipFab) target = center(b.chipFab);
+            else if (top.type === 'CHIP' && b.nukeFab) target = center(b.nukeFab);
+            else if (top.type === 'BATTERY' && b.qFab) target = center(b.qFab);
+            else if (top.type === 'CORE' && b.antiFab) target = center(b.antiFab);
+            else target = center(b.hub);
+        }
+        const dx = target.x - bot.x, dy = target.y - bot.y, d = Math.hypot(dx, dy);
+        if (d > 5) { bot.x += (dx / d) * speed; bot.y += (dy / d) * speed; }
+        interact(bot, b);
+    });
+
+    interact(p, b);
+
+    // 玩家自動攻擊
+    p.cooldown--;
+    const dmgMult = (1 + darkMatter * 0.08) * (1 + talents.dmgLv * 0.2);
+    const critChance = talents.critLv * 0.05;
+    const basePlayerDmg = 30 * dmgMult * (1 + playerDamageLevel * 0.25);
+
+    if (p.cooldown <= 0 && enemies.length > 0) {
+        let target = null, bestD = p.atkRange;
+        enemies.forEach(e => { const d = dist(p.x, p.y, e.x, e.y); if (d < bestD) { bestD = d; target = e; } });
+        if (target) {
+            p.angle = Math.atan2(target.y - p.y, target.x - p.x);
+            const crit = Math.random() < critChance;
+            bullets.push({
+                x: p.x, y: p.y, target, dmg: basePlayerDmg * (crit ? 2 : 1),
+                speed: 16, color: crit ? '#fbbf24' : '#38bdf8', size: crit ? 6 : 4,
+                crit, kind: 'player'
             });
+            p.cooldown = isOverclocked ? 4 : 9;
+            addParticles(p.x + Math.cos(p.angle) * 16, p.y + Math.sin(p.angle) * 16, '#7dd3fc', 2, 4);
+        }
+    }
 
-            // ===== 名稱 =====
-            nameForm.addEventListener('submit', function(e) {
-                e.preventDefault();
-                var name = displayNameInput.value.trim();
-                if (!name) {
-                    setStatus('name-status', '請輸入顯示名稱。', 'error');
-                    return;
-                }
-                setFormDisabled(nameForm, true);
-                setStatus('name-status', '正在儲存…');
-                currentUser.updateProfile({ displayName: name }).then(function() {
-                    return currentUser.reload();
-                }).then(function() {
-                    var navAvatar = document.getElementById('user-avatar');
-                    if (navAvatar) navAvatar.title = '個人檔案：' + name;
-                    setStatus('name-status', '顯示名稱已更新。', 'ok');
-                }).catch(function(err) {
-                    setStatus('name-status', errorMessage(err), 'error');
-                }).finally(function() {
-                    setFormDisabled(nameForm, false);
-                });
-            });
+    // 防衛塔
+    turrets.forEach(t => {
+        if (t.cd > 0) t.cd--;
+        if (t.flash > 0) t.flash--;
+        const def = TURRET_DEFS[t.type];
+        const range = def.range * (1 + talents.rangeLv * 0.1) * (1 + (t.lv - 1) * 0.06);
+        const dmg = def.dmg * dmgMult * (1 + turretDamageLevel * 0.2) * Math.pow(1.22, t.lv - 1);
 
-            // ===== 密碼 =====
-            passwordForm.addEventListener('submit', function(e) {
-                e.preventDefault();
-                if (!currentUser || !currentUser.email) return;
-                var cur = document.getElementById('current-password').value;
-                var nw = document.getElementById('new-password').value;
-                var cf = document.getElementById('confirm-password').value;
-                if (nw.length < 6) {
-                    setStatus('password-status', '新密碼至少需要 6 個字元。', 'error');
-                    return;
-                }
-                if (nw !== cf) {
-                    setStatus('password-status', '兩次輸入的新密碼不一致。', 'error');
-                    return;
-                }
-                setFormDisabled(passwordForm, true);
-                setStatus('password-status', '正在變更密碼…');
-                var cred = window.firebase.auth.EmailAuthProvider.credential(currentUser.email, cur);
-                currentUser.reauthenticateWithCredential(cred).then(function() {
-                    return currentUser.updatePassword(nw);
-                }).then(function() {
-                    passwordForm.reset();
-                    setStatus('password-status', '密碼已成功變更。', 'ok');
-                }).catch(function(err) {
-                    setStatus('password-status', errorMessage(err), 'error');
-                }).finally(function() {
-                    setFormDisabled(passwordForm, false);
-                });
-            });
-
-            // ===== 登出 =====
-            signOutButton.addEventListener('click', function() {
-                signOutButton.disabled = true;
-                window.firebase.auth().signOut().then(function() {
-                    if (typeof window.raingodClearLocalAccountData === 'function') {
-                        window.raingodClearLocalAccountData();
-                    }
-                    window.location.href = 'index.html';
-                }).catch(function(err) {
-                    signOutButton.disabled = false;
-                    alert('登出失敗：' + err.message);
-                });
-            });
-
-            // ===== 好友搜尋 =====
-            friendSearchBtn.addEventListener('click', function() {
-                var keyword = friendSearchInput.value.trim().toLowerCase();
-                searchResults.innerHTML = '';
-                if (!keyword) {
-                    searchResults.innerHTML = '<li class="profile-help">請輸入帳號關鍵字。</li>';
-                    return;
-                }
-                if (keyword === currentUsername) {
-                    searchResults.innerHTML = '<li class="profile-help">不能加入自己為好友。</li>';
-                    return;
-                }
-                fetchUserProfile(keyword, function(profile) {
-                    if (!profile) {
-                        searchResults.innerHTML = '<li class="profile-help">找不到此帳號。</li>';
-                        return;
-                    }
-                    db().ref('users/' + currentUsername + '/friends/' + profile.uid).once('value').then(function(friendSnap) {
-                        return db().ref('users/' + keyword + '/friend_requests/' + currentUsername).once('value').then(function(reqSnap) {
-                            var isFriend = friendSnap.exists();
-                            var requestSent = reqSnap.exists();
-                            var name = (profile.profile && profile.profile.displayName) || keyword;
-                            var avatar = (profile.profile && profile.profile.avatar) || fallbackAvatar;
-                            var li = document.createElement('li');
-                            li.className = 'friend-item';
-                            var actionHtml = isFriend ? '<span class="profile-help">已是好友</span>' :
-                                requestSent ? '<span class="profile-help">已送出申請</span>' :
-                                '<button class="mini-btn primary" data-uid="' + escapeHtml(profile.uid) + '" data-name="' + escapeHtml(name) + '" data-username="' + escapeHtml(keyword) + '">加好友</button>';
-                            li.innerHTML =
-                                '<img class="friend-avatar" src="' + escapeHtml(avatar) + '" alt="">' +
-                                '<div class="friend-name">' + escapeHtml(name) + ' <small style="color:var(--text-gray);font-weight:400;">@' + escapeHtml(keyword) + '</small></div>' +
-                                '<div class="friend-actions">' + actionHtml + '</div>';
-                            searchResults.appendChild(li);
-                            var addBtn = li.querySelector('button[data-uid]');
-                            if (addBtn) {
-                                addBtn.addEventListener('click', function() {
-                                    addBtn.disabled = true;
-                                    addBtn.textContent = '送出中…';
-                                    sendFriendRequest(keyword, profile.uid, name).then(function() {
-                                        addBtn.textContent = '已送出';
-                                    }).catch(function(e) {
-                                        console.error(e);
-                                        addBtn.disabled = false;
-                                        addBtn.textContent = '加好友';
-                                        alert('送出好友申請失敗：' + errorMessage(e));
-                                    });
-                                });
-                            }
-                        });
-                    }).catch(function(e) {
-                        console.error(e);
-                        searchResults.innerHTML = '<li class="profile-help">查詢好友狀態失敗。</li>';
-                    });
-                });
-            });
-
-            function sendFriendRequest(toUsername, toUid, toName) {
-                var myName = currentUser.displayName || currentUsername;
-                var myAvatar = currentUser.photoURL || avatarImg.src || fallbackAvatar;
-                return db().ref('users/' + toUsername + '/friend_requests/' + currentUsername).set({
-                    fromUid: currentUid,
-                    fromName: myName,
-                    fromUsername: currentUsername,
-                    fromAvatar: myAvatar,
-                    ts: window.firebase.database.ServerValue.TIMESTAMP
-                });
-            }
-
-            // ===== 好友申請監聽 =====
-            function listenFriendRequests() {
-                db().ref('users/' + currentUsername + '/friend_requests').on('value', function(snap) {
-                    var val = snap.val() || {};
-                    var entries = Object.keys(val).map(function(k) { return [k, val[k]]; });
-                    requestList.innerHTML = '';
-                    requestsCount = entries.length;
-                    updateTabBadges();
-                    if (!entries.length) {
-                        requestList.innerHTML = '<li class="profile-help" id="request-empty">目前沒有待處理的好友申請。</li>';
-                        return;
-                    }
-                    entries.forEach(function(pair) {
-                        var fromUsername = pair[0];
-                        var req = pair[1];
-                        var li = document.createElement('li');
-                        li.className = 'request-item';
-                        li.innerHTML =
-                            '<img class="friend-avatar" src="' + escapeHtml(req.fromAvatar || fallbackAvatar) + '" alt="">' +
-                            '<div class="friend-name">' + escapeHtml(req.fromName || fromUsername) + '</div>' +
-                            '<div class="friend-actions">' +
-                                '<button class="mini-btn success" data-accept="' + escapeHtml(fromUsername) + '" data-uid="' + escapeHtml(req.fromUid) + '" data-name="' + escapeHtml(req.fromName || fromUsername) + '" data-avatar="' + escapeHtml(req.fromAvatar || fallbackAvatar) + '">接受</button>' +
-                                '<button class="mini-btn danger" data-reject="' + escapeHtml(fromUsername) + '">拒絕</button>' +
-                            '</div>';
-                        requestList.appendChild(li);
-                    });
-                    var acceptBtns = requestList.querySelectorAll('[data-accept]');
-                    for (var i = 0; i < acceptBtns.length; i++) {
-                        (function(btn) {
-                            btn.addEventListener('click', function() {
-                                btn.disabled = true;
-                                acceptFriendRequest(btn.dataset.accept, btn.dataset.uid, btn.dataset.name, btn.dataset.avatar).catch(function(e) {
-                                    console.error(e);
-                                    alert('接受好友申請失敗：' + errorMessage(e));
-                                    btn.disabled = false;
-                                });
-                            });
-                        })(acceptBtns[i]);
-                    }
-                    var rejectBtns = requestList.querySelectorAll('[data-reject]');
-                    for (var j = 0; j < rejectBtns.length; j++) {
-                        (function(btn) {
-                            btn.addEventListener('click', function() {
-                                btn.disabled = true;
-                                rejectFriendRequest(btn.dataset.reject).catch(function(e) {
-                                    console.error(e);
-                                    alert('拒絕好友申請失敗：' + errorMessage(e));
-                                    btn.disabled = false;
-                                });
-                            });
-                        })(rejectBtns[j]);
-                    }
-                });
-            }
-
-            function acceptFriendRequest(fromUsername, fromUid, fromName, fromAvatar) {
-                var myName = currentUser.displayName || currentUsername;
-                var myAvatar = currentUser.photoURL || avatarImg.src || fallbackAvatar;
-                var updates = {};
-                updates['users/' + currentUsername + '/friends/' + fromUid] = {
-                    name: fromName, avatar: fromAvatar, username: fromUsername,
-                    since: window.firebase.database.ServerValue.TIMESTAMP
-                };
-                updates['users/' + fromUsername + '/friends/' + currentUid] = {
-                    name: myName, avatar: myAvatar, username: currentUsername,
-                    since: window.firebase.database.ServerValue.TIMESTAMP
-                };
-                updates['users/' + currentUsername + '/friend_requests/' + fromUsername] = null;
-                return db().ref().update(updates);
-            }
-
-            function rejectFriendRequest(fromUsername) {
-                return db().ref('users/' + currentUsername + '/friend_requests/' + fromUsername).remove();
-            }
-
-            // ===== 好友列表 =====
-            function listenFriends() {
-                db().ref('users/' + currentUsername + '/friends').on('value', function(snap) {
-                    friendsCache = snap.val() || {};
-                    refreshFriendsUI();
-                    listenAllUnread();
-                });
-            }
-
-            function refreshFriendsUI() {
-                friendList.innerHTML = '';
-                var entries = Object.keys(friendsCache).map(function(k) { return [k, friendsCache[k]]; });
-                if (!entries.length) {
-                    friendList.innerHTML = '<li class="profile-help" id="friend-empty">尚未加入任何好友。</li>';
-                } else {
-                    entries.forEach(function(pair) {
-                        var uid = pair[0];
-                        var f = pair[1];
-                        var li = document.createElement('li');
-                        li.className = 'friend-item' + (uid === activeFriendUid ? ' active' : '');
-                        li.innerHTML =
-                            '<img class="friend-avatar" src="' + escapeHtml(f.avatar || fallbackAvatar) + '" alt="">' +
-                            '<div class="friend-name">' + escapeHtml(f.name || f.username || '好友') + '</div>' +
-                            '<span class="friend-unread" data-uid="' + escapeHtml(uid) + '"></span>' +
-                            '<div class="friend-actions">' +
-                                '<button class="mini-btn primary" data-chat-uid="' + escapeHtml(uid) + '" data-chat-name="' + escapeHtml(f.name || f.username || '好友') + '" data-chat-avatar="' + escapeHtml(f.avatar || fallbackAvatar) + '">私訊</button>' +
-                            '</div>';
-                        friendList.appendChild(li);
-                    });
-                    var chatBtns = friendList.querySelectorAll('[data-chat-uid]');
-                    for (var i = 0; i < chatBtns.length; i++) {
-                        (function(btn) {
-                            btn.addEventListener('click', function() {
-                                openPrivateChat(btn.dataset.chatUid, btn.dataset.chatName, btn.dataset.chatAvatar);
-                                switchTab('chat');
-                            });
-                        })(chatBtns[i]);
-                    }
-                }
-
-                // 聊天室側邊欄（桌面）
-                chatSidebarFriends.innerHTML = '';
-                if (!entries.length) {
-                    chatSidebarFriends.innerHTML = '<li class="profile-help" style="padding:12px;">尚無好友</li>';
-                } else {
-                    entries.forEach(function(pair) {
-                        var uid = pair[0];
-                        var f = pair[1];
-                        var li = document.createElement('li');
-                        li.className = 'friend-item' + (uid === activeFriendUid ? ' active' : '');
-                        li.style.cursor = 'pointer';
-                        li.innerHTML =
-                            '<img class="friend-avatar" src="' + escapeHtml(f.avatar || fallbackAvatar) + '" alt="">' +
-                            '<div class="friend-name">' + escapeHtml(f.name || f.username || '好友') + '</div>' +
-                            '<span class="friend-unread" data-uid="' + escapeHtml(uid) + '"></span>';
-                        li.addEventListener('click', (function(u, ff) {
-                            return function() {
-                                openPrivateChat(u, ff.name || ff.username || '好友', ff.avatar || fallbackAvatar);
-                            };
-                        })(uid, f));
-                        chatSidebarFriends.appendChild(li);
-                    });
-                }
-
-                // 手機版好友選擇器
-                refreshMobileSelect(entries);
-                updateUnreadBadges();
-            }
-
-            function refreshMobileSelect(entries) {
-                var currentVal = activeFriendUid;
-                chatMobileSelect.innerHTML = '<option value="">選擇好友開始聊天…</option>';
-                entries.forEach(function(pair) {
-                    var uid = pair[0];
-                    var f = pair[1];
-                    var opt = document.createElement('option');
-                    opt.value = uid;
-                    opt.textContent = (f.name || f.username || '好友') + (unreadCache[uid] ? ' (' + unreadCache[uid] + ')' : '');
-                    if (uid === currentVal) opt.selected = true;
-                    chatMobileSelect.appendChild(opt);
-                });
-            }
-
-            chatMobileSelect.addEventListener('change', function() {
-                var uid = chatMobileSelect.value;
-                if (!uid) return;
-                var f = friendsCache[uid];
-                if (!f) return;
-                openPrivateChat(uid, f.name || f.username || '好友', f.avatar || fallbackAvatar);
-            });
-
-            // ===== 未讀 =====
-            function listenAllUnread() {
-                for (var i = 0; i < friendUnreadListeners.length; i++) friendUnreadListeners[i]();
-                friendUnreadListeners = [];
-                unreadCache = {};
-
-                Object.keys(friendsCache).forEach(function(friendUid) {
-                    var cid = chatIdFor(currentUid, friendUid);
-                    var msgsRef = db().ref('private_chats/' + cid + '/msgs');
-                    var readRef = db().ref('private_chats/' + cid + '/read/' + currentUid);
-                    var handler = function(snap) {
-                        var msgs = snap.val() || {};
-                        readRef.once('value').then(function(readSnap) {
-                            var lastRead = readSnap.val() || 0;
-                            var unread = 0;
-                            Object.keys(msgs).forEach(function(id) {
-                                var m = msgs[id];
-                                if (m.from !== currentUid && (m.ts || 0) > lastRead) unread++;
-                            });
-                            unreadCache[friendUid] = unread;
-                            updateUnreadBadges();
-                            refreshMobileSelect(Object.keys(friendsCache).map(function(k) { return [k, friendsCache[k]]; }));
-                        }).catch(function() {});
-                    };
-                    msgsRef.on('value', handler);
-                    friendUnreadListeners.push((function(ref) {
-                        return function() { ref.off('value', handler); };
-                    })(msgsRef));
-                });
-            }
-
-            function updateUnreadBadges() {
-                var unreadEls = document.querySelectorAll('.friend-unread');
-                for (var i = 0; i < unreadEls.length; i++) {
-                    var uid = unreadEls[i].dataset.uid;
-                    var count = unreadCache[uid] || 0;
-                    unreadEls[i].textContent = count > 99 ? '99+' : String(count);
-                    unreadEls[i].classList.toggle('show', count > 0);
-                }
-                var total = 0;
-                Object.keys(unreadCache).forEach(function(k) { total += unreadCache[k] || 0; });
-                tabBadgeUnread.textContent = total > 99 ? '99+' : String(total);
-                tabBadgeUnread.classList.toggle('show', total > 0);
-                updateTabBadges();
-            }
-
-            function updateTabBadges() {
-                tabBadgeRequests.textContent = requestsCount > 99 ? '99+' : String(requestsCount);
-                tabBadgeRequests.classList.toggle('show', requestsCount > 0);
-            }
-
-            // ===== 聊天室 =====
-            function clearChatListeners() {
-                for (var i = 0; i < chatListeners.length; i++) chatListeners[i]();
-                chatListeners = [];
-            }
-
-            function openPrivateChat(friendUid, friendName, friendAvatar) {
-                activeFriendUid = friendUid;
-                clearChatListeners();
-                chatTitle.textContent = friendName;
-                chatSubtitle.textContent = '私訊對話';
-                chatClearFriend.hidden = false;
-                msgInput.disabled = false;
-                chatSendBtn.disabled = false;
-                chatEmpty.style.display = 'none';
-                var oldRows = chatBox.querySelectorAll('.msg-row');
-                for (var i = 0; i < oldRows.length; i++) oldRows[i].remove();
-
-                var cid = chatIdFor(currentUid, friendUid);
-                var msgsRef = db().ref('private_chats/' + cid + '/msgs');
-                var handler = function(snap) {
-                    var msgs = snap.val() || {};
-                    var list = Object.keys(msgs).map(function(id) { return [id, msgs[id]]; });
-                    list.sort(function(a, b) { return (a[1].ts || 0) - (b[1].ts || 0); });
-                    var rows = chatBox.querySelectorAll('.msg-row');
-                    for (var r = 0; r < rows.length; r++) rows[r].remove();
-                    if (!list.length) {
-                        chatEmpty.style.display = 'block';
-                        return;
-                    }
-                    chatEmpty.style.display = 'none';
-                    list.forEach(function(pair) {
-                        var m = pair[1];
-                        var isMe = m.from === currentUid;
-                        var div = document.createElement('div');
-                        div.className = 'msg-row ' + (isMe ? 'me' : 'other');
-                        div.innerHTML =
-                            '<div class="msg-info">' + escapeHtml(m.name || (isMe ? currentUsername : friendName)) + ' • ' + formatTime(m.ts) + '</div>' +
-                            '<div class="bubble">' + escapeHtml(m.text) + '</div>';
-                        chatBox.appendChild(div);
-                    });
-                    chatBox.scrollTop = chatBox.scrollHeight;
-                    markChatRead(cid);
-                };
-                msgsRef.on('value', handler);
-                chatListeners.push((function(ref) {
-                    return function() { ref.off('value', handler); };
-                })(msgsRef));
-
-                // 更新選取狀態
-                chatMobileSelect.value = friendUid;
-                refreshFriendsUI();
-                markChatRead(cid);
-            }
-
-            function markChatRead(cid) {
-                if (!currentUid) return;
-                db().ref('private_chats/' + cid + '/read/' + currentUid).set(window.firebase.database.ServerValue.TIMESTAMP).then(function() {
-                    if (activeFriendUid) {
-                        unreadCache[activeFriendUid] = 0;
-                        updateUnreadBadges();
-                    }
-                }).catch(function(e) {
-                    console.warn('標記已讀失敗', e);
-                });
-            }
-
-            chatClearFriend.addEventListener('click', function() {
-                activeFriendUid = '';
-                clearChatListeners();
-                chatTitle.textContent = '聊天室';
-                chatSubtitle.textContent = '請選擇一位好友開始聊天。';
-                chatClearFriend.hidden = true;
-                msgInput.disabled = true;
-                chatSendBtn.disabled = true;
-                var rows = chatBox.querySelectorAll('.msg-row');
-                for (var i = 0; i < rows.length; i++) rows[i].remove();
-                chatEmpty.style.display = 'block';
-                chatMobileSelect.value = '';
-                refreshFriendsUI();
-            });
-
-            function sendMessage() {
-                if (!activeFriendUid) return;
-                var text = msgInput.value.trim();
-                if (!text) return;
-                var cid = chatIdFor(currentUid, activeFriendUid);
-                db().ref('private_chats/' + cid + '/msgs').push({
-                    from: currentUid,
-                    to: activeFriendUid,
-                    name: currentUser.displayName || currentUsername,
-                    text: text,
-                    ts: window.firebase.database.ServerValue.TIMESTAMP
-                }).then(function() {
-                    msgInput.value = '';
-                    msgInput.focus();
-                }).catch(function(e) {
-                    console.error('訊息傳送失敗', e.code, e.message);
-                    alert('訊息傳送失敗：' + (e.code || e.message || '未知錯誤'));
-                });
-            }
-
-            chatSendBtn.addEventListener('click', sendMessage);
-            msgInput.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    sendMessage();
+        // 黑洞塔持續效果
+        if (t.type === 'blackhole') {
+            enemies.forEach(e => {
+                const d = dist(t.x, t.y, e.x, e.y);
+                if (d < range) {
+                    damageEnemy(e, dmg / 12, '#c084fc', false);
+                    e.x += (t.x - e.x) * 0.045;
+                    e.y += (t.y - e.y) * 0.045;
                 }
             });
+            if (frame % 6 === 0) addParticles(t.x + rnd(-range * 0.6, range * 0.6), t.y + rnd(-range * 0.6, range * 0.6), '#c084fc', 1, 2);
+        }
 
-            function formatTime(ts) {
-                if (!ts) return '';
-                var d = new Date(ts);
-                var now = new Date();
-                var time = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
-                if (d.toDateString() === now.toDateString()) return '今天 ' + time;
-                var yesterday = new Date(now);
-                yesterday.setDate(now.getDate() - 1);
-                if (d.toDateString() === yesterday.toDateString()) return '昨天 ' + time;
-                return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + time;
-            }
+        if (t.cd > 0) return;
 
-            // ===== 啟動 =====
-            ready.then(function() {
-                return authReady;
-            }).then(function(user) {
-                if (!user) {
-                    loginRequired.hidden = false;
-                    appArea.hidden = true;
-                    return;
-                }
-                initProfile(user);
-                window.firebase.auth().onAuthStateChanged(function(u) {
-                    if (u) {
-                        initProfile(u);
-                    } else {
-                        currentUser = null; currentUid = ''; currentUsername = '';
-                        appArea.hidden = true;
-                        loginRequired.hidden = false;
-                        clearChatListeners();
-                        for (var i = 0; i < friendUnreadListeners.length; i++) friendUnreadListeners[i]();
-                        friendUnreadListeners = [];
-                        friendsCache = {};
-                        unreadCache = {};
-                        requestList.innerHTML = '';
-                        friendList.innerHTML = '';
-                        chatSidebarFriends.innerHTML = '';
-                        searchResults.innerHTML = '';
-                        chatMobileSelect.innerHTML = '<option value="">選擇好友開始聊天…</option>';
-                        var rows = chatBox.querySelectorAll('.msg-row');
-                        for (var j = 0; j < rows.length; j++) rows[j].remove();
-                        chatEmpty.style.display = 'block';
-                        chatClearFriend.hidden = true;
-                        msgInput.disabled = true;
-                        chatSendBtn.disabled = true;
-                        updateUnreadBadges();
-                    }
-                });
-            }).catch(function(e) {
-                console.error('初始化失敗', e);
-                loginRequired.hidden = false;
-                loginRequired.textContent = '載入個人檔案失敗：' + errorMessage(e);
-                loginRequired.classList.add('error');
+        let target = null, bestD = range;
+        enemies.forEach(e => { const d = dist(t.x, t.y, e.x, e.y); if (d < bestD) { bestD = d; target = e; } });
+        if (!target) return;
+
+        t.angle = Math.atan2(target.y - t.y, target.x - t.x);
+        t.flash = 5;
+
+        if (t.type === 'gatling') {
+            const crit = Math.random() < critChance;
+            bullets.push({ x: t.x, y: t.y, target, dmg: dmg * (crit ? 2 : 1), speed: 18, color: crit ? '#fde047' : '#f59e0b', size: 3.5, crit, kind: 'gatling' });
+            t.cd = isOverclocked ? 3 : Math.max(3, def.cd - (t.lv - 1));
+        } else if (t.type === 'laser') {
+            addBeam(t.x, t.y, target.x, target.y, '#3b82f6', 4, 10);
+            damageEnemy(target, dmg, '#3b82f6', false);
+            addParticles(target.x, target.y, '#93c5fd', 6, 8);
+            t.cd = Math.max(8, def.cd - (t.lv - 1) * 2);
+        } else if (t.type === 'mortar') {
+            bullets.push({
+                x: t.x, y: t.y, target, dmg, speed: 9, color: '#a855f7',
+                splash: def.splash * (1 + (t.lv - 1) * 0.1), size: 7, kind: 'mortar'
             });
-        })();
-    </script>
+            t.cd = Math.max(18, def.cd - (t.lv - 1) * 3);
+        } else if (t.type === 'frost') {
+            addBeam(t.x, t.y, target.x, target.y, '#7dd3fc', 2, 8);
+            enemies.forEach(e => {
+                if (dist(e.x, e.y, target.x, target.y) < 70) {
+                    e.slowT = 150;
+                    e.slowFactor = Math.max(0.25, 1 - def.slow * (1 + (t.lv - 1) * 0.12));
+                    addParticles(e.x, e.y, '#7dd3fc', 3, 5);
+                }
+            });
+            damageEnemy(target, dmg, '#7dd3fc', false);
+            t.cd = Math.max(6, def.cd - (t.lv - 1));
+        } else if (t.type === 'venom') {
+            bullets.push({ x: t.x, y: t.y, target, dmg, speed: 12, color: '#84cc16', size: 5, kind: 'venom', poison: def.poison * (1 + (t.lv - 1) * 0.3) });
+            t.cd = Math.max(9, def.cd - (t.lv - 1) * 2);
+        } else if (t.type === 'tesla') {
+            let chainTarget = target;
+            const hit = new Set();
+            for (let c = 0; c < def.chain; c++) {
+                if (!chainTarget) break;
+                hit.add(chainTarget);
+                if (c === 0) addBeam(t.x, t.y, chainTarget.x, chainTarget.y, '#facc15', 3, 9);
+                else addBeam(prev.x, prev.y, chainTarget.x, chainTarget.y, '#fde047', 2.5, 8);
+                damageEnemy(chainTarget, dmg * Math.pow(0.72, c), '#facc15', false);
+                addParticles(chainTarget.x, chainTarget.y, '#fde047', 5, 8);
+                var prev = chainTarget;
+                let next = null, nd = 160;
+                enemies.forEach(e => {
+                    if (hit.has(e)) return;
+                    const d = dist(prev.x, prev.y, e.x, e.y);
+                    if (d < nd) { nd = d; next = e; }
+                });
+                chainTarget = next;
+            }
+            t.cd = Math.max(16, def.cd - (t.lv - 1) * 3);
+        } else if (t.type === 'missile') {
+            bullets.push({
+                x: t.x, y: t.y, target, dmg, speed: 8, color: '#fb7185',
+                splash: def.splash * (1 + (t.lv - 1) * 0.1), size: 6, kind: 'missile'
+            });
+            t.cd = Math.max(35, def.cd - (t.lv - 1) * 6);
+        } else if (t.type === 'railgun') {
+            const ang = Math.atan2(target.y - t.y, target.x - t.x);
+            const len = range * 1.6;
+            const ex = t.x + Math.cos(ang) * len, ey = t.y + Math.sin(ang) * len;
+            addBeam(t.x, t.y, ex, ey, '#22d3ee', 7, 14);
+            addShock(t.x, t.y, '#22d3ee', 6, 70, 1);
+            enemies.forEach(e => {
+                // 點到直線距離
+                const dx = ex - t.x, dy = ey - t.y;
+                const l2 = dx * dx + dy * dy;
+                let u = ((e.x - t.x) * dx + (e.y - t.y) * dy) / l2;
+                u = Math.max(0, Math.min(1, u));
+                const px = t.x + u * dx, py = t.y + u * dy;
+                if (dist(e.x, e.y, px, py) < 26) {
+                    damageEnemy(e, dmg, '#22d3ee', false);
+                    addParticles(e.x, e.y, '#67e8f9', 8, 10);
+                }
+            });
+            t.cd = Math.max(60, def.cd - (t.lv - 1) * 10);
+        }
+    });
+
+    // 子彈
+    for (let i = bullets.length - 1; i >= 0; i--) {
+        const bul = bullets[i];
+        const tx = bul.target && !bul.target.dead ? bul.target.x : (bul.lastX || bul.x);
+        const ty = bul.target && !bul.target.dead ? bul.target.y : (bul.lastY || bul.y);
+        bul.lastX = tx; bul.lastY = ty;
+
+        const dx = tx - bul.x, dy = ty - bul.y;
+        const d = Math.hypot(dx, dy);
+        if (d < 14) {
+            if (bul.splash) {
+                addShock(bul.x, bul.y, bul.color, 6, bul.splash, 1);
+                addParticles(bul.x, bul.y, bul.color, 12, 10);
+                enemies.forEach(e => {
+                    if (dist(bul.x, bul.y, e.x, e.y) < bul.splash) damageEnemy(e, bul.dmg, bul.color, false);
+                });
+                triggerShake(8);
+            } else if (bul.target && !bul.target.dead) {
+                damageEnemy(bul.target, bul.dmg, bul.color, bul.crit);
+                addParticles(bul.x, bul.y, bul.color, 4, 6);
+                if (bul.poison) { bul.target.poison = 180; bul.target.poisonDmg = bul.poison; }
+            }
+            bullets.splice(i, 1);
+        } else if (d > 0) {
+            bul.x += (dx / d) * bul.speed;
+            bul.y += (dy / d) * bul.speed;
+            if (bul.kind === 'missile' || bul.kind === 'mortar') {
+                addParticles(bul.x, bul.y, bul.color, 1, 1.5);
+            }
+        }
+    }
+
+    // 敵群
+    const freezeMul = freezeTimer > 0 ? 0.15 : 1;
+    enemies.forEach(e => {
+        if (e.dead) return;
+        if (e.hitFlash > 0) e.hitFlash--;
+        if (e.slowT > 0) e.slowT--;
+        const slow = e.slowT > 0 ? e.slowFactor : 1;
+
+        // 中毒
+        if (e.poison > 0) {
+            e.poison--;
+            damageEnemy(e, e.poisonDmg / 6, '#84cc16', false);
+            if (frame % 8 === 0) addParticles(e.x, e.y, '#84cc16', 1, 2);
+        }
+
+        // 治療蟲
+        if (ENEMY_DEFS[e.type].heal && frame % 30 === 0) {
+            enemies.forEach(o => {
+                if (o === e || o.dead) return;
+                if (dist(o.x, o.y, e.x, e.y) < 130) {
+                    o.hp = Math.min(o.maxHp, o.hp + o.maxHp * 0.06);
+                    addParticles(o.x, o.y, '#14b8a6', 3, 4);
+                }
+            });
+        }
+
+        // 引力奇點
+        if (singularityTimer > 0) {
+            const cx = W / 2, cy = H / 2;
+            e.x += (cx - e.x) * 0.012;
+            e.y += (cy - e.y) * 0.012;
+            if (frame % 10 === 0) damageEnemy(e, 12, '#c084fc', false);
+        }
+
+        e.x -= e.speed * slow * freezeMul;
+
+        if (!e.dead && e.x < -50) {
+            e.x = W + 50;
+            e.y = rnd(90, H - 90);
+            e.hp = Math.min(e.maxHp, e.hp + e.maxHp * 0.2);
+            addParticles(W, e.y, '#ef4444', 6, 6);
+        }
+    });
+
+    // 清理死亡敵人
+    if (enemies.some(e => e.dead)) {
+        enemies = enemies.filter(e => !e.dead);
+    }
+
+    // 特效
+    if (shakeTime > 0) shakeTime--;
+    for (let i = floatTexts.length - 1; i >= 0; i--) {
+        const f = floatTexts[i];
+        f.y += f.vy; f.alpha -= 0.018;
+        if (f.alpha <= 0) floatTexts.splice(i, 1);
+    }
+    for (let i = particles.length - 1; i >= 0; i--) {
+        const pt = particles[i];
+        pt.x += pt.vx; pt.y += pt.vy;
+        pt.vx *= 0.96; pt.vy *= 0.96;
+        pt.alpha -= pt.decay;
+        if (pt.alpha <= 0) particles.splice(i, 1);
+    }
+    for (let i = beams.length - 1; i >= 0; i--) {
+        beams[i].life--;
+        if (beams[i].life <= 0) beams.splice(i, 1);
+    }
+    for (let i = shocks.length - 1; i >= 0; i--) {
+        const s = shocks[i];
+        s.r += (s.maxR - s.r) * 0.14;
+        s.life -= 0.045;
+        if (s.life <= 0) shocks.splice(i, 1);
+    }
+
+    // 成就
+    if (frame % 30 === 0) checkAchievements();
+
+    // UI 同步
+    if (frame % 6 === 0) updateUI();
+    if (frame % 180 === 0) saveGame();
+}
+
+function center(bld) { return { x: bld.x + bld.w / 2, y: bld.y + bld.h / 2 }; }
+
+function processConvert(obj, from, to, bld) {
+    const idx = obj.bag.findIndex(i => i.type === from);
+    if (idx >= 0) {
+        obj.bag[idx] = { type: to };
+        addParticles(bld.x + bld.w / 2, bld.y + bld.h / 2, ITEMS[to].color, 5, 5);
+    }
+}
+
+function interact(obj, b) {
+    // 撿礦
+    for (let i = items.length - 1; i >= 0; i--) {
+        if (obj.bag.length >= capacity) break;
+        if (dist(obj.x, obj.y, items[i].x, items[i].y) < 30) {
+            obj.bag.push(items.splice(i, 1)[0]);
+        }
+    }
+
+    const cSmelt = center(b.smelter);
+    if (dist(obj.x, obj.y, cSmelt.x, cSmelt.y) < 52) processConvert(obj, 'RAW', 'STEEL', b.smelter);
+    if (b.chipFab) { const c = center(b.chipFab); if (dist(obj.x, obj.y, c.x, c.y) < 52) processConvert(obj, 'STEEL', 'CHIP', b.chipFab); }
+    if (b.nukeFab) { const c = center(b.nukeFab); if (dist(obj.x, obj.y, c.x, c.y) < 52) processConvert(obj, 'CHIP', 'BATTERY', b.nukeFab); }
+    if (b.qFab) { const c = center(b.qFab); if (dist(obj.x, obj.y, c.x, c.y) < 52) processConvert(obj, 'BATTERY', 'CORE', b.qFab); }
+    if (b.antiFab) { const c = center(b.antiFab); if (dist(obj.x, obj.y, c.x, c.y) < 52) processConvert(obj, 'CORE', 'ANTIM', b.antiFab); }
+
+    const cHub = center(b.hub);
+    if (dist(obj.x, obj.y, cHub.x, cHub.y) < 74 && obj.bag.length > 0) {
+        const mult = (1 + darkMatter * 0.08) * (1 + talents.moneyLv * 0.25);
+        const total = obj.bag.reduce((s, it) => s + ITEMS[it.type].val, 0) * mult;
+        obj.bag = [];
+        money += total;
+        addFloat(cHub.x, cHub.y - 30, `+$${Math.floor(total).toLocaleString()}`, '#4ade80', 13);
+    }
+}
+
+/* =========================================================
+   UI 更新
+   ========================================================= */
+function updateUI() {
+    document.getElementById('m').innerText = Math.floor(money).toLocaleString();
+    document.getElementById('dm').innerText = darkMatter;
+    document.getElementById('waveNum').innerText = wave;
+    document.getElementById('enemyCount').innerText = enemies.length;
+    document.getElementById('comboNum').innerText = combo;
+    document.getElementById('waveTimer').innerText = isWaveActive ? '戰鬥中' : Math.ceil(waveTimer / 60) + 's';
+
+    for (let i = 0; i < 4; i++) {
+        const el = document.getElementById('cd' + (i + 1));
+        const btn = document.querySelector(`.skill-btn[data-skill="${i + 1}"]`);
+        if (skillCd[i] > 0) {
+            el.innerText = Math.ceil(skillCd[i] / 60) + 's';
+            btn.classList.add('cooling');
+        } else {
+            el.innerText = '就緒';
+            btn.classList.remove('cooling');
+        }
+    }
+
+    document.getElementById('questText').innerText = quest.desc;
+    document.getElementById('questProg').innerText = `${quest.current}/${quest.target}`;
+
+    document.getElementById('tDmgCost').innerText = `${(talents.dmgLv + 1) * 5} DM`;
+    document.getElementById('tSpdCost').innerText = `${(talents.spdLv + 1) * 5} DM`;
+    document.getElementById('tRangeCost').innerText = `${(talents.rangeLv + 1) * 5} DM`;
+    document.getElementById('tCritCost').innerText = `${(talents.critLv + 1) * 5} DM`;
+    document.getElementById('tMoneyCost').innerText = `${(talents.moneyLv + 1) * 5} DM`;
+
+    // 塔價格
+    TURRET_ORDER.forEach(id => {
+        const el = document.querySelector(`[data-cost="${id}"]`);
+        if (!el) return;
+        const c = getTurretCost(id);
+        el.innerText = '$' + c.toLocaleString();
+        const btn = el.closest('button');
+        if (btn) btn.disabled = money < c;
+    });
+
+    document.getElementById('minerLv').innerText = minerLevel;
+    document.getElementById('capLv').innerText = capacity;
+    document.getElementById('bCost').innerText = `$${Math.floor(500 * Math.pow(1.3, bots.length)).toLocaleString()}`;
+    document.getElementById('mCost').innerText = `$${Math.floor(1000 * Math.pow(1.5, minerLevel)).toLocaleString()}`;
+    document.getElementById('cCost').innerText = `$${Math.floor(1500 * (capacity / 2)).toLocaleString()}`;
+    document.getElementById('playerDamageLv').innerText = playerDamageLevel;
+    document.getElementById('playerDamageCost').innerText = `$${Math.floor(1000 * Math.pow(1.6, playerDamageLevel)).toLocaleString()}`;
+    document.getElementById('turretDamageLv').innerText = turretDamageLevel;
+    document.getElementById('turretDamageCost').innerText = `$${Math.floor(1500 * Math.pow(1.6, turretDamageLevel)).toLocaleString()}`;
+
+    document.getElementById('rebirthGain').innerText = `+${Math.floor(money / 100000)} DM`;
+
+    // 工廠解鎖按鈕狀態
+    document.querySelectorAll('[data-unlock]').forEach(btn => {
+        const tier = parseInt(btn.dataset.unlock, 10);
+        btn.disabled = techTier !== tier - 1;
+        if (techTier >= tier) btn.style.opacity = '0.3';
+        else btn.style.opacity = '';
+    });
+
+    // 天賦按鈕
+    document.querySelectorAll('[data-talent]').forEach(btn => {
+        const key = btn.dataset.talent + 'Lv';
+        btn.disabled = darkMatter < (talents[key] + 1) * 5;
+    });
+
+    if (selectedTurret) updateInspector();
+}
+
+/* =========================================================
+   繪製
+   ========================================================= */
+function draw() {
+    const time = frame / 60;
+
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+    // 背景
+    const bg = ctx.createRadialGradient(W * 0.5, H * 0.45, 60, W * 0.5, H * 0.45, Math.max(W, H) * 0.8);
+    bg.addColorStop(0, '#0b1729');
+    bg.addColorStop(1, '#020617');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+
+    // 星空
+    for (let i = 0; i < 60; i++) {
+        const sx = ((i * 137.5) % W);
+        const sy = ((i * 219.3) % H);
+        const tw = 0.35 + 0.5 * Math.abs(Math.sin(time * 0.8 + i));
+        ctx.fillStyle = `rgba(148,197,253,${tw * 0.5})`;
+        ctx.fillRect(sx, sy, 1.6, 1.6);
+    }
+
+    // 網格
+    ctx.strokeStyle = 'rgba(30, 41, 59, 0.45)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = 0; x < W; x += 56) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
+    for (let y = 0; y < H; y += 56) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
+    ctx.stroke();
+
+    ctx.save();
+    if (shakeTime > 0) {
+        const k = shakeTime / 26;
+        ctx.translate(rnd(-9, 9) * k, rnd(-9, 9) * k);
+    }
+
+    const b = getBuildings();
+
+    // 建築物
+    Object.values(b).forEach(bld => drawBuilding(bld, time));
+
+    // 塔
+    turrets.forEach(t => drawTurret(t, time));
+
+    // 放置預覽
+    if (placingTurret) {
+        const def = TURRET_DEFS[placingTurret];
+        const mx = mouseX || p.x, my = mouseY || p.y;
+        const range = def.range * (1 + talents.rangeLv * 0.1);
+        ctx.save();
+        ctx.globalAlpha = 0.28;
+        ctx.fillStyle = def.color;
+        ctx.beginPath(); ctx.arc(mx, my, range, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 0.7;
+        ctx.strokeStyle = def.color; ctx.lineWidth = 1.5;
+        ctx.setLineDash([6, 6]);
+        ctx.beginPath(); ctx.arc(mx, my, range, 0, Math.PI * 2); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 0.85;
+        drawTurretShape(mx, my, placingTurret, 1, 0, time, 0);
+        ctx.restore();
+    }
+
+    // 選中的塔
+    if (selectedTurret && turrets.includes(selectedTurret)) {
+        const def = TURRET_DEFS[selectedTurret.type];
+        const range = def.range * (1 + talents.rangeLv * 0.1) * (1 + (selectedTurret.lv - 1) * 0.06);
+        ctx.save();
+        ctx.strokeStyle = def.color;
+        ctx.globalAlpha = 0.55;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([8, 8]);
+        ctx.beginPath(); ctx.arc(selectedTurret.x, selectedTurret.y, range, 0, Math.PI * 2); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 0.9;
+        ctx.beginPath(); ctx.arc(selectedTurret.x, selectedTurret.y, 30, 0, Math.PI * 2); ctx.stroke();
+        ctx.restore();
+    }
+
+    // 光束
+    beams.forEach(bm => {
+        const a = bm.life / bm.maxLife;
+        ctx.save();
+        ctx.globalAlpha = a;
+        ctx.strokeStyle = bm.color;
+        ctx.lineWidth = bm.width;
+        ctx.shadowColor = bm.color;
+        ctx.shadowBlur = 14;
+        ctx.beginPath();
+        ctx.moveTo(bm.x1, bm.y1);
+        ctx.lineTo(bm.x2, bm.y2);
+        ctx.stroke();
+        ctx.restore();
+    });
+
+    // 衝擊波
+    shocks.forEach(s => {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, s.life) * 0.6;
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.stroke();
+        ctx.restore();
+    });
+
+    // 掉落物
+    items.forEach(it => {
+        const col = ITEMS[it.type].color;
+        const bob = Math.sin(time * 4 + (it.bob || 0)) * 3;
+        ctx.save();
+        ctx.translate(it.x, it.y + bob);
+        ctx.rotate(time * 1.2 + (it.bob || 0));
+        ctx.shadowColor = col; ctx.shadowBlur = 10;
+        ctx.fillStyle = col;
+        ctx.beginPath(); ctx.roundRect(-7, -7, 14, 14, 3); ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        ctx.beginPath(); ctx.roundRect(-4, -5, 5, 4, 1.5); ctx.fill();
+        ctx.restore();
+    });
+
+    // 子彈
+    bullets.forEach(bul => {
+        ctx.save();
+        ctx.shadowColor = bul.color;
+        ctx.shadowBlur = 10;
+        ctx.fillStyle = bul.color;
+        ctx.beginPath();
+        ctx.arc(bul.x, bul.y, bul.size || 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    });
+
+    // 敵人
+    enemies.forEach(e => drawEnemy(e, time));
+
+    // 機兵
+    bots.forEach(bot => drawBot(bot, time));
+
+    // 玩家
+    drawPlayer(p, time);
+
+    // 粒子
+    particles.forEach(pt => {
+        ctx.globalAlpha = Math.max(0, pt.alpha);
+        ctx.fillStyle = pt.color;
+        ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI * 2); ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+
+    // 浮動文字
+    floatTexts.forEach(f => {
+        ctx.globalAlpha = Math.max(0, f.alpha);
+        ctx.fillStyle = f.color;
+        ctx.font = `900 ${f.size}px 'Segoe UI', sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.shadowColor = 'rgba(0,0,0,0.8)';
+        ctx.shadowBlur = 4;
+        ctx.fillText(f.text, f.x, f.y);
+        ctx.shadowBlur = 0;
+    });
+    ctx.globalAlpha = 1;
+    ctx.textAlign = 'start';
+
+    // 凍結 / 奇點覆蓋
+    if (freezeTimer > 0) {
+        ctx.fillStyle = `rgba(125,211,252,${0.10 * (freezeTimer / 300)})`;
+        ctx.fillRect(0, 0, W, H);
+    }
+    if (singularityTimer > 0) {
+        const g = ctx.createRadialGradient(W / 2, H / 2, 10, W / 2, H / 2, Math.max(W, H) * 0.55);
+        g.addColorStop(0, `rgba(192,132,252,${0.25 * (singularityTimer / 240)})`);
+        g.addColorStop(1, 'rgba(192,132,252,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, W, H);
+    }
+
+    ctx.restore();
+
+    update();
+    requestAnimationFrame(draw);
+}
+
+/* ---------- 建築繪製 ---------- */
+function drawBuilding(bld, time) {
+    const { x, y, w, h, color, label } = bld;
+    ctx.save();
+
+    // 底座陰影
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.beginPath(); ctx.roundRect(x + 4, y + 6, w, h, 10); ctx.fill();
+
+    // 主體
+    const g = ctx.createLinearGradient(x, y, x + w, y + h);
+    g.addColorStop(0, 'rgba(30,41,59,0.98)');
+    g.addColorStop(1, 'rgba(8,15,30,0.98)');
+    ctx.fillStyle = g;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 12;
+    ctx.beginPath(); ctx.roundRect(x, y, w, h, 10); ctx.fill(); ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // 內部細節依類型
+    ctx.save();
+    ctx.beginPath(); ctx.roundRect(x + 2, y + 2, w - 4, h - 4, 8); ctx.clip();
+
+    if (bld.kind === 'mine') {
+        // 鑽頭
+        ctx.fillStyle = color;
+        const rot = time * 2;
+        ctx.translate(x + w / 2, y + h / 2);
+        ctx.rotate(rot);
+        ctx.beginPath();
+        ctx.moveTo(0, -16); ctx.lineTo(12, 10); ctx.lineTo(-12, 10);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#0f172a';
+        ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2); ctx.fill();
+    } else if (bld.kind === 'hub') {
+        // 總部：窗格 + 旋轉核心
+        for (let i = 0; i < 4; i++) {
+            for (let j = 0; j < 3; j++) {
+                const lit = Math.sin(time * 2 + i * 1.7 + j) > 0;
+                ctx.fillStyle = lit ? 'rgba(56,189,248,0.85)' : 'rgba(56,189,248,0.18)';
+                ctx.fillRect(x + 14 + i * 28, y + 14 + j * 22, 16, 12);
+            }
+        }
+        ctx.save();
+        ctx.translate(x + w / 2, y + h - 22);
+        ctx.rotate(time * 1.5);
+        ctx.strokeStyle = 'rgba(56,189,248,0.85)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        for (let i = 0; i < 3; i++) {
+            const a = i * Math.PI * 2 / 3;
+            ctx.moveTo(Math.cos(a) * 11, Math.sin(a) * 11);
+            ctx.lineTo(Math.cos(a + Math.PI) * 11, Math.sin(a + Math.PI) * 11);
+        }
+        ctx.stroke();
+        ctx.restore();
+    } else {
+        // 工廠：管道 + 煙囪 + 指示燈
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(x + 16, y + h - 12);
+        ctx.lineTo(x + 16, y + 24);
+        ctx.lineTo(x + w - 16, y + 24);
+        ctx.stroke();
+        // 煙囪
+        ctx.fillStyle = color;
+        ctx.fillRect(x + w - 30, y + 10, 10, 24);
+        // 指示燈
+        for (let i = 0; i < 3; i++) {
+            const on = Math.sin(time * 3 + i * 2) > 0;
+            ctx.fillStyle = on ? color : 'rgba(100,116,139,0.5)';
+            ctx.beginPath(); ctx.arc(x + 26 + i * 18, y + h - 16, 3.5, 0, Math.PI * 2); ctx.fill();
+        }
+        // 輸送帶
+        ctx.strokeStyle = 'rgba(148,163,184,0.35)';
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.moveTo(x + 10, y + h - 8);
+        ctx.lineTo(x + w - 10, y + h - 8);
+        ctx.stroke();
+        const off = (time * 40) % 16;
+        ctx.strokeStyle = 'rgba(226,232,240,0.5)';
+        ctx.lineWidth = 2;
+        for (let i = -1; i < 8; i++) {
+            const px = x + 10 + ((i * 16 + off) % (w - 20));
+            ctx.beginPath();
+            ctx.moveTo(px, y + h - 12);
+            ctx.lineTo(px, y + h - 4);
+            ctx.stroke();
+        }
+    }
+    ctx.restore();
+
+    // 標籤
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(2,6,23,0.85)';
+    const tw = ctx.measureText(label).width + 12;
+    ctx.beginPath(); ctx.roundRect(x + w / 2 - tw / 2, y - 20, tw, 16, 8); ctx.fill();
+    ctx.fillStyle = color;
+    ctx.fillText(label, x + w / 2, y - 8);
+    ctx.textAlign = 'start';
+
+    ctx.restore();
+}
+
+/* ---------- 塔繪製 ---------- */
+function drawTurret(t, time) {
+    drawTurretShape(t.x, t.y, t.type, t.lv, t.angle, time, t.flash);
+}
+
+function drawTurretShape(x, y, type, lv, angle, time, flash) {
+    const def = TURRET_DEFS[type];
+    const col = flash > 0 ? '#ffffff' : def.color;
+
+    ctx.save();
+    ctx.translate(x, y);
+
+    // 底座光環
+    const lg = ctx.createRadialGradient(0, 0, 4, 0, 0, 30);
+    lg.addColorStop(0, hexA(def.color, 0.35));
+    lg.addColorStop(1, hexA(def.color, 0));
+    ctx.fillStyle = lg;
+    ctx.beginPath(); ctx.arc(0, 0, 30, 0, Math.PI * 2); ctx.fill();
+
+    // 底座
+    ctx.fillStyle = '#0f172a';
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(-17, -17, 34, 34, 8); ctx.fill(); ctx.stroke();
+
+    // 等級小點
+    ctx.fillStyle = def.color;
+    for (let i = 0; i < Math.min(lv, 6); i++) {
+        ctx.beginPath();
+        ctx.arc(-13 + i * 5.2, 20, 1.8, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    ctx.rotate(angle);
+    ctx.shadowColor = def.color;
+    ctx.shadowBlur = 10;
+
+    switch (type) {
+        case 'gatling': {
+            ctx.fillStyle = col;
+            ctx.beginPath(); ctx.roundRect(-2, -4, 20, 8, 3); ctx.fill();
+            ctx.fillStyle = '#f8fafc';
+            ctx.beginPath(); ctx.roundRect(14, -5, 8, 3, 1.5); ctx.fill();
+            ctx.beginPath(); ctx.roundRect(14, 2, 8, 3, 1.5); ctx.fill();
+            ctx.fillStyle = def.color;
+            ctx.beginPath(); ctx.arc(0, 0, 7, 0, Math.PI * 2); ctx.fill();
+            break;
+        }
+        case 'laser': {
+            ctx.fillStyle = col;
+            ctx.beginPath();
+            ctx.moveTo(20, 0); ctx.lineTo(4, -8); ctx.lineTo(-4, 0); ctx.lineTo(4, 8);
+            ctx.closePath(); ctx.fill();
+            ctx.fillStyle = '#dbeafe';
+            ctx.beginPath(); ctx.arc(-2, 0, 6, 0, Math.PI * 2); ctx.fill();
+            break;
+        }
+        case 'mortar': {
+            ctx.fillStyle = col;
+            ctx.beginPath(); ctx.roundRect(2, -6, 20, 12, 4); ctx.fill();
+            ctx.fillStyle = '#0f172a';
+            ctx.beginPath(); ctx.arc(21, 0, 4.5, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = def.color;
+            ctx.beginPath(); ctx.arc(-2, 0, 8, 0, Math.PI * 2); ctx.fill();
+            break;
+        }
+        case 'frost': {
+            ctx.rotate(time * 0.8);
+            ctx.fillStyle = col;
+            for (let i = 0; i < 6; i++) {
+                ctx.rotate(Math.PI / 3);
+                ctx.beginPath();
+                ctx.moveTo(0, 0); ctx.lineTo(6, -14); ctx.lineTo(-6, -14);
+                ctx.closePath(); ctx.fill();
+            }
+            ctx.fillStyle = '#e0f2fe';
+            ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2); ctx.fill();
+            break;
+        }
+        case 'venom': {
+            ctx.fillStyle = col;
+            ctx.beginPath(); ctx.roundRect(-6, -9, 22, 18, 6); ctx.fill();
+            ctx.fillStyle = '#ecfccb';
+            for (let i = 0; i < 3; i++) {
+                const bb = Math.sin(time * 4 + i * 2) * 2;
+                ctx.beginPath(); ctx.arc(6 + i * 5, -2 + bb, 2.4, 0, Math.PI * 2); ctx.fill();
+            }
+            break;
+        }
+        case 'tesla': {
+            ctx.fillStyle = col;
+            ctx.beginPath(); ctx.roundRect(-4, -4, 8, 20, 3); ctx.fill();
+            ctx.strokeStyle = '#fef08a';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            for (let i = 0; i < 4; i++) {
+                ctx.moveTo(0, -18 + i * 4);
+                ctx.lineTo((i % 2 ? 7 : -7), -16 + i * 4);
+            }
+            ctx.stroke();
+            ctx.fillStyle = '#fef9c3';
+            ctx.beginPath(); ctx.arc(0, -19, 5, 0, Math.PI * 2); ctx.fill();
+            break;
+        }
+        case 'blackhole': {
+            ctx.save();
+            ctx.rotate(time * 1.6);
+            const grd = ctx.createRadialGradient(0, 0, 2, 0, 0, 20);
+            grd.addColorStop(0, '#000000');
+            grd.addColorStop(0.55, def.color);
+            grd.addColorStop(1, 'rgba(192,132,252,0)');
+            ctx.fillStyle = grd;
+            ctx.beginPath(); ctx.arc(0, 0, 20, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = '#f5d0fe';
+            ctx.lineWidth = 1.6;
+            ctx.beginPath(); ctx.ellipse(0, 0, 19, 7, 0, 0, Math.PI * 2); ctx.stroke();
+            ctx.beginPath(); ctx.ellipse(0, 0, 19, 7, Math.PI / 2, 0, Math.PI * 2); ctx.stroke();
+            ctx.fillStyle = '#000';
+            ctx.beginPath(); ctx.arc(0, 0, 7, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+            break;
+        }
+        case 'missile': {
+            ctx.fillStyle = col;
+            ctx.beginPath(); ctx.roundRect(-8, -12, 26, 24, 5); ctx.fill();
+            ctx.fillStyle = '#0f172a';
+            for (let i = 0; i < 2; i++) {
+                for (let j = 0; j < 2; j++) {
+                    ctx.beginPath();
+                    ctx.arc(2 + i * 10, -6 + j * 12, 3.2, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+            break;
+        }
+        case 'railgun': {
+            ctx.fillStyle = col;
+            ctx.beginPath(); ctx.roundRect(-6, -5, 34, 10, 3); ctx.fill();
+            ctx.strokeStyle = '#a5f3fc';
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(6, -2.5); ctx.lineTo(26, -2.5); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(6, 2.5); ctx.lineTo(26, 2.5); ctx.stroke();
+            ctx.fillStyle = '#67e8f9';
+            ctx.beginPath(); ctx.arc(-4, 0, 7, 0, Math.PI * 2); ctx.fill();
+            break;
+        }
+    }
+    ctx.restore();
+    ctx.restore();
+}
+
+function hexA(hex, a) {
+    const c = hex.replace('#', '');
+    const n = parseInt(c.length === 3 ? c.split('').map(x => x + x).join('') : c, 16);
+    return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
+
+/* ---------- 敵人繪製 ---------- */
+function drawEnemy(e, time) {
+    const def = ENEMY_DEFS[e.type];
+    const s = def.size;
+    const bob = Math.sin(time * 7 + e.seed) * (def.bob || 0);
+    const col = e.hitFlash > 0 ? '#ffffff' : def.color;
+
+    ctx.save();
+    ctx.translate(e.x, e.y + bob);
+    if (def.alpha) ctx.globalAlpha = def.alpha;
+
+    ctx.shadowColor = def.color;
+    ctx.shadowBlur = def.glow || 12;
+
+    switch (def.shape) {
+        case 'bug': {
+            ctx.strokeStyle = col;
+            ctx.lineWidth = 2;
+            for (let i = -1; i <= 1; i++) {
+                const wig = Math.sin(time * 12 + i * 2 + e.seed) * 3.5;
+                ctx.beginPath();
+                ctx.moveTo(i * s * 0.45, 0);
+                ctx.lineTo(i * s * 0.9, -s * 0.75 + wig);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(i * s * 0.45, 0);
+                ctx.lineTo(i * s * 0.9, s * 0.75 - wig);
+                ctx.stroke();
+            }
+            ctx.fillStyle = col;
+            ctx.beginPath();
+            ctx.ellipse(0, 0, s, s * 0.72, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = 'rgba(255,255,255,0.2)';
+            ctx.beginPath();
+            ctx.ellipse(-s * 0.2, -s * 0.22, s * 0.5, s * 0.28, -0.4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(-s * 0.62, -s * 0.16, s * 0.16, 0, Math.PI * 2);
+            ctx.arc(-s * 0.62, s * 0.16, s * 0.16, 0, Math.PI * 2);
+            ctx.fill();
+            break;
+        }
+        case 'dart': {
+            // 尾跡
+            const tg = ctx.createLinearGradient(0, 0, s * 3, 0);
+            tg.addColorStop(0, hexA(def.color, 0.55));
+            tg.addColorStop(1, hexA(def.color, 0));
+            ctx.fillStyle = tg;
+            ctx.beginPath();
+            ctx.moveTo(0, -s * 0.5); ctx.lineTo(s * 3, 0); ctx.lineTo(0, s * 0.5);
+            ctx.closePath(); ctx.fill();
+
+            ctx.fillStyle = col;
+            ctx.beginPath();
+            ctx.moveTo(s * 1.3, 0);
+            ctx.lineTo(-s * 0.8, -s * 0.72);
+            ctx.lineTo(-s * 0.35, 0);
+            ctx.lineTo(-s * 0.8, s * 0.72);
+            ctx.closePath(); ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.beginPath(); ctx.arc(s * 0.35, 0, s * 0.2, 0, Math.PI * 2); ctx.fill();
+            break;
+        }
+        case 'hex': {
+            ctx.fillStyle = col;
+            ctx.beginPath();
+            for (let i = 0; i < 6; i++) {
+                const a = i * Math.PI / 3 + Math.PI / 6;
+                const px = Math.cos(a) * s, py = Math.sin(a) * s;
+                i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+            }
+            ctx.closePath(); ctx.fill();
+            ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.fillStyle = '#1e293b';
+            ctx.beginPath(); ctx.arc(0, 0, s * 0.45, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#f87171';
+            ctx.beginPath();
+            ctx.arc(0, 0, s * 0.22 + Math.sin(time * 6) * 1.5, 0, Math.PI * 2);
+            ctx.fill();
+            break;
+        }
+        case 'diamond': {
+            const pulse = 1 + Math.sin(time * 8 + e.seed) * 0.12;
+            ctx.save();
+            ctx.scale(pulse, pulse);
+            ctx.fillStyle = col;
+            ctx.beginPath();
+            ctx.moveTo(s, 0); ctx.lineTo(0, -s); ctx.lineTo(-s, 0); ctx.lineTo(0, s);
+            ctx.closePath(); ctx.fill();
+            ctx.fillStyle = 'rgba(255,255,255,0.45)';
+            ctx.beginPath();
+            ctx.moveTo(s * 0.55, 0); ctx.lineTo(0, -s * 0.55); ctx.lineTo(-s * 0.55, 0); ctx.lineTo(0, s * 0.55);
+            ctx.closePath(); ctx.fill();
+            ctx.restore();
+            break;
+        }
+        case 'blob': {
+            ctx.fillStyle = col;
+            ctx.beginPath();
+            for (let i = 0; i <= 12; i++) {
+                const a = (i / 12) * Math.PI * 2;
+                const rr = s * (0.82 + Math.sin(a * 3 + time * 3 + e.seed) * 0.16);
+                const px = Math.cos(a) * rr, py = Math.sin(a) * rr;
+                i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+            }
+            ctx.closePath(); ctx.fill();
+            ctx.fillStyle = 'rgba(255,255,255,0.35)';
+            ctx.beginPath();
+            ctx.arc(-s * 0.25, -s * 0.25, s * 0.22, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(s * 0.3, s * 0.1, s * 0.14, 0, Math.PI * 2);
+            ctx.fill();
+            break;
+        }
+        case 'star': {
+            ctx.save();
+            ctx.rotate(time * 0.9 + e.seed);
+            ctx.fillStyle = col;
+            ctx.beginPath();
+            for (let i = 0; i < 10; i++) {
+                const a = (i / 10) * Math.PI * 2 - Math.PI / 2;
+                const rr = i % 2 ? s * 0.45 : s;
+                const px = Math.cos(a) * rr, py = Math.sin(a) * rr;
+                i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+            }
+            ctx.closePath(); ctx.fill();
+            ctx.restore();
+            // 治療光環
+            ctx.strokeStyle = hexA(def.color, 0.4 + Math.sin(time * 3) * 0.2);
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(0, 0, s * 2.2, 0, Math.PI * 2); ctx.stroke();
+            break;
+        }
+        case 'ring': {
+            ctx.fillStyle = col;
+            ctx.beginPath(); ctx.arc(0, 0, s * 0.7, 0, Math.PI * 2); ctx.fill();
+            // 護盾弧
+            const shieldRatio = e.maxShield > 0 ? e.shield / e.maxShield : 0;
+            if (shieldRatio > 0) {
+                ctx.strokeStyle = '#7dd3fc';
+                ctx.lineWidth = 3.5;
+                ctx.shadowColor = '#7dd3fc';
+                ctx.shadowBlur = 14;
+                ctx.beginPath();
+                ctx.arc(0, 0, s * 1.15, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * shieldRatio);
+                ctx.stroke();
+            }
+            ctx.fillStyle = '#fff';
+            ctx.beginPath(); ctx.arc(0, 0, s * 0.24, 0, Math.PI * 2); ctx.fill();
+            break;
+        }
+        case 'ghost': {
+            ctx.globalAlpha = 0.62;
+            ctx.fillStyle = col;
+            ctx.beginPath();
+            ctx.arc(0, -s * 0.2, s * 0.85, Math.PI, 0);
+            for (let i = 0; i <= 4; i++) {
+                const px = s * 0.85 - (i / 4) * s * 1.7;
+                const py = s * 0.55 + (i % 2 ? s * 0.3 : 0);
+                ctx.lineTo(px, py);
+            }
+            ctx.closePath(); ctx.fill();
+            ctx.fillStyle = '#0f172a';
+            ctx.beginPath();
+            ctx.arc(-s * 0.28, -s * 0.28, s * 0.18, 0, Math.PI * 2);
+            ctx.arc(s * 0.28, -s * 0.28, s * 0.18, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+            break;
+        }
+        case 'boss': {
+            // 外環
+            ctx.save();
+            ctx.rotate(time * 0.7);
+            ctx.strokeStyle = hexA(def.color, 0.65);
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            for (let i = 0; i < 3; i++) {
+                const a = (i / 3) * Math.PI * 2;
+                ctx.moveTo(Math.cos(a) * s * 1.5, Math.sin(a) * s * 1.5);
+                ctx.arc(0, 0, s * 1.5, a, a + 1.1);
+            }
+            ctx.stroke();
+            ctx.restore();
+            // 本體
+            ctx.fillStyle = col;
+            ctx.beginPath();
+            for (let i = 0; i < 8; i++) {
+                const a = (i / 8) * Math.PI * 2 + time * 0.3;
+                const rr = i % 2 ? s * 0.7 : s;
+                const px = Math.cos(a) * rr, py = Math.sin(a) * rr;
+                i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+            }
+            ctx.closePath(); ctx.fill();
+            // 核心眼
+            ctx.fillStyle = '#fde68a';
+            ctx.beginPath();
+            ctx.arc(0, 0, s * 0.34, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#7f1d1d';
+            ctx.beginPath();
+            ctx.arc(-s * 0.05, 0, s * 0.16, 0, Math.PI * 2);
+            ctx.fill();
+            break;
+        }
+    }
+    ctx.restore();
+
+    // 血條
+    const barW = Math.max(22, s * 2.2);
+    const topY = e.y + bob - s - (def.shape === 'boss' ? 26 : 12);
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.beginPath(); ctx.roundRect(e.x - barW / 2, topY, barW, 4.5, 2); ctx.fill();
+    const hpRatio = Math.max(0, e.hp / e.maxHp);
+    const hpColor = hpRatio > 0.5 ? '#22c55e' : hpRatio > 0.22 ? '#f59e0b' : '#ef4444';
+    ctx.fillStyle = hpColor;
+    ctx.beginPath(); ctx.roundRect(e.x - barW / 2, topY, barW * hpRatio, 4.5, 2); ctx.fill();
+    if (e.maxShield > 0 && e.shield > 0) {
+        ctx.fillStyle = '#38bdf8';
+        ctx.beginPath(); ctx.roundRect(e.x - barW / 2, topY - 5, barW * (e.shield / e.maxShield), 3, 1.5); ctx.fill();
+    }
+    ctx.restore();
+}
+
+/* ---------- 機兵繪製 ---------- */
+function drawBot(bot, time) {
+    const x = bot.x, y = bot.y;
+    ctx.save();
+    ctx.translate(x, y);
+
+    // 推進器光
+    const gg = ctx.createRadialGradient(0, 12, 1, 0, 12, 16);
+    gg.addColorStop(0, 'rgba(56,189,248,0.7)');
+    gg.addColorStop(1, 'rgba(56,189,248,0)');
+    ctx.fillStyle = gg;
+    ctx.beginPath(); ctx.arc(0, 12, 16, 0, Math.PI * 2); ctx.fill();
+
+    // 旋翼
+    const spin = time * 16 + bot.phase;
+    ctx.strokeStyle = 'rgba(125,211,252,0.75)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(spin) * 15, Math.sin(spin) * 15);
+    ctx.lineTo(-Math.cos(spin) * 15, -Math.sin(spin) * 15);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(spin + Math.PI / 2) * 15, Math.sin(spin + Math.PI / 2) * 15);
+    ctx.lineTo(-Math.cos(spin + Math.PI / 2) * 15, -Math.sin(spin + Math.PI / 2) * 15);
+    ctx.stroke();
+
+    // 機身
+    const bg = ctx.createLinearGradient(-9, -9, 9, 9);
+    bg.addColorStop(0, '#7dd3fc');
+    bg.addColorStop(1, '#0369a1');
+    ctx.fillStyle = bg;
+    ctx.beginPath(); ctx.arc(0, 0, 9.5, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#e0f2fe';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = '#f0f9ff';
+    ctx.beginPath(); ctx.arc(0, 0, 3.4, 0, Math.PI * 2); ctx.fill();
+
+    ctx.restore();
+
+    drawStack(bot);
+}
+
+/* ---------- 玩家繪製 ---------- */
+function drawPlayer(obj, time) {
+    const x = obj.x, y = obj.y;
+
+    // 攻擊範圍
+    ctx.save();
+    ctx.strokeStyle = 'rgba(56,189,248,0.14)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([5, 8]);
+    ctx.beginPath(); ctx.arc(x, y, obj.atkRange, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+
+    // 光暈
+    const glow = ctx.createRadialGradient(x, y, 3, x, y, 40);
+    glow.addColorStop(0, 'rgba(56,189,248,0.45)');
+    glow.addColorStop(1, 'rgba(56,189,248,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(x, y, 40, 0, Math.PI * 2); ctx.fill();
+
+    // 旋轉外環
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(time * 1.1);
+    ctx.strokeStyle = 'rgba(56,189,248,0.85)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = 0; i < 3; i++) {
+        const a = (i / 3) * Math.PI * 2;
+        ctx.moveTo(Math.cos(a) * 21, Math.sin(a) * 21);
+        ctx.arc(0, 0, 21, a, a + Math.PI / 3.2);
+    }
+    ctx.stroke();
+    ctx.restore();
+
+    // 機身
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2 - Math.PI / 6;
+        const px = Math.cos(a) * 15, py = Math.sin(a) * 15;
+        i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+    }
+    ctx.closePath();
+    const bodyG = ctx.createLinearGradient(-15, -15, 15, 15);
+    bodyG.addColorStop(0, '#bae6fd');
+    bodyG.addColorStop(0.5, '#38bdf8');
+    bodyG.addColorStop(1, '#0369a1');
+    ctx.fillStyle = bodyG;
+    ctx.shadowColor = '#38bdf8';
+    ctx.shadowBlur = 16;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = '#e0f2fe';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // 炮口
+    ctx.rotate(obj.angle || 0);
+    ctx.fillStyle = '#0c4a6e';
+    ctx.beginPath(); ctx.roundRect(9, -3.5, 14, 7, 3); ctx.fill();
+    ctx.fillStyle = '#7dd3fc';
+    ctx.beginPath(); ctx.roundRect(20, -2.5, 5, 5, 2); ctx.fill();
+
+    // 核心
+    ctx.rotate(-(obj.angle || 0));
+    ctx.fillStyle = '#f0f9ff';
+    ctx.beginPath(); ctx.arc(0, 0, 5.2, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#0284c7';
+    ctx.beginPath(); ctx.arc(0, 0, 2.4, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+
+    drawStack(obj);
+}
+
+/* ---------- 背包堆疊 ---------- */
+function drawStack(obj) {
+    obj.bag.forEach((it, i) => {
+        const col = ITEMS[it.type].color;
+        ctx.save();
+        ctx.fillStyle = col;
+        ctx.globalAlpha = 0.95;
+        ctx.beginPath();
+        ctx.roundRect(obj.x - 10, obj.y - 30 - i * 8, 20, 6, 2);
+        ctx.fill();
+        ctx.restore();
+    });
+}
+
+/* =========================================================
+   初始化
+   ========================================================= */
+buildTurretListUI();
+buildAchListUI();
+updateInspector();
+updateUI();
+
+window.addEventListener('pagehide', saveGame);
+window.addEventListener('beforeunload', saveGame);
+
+initializeTycoon().catch(error => {
+    console.error('雨神大亨初始化失敗：', error);
+    const st = document.getElementById('tycoon-leaderboard-status');
+    if (st) st.textContent = '遊戲初始化失敗，請重新整理頁面。';
+    requestAnimationFrame(draw);
+});
+</script>
 </body>
 </html>
