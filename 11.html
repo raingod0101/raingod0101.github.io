@@ -3,261 +3,1725 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>雨神大亨 | Raingod</title>
+<title>雨神大亨 · 征服</title>
 <style>
-    * { touch-action: none; user-select: none; box-sizing: border-box; }
-    body { margin: 0; background: #020617; overflow: hidden; font-family: 'Segoe UI', system-ui, sans-serif; }
-    #ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
+    * { touch-action: none; user-select: none; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body { margin: 0; background: #020617; overflow: hidden; font-family: 'Segoe UI', system-ui, sans-serif; color: #e2e8f0; }
 
-    .top-bar {
-        position: absolute !important;
-        top: 110px !important;
-        left: 50% !important;
-        transform: translateX(-50%) !important;
-        background: rgba(15, 23, 42, 0.92);
-        border: 1px solid #38bdf8;
-        box-shadow: 0 0 20px rgba(56, 189, 248, 0.2);
-        padding: 8px 20px;
-        border-radius: 30px;
-        pointer-events: auto;
-        backdrop-filter: blur(8px);
-        display: flex;
-        gap: 16px;
-        align-items: center;
-        white-space: nowrap;
-        z-index: 999 !important;
+    #gameCanvas { position: fixed; inset: 0; display: block; cursor: grab; }
+    #gameCanvas:active { cursor: grabbing; }
+
+    /* ---- 頂部資源欄 ---- */
+    #resourceBar {
+        position: fixed; top: 8px; left: 50%; transform: translateX(-50%);
+        display: flex; gap: 6px; padding: 6px 10px; z-index: 20;
+        background: rgba(15,23,42,0.92); border: 1px solid #38bdf8; border-radius: 14px;
+        backdrop-filter: blur(8px); box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+        flex-wrap: wrap; justify-content: center; max-width: 96vw;
     }
-    .hud-item { font-size: 12px; font-weight: bold; color: #f8fafc; }
-    .money { color: #4ade80; font-size: 16px; font-weight: 900; }
-    .dark-matter { color: #c084fc; font-size: 12px; }
+    .res-item { display: flex; align-items: center; gap: 3px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+    .res-item b { font-size: 13px; }
+    .r-gold { color: #fbbf24; }
+    .r-food { color: #4ade80; }
+    .r-wood { color: #d97706; }
+    .r-stone { color: #94a3b8; }
+    .r-dm { color: #c084fc; }
+    .r-land { color: #38bdf8; }
 
-    .skill-bar {
-        position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%);
-        display: flex; gap: 8px; pointer-events: auto;
+    /* ---- 小地圖 ---- */
+    #minimapWrap {
+        position: fixed; left: 8px; bottom: 8px; z-index: 20;
+        border: 1px solid #38bdf8; border-radius: 10px; overflow: hidden;
+        background: rgba(2,6,23,0.85); box-shadow: 0 4px 16px rgba(0,0,0,0.6);
     }
-    .skill-btn {
-        background: rgba(15, 23, 42, 0.9); border: 1px solid #38bdf8; color: #fff;
-        padding: 7px 10px; border-radius: 8px; font-size: 11px; font-weight: bold; cursor: pointer;
-        display: flex; flex-direction: column; align-items: center; gap: 2px; transition: all 0.2s;
-        min-width: 72px;
+    #minimap { display: block; cursor: pointer; }
+    #zoomBtns { position: fixed; left: 8px; bottom: 148px; display: flex; gap: 4px; z-index: 20; }
+    #zoomBtns button, .mini-btn {
+        width: 30px; height: 30px; border-radius: 8px; border: 1px solid #38bdf8;
+        background: rgba(15,23,42,0.92); color: #fff; font-weight: 900; font-size: 15px;
+        cursor: pointer; display: flex; align-items: center; justify-content: center;
     }
-    .skill-btn:hover:not(:disabled) { background: #0284c7; }
-    .skill-btn:disabled, .skill-btn.cooling { opacity: 0.45; border-color: #475569; cursor: not-allowed; }
-    .sk-ico { font-size: 15px; line-height: 1; }
-    .sk-cd { font-size: 9px; color: #f59e0b; }
 
-    .panel {
-        position: absolute; bottom: 15px; right: 15px;
-        width: 330px; max-height: 78vh; overflow-y: auto;
-        background: rgba(15, 23, 42, 0.95); border: 1px solid #334155; border-radius: 12px;
-        pointer-events: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8); backdrop-filter: blur(8px);
+    /* ---- 底部命令欄 ---- */
+    #bottomBar {
+        position: fixed; bottom: 8px; left: 50%; transform: translateX(-50%);
+        display: flex; gap: 5px; z-index: 20;
+        background: rgba(15,23,42,0.92); border: 1px solid #334155; border-radius: 14px;
+        padding: 5px; backdrop-filter: blur(8px); box-shadow: 0 4px 20px rgba(0,0,0,0.6);
     }
-    .panel::-webkit-scrollbar { width: 4px; }
-    .panel::-webkit-scrollbar-thumb { background: #38bdf8; border-radius: 4px; }
-
-    .tabs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin-bottom: 2px; }
-    .tab-btn {
-        background: #1e293b; color: #94a3b8; border: none; padding: 7px 2px;
-        font-size: 10px; font-weight: bold; border-radius: 6px; cursor: pointer;
-        display: flex; flex-direction: column; align-items: center; gap: 2px;
+    .cmd-btn {
+        display: flex; flex-direction: column; align-items: center; gap: 1px;
+        padding: 6px 10px; border-radius: 10px; border: 1px solid transparent;
+        background: #1e293b; color: #cbd5e1; font-size: 9px; font-weight: 700;
+        cursor: pointer; min-width: 54px; transition: all 0.15s;
     }
-    .tab-btn.active { background: #0284c7; color: #fff; }
+    .cmd-btn .ico { font-size: 17px; line-height: 1; }
+    .cmd-btn:hover, .cmd-btn.active { background: #0284c7; color: #fff; border-color: #38bdf8; }
 
-    .btn {
-        background: linear-gradient(135deg, #1e293b, #0f172a); color: #fff; border: 1px solid #38bdf8;
-        padding: 8px 10px; font-weight: bold; font-size: 11px; border-radius: 8px; cursor: pointer;
-        display: flex; justify-content: space-between; align-items: center; transition: all 0.2s;
-        gap: 8px; text-align: left;
+    /* ---- 側邊面板 ---- */
+    #sidePanel {
+        position: fixed; top: 58px; right: 8px; width: 320px; max-width: 62vw;
+        max-height: calc(100vh - 130px); overflow-y: auto; z-index: 19;
+        background: rgba(15,23,42,0.96); border: 1px solid #334155; border-radius: 12px;
+        padding: 12px; display: none; flex-direction: column; gap: 8px;
+        backdrop-filter: blur(10px); box-shadow: 0 8px 30px rgba(0,0,0,0.8);
     }
-    .btn:hover:not(:disabled) { background: linear-gradient(135deg, #0284c7, #0369a1); border-color: #38bdf8; }
-    .btn:disabled { opacity: 0.35; border-color: #475569; cursor: not-allowed; }
-    .rebirth-btn { background: linear-gradient(135deg, #7e22ce, #581c87); border-color: #c084fc; }
-    .btn .desc { font-size: 9px; color: #94a3b8; font-weight: normal; display: block; margin-top: 2px; }
+    #sidePanel.show { display: flex; }
+    #sidePanel::-webkit-scrollbar { width: 5px; }
+    #sidePanel::-webkit-scrollbar-thumb { background: #38bdf8; border-radius: 4px; }
+    .panel-title { font-size: 13px; font-weight: 900; color: #38bdf8; display: flex; justify-content: space-between; align-items: center; }
+    .panel-title button { background: #1e293b; border: 1px solid #64748b; color: #cbd5e1; border-radius: 6px; padding: 3px 8px; font-size: 10px; cursor: pointer; }
 
-    .quest-box {
-        background: rgba(30, 41, 59, 0.6); border: 1px dashed #38bdf8; padding: 6px 8px;
-        border-radius: 6px; font-size: 10px; color: #e2e8f0; margin-bottom: 2px;
+    .card {
+        background: rgba(30,41,59,0.55); border: 1px solid #334155; border-radius: 9px;
+        padding: 8px 9px; display: flex; flex-direction: column; gap: 5px;
     }
-    .inspector {
-        background: rgba(8, 47, 73, 0.7); border: 1px solid #0ea5e9; border-radius: 8px;
-        padding: 8px; font-size: 11px; color: #e0f2fe; display: flex; flex-direction: column; gap: 6px;
+    .card-top { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+    .card-name { font-size: 12px; font-weight: 800; color: #f1f5f9; }
+    .card-desc { font-size: 9.5px; color: #94a3b8; line-height: 1.4; }
+    .act-btn {
+        border: 1px solid #38bdf8; border-radius: 7px; background: linear-gradient(135deg,#1e293b,#0f172a);
+        color: #fff; font-weight: 700; font-size: 10.5px; padding: 6px 9px; cursor: pointer; transition: all 0.15s;
     }
-    .inspector .row { display: flex; gap: 6px; }
-    .inspector .row .btn { flex: 1; justify-content: center; font-size: 10px; padding: 6px; }
-    .ach-row { font-size: 10px; color: #cbd5e1; display: flex; justify-content: space-between; padding: 4px 2px; border-bottom: 1px dashed #1e293b; }
-    .ach-row.done { color: #4ade80; }
+    .act-btn:hover:not(:disabled) { background: linear-gradient(135deg,#0284c7,#0369a1); }
+    .act-btn:disabled { opacity: 0.35; border-color: #475569; cursor: not-allowed; }
+    .act-btn.green { border-color: #4ade80; }
+    .act-btn.green:hover:not(:disabled) { background: linear-gradient(135deg,#166534,#14532d); }
+    .act-btn.red { border-color: #f87171; }
+    .act-btn.red:hover:not(:disabled) { background: linear-gradient(135deg,#b91c1c,#991b1b); }
+    .act-btn.purple { border-color: #c084fc; }
+    .act-btn.purple:hover:not(:disabled) { background: linear-gradient(135deg,#7e22ce,#581c87); }
+    .act-row { display: flex; gap: 6px; }
+    .act-row .act-btn { flex: 1; }
 
-    #tycoon-leaderboard-button { position: absolute; top: 160px; right: 15px; z-index: 20; pointer-events: auto; padding: 9px 14px; border: 1px solid #38bdf8; border-radius: 20px; color: #fff; background: rgba(15,23,42,0.9); font-weight: bold; cursor: pointer; }
-    #tycoon-leaderboard { position: fixed; inset: 0; z-index: 2000; display: none; align-items: center; justify-content: center; padding: 16px; background: rgba(2,6,23,0.94); color: #fff; }
-    .tycoon-leaderboard-card { width: min(520px, 100%); max-height: 80vh; overflow-y: auto; padding: 20px; border: 1px solid #38bdf8; border-radius: 16px; background: #0b1020; }
-    .tycoon-leaderboard-row { display: flex; justify-content: space-between; gap: 12px; padding: 10px 4px; border-bottom: 1px solid #26334a; }
-    .mobile-shop-toggle, .mobile-panel-close { display: none; }
+    .tabs { display: grid; grid-template-columns: repeat(4,1fr); gap: 4px; }
+    .tab { padding: 6px 2px; border-radius: 7px; background: #1e293b; color: #94a3b8; border: none; font-size: 10px; font-weight: 800; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 1px; }
+    .tab.active { background: #0284c7; color: #fff; }
+    .tab .ico { font-size: 15px; }
 
-    @media (max-width: 700px), (max-height: 500px) and (pointer: coarse) {
-        .nav-content { gap: 6px; padding: 0 8px !important; }
-        .brand { flex: 0 0 auto; white-space: nowrap; }
-        .nav-links { flex: 1; min-width: 0; justify-content: space-evenly; gap: 0 !important; margin-left: 4px !important; }
-        .nav-item { padding: 6px 3px !important; font-size: 11px !important; white-space: nowrap; }
-        .login-btn { flex: 0 0 auto; padding: 6px 8px !important; white-space: nowrap; }
+    .unit-row {
+        display: flex; justify-content: space-between; align-items: center; gap: 6px;
+        padding: 6px 8px; background: rgba(8,47,73,0.45); border-radius: 8px; font-size: 11px;
+    }
+    .unit-row .u-name { display: flex; align-items: center; gap: 5px; font-weight: 800; }
+    .qty-ctrl { display: flex; align-items: center; gap: 5px; }
+    .qty-ctrl button { width: 24px; height: 24px; border-radius: 6px; border: 1px solid #38bdf8; background: #0f172a; color: #fff; font-weight: 900; font-size: 13px; cursor: pointer; }
+    .qty-ctrl .q { min-width: 26px; text-align: center; font-weight: 900; color: #fbbf24; }
 
-        .top-bar {
-            top: calc(60px + env(safe-area-inset-top)) !important;
-            left: 8px !important;
-            width: calc(100% - 16px) !important;
-            transform: none !important;
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 4px 8px;
-            padding: 7px 10px;
-            border-radius: 12px;
-            white-space: normal;
-        }
-        .hud-item { font-size: 10px; }
-        .money { font-size: 13px; }
-        .dark-matter { font-size: 10px; }
+    /* ---- 戰鬥結算彈窗 ---- */
+    #battleModal {
+        position: fixed; inset: 0; z-index: 100; display: none; align-items: center; justify-content: center;
+        background: rgba(2,6,23,0.88); padding: 16px;
+    }
+    #battleModal.show { display: flex; }
+    .battle-card {
+        width: min(440px, 94vw); background: #0b1020; border: 2px solid #38bdf8; border-radius: 16px;
+        padding: 18px; display: flex; flex-direction: column; gap: 12px;
+        box-shadow: 0 0 40px rgba(56,189,248,0.3);
+    }
+    .battle-title { font-size: 20px; font-weight: 900; text-align: center; }
+    .battle-title.win { color: #4ade80; }
+    .battle-title.lose { color: #f87171; }
+    .battle-row { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 0; border-bottom: 1px dashed #1e293b; }
 
-        #tycoon-leaderboard-button { top: 146px; right: 8px; max-width: 46%; padding: 8px 10px; font-size: 11px; }
+    /* ---- 提示橫幅 ---- */
+    #toast {
+        position: fixed; top: 74px; left: 50%; transform: translateX(-50%) translateY(-20px);
+        background: rgba(15,23,42,0.96); border: 1px solid #38bdf8; border-radius: 10px;
+        padding: 8px 16px; font-size: 12px; font-weight: 700; color: #e0f2fe; z-index: 50;
+        opacity: 0; transition: all 0.25s; pointer-events: none; white-space: nowrap; max-width: 90vw; overflow: hidden;
+    }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-        .skill-bar {
-            bottom: max(8px, env(safe-area-inset-bottom));
-            left: 8px; right: 8px; transform: none; gap: 5px;
-        }
-        .skill-btn { flex: 1; min-width: 0; padding: 6px 2px; font-size: 8px; }
-        .sk-ico { font-size: 13px; }
-        .sk-cd { font-size: 8px; }
+    /* ---- 出征模式提示 ---- */
+    #modeHint {
+        position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        background: rgba(2,6,23,0.82); border: 1px solid #fbbf24; border-radius: 12px;
+        padding: 10px 20px; font-size: 13px; font-weight: 900; color: #fbbf24; z-index: 30;
+        display: none; pointer-events: none; text-align: center;
+    }
+    #modeHint.show { display: block; }
 
-        .panel {
-            display: none; left: 0; right: 0; bottom: 0; width: 100%;
-            max-height: 56dvh;
-            padding: 10px max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
-            border-radius: 14px 14px 0 0;
-            touch-action: pan-y; -webkit-overflow-scrolling: touch;
-        }
-        #ui.shop-open .panel { display: flex; }
-        #ui.shop-open .skill-bar { display: none; }
-        .mobile-panel-close {
-            display: block; align-self: flex-end; padding: 7px 12px; border: 1px solid #64748b;
-            border-radius: 8px; background: #1e293b; color: #fff; font-weight: bold; touch-action: manipulation;
-        }
-        .mobile-shop-toggle {
-            display: block; position: absolute; right: 10px;
-            bottom: calc(62px + env(safe-area-inset-bottom)); z-index: 15;
-            padding: 9px 13px; border: 1px solid #38bdf8; border-radius: 20px;
-            background: rgba(15, 23, 42, 0.95); color: #fff; font-weight: bold;
-            pointer-events: auto; touch-action: manipulation;
-        }
-        #ui.shop-open .mobile-shop-toggle { display: none; }
-
-        .tab-btn { min-height: 40px; font-size: 9px; }
-        .btn { min-height: 40px; font-size: 11px; touch-action: manipulation; }
-        #tycoon-leaderboard { padding: max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom)); }
-        .tycoon-leaderboard-card { max-height: 85dvh; padding: 14px; touch-action: pan-y; -webkit-overflow-scrolling: touch; }
-        .tycoon-leaderboard-row { flex-direction: column; gap: 4px; }
+    @media (max-width: 720px) {
+        #resourceBar { top: 4px; gap: 4px; padding: 5px 7px; border-radius: 10px; }
+        .res-item { font-size: 10px; }
+        .res-item b { font-size: 11px; }
+        #sidePanel { top: 76px; width: 260px; max-width: 78vw; max-height: calc(100vh - 200px); padding: 9px; }
+        #zoomBtns { bottom: 132px; }
+        #zoomBtns button, .mini-btn { width: 27px; height: 27px; font-size: 13px; }
+        #bottomBar { padding: 4px; gap: 3px; }
+        .cmd-btn { padding: 5px 7px; min-width: 46px; font-size: 8px; }
+        .cmd-btn .ico { font-size: 15px; }
+        #minimapWrap { transform: scale(0.9); transform-origin: left bottom; }
     }
 </style>
 </head>
 <body>
-<link rel="stylesheet" href="menu.css">
 
-<div id="nav_bar"></div>
+<canvas id="gameCanvas"></canvas>
 
-<script src="menu.js"></script>
-<canvas id="c"></canvas>
-<div id="ui">
-    <div class="top-bar">
-        <div class="hud-item">$<span id="m" class="money">0</span></div>
-        <div class="hud-item dark-matter">🌌 <span id="dm">0</span></div>
-        <div class="hud-item" style="color: #ef4444;">⚔️ 第 <span id="waveNum">1</span> 波</div>
-        <div class="hud-item" style="color: #fb7185;">👾 <span id="enemyCount">0</span></div>
-        <div class="hud-item" style="color:#fbbf24;">🔥 <span id="comboNum">0</span></div>
-        <div class="hud-item" style="color:#22d3ee;">⏱ <span id="waveTimer">20s</span></div>
-    </div>
-
-    <div class="skill-bar">
-        <button class="skill-btn" data-skill="1"><span class="sk-ico">⚡</span><span>超頻</span><span class="sk-cd" id="cd1">就緒</span></button>
-        <button class="skill-btn" data-skill="2"><span class="sk-ico">💥</span><span>軌道砲</span><span class="sk-cd" id="cd2">就緒</span></button>
-        <button class="skill-btn" data-skill="3"><span class="sk-ico">❄️</span><span>時間凍結</span><span class="sk-cd" id="cd3">就緒</span></button>
-        <button class="skill-btn" data-skill="4"><span class="sk-ico">🌀</span><span>引力奇點</span><span class="sk-cd" id="cd4">就緒</span></button>
-    </div>
-
-    <div class="panel" id="tycoon-panel">
-        <button class="mobile-panel-close" type="button" onclick="toggleTycoonShop(false)">收起商店 ▲</button>
-        <div class="quest-box">🎯 任務：<span id="questText">載入中...</span> (<span id="questProg">0/0</span>)</div>
-        <div id="turret-inspector" class="inspector" style="display:none;"></div>
-
-        <div class="tabs">
-            <button class="tab-btn active" data-tab="tab-turret"><span>⚔️</span>武器塔</button>
-            <button class="tab-btn" data-tab="tab-prod"><span>🏭</span>工廠</button>
-            <button class="tab-btn" data-tab="tab-upg"><span>⚙️</span>升級</button>
-            <button class="tab-btn" data-tab="tab-tech"><span>🌌</span>天賦</button>
-            <button class="tab-btn" data-tab="tab-more"><span>🎯</span>挑戰</button>
-        </div>
-
-        <div id="tab-turret">
-            <div id="turret-list" style="display:flex; flex-direction:column; gap:6px;"></div>
-            <button class="btn" style="background: linear-gradient(135deg, #b91c1c, #991b1b); border-color: #f87171; margin-top:4px;" onclick="triggerNextWave()">
-                <span>⚠️ 立即召喚下一波敵人</span>
-            </button>
-        </div>
-
-        <div id="tab-prod" style="display:none;">
-            <button class="btn" data-unlock="2"><span>🔓 矽晶/晶片廠<div class="desc">解鎖晶片生產線</div></span><span style="color:#4ade80">$2,500</span></button>
-            <button class="btn" data-unlock="3"><span>🔓 鈾能/電池中心<div class="desc">解鎖核電池</div></span><span style="color:#4ade80">$25,000</span></button>
-            <button class="btn" data-unlock="4"><span>🔓 量子合成廠<div class="desc">解鎖量子核心</div></span><span style="color:#4ade80">$200,000</span></button>
-            <button class="btn" data-unlock="5"><span>🔓 反物質研究所<div class="desc">解鎖反物質</div></span><span style="color:#4ade80">$2,000,000</span></button>
-        </div>
-
-        <div id="tab-upg" style="display:none;">
-            <button class="btn" onclick="buyBot()"><span>🤖 雇用運輸機兵<div class="desc">自動搬運礦物</div></span><span style="color:#4ade80" id="bCost">$500</span></button>
-            <button class="btn" onclick="upgrade('miner')"><span>⚙️ 採礦速率 Lv.<span id="minerLv">0</span></span><span style="color:#4ade80" id="mCost">$1,000</span></button>
-            <button class="btn" onclick="upgrade('capacity')"><span>🎒 機兵容量 Lv.<span id="capLv">4</span></span><span style="color:#4ade80" id="cCost">$1,500</span></button>
-            <button class="btn" onclick="upgrade('playerDamage')"><span>⚔️ 玩家傷害 Lv.<span id="playerDamageLv">0</span><div class="desc">每級 +25%</div></span><span style="color:#4ade80" id="playerDamageCost">$1,000</span></button>
-            <button class="btn" onclick="upgrade('turretDamage')"><span>🛡️ 防衛塔傷害 Lv.<span id="turretDamageLv">0</span><div class="desc">每級 +20%</div></span><span style="color:#4ade80" id="turretDamageCost">$1,500</span></button>
-        </div>
-
-        <div id="tab-tech" style="display:none;">
-            <button class="btn rebirth-btn" data-talent="dmg"><span>🧬 基因傷害 +20%</span><span style="color:#c084fc" id="tDmgCost">5 DM</span></button>
-            <button class="btn rebirth-btn" data-talent="spd"><span>🤖 機兵速度 +15%</span><span style="color:#c084fc" id="tSpdCost">5 DM</span></button>
-            <button class="btn rebirth-btn" data-talent="range"><span>🎯 全體射程 +10%</span><span style="color:#c084fc" id="tRangeCost">5 DM</span></button>
-            <button class="btn rebirth-btn" data-talent="crit"><span>💢 暴擊率 +5%</span><span style="color:#c084fc" id="tCritCost">5 DM</span></button>
-            <button class="btn rebirth-btn" data-talent="money"><span>💰 金錢收益 +25%</span><span style="color:#c084fc" id="tMoneyCost">5 DM</span></button>
-            <button class="btn rebirth-btn" style="margin-top:8px;" onclick="triggerRebirth()">
-                <span>🌌 暗物質量子轉生</span><span style="color:#c084fc" id="rebirthGain">+0 DM</span>
-            </button>
-        </div>
-
-        <div id="tab-more" style="display:none;">
-            <div style="font-size:10px; color:#94a3b8; margin-bottom:2px;">🏆 成就</div>
-            <div id="ach-list"></div>
-        </div>
-    </div>
-    <button class="mobile-shop-toggle" type="button" aria-controls="tycoon-panel" aria-expanded="false" onclick="toggleTycoonShop()">🛠️ 建造 / 升級</button>
+<!-- 資源欄 -->
+<div id="resourceBar">
+    <span class="res-item r-gold">💰<b id="uiGold">0</b></span>
+    <span class="res-item r-food">🌾<b id="uiFood">0</b></span>
+    <span class="res-item r-wood">🪵<b id="uiWood">0</b></span>
+    <span class="res-item r-stone">🪨<b id="uiStone">0</b></span>
+    <span class="res-item r-dm">🌌<b id="uiDm">0</b></span>
+    <span class="res-item r-land">🏳️<b id="uiLand">0</b></span>
 </div>
 
-<button id="tycoon-leaderboard-button" onclick="openTycoonLeaderboard()">🏆 登入後查看排行榜</button>
-<div id="tycoon-leaderboard">
-    <div class="tycoon-leaderboard-card">
-        <h2 style="color:#38bdf8; margin-top:0;">🏆 雨神大亨排行榜</h2>
-        <p id="tycoon-leaderboard-status" style="color:#aaa;">請登入帳號後查看。</p>
-        <div id="tycoon-leaderboard-list"></div>
-        <div style="display:flex; gap:8px; justify-content:center; margin-top:14px;">
-            <button class="btn" onclick="refreshTycoonLeaderboard()">重新整理</button>
-            <button class="btn" onclick="closeTycoonLeaderboard()">關閉</button>
-        </div>
+<!-- 小地圖 -->
+<div id="minimapWrap"><canvas id="minimap" width="180" height="120"></canvas></div>
+<div id="zoomBtns">
+    <button onclick="zoomBy(1.25)">+</button>
+    <button onclick="zoomBy(0.8)">−</button>
+    <button onclick="centerOnPlayer()" title="回到基地">🏠</button>
+</div>
+
+<!-- 底部命令欄 -->
+<div id="bottomBar">
+    <button class="cmd-btn" data-cmd="build"><span class="ico">🏗️</span>建造</button>
+    <button class="cmd-btn" data-cmd="train"><span class="ico">⚔️</span>兵營</button>
+    <button class="cmd-btn" data-cmd="army"><span class="ico">🛡️</span>軍隊</button>
+    <button class="cmd-btn" data-cmd="conquest"><span class="ico">🚩</span>遠征</button>
+    <button class="cmd-btn" data-cmd="tech"><span class="ico">🧬</span>轉生</button>
+</div>
+
+<!-- 側邊面板 -->
+<div id="sidePanel">
+    <div class="panel-title">
+        <span id="panelTitle">面板</span>
+        <button onclick="closePanel()">✕</button>
+    </div>
+    <div id="panelBody"></div>
+</div>
+
+<!-- 出征提示 -->
+<div id="modeHint">🎯 點擊地圖上的目標領地開始遠征<br><span style="font-size:10px;color:#94a3b8">按 ESC 或再點「遠征」取消</span></div>
+
+<!-- 戰鬥結算 -->
+<div id="battleModal">
+    <div class="battle-card">
+        <div class="battle-title" id="battleTitle">戰鬥</div>
+        <div id="battleBody"></div>
+        <button class="act-btn" onclick="closeBattle()">關閉</button>
     </div>
 </div>
+
+<!-- Toast -->
+<div id="toast"></div>
 
 <script>
-/* =========================================================
-   雨神大亨 · 全面進化版
-   ========================================================= */
-const cvs = document.getElementById('c');
-const ctx = cvs.getContext('2d');
-const SAVE_KEY = 'raingod_tycoon_save';
-const TYCOON_LEADERBOARD_URL = 'https://game-24b43-default-rtdb.firebaseio.com/raingod_tycoon_leaderboard';
+/* ============================================================
+   雨神大亨 · 征服版
+   大地圖戰略 + 軍隊 + 領地征服 + 敵方 AI
+   ============================================================ */
 
-/* ---- roundRect polyfill ---- */
+const cvs = document.getElementById('gameCanvas');
+const ctx = cvs.getContext('2d');
+const miniCvs = document.getElementById('minimap');
+const mctx = miniCvs.getContext('2d');
+
+/* ---------- 世界設定 ---------- */
+const WORLD = { w: 3600, h: 2400 };
+let DPR = Math.min(window.devicePixelRatio || 1, 2);
+let VW = window.innerWidth, VH = window.innerHeight;
+
+/* ---------- 相機 ---------- */
+const cam = { x: 0, y: 0, zoom: 0.85 };
+let dragState = null; // {startX, startY, camX, camY, moved}
+
+/* ---------- 資源 / 遊戲狀態 ---------- */
+let res = { gold: 3000, food: 400, wood: 400, stone: 300, dm: 0 };
+let buildings = [];      // 玩家建築
+let territories = [];    // 領地（含玩家 / 中立 / 敵方）
+let garrison = {};       // 基地駐軍 { unitType: count }
+let trainQueue = [];     // 訓練隊列 { type, timeLeft }
+let expeditions = [];    // 玩家遠征軍
+let enemyArmies = [];    // 敵方來襲軍隊
+let particles = [], floats = [], shocks = [];
+let gameTime = 0;
+let lastFrame = performance.now();
+let selectedTerritory = null;
+let selectedBuilding = null;
+let buildMode = null;    // 建造模式中的建築類型
+let attackMode = false;  // 遠征目標選擇模式
+let currentPanel = null;
+
+/* ---------- 玩家基地 ---------- */
+const playerBase = { x: 700, y: 1200, r: 190 };
+
+/* ============================================================
+   單位 / 建築 / 領地定義
+   ============================================================ */
+const UNITS = {
+    militia:  { name: '民兵',   icon: '🗡️', cost: { gold: 100 },                     atk: 9,   hp: 70,   trainTime: 2.5, color: '#a8a29e', desc: '廉價砲灰' },
+    archer:   { name: '弓箭手', icon: '🏹', cost: { gold: 160, wood: 60 },           atk: 16,  hp: 55,   trainTime: 3.5, color: '#22c55e', desc: '遠程輸出' },
+    knight:   { name: '騎士',   icon: '🐴', cost: { gold: 320, food: 120 },         atk: 34,  hp: 170,  trainTime: 6,   color: '#60a5fa', desc: '高攻高血' },
+    mage:     { name: '法師',   icon: '🔮', cost: { gold: 420, stone: 120 },        atk: 62,  hp: 80,   trainTime: 8,   color: '#a855f7', desc: '爆發傷害' },
+    catapult: { name: '攻城車', icon: '🏰', cost: { gold: 550, wood: 220, stone: 220 }, atk: 95, hp: 340, trainTime: 11, color: '#f59e0b', desc: '破城利器' },
+    dragon:   { name: '巨龍',   icon: '🐉', cost: { gold: 2200, food: 600, dm: 8 }, atk: 320, hp: 1300, trainTime: 22,  color: '#e11d48', desc: '王者之師', unlockLand: 5 }
+};
+
+const BUILDINGS = {
+    goldMine:   { name: '金礦場', icon: '🏵️', cost: { wood: 120 },  income: { gold: 10 },  desc: '每秒產出金幣', maxLv: 6 },
+    farm:       { name: '農場',   icon: '🌾', cost: { wood: 100 },  income: { food: 8 },   desc: '每秒產出糧食', maxLv: 6 },
+    lumberMill: { name: '伐木場', icon: '🪓', cost: { gold: 150 },  income: { wood: 7 },   desc: '每秒產出木材', maxLv: 6 },
+    quarry:     { name: '採石場', icon: '⛏️', cost: { gold: 150 },  income: { stone: 6 },  desc: '每秒產出石料', maxLv: 6 },
+    barracks:   { name: '兵營',   icon: '⚔️', cost: { wood: 200, stone: 100 }, income: {}, desc: '解鎖軍隊訓練', maxLv: 1, unique: true },
+    tower:      { name: '箭塔',   icon: '🏹', cost: { wood: 180, stone: 140 }, income: {}, desc: '攻擊範圍內敵軍', maxLv: 5, isTower: true }
+};
+
+const TERRITORY_TYPES = {
+    village:  { name: '中立村莊', color: '#fbbf24', icon: '🏘️', r: 80,  income: { gold: 6 },              desc: '弱小中立聚落' },
+    mine:     { name: '礦脈據點', color: '#facc15', icon: '💎', r: 70,  income: { gold: 4, stone: 4 },    desc: '資源據點' },
+    outpost:  { name: '敵方哨站', color: '#f97316', icon: '🗼', r: 90,  income: { gold: 8, food: 4 },     desc: '敵軍前哨' },
+    fortress: { name: '敵方要塞', color: '#ef4444', icon: '🏯', r: 120, income: { gold: 20, stone: 8 },   desc: '重兵把守' },
+    capital:  { name: '敵方王城', color: '#dc2626', icon: '👑', r: 150, income: { gold: 60, food: 20, stone: 20 }, desc: '敵軍首都' }
+};
+
+/* ============================================================
+   初始化
+   ============================================================ */
+function resize() {
+    VW = window.innerWidth; VH = window.innerHeight;
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    cvs.width = Math.floor(VW * DPR);
+    cvs.height = Math.floor(VH * DPR);
+    cvs.style.width = VW + 'px';
+    cvs.style.height = VH + 'px';
+}
+window.addEventListener('resize', resize);
+resize();
+
+function generateWorld() {
+    territories = [];
+    // 玩家主基地領地（本身算一個玩家領地）
+    territories.push({
+        id: 'home', name: '雨神主城', type: 'home', faction: 'player',
+        x: playerBase.x, y: playerBase.y, r: playerBase.r,
+        income: { gold: 15, food: 8 }, garrison: {}, isHome: true
+    });
+
+    // 中立村莊 / 礦脈（圍繞玩家基地周邊）
+    const neutralSpots = [
+        { x: 1250, y: 780,  type: 'village' },
+        { x: 1180, y: 1650, type: 'village' },
+        { x: 1500, y: 1150, type: 'mine' },
+        { x: 1050, y: 1050, type: 'mine' },
+        { x: 1550, y: 620,  type: 'village' },
+        { x: 1450, y: 1850, type: 'mine' },
+    ];
+    neutralSpots.forEach((s, i) => {
+        const def = TERRITORY_TYPES[s.type];
+        territories.push({
+            id: 'neutral_' + i, name: def.name + ' ' + (i + 1), type: s.type, faction: 'neutral',
+            x: s.x, y: s.y, r: def.r, income: { ...def.income },
+            garrison: { militia: 6 + i * 2, archer: 2 + i },
+            reward: { gold: 200 + i * 80 }
+        });
+    });
+
+    // 敵方哨站 / 要塞（中東部）
+    const enemySpots = [
+        { x: 2100, y: 700,  type: 'outpost' },
+        { x: 2150, y: 1650, type: 'outpost' },
+        { x: 2450, y: 1150, type: 'outpost' },
+        { x: 2700, y: 550,  type: 'fortress' },
+        { x: 2780, y: 1750, type: 'fortress' },
+        { x: 2950, y: 1200, type: 'capital' },
+    ];
+    enemySpots.forEach((s, i) => {
+        const def = TERRITORY_TYPES[s.type];
+        let gar;
+        if (s.type === 'outpost') gar = { militia: 14, archer: 8, knight: 3 };
+        else if (s.type === 'fortress') gar = { militia: 30, archer: 18, knight: 10, mage: 4 };
+        else gar = { militia: 50, archer: 30, knight: 20, mage: 12, catapult: 6, dragon: 2 };
+        territories.push({
+            id: 'enemy_' + i, name: def.name + ' ' + (i + 1), type: s.type, faction: 'enemy',
+            x: s.x, y: s.y, r: def.r, income: { ...def.income },
+            garrison: gar,
+            reward: { gold: 400 + i * 200, dm: s.type === 'capital' ? 60 : (s.type === 'fortress' ? 20 : 8) }
+        });
+    });
+
+    // 玩家初始建築
+    buildings = [];
+    addBuilding('goldMine', playerBase.x - 100, playerBase.y - 80);
+    addBuilding('farm', playerBase.x + 60, playerBase.y - 80);
+    addBuilding('lumberMill', playerBase.x - 100, playerBase.y + 80);
+    addBuilding('quarry', playerBase.x + 60, playerBase.y + 80);
+    addBuilding('barracks', playerBase.x, playerBase.y);
+
+    // 初始駐軍
+    garrison = { militia: 8, archer: 3 };
+}
+
+function addBuilding(type, x, y) {
+    buildings.push({
+        id: 'b_' + Math.random().toString(36).slice(2, 9),
+        type, x, y, lv: 1, incomeAcc: 0
+    });
+}
+
+/* ============================================================
+   相機 / 座標
+   ============================================================ */
+function clampCamera() {
+    const halfW = VW / (2 * cam.zoom), halfH = VH / (2 * cam.zoom);
+    cam.x = Math.max(halfW, Math.min(WORLD.w - halfW, cam.x));
+    cam.y = Math.max(halfH, Math.min(WORLD.h - halfH, cam.y));
+    if (WORLD.w * cam.zoom < VW) cam.x = WORLD.w / 2;
+    if (WORLD.h * cam.zoom < VH) cam.y = WORLD.h / 2;
+}
+function centerOnPlayer() {
+    cam.x = playerBase.x; cam.y = playerBase.y;
+    clampCamera();
+}
+function zoomBy(f) {
+    cam.zoom = Math.max(0.45, Math.min(1.8, cam.zoom * f));
+    clampCamera();
+}
+function screenToWorld(sx, sy) {
+    return { x: (sx - VW / 2) / cam.zoom + cam.x, y: (sy - VH / 2) / cam.zoom + cam.y };
+}
+function worldToScreen(wx, wy) {
+    return { x: (wx - cam.x) * cam.zoom + VW / 2, y: (wy - cam.y) * cam.zoom + VH / 2 };
+}
+
+/* ============================================================
+   工具
+   ============================================================ */
+const rnd = (a, b) => a + Math.random() * (b - a);
+const dist = (ax, ay, bx, by) => Math.hypot(ax - bx, ay - by);
+function toast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(el._t);
+    el._t = setTimeout(() => el.classList.remove('show'), 1800);
+}
+function addFloat(wx, wy, text, color, size) {
+    floats.push({ x: wx, y: wy, text, color: color || '#4ade80', size: size || 14, alpha: 1, vy: -1 });
+    if (floats.length > 80) floats.shift();
+}
+function addParticles(wx, wy, color, count, spd) {
+    count = Math.min(count, 30);
+    for (let i = 0; i < count; i++) {
+        const a = Math.random() * Math.PI * 2, v = rnd(0.4, 1) * (spd || 8);
+        particles.push({ x: wx, y: wy, vx: Math.cos(a) * v, vy: Math.sin(a) * v, size: rnd(2, 5), color, alpha: 1, decay: rnd(0.02, 0.05) });
+    }
+    if (particles.length > 300) particles.splice(0, particles.length - 300);
+}
+function addShock(wx, wy, color, maxR, life) {
+    shocks.push({ x: wx, y: wy, r: 8, maxR: maxR || 100, color, life: life || 1 });
+}
+function canAfford(cost) {
+    for (const k in cost) if ((res[k] || 0) < cost[k]) return false;
+    return true;
+}
+function pay(cost) {
+    for (const k in cost) res[k] -= cost[k];
+}
+
+/* ============================================================
+   軍隊計算
+   ============================================================ */
+function totalHp(units) {
+    let hp = 0;
+    for (const t in units) hp += (UNITS[t] ? UNITS[t].hp : 0) * units[t];
+    return hp;
+}
+function totalAtk(units) {
+    let a = 0;
+    for (const t in units) a += (UNITS[t] ? UNITS[t].atk : 0) * units[t];
+    return a;
+}
+function unitCount(units) {
+    let c = 0;
+    for (const t in units) c += units[t];
+    return c;
+}
+
+/* 戰鬥模擬：回傳 { win, attLeft, defLeft, attLossPct, defLossPct } */
+function simulateBattle(attUnits, defUnits) {
+    const attHp0 = totalHp(attUnits), defHp0 = totalHp(defUnits);
+    const attAtk = totalAtk(attUnits), defAtk = totalAtk(defUnits);
+
+    let attHp = attHp0, defHp = defHp0;
+    if (attAtk <= 0) return { win: false, attLeft: attUnits, defLeft: defUnits, attLossPct: 1, defLossPct: 0 };
+    if (defAtk <= 0) return { win: true, attLeft: attUnits, defLeft: {}, attLossPct: 0, defLossPct: 1 };
+
+    let rounds = 0;
+    while (attHp > 0 && defHp > 0 && rounds < 200) {
+        defHp -= attAtk * 0.9;
+        if (defHp <= 0) break;
+        attHp -= defAtk * 0.9;
+        rounds++;
+    }
+    const attLossPct = attHp0 > 0 ? Math.max(0, 1 - Math.max(0, attHp) / attHp0) : 1;
+    const defLossPct = defHp0 > 0 ? Math.max(0, 1 - Math.max(0, defHp) / defHp0) : 1;
+    const win = attHp > 0 && defHp <= 0;
+
+    return {
+        win,
+        attLeft: scaleUnits(attUnits, 1 - attLossPct),
+        defLeft: scaleUnits(defUnits, 1 - defLossPct),
+        attLossPct, defLossPct
+    };
+}
+function scaleUnits(units, factor) {
+    const out = {};
+    for (const t in units) {
+        const n = Math.round(units[t] * Math.max(0, factor));
+        if (n > 0) out[t] = n;
+    }
+    return out;
+}
+function mergeUnits(target, add) {
+    for (const t in add) target[t] = (target[t] || 0) + add[t];
+}
+
+/* ============================================================
+   建築系統
+   ============================================================ */
+function buildingUpgradeCost(b) {
+    const def = BUILDINGS[b.type];
+    const baseVal = Object.values(def.cost).reduce((a, v) => a + v, 0);
+    const cost = {};
+    for (const k in def.cost) cost[k] = Math.floor(def.cost[k] * Math.pow(1.8, b.lv - 1) * 0.8 + baseVal * 0.05);
+    return cost;
+}
+function incomeOf(b) {
+    const def = BUILDINGS[b.type];
+    const out = {};
+    for (const k in def.income) out[k] = def.income[k] * b.lv;
+    return out;
+}
+
+function tryPlaceBuilding(type, wx, wy) {
+    const def = BUILDINGS[type];
+    if (def.unique && buildings.some(b => b.type === type)) { toast('此建築只能建造一座'); return; }
+    // 必須在玩家領地內
+    const inTerritory = territories.some(t =>
+        t.faction === 'player' && dist(wx, wy, t.x, t.y) < t.r - 20
+    );
+    if (!inTerritory) { toast('只能在你的領地內建造'); return; }
+    // 避免重疊
+    if (buildings.some(b => dist(b.x, b.y, wx, wy) < 50)) { toast('位置太近'); return; }
+    if (!canAfford(def.cost)) { toast('資源不足'); return; }
+    pay(def.cost);
+    addBuilding(type, wx, wy);
+    addParticles(wx, wy, '#38bdf8', 16, 10);
+    addShock(wx, wy, '#38bdf8', 70, 0.9);
+    toast(def.name + ' 建造完成');
+    buildMode = null;
+    document.getElementById('modeHint').classList.remove('show');
+    refreshPanel();
+}
+
+/* ============================================================
+   訓練系統
+   ============================================================ */
+function queueUnit(type) {
+    const def = UNITS[type];
+    if (!buildings.some(b => b.type === 'barracks')) { toast('需要先建造兵營'); return; }
+    if (def.unlockLand && getPlayerLandCount() < def.unlockLand) { toast(`需佔領 ${def.unlockLand} 塊領地解鎖`); return; }
+    if (!canAfford(def.cost)) { toast('資源不足'); return; }
+    pay(def.cost);
+    trainQueue.push({ type, timeLeft: def.trainTime });
+    toast('開始訓練：' + def.name);
+    refreshPanel();
+}
+
+function updateTraining(dt) {
+    for (let i = trainQueue.length - 1; i >= 0; i--) {
+        trainQueue[i].timeLeft -= dt;
+        if (trainQueue[i].timeLeft <= 0) {
+            const t = trainQueue[i].type;
+            garrison[t] = (garrison[t] || 0) + 1;
+            addFloat(playerBase.x + rnd(-60, 60), playerBase.y - 60, '+1 ' + UNITS[t].icon, UNITS[t].color, 15);
+            trainQueue.splice(i, 1);
+            if (currentPanel === 'train') refreshPanel();
+        }
+    }
+}
+
+/* ============================================================
+   領地 / 遠征
+   ============================================================ */
+function getPlayerLandCount() {
+    return territories.filter(t => t.faction === 'player').length;
+}
+function canAttackTerritory(t) {
+    return t.faction !== 'player';
+}
+
+function sendExpedition(targetTerritory, unitsToSend) {
+    if (unitCount(unitsToSend) === 0) { toast('沒有派出任何軍隊'); return; }
+    // 扣除駐軍
+    for (const t in unitsToSend) {
+        garrison[t] = (garrison[t] || 0) - unitsToSend[t];
+        if (garrison[t] <= 0) delete garrison[t];
+    }
+    expeditions.push({
+        units: { ...unitsToSend },
+        x: playerBase.x, y: playerBase.y,
+        targetId: targetTerritory.id,
+        state: 'moving',
+        speed: 260,
+        battleTimer: 0
+    });
+    addParticles(playerBase.x, playerBase.y, '#38bdf8', 20, 12);
+    toast(`⚔️ 遠征軍出發！目標：${targetTerritory.name}`);
+    attackMode = false;
+    document.getElementById('modeHint').classList.remove('show');
+    closePanel();
+}
+
+function updateExpeditions(dt) {
+    for (let i = expeditions.length - 1; i >= 0; i--) {
+        const exp = expeditions[i];
+        const target = territories.find(t => t.id === exp.targetId);
+        if (!target) { expeditions.splice(i, 1); continue; }
+
+        if (exp.state === 'moving') {
+            const dx = target.x - exp.x, dy = target.y - exp.y;
+            const d = Math.hypot(dx, dy);
+            if (d < target.r + 10) {
+                // 抵達，開始戰鬥
+                exp.state = 'fighting';
+                exp.battleTimer = 1.2;
+            } else {
+                exp.x += (dx / d) * exp.speed * dt;
+                exp.y += (dy / d) * exp.speed * dt;
+            }
+        } else if (exp.state === 'fighting') {
+            exp.battleTimer -= dt;
+            if (frameRandomExpEffect()) addParticles(target.x + rnd(-30, 30), target.y + rnd(-30, 30), '#fbbf24', 3, 8);
+            if (exp.battleTimer <= 0) {
+                // 結算
+                const result = simulateBattle(exp.units, target.garrison || {});
+                if (result.win) {
+                    captureTerritory(target, exp.units, result);
+                } else {
+                    // 失敗，殘兵返回
+                    loseExpedition(exp, result);
+                }
+                expeditions.splice(i, 1);
+            }
+        }
+    }
+}
+
+let _expFx = 0;
+function frameRandomExpEffect() { _expFx++; return _expFx % 3 === 0; }
+
+function captureTerritory(target, attackerUnits, result) {
+    const survivors = result.attLeft;
+    // 佔領
+    const oldFaction = target.faction;
+    target.faction = 'player';
+    target.garrison = { ...survivors };
+    target.isHome = false;
+
+    // 獎勵
+    if (target.reward) {
+        if (target.reward.gold) { res.gold += target.reward.gold; addFloat(target.x, target.y - 40, `+${target.reward.gold}💰`, '#fbbf24', 16); }
+        if (target.reward.dm) { res.dm += target.reward.dm; addFloat(target.x, target.y - 60, `+${target.reward.dm}🌌`, '#c084fc', 16); }
+    }
+    addParticles(target.x, target.y, '#4ade80', 26, 12);
+    addShock(target.x, target.y, '#4ade80', target.r * 1.6, 1.3);
+    showBattleResult(true, target.name, result, target.reward);
+    target.reward = null;
+    refreshPanel();
+    saveGame();
+}
+
+function loseExpedition(exp, result) {
+    const survivors = result.attLeft;
+    const target = territories.find(t => t.id === exp.targetId);
+    // 敵軍也有損失
+    if (target && target.garrison) {
+        target.garrison = result.defLeft;
+    }
+    // 殘兵回到基地駐軍
+    if (unitCount(survivors) > 0) {
+        mergeUnits(garrison, survivors);
+    }
+    addParticles(exp.x, exp.y, '#ef4444', 18, 10);
+    showBattleResult(false, target ? target.name : '敵軍', result, null);
+    refreshPanel();
+    saveGame();
+}
+
+/* ============================================================
+   敵方 AI
+   ============================================================ */
+let enemyAttackTimer = 45; // 秒
+function updateEnemyAI(dt) {
+    enemyAttackTimer -= dt;
+    if (enemyAttackTimer <= 0) {
+        enemyAttackTimer = Math.max(20, 45 - getPlayerLandCount() * 2);
+        spawnEnemyRaid();
+    }
+    // 敵軍移動
+    for (let i = enemyArmies.length - 1; i >= 0; i--) {
+        const arm = enemyArmies[i];
+        const dx = playerBase.x - arm.x, dy = playerBase.y - arm.y;
+        const d = Math.hypot(dx, dy);
+        if (d < playerBase.r * 0.7) {
+            // 到達基地，與玩家駐軍戰鬥
+            resolveDefenseBattle(arm);
+            enemyArmies.splice(i, 1);
+        } else {
+            arm.x += (dx / d) * arm.speed * dt;
+            arm.y += (dy / d) * arm.speed * dt;
+            // 經過箭塔時受攻擊
+            buildings.filter(b => b.type === 'tower').forEach(tw => {
+                const range = 190 + tw.lv * 25;
+                if (dist(tw.x, tw.y, arm.x, arm.y) < range) {
+                    arm.hpPool = (arm.hpPool || totalHp(arm.units)) - (18 + tw.lv * 14) * dt;
+                    if (arm.hpPool <= 0) {
+                        addParticles(arm.x, arm.y, '#4ade80', 20, 12);
+                        addFloat(arm.x, arm.y - 30, '殲滅敵軍！', '#4ade80', 16);
+                        enemyArmies.splice(i, 1);
+                    } else {
+                        // 減少兵力
+                        const ratio = Math.max(0, arm.hpPool / arm.maxHpPool);
+                        arm.units = scaleUnits(arm.baseUnits, ratio);
+                    }
+                }
+            });
+        }
+    }
+}
+
+function spawnEnemyRaid() {
+    // 從敵方領地選一個作為出發點
+    const enemyTerrs = territories.filter(t => t.faction === 'enemy');
+    if (enemyTerrs.length === 0) return;
+    const from = enemyTerrs[Math.floor(Math.random() * enemyTerrs.length)];
+    const scale = 1 + getPlayerLandCount() * 0.25;
+    const raid = {
+        militia: Math.round(6 * scale),
+        archer: Math.round(3 * scale),
+        knight: Math.round(1.5 * scale)
+    };
+    const hp = totalHp(raid);
+    enemyArmies.push({
+        units: { ...raid }, baseUnits: { ...raid },
+        x: from.x, y: from.y, speed: 55,
+        hpPool: hp, maxHpPool: hp
+    });
+    toast(`⚠️ 敵軍從 ${from.name} 出兵偷襲你的主城！`);
+}
+
+function resolveDefenseBattle(arm) {
+    // 玩家基地防禦：駐軍 + 塔的加成
+    const towerBonus = buildings.filter(b => b.type === 'tower').reduce((a, t) => a + t.lv, 0) * 0.06;
+    const defUnits = { ...garrison };
+    const result = simulateBattle(defUnits, arm.units);
+
+    if (result.win) {
+        // 玩家獲勝
+        garrison = { ...result.attLeft };
+        const gain = Math.round(unitCount(arm.units) * 25 * (1 + getPlayerLandCount() * 0.1));
+        res.gold += gain;
+        addFloat(playerBase.x, playerBase.y - 60, `⚔️ 擊退敵軍！+${gain}💰`, '#4ade80', 18);
+        addParticles(playerBase.x, playerBase.y, '#4ade80', 30, 14);
+    } else {
+        // 玩家失敗，損失資源
+        garrison = { ...result.attLeft };
+        const lossGold = Math.min(res.gold, Math.round(res.gold * 0.25 + 200));
+        const lossFood = Math.min(res.food, Math.round(res.food * 0.2));
+        res.gold -= lossGold;
+        res.food -= lossFood;
+        addFloat(playerBase.x, playerBase.y - 60, `💥 主城被劫掠！-${lossGold}💰`, '#ef4444', 18);
+        addParticles(playerBase.x, playerBase.y, '#ef4444', 30, 14);
+        addShock(playerBase.x, playerBase.y, '#ef4444', 220, 1.4);
+        // 一座建築可能被毀
+        if (buildings.length > 3 && Math.random() < 0.35) {
+            const idx = Math.floor(Math.random() * buildings.length);
+            const destroyed = buildings.splice(idx, 1)[0];
+            toast(`🔥 ${BUILDINGS[destroyed.type].name} 被摧毀了！`);
+        }
+    }
+    refreshPanel();
+}
+
+/* ============================================================
+   生產 / 資源
+   ============================================================ */
+function updateEconomy(dt) {
+    // 建築產出
+    buildings.forEach(b => {
+        const inc = incomeOf(b);
+        for (const k in inc) res[k] = (res[k] || 0) + inc[k] * dt;
+    });
+    // 領地產出
+    territories.forEach(t => {
+        if (t.faction === 'player' && t.income) {
+            for (const k in t.income) res[k] = (res[k] || 0) + t.income[k] * dt;
+        }
+    });
+}
+
+/* ============================================================
+   主更新
+   ============================================================ */
+let frameCount = 0;
+function update(dt) {
+    gameTime += dt;
+    frameCount++;
+
+    updateEconomy(dt);
+    updateTraining(dt);
+    updateExpeditions(dt);
+    updateEnemyAI(dt);
+
+    // 特效
+    for (let i = floats.length - 1; i >= 0; i--) {
+        const f = floats[i];
+        f.y += f.vy; f.alpha -= 0.02;
+        if (f.alpha <= 0) floats.splice(i, 1);
+    }
+    for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx; p.y += p.vy;
+        p.vx *= 0.96; p.vy *= 0.96;
+        p.alpha -= p.decay;
+        if (p.alpha <= 0) particles.splice(i, 1);
+    }
+    for (let i = shocks.length - 1; i >= 0; i--) {
+        const s = shocks[i];
+        s.r += (s.maxR - s.r) * 0.12;
+        s.life -= 0.04;
+        if (s.life <= 0) shocks.splice(i, 1);
+    }
+
+    updateUIValues();
+
+    if (frameCount % 300 === 0) saveGame();
+}
+
+/* ============================================================
+   渲染
+   ============================================================ */
+function render() {
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctx.clearRect(0, 0, VW, VH);
+
+    // 背景
+    const bg = ctx.createLinearGradient(0, 0, 0, VH);
+    bg.addColorStop(0, '#0a1628');
+    bg.addColorStop(1, '#020617');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, VW, VH);
+
+    // 世界變換
+    ctx.save();
+    ctx.translate(VW / 2, VH / 2);
+    ctx.scale(cam.zoom, cam.zoom);
+    ctx.translate(-cam.x, -cam.y);
+
+    drawTerrain();
+    drawTerritories();
+    drawBuildings();
+    drawEnemyArmies();
+    drawExpeditions();
+    drawEffects();
+    drawPlayerBaseMarker();
+
+    ctx.restore();
+
+    // 螢幕空間 UI（模式提示）
+    if (attackMode) drawAttackModeOverlay();
+
+    drawMinimap();
+}
+
+function drawTerrain() {
+    // 草地底色
+    ctx.fillStyle = '#0f2a1a';
+    ctx.fillRect(0, 0, WORLD.w, WORLD.h);
+
+    // 網格
+    ctx.strokeStyle = 'rgba(56,189,248,0.05)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let x = 0; x < WORLD.w; x += 200) { ctx.moveTo(x, 0); ctx.lineTo(x, WORLD.h); }
+    for (let y = 0; y < WORLD.h; y += 200) { ctx.moveTo(0, y); ctx.lineTo(WORLD.w, y); }
+    ctx.stroke();
+
+    // 裝飾：草地色塊（確定性生成，避免閃爍）
+    for (let i = 0; i < 120; i++) {
+        const sx = ((i * 907.3) % WORLD.w);
+        const sy = ((i * 613.7) % WORLD.h);
+        const r = 30 + (i % 7) * 12;
+        ctx.fillStyle = i % 2 ? 'rgba(20,60,35,0.35)' : 'rgba(15,45,30,0.3)';
+        ctx.beginPath();
+        ctx.arc(sx, sy, r, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    // 河流裝飾
+    ctx.strokeStyle = 'rgba(14,116,144,0.25)';
+    ctx.lineWidth = 30;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(100, 400);
+    ctx.bezierCurveTo(500, 300, 900, 900, 1300, 500);
+    ctx.bezierCurveTo(1700, 150, 2100, 700, 2500, 400);
+    ctx.stroke();
+}
+
+function drawTerritories() {
+    territories.forEach(t => {
+        const def = TERRITORY_TYPES[t.type] || { color: '#38bdf8', icon: '🏰' };
+        let color = def.color;
+        if (t.faction === 'player') color = '#38bdf8';
+
+        // 領地範圍圈
+        ctx.save();
+        ctx.globalAlpha = 0.13;
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(t.x, t.y, t.r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        ctx.save();
+        ctx.globalAlpha = 0.5;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3;
+        ctx.setLineDash([12, 8]);
+        ctx.beginPath();
+        ctx.arc(t.x, t.y, t.r, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+
+        // 圖標 + 名稱
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.font = `${Math.round(t.r * 0.55)}px sans-serif`;
+        ctx.fillText(def.icon, t.x, t.y + t.r * 0.2);
+
+        // 名稱牌
+        const nameColor = t.faction === 'player' ? '#4ade80' : (t.faction === 'enemy' ? '#f87171' : '#fbbf24');
+        ctx.font = 'bold 20px "Segoe UI", sans-serif';
+        const nameW = ctx.measureText(t.name).width + 24;
+        ctx.fillStyle = 'rgba(2,6,23,0.82)';
+        ctx.beginPath();
+        ctx.roundRect(t.x - nameW / 2, t.y - t.r - 42, nameW, 30, 8);
+        ctx.fill();
+        ctx.fillStyle = nameColor;
+        ctx.fillText(t.name, t.x, t.y - t.r - 20);
+
+        // 勢力標籤
+        ctx.font = 'bold 13px sans-serif';
+        const factionText = t.faction === 'player' ? '★ 我方' : (t.faction === 'enemy' ? '☠ 敵軍' : '◆ 中立');
+        ctx.fillStyle = nameColor;
+        ctx.fillText(factionText, t.x, t.y - t.r - 52);
+
+        // 駐軍信息
+        if (t.garrison && unitCount(t.garrison) > 0) {
+            ctx.font = 'bold 14px sans-serif';
+            ctx.fillStyle = 'rgba(226,232,240,0.8)';
+            ctx.fillText('🛡 ' + unitCount(t.garrison), t.x, t.y + t.r + 22);
+        }
+        ctx.restore();
+
+        // 選中高亮
+        if (selectedTerritory === t) {
+            ctx.save();
+            ctx.strokeStyle = '#fbbf24';
+            ctx.lineWidth = 4;
+            ctx.shadowColor = '#fbbf24';
+            ctx.shadowBlur = 20;
+            ctx.beginPath();
+            ctx.arc(t.x, t.y, t.r + 6, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+        }
+    });
+}
+
+function drawBuildings() {
+    buildings.forEach(b => {
+        const def = BUILDINGS[b.type];
+        const s = 26;
+        // 底座
+        ctx.fillStyle = 'rgba(2,6,23,0.7)';
+        ctx.beginPath(); ctx.roundRect(b.x - s - 4, b.y + s - 8, s * 2 + 8, 16, 6); ctx.fill();
+        // 光環
+        const g = ctx.createRadialGradient(b.x, b.y, 4, b.x, b.y, s + 10);
+        g.addColorStop(0, 'rgba(56,189,248,0.35)');
+        g.addColorStop(1, 'rgba(56,189,248,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(b.x, b.y, s + 10, 0, Math.PI * 2); ctx.fill();
+        // 主體
+        ctx.fillStyle = '#0f172a';
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.roundRect(b.x - s, b.y - s, s * 2, s * 2, 10); ctx.fill(); ctx.stroke();
+        // 圖標
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = `${s}px sans-serif`;
+        ctx.fillText(def.icon, b.x, b.y + 2);
+        // 等級
+        ctx.font = 'bold 13px sans-serif';
+        ctx.fillStyle = '#fbbf24';
+        ctx.textBaseline = 'alphabetic';
+        ctx.fillText('Lv.' + b.lv, b.x, b.y + s + 16);
+        ctx.textAlign = 'start';
+    });
+}
+
+function drawEnemyArmies() {
+    enemyArmies.forEach(arm => {
+        const n = unitCount(arm.units);
+        if (n <= 0) return;
+        ctx.save();
+        ctx.shadowColor = '#ef4444';
+        ctx.shadowBlur = 16;
+        ctx.fillStyle = '#ef4444';
+        ctx.beginPath(); ctx.arc(arm.x, arm.y, 16, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#fca5a5';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 12px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('☠', arm.x, arm.y + 1);
+        // 血條
+        const ratio = Math.max(0, (arm.hpPool || 0) / (arm.maxHpPool || 1));
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.fillRect(arm.x - 20, arm.y - 30, 40, 5);
+        ctx.fillStyle = '#ef4444';
+        ctx.fillRect(arm.x - 20, arm.y - 30, 40 * ratio, 5);
+        ctx.textAlign = 'start';
+        ctx.textBaseline = 'alphabetic';
+        ctx.restore();
+    });
+}
+
+function drawExpeditions() {
+    expeditions.forEach(exp => {
+        ctx.save();
+        ctx.shadowColor = '#fbbf24';
+        ctx.shadowBlur = 16;
+        ctx.fillStyle = '#fbbf24';
+        ctx.beginPath(); ctx.arc(exp.x, exp.y, 15, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#fef08a';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#1c1917';
+        ctx.font = 'bold 13px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('⚔', exp.x, exp.y + 1);
+        ctx.textAlign = 'start';
+        ctx.textBaseline = 'alphabetic';
+        ctx.restore();
+    });
+}
+
+function drawEffects() {
+    particles.forEach(p => {
+        ctx.globalAlpha = Math.max(0, p.alpha);
+        ctx.fillStyle = p.color;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+
+    shocks.forEach(s => {
+        ctx.globalAlpha = Math.max(0, s.life) * 0.6;
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.stroke();
+    });
+    ctx.globalAlpha = 1;
+
+    floats.forEach(f => {
+        ctx.globalAlpha = Math.max(0, f.alpha);
+        ctx.fillStyle = f.color;
+        ctx.font = `900 ${f.size}px "Segoe UI", sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.shadowColor = 'rgba(0,0,0,0.9)';
+        ctx.shadowBlur = 5;
+        ctx.fillText(f.text, f.x, f.y);
+        ctx.shadowBlur = 0;
+    });
+    ctx.globalAlpha = 1;
+    ctx.textAlign = 'start';
+}
+
+function drawPlayerBaseMarker() {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(56,189,248,0.7)';
+    ctx.lineWidth = 4;
+    ctx.setLineDash([16, 10]);
+    ctx.beginPath(); ctx.arc(playerBase.x, playerBase.y, playerBase.r, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+    // 主城標記
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.font = '46px sans-serif';
+    ctx.fillText('🏰', playerBase.x, playerBase.y + playerBase.r + 50);
+    ctx.fillStyle = '#38bdf8';
+    ctx.font = 'bold 18px sans-serif';
+    ctx.fillText('雨神主城', playerBase.x, playerBase.y + playerBase.r + 78);
+    ctx.restore();
+}
+
+function drawAttackModeOverlay() {
+    // 高亮可攻擊領地
+    territories.forEach(t => {
+        if (t.faction === 'player') return;
+        const s = worldToScreen(t.x, t.y);
+        if (s.x < -100 || s.x > VW + 100 || s.y < -100 || s.y > VH + 100) return;
+        ctx.save();
+        ctx.globalAlpha = 0.4 + Math.sin(gameTime * 4) * 0.15;
+        ctx.strokeStyle = '#fbbf24';
+        ctx.lineWidth = 4;
+        ctx.setLineDash([10, 8]);
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, t.r * cam.zoom, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+    });
+}
+
+/* ============================================================
+   小地圖
+   ============================================================ */
+function drawMinimap() {
+    const MW = miniCvs.width, MH = miniCvs.height;
+    mctx.clearRect(0, 0, MW, MH);
+    const sx = MW / WORLD.w, sy = MH / WORLD.h;
+
+    mctx.fillStyle = '#0f2a1a';
+    mctx.fillRect(0, 0, MW, MH);
+
+    territories.forEach(t => {
+        let color = TERRITORY_TYPES[t.type] ? TERRITORY_TYPES[t.type].color : '#38bdf8';
+        if (t.faction === 'player') color = '#38bdf8';
+        mctx.fillStyle = color;
+        mctx.globalAlpha = 0.7;
+        mctx.beginPath();
+        mctx.arc(t.x * sx, t.y * sy, Math.max(2.5, t.r * sx), 0, Math.PI * 2);
+        mctx.fill();
+    });
+    mctx.globalAlpha = 1;
+
+    // 建築
+    mctx.fillStyle = '#93c5fd';
+    buildings.forEach(b => {
+        mctx.fillRect(b.x * sx - 1.5, b.y * sy - 1.5, 3, 3);
+    });
+
+    // 敵軍
+    mctx.fillStyle = '#ef4444';
+    enemyArmies.forEach(a => {
+        mctx.beginPath(); mctx.arc(a.x * sx, a.y * sy, 2.5, 0, Math.PI * 2); mctx.fill();
+    });
+
+    // 相機視窗
+    const vw = (VW / cam.zoom) * sx, vh = (VH / cam.zoom) * sy;
+    mctx.strokeStyle = '#fff';
+    mctx.lineWidth = 1.5;
+    mctx.strokeRect(cam.x * sx - vw / 2, cam.y * sy - vh / 2, vw, vh);
+}
+
+/* ============================================================
+   輸入處理
+   ============================================================ */
+cvs.addEventListener('pointerdown', e => {
+    if (e.button === 2) return;
+    dragState = {
+        startX: e.clientX, startY: e.clientY,
+        camX: cam.x, camY: cam.y,
+        moved: false, pointerId: e.pointerId
+    };
+    cvs.setPointerCapture(e.pointerId);
+});
+
+cvs.addEventListener('pointermove', e => {
+    if (!dragState) return;
+    const dx = e.clientX - dragState.startX;
+    const dy = e.clientY - dragState.startY;
+    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) dragState.moved = true;
+    if (dragState.moved) {
+        cam.x = dragState.camX - dx / cam.zoom;
+        cam.y = dragState.camY - dy / cam.zoom;
+        clampCamera();
+    }
+});
+
+cvs.addEventListener('pointerup', e => {
+    if (!dragState) return;
+    const wasMoved = dragState.moved;
+    const sx = e.clientX, sy = e.clientY;
+    dragState = null;
+    if (wasMoved) return;
+
+    // 點擊處理
+    handleMapClick(sx, sy);
+});
+
+cvs.addEventListener('contextmenu', e => e.preventDefault());
+
+// 滑鼠滾輪縮放
+cvs.addEventListener('wheel', e => {
+    e.preventDefault();
+    const factor = e.deltaY > 0 ? 0.9 : 1.1;
+    const before = screenToWorld(e.clientX, e.clientY);
+    cam.zoom = Math.max(0.45, Math.min(1.8, cam.zoom * factor));
+    const after = screenToWorld(e.clientX, e.clientY);
+    cam.x += before.x - after.x;
+    cam.y += before.y - after.y;
+    clampCamera();
+}, { passive: false });
+
+function handleMapClick(sx, sy) {
+    const wp = screenToWorld(sx, sy);
+
+    // 建造模式
+    if (buildMode) {
+        tryPlaceBuilding(buildMode, wp.x, wp.y);
+        return;
+    }
+
+    // 遠征模式
+    if (attackMode) {
+        const t = findTerritoryAt(wp.x, wp.y);
+        if (t && t.faction !== 'player') {
+            openExpeditionPanel(t);
+        } else {
+            toast('請點擊敵方或中立領地');
+        }
+        return;
+    }
+
+    // 普通選擇：優先領地，其次建築
+    const terr = findTerritoryAt(wp.x, wp.y);
+    if (terr) {
+        selectedTerritory = terr;
+        selectedBuilding = null;
+        openTerritoryPanel(terr);
+        return;
+    }
+    const bld = findBuildingAt(wp.x, wp.y);
+    if (bld) {
+        selectedBuilding = bld;
+        selectedTerritory = null;
+        openBuildingPanel(bld);
+        return;
+    }
+    selectedTerritory = null;
+    selectedBuilding = null;
+    closePanel();
+}
+
+function findTerritoryAt(x, y) {
+    let best = null, bestD = Infinity;
+    territories.forEach(t => {
+        const d = dist(x, y, t.x, t.y);
+        if (d < t.r && d < bestD) { bestD = d; best = t; }
+    });
+    return best;
+}
+function findBuildingAt(x, y) {
+    let best = null, bestD = 40;
+    buildings.forEach(b => {
+        const d = dist(x, y, b.x, b.y);
+        if (d < bestD) { bestD = d; best = b; }
+    });
+    return best;
+}
+
+// 觸控雙指縮放（簡化）
+let pinchState = null;
+cvs.addEventListener('touchstart', e => {
+    if (e.touches.length === 2) {
+        const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        pinchState = { dist: d, zoom: cam.zoom };
+        dragState = null;
+    }
+}, { passive: true });
+cvs.addEventListener('touchmove', e => {
+    if (e.touches.length === 2 && pinchState) {
+        e.preventDefault();
+        const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        cam.zoom = Math.max(0.45, Math.min(1.8, pinchState.zoom * (d / pinchState.dist)));
+        clampCamera();
+    }
+}, { passive: false });
+cvs.addEventListener('touchend', () => { if (pinchState) pinchState = null; });
+
+// 鍵盤
+window.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+        buildMode = null;
+        attackMode = false;
+        document.getElementById('modeHint').classList.remove('show');
+        closePanel();
+        refreshPanel();
+    }
+});
+
+// 小地圖點擊
+miniCvs.addEventListener('click', e => {
+    const rect = miniCvs.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) / rect.width;
+    const my = (e.clientY - rect.top) / rect.height;
+    cam.x = mx * WORLD.w;
+    cam.y = my * WORLD.h;
+    clampCamera();
+});
+
+/* ============================================================
+   UI 面板
+   ============================================================ */
+function closePanel() {
+    document.getElementById('sidePanel').classList.remove('show');
+    currentPanel = null;
+}
+function refreshPanel() {
+    if (!currentPanel) return;
+    if (currentPanel === 'build') renderBuildPanel();
+    else if (currentPanel === 'train') renderTrainPanel();
+    else if (currentPanel === 'army') renderArmyPanel();
+    else if (currentPanel === 'tech') renderTechPanel();
+    else if (currentPanel === 'territory' && selectedTerritory) renderTerritoryPanelContent(selectedTerritory);
+    else if (currentPanel === 'building' && selectedBuilding) renderBuildingPanelContent(selectedBuilding);
+}
+
+function openPanel(title, cmd) {
+    currentPanel = cmd || title;
+    document.getElementById('panelTitle').textContent = title;
+    document.getElementById('sidePanel').classList.add('show');
+}
+
+/* ---------- 建造面板 ---------- */
+function openBuildPanel() {
+    openPanel('🏗️ 建造建築', 'build');
+    renderBuildPanel();
+}
+function renderBuildPanel() {
+    const body = document.getElementById('panelBody');
+    let html = '<div class="card-desc" style="margin-bottom:4px">點選建築後，在地圖上你的領地內點擊放置。</div>';
+    for (const type in BUILDINGS) {
+        const def = BUILDINGS[type];
+        const costStr = Object.entries(def.cost).map(([k, v]) => `${resIcon(k)}${v}`).join(' ');
+        const owned = def.unique && buildings.some(b => b.type === type);
+        const afford = canAfford(def.cost);
+        html += `<div class="card">
+            <div class="card-top">
+                <span class="card-name">${def.icon} ${def.name}</span>
+                <span style="font-size:10px;color:#94a3b8">${costStr}</span>
+            </div>
+            <div class="card-desc">${def.desc}</div>
+            <div class="act-row">
+                <button class="act-btn ${owned ? '' : 'green'}" ${owned || !afford ? 'disabled' : ''}
+                    onclick="startBuild('${type}')">${owned ? '已建造' : '建造'}</button>
+            </div>
+        </div>`;
+    }
+    body.innerHTML = html;
+}
+function startBuild(type) {
+    if (!canAfford(BUILDINGS[type].cost)) { toast('資源不足'); return; }
+    buildMode = type;
+    attackMode = false;
+    document.getElementById('modeHint').innerHTML = `🏗️ 點擊你的領地空地放置【${BUILDINGS[type].name}】<br><span style="font-size:10px;color:#94a3b8">按 ESC 取消</span>`;
+    document.getElementById('modeHint').classList.add('show');
+    closePanel();
+}
+
+/* ---------- 訓練面板 ---------- */
+function openTrainPanel() {
+    openPanel('⚔️ 軍隊訓練', 'train');
+    renderTrainPanel();
+}
+function renderTrainPanel() {
+    const body = document.getElementById('panelBody');
+    let html = '';
+    if (!buildings.some(b => b.type === 'barracks')) {
+        html += '<div class="card-desc" style="color:#f87171">⚠️ 需要先建造兵營</div>';
+    }
+    const landCount = getPlayerLandCount();
+    for (const type in UNITS) {
+        const def = UNITS[type];
+        const costStr = Object.entries(def.cost).map(([k, v]) => `${resIcon(k)}${v}`).join(' ');
+        const locked = def.unlockLand && landCount < def.unlockLand;
+        const afford = canAfford(def.cost);
+        html += `<div class="card">
+            <div class="card-top">
+                <span class="card-name">${def.icon} ${def.name}</span>
+                <span style="font-size:10px;color:#94a3b8">${costStr}</span>
+            </div>
+            <div class="card-desc">${def.desc} · ⚔${def.atk} ❤${def.hp} · ${def.trainTime}s</div>
+            ${locked ? `<div class="card-desc" style="color:#fbbf24">🔒 需佔領 ${def.unlockLand} 塊領地</div>` : ''}
+            <button class="act-btn green" ${locked || !afford ? 'disabled' : ''} onclick="queueUnit('${type}')">訓練</button>
+        </div>`;
+    }
+    if (trainQueue.length > 0) {
+        html += '<div class="card"><div class="card-name">訓練隊列</div>';
+        trainQueue.forEach(q => {
+            html += `<div class="unit-row"><span>${UNITS[q.type].icon} ${UNITS[q.type].name}</span><span style="color:#fbbf24">${q.timeLeft.toFixed(1)}s</span></div>`;
+        });
+        html += '</div>';
+    }
+    body.innerHTML = html;
+}
+
+/* ---------- 軍隊面板 ---------- */
+function openArmyPanel() {
+    openPanel('🛡️ 我的軍隊', 'army');
+    renderArmyPanel();
+}
+function renderArmyPanel() {
+    const body = document.getElementById('panelBody');
+    let html = '';
+    // 駐軍
+    html += '<div class="card"><div class="card-name">🏰 主城駐軍</div>';
+    const cnt = unitCount(garrison);
+    if (cnt === 0) html += '<div class="card-desc">暫無駐軍</div>';
+    for (const t in garrison) {
+        if (garrison[t] <= 0) continue;
+        html += `<div class="unit-row"><span class="u-name">${UNITS[t].icon} ${UNITS[t].name}</span><span style="color:#fbbf24">×${garrison[t]}</span></div>`;
+    }
+    html += `<div class="card-desc">總戰力：⚔${totalAtk(garrison)} · ❤${totalHp(garrison)}</div></div>`;
+
+    // 遠征軍
+    if (expeditions.length > 0) {
+        html += '<div class="card"><div class="card-name">⚔️ 出征中的軍隊</div>';
+        expeditions.forEach(exp => {
+            const tg = territories.find(t => t.id === exp.targetId);
+            html += `<div class="unit-row"><span>${tg ? tg.name : '?'}</span><span style="color:#fbbf24">${exp.state === 'moving' ? '行軍中' : '戰鬥中'}</span></div>`;
+        });
+        html += '</div>';
+    }
+
+    // 領地駐軍
+    const playerTerrs = territories.filter(t => t.faction === 'player' && !t.isHome && unitCount(t.garrison || {}) > 0);
+    if (playerTerrs.length > 0) {
+        html += '<div class="card"><div class="card-name">🏳️ 領地駐軍</div>';
+        playerTerrs.forEach(t => {
+            html += `<div class="unit-row"><span>${t.name}</span><span style="color:#38bdf8">🛡${unitCount(t.garrison)}</span></div>`;
+        });
+        html += '</div>';
+    }
+    body.innerHTML = html;
+}
+
+/* ---------- 遠征面板（選目標時） ---------- */
+function openExpeditionPanel(target) {
+    openPanel('🚩 遠征：' + target.name, 'territory');
+    selectedTerritory = target;
+    renderTerritoryPanelContent(target);
+}
+function renderTerritoryPanelContent(t) {
+    const body = document.getElementById('panelBody');
+    const def = TERRITORY_TYPES[t.type] || { color: '#38bdf8', icon: '🏰' };
+    let html = '';
+    html += `<div class="card">
+        <div class="card-top">
+            <span class="card-name" style="color:${t.faction === 'player' ? '#4ade80' : (t.faction === 'enemy' ? '#f87171' : '#fbbf24')}">${def.icon} ${t.name}</span>
+            <span style="font-size:10px;color:#94a3b8">${t.faction === 'player' ? '我方' : (t.faction === 'enemy' ? '敵軍' : '中立')}</span>
+        </div>
+        <div class="card-desc">${def.desc || ''}</div>
+        <div class="card-desc">💰 產出：${Object.entries(t.income || {}).map(([k, v]) => `${resIcon(k)}+${v}/s`).join(' ') || '無'}</div>
+    </div>`;
+
+    // 目標守軍
+    if (t.faction !== 'player') {
+        html += '<div class="card"><div class="card-name">🛡 守軍</div>';
+        const gc = unitCount(t.garrison || {});
+        if (gc === 0) html += '<div class="card-desc">無守軍</div>';
+        else {
+            for (const k in t.garrison) {
+                if (t.garrison[k] <= 0) continue;
+                html += `<div class="unit-row"><span class="u-name">${UNITS[k].icon} ${UNITS[k].name}</span><span style="color:#f87171">×${t.garrison[k]}</span></div>`;
+            }
+            html += `<div class="card-desc">守軍戰力：⚔${totalAtk(t.garrison)} · ❤${totalHp(t.garrison)}</div>`;
+        }
+        html += '</div>';
+    }
+
+    // 出征區
+    if (t.faction !== 'player') {
+        const cnt = unitCount(garrison);
+        if (cnt === 0) {
+            html += '<div class="card-desc" style="color:#fbbf24">⚠️ 你沒有可出征的駐軍</div>';
+        } else {
+            html += '<div class="card"><div class="card-name">派出軍隊</div>';
+            window._expSelection = {};
+            for (const type in garrison) {
+                if (garrison[type] <= 0) continue;
+                html += `<div class="unit-row">
+                    <span class="u-name">${UNITS[type].icon} ${UNITS[type].name}</span>
+                    <div class="qty-ctrl">
+                        <button onclick="expSel('${type}',-1)">−</button>
+                        <span class="q" id="expq_${type}">0</span>
+                        <button onclick="expSel('${type}',1)">+</button>
+                        <button onclick="expSel('${type}',999)" style="width:auto;padding:0 6px;font-size:10px">全部</button>
+                    </div>
+                </div>`;
+            }
+            html += `<div class="act-row" style="margin-top:6px">
+                <button class="act-btn green" onclick="confirmExpedition('${t.id}')">🚩 出發遠征</button>
+            </div></div>`;
+        }
+    }
+    body.innerHTML = html;
+}
+function expSel(type, delta) {
+    if (!window._expSelection) window._expSelection = {};
+    const cur = window._expSelection[type] || 0;
+    const max = garrison[type] || 0;
+    let next = delta >= 999 ? max : cur + delta;
+    next = Math.max(0, Math.min(max, next));
+    window._expSelection[type] = next;
+    document.getElementById('expq_' + type).textContent = next;
+}
+function confirmExpedition(territoryId) {
+    const t = territories.find(x => x.id === territoryId);
+    if (!t) return;
+    const sel = window._expSelection || {};
+    sendExpedition(t, sel);
+    window._expSelection = {};
+}
+
+/* ---------- 領地面板（普通點擊） ---------- */
+function openTerritoryPanel(t) {
+    openPanel('🚩 ' + t.name, 'territory');
+    renderTerritoryPanelContent(t);
+}
+
+/* ---------- 建築面板 ---------- */
+function openBuildingPanel(b) {
+    openPanel('🏗️ ' + BUILDINGS[b.type].name, 'building');
+    renderBuildingPanelContent(b);
+}
+function renderBuildingPanelContent(b) {
+    const body = document.getElementById('panelBody');
+    const def = BUILDINGS[b.type];
+    const upCost = buildingUpgradeCost(b);
+    const costStr = Object.entries(upCost).map(([k, v]) => `${resIcon(k)}${v}`).join(' ');
+    let html = `<div class="card">
+        <div class="card-top">
+            <span class="card-name">${def.icon} ${def.name} Lv.${b.lv}</span>
+        </div>
+        <div class="card-desc">${def.desc}</div>
+        <div class="card-desc">產出：${Object.entries(incomeOf(b)).map(([k, v]) => `${resIcon(k)}+${v}/s`).join(' ') || (def.isTower ? '防禦攻擊' : '無')}</div>
+    </div>`;
+    if (b.lv < def.maxLv) {
+        html += `<button class="act-btn green" ${canAfford(upCost) ? '' : 'disabled'} onclick="upgradeBuilding('${b.id}')">
+            升級至 Lv.${b.lv + 1}（${costStr}）
+        </button>`;
+    } else {
+        html += '<div class="card-desc" style="color:#4ade80">已達最高等級</div>';
+    }
+    html += `<button class="act-btn red" onclick="demolishBuilding('${b.id}')">拆除（返還 50%）</button>`;
+    body.innerHTML = html;
+}
+function upgradeBuilding(id) {
+    const b = buildings.find(x => x.id === id);
+    if (!b) return;
+    const cost = buildingUpgradeCost(b);
+    if (!canAfford(cost)) { toast('資源不足'); return; }
+    pay(cost);
+    b.lv++;
+    addParticles(b.x, b.y, '#38bdf8', 16, 10);
+    toast(BUILDINGS[b.type].name + ' 升級至 Lv.' + b.lv);
+    renderBuildingPanelContent(b);
+}
+function demolishBuilding(id) {
+    const idx = buildings.findIndex(x => x.id === id);
+    if (idx < 0) return;
+    const b = buildings[idx];
+    if (b.type === 'barracks' && buildings.filter(x => x.type === 'barracks').length === 1) {
+        toast('不能拆除唯一兵營'); return;
+    }
+    const def = BUILDINGS[b.type];
+    for (const k in def.cost) res[k] = (res[k] || 0) + Math.floor(def.cost[k] * 0.5);
+    buildings.splice(idx, 1);
+    addParticles(b.x, b.y, '#94a3b8', 12, 8);
+    closePanel();
+    toast('建築已拆除');
+}
+
+/* ---------- 轉生 / 天賦面板 ---------- */
+function openTechPanel() {
+    openPanel('🧬 暗物質天賦', 'tech');
+    renderTechPanel();
+}
+function renderTechPanel() {
+    const body = document.getElementById('panelBody');
+    const landCount = getPlayerLandCount();
+    const rebirthGain = Math.floor((res.gold / 5000) + landCount * 2);
+    let html = `<div class="card">
+        <div class="card-name">🌌 暗物質轉生</div>
+        <div class="card-desc">目前可獲得：<b style="color:#c084fc">${rebirthGain} DM</b></div>
+        <div class="card-desc">轉生將清空金錢、建築、軍隊與領地，但保留天賦與暗物質。</div>
+        <button class="act-btn purple" ${rebirthGain < 5 ? 'disabled' : ''} onclick="doRebirth()">🌌 轉生（+${rebirthGain} DM）</button>
+    </div>
+    <div class="card">
+        <div class="card-name">🧬 永久天賦</div>
+        <div class="card-desc">消耗暗物質強化永久能力，轉生保留。</div>
+        <div class="card-desc">目前 DM：<b style="color:#c084fc">${Math.floor(res.dm)}</b></div>
+    </div>`;
+    body.innerHTML = html;
+}
+function doRebirth() {
+    const landCount = getPlayerLandCount();
+    const gain = Math.floor((res.gold / 5000) + landCount * 2);
+    if (gain < 5) { toast('至少需要 5 DM 才能轉生'); return; }
+    res.dm += gain;
+    res.gold = 3000; res.food = 400; res.wood = 400; res.stone = 300;
+    buildings = [];
+    territories = [];
+    garrison = { militia: 8, archer: 3 };
+    expeditions = [];
+    enemyArmies = [];
+    generateWorld();
+    addShock(playerBase.x, playerBase.y, '#c084fc', 400, 1.6);
+    addFloat(playerBase.x, playerBase.y - 100, `🌌 轉生成功！+${gain} DM`, '#c084fc', 22);
+    toast(`轉生成功！獲得 ${gain} 暗物質`);
+    centerOnPlayer();
+    closePanel();
+    saveGame();
+}
+
+/* ---------- 戰鬥結算彈窗 ---------- */
+function showBattleResult(win, targetName, result, reward) {
+    document.getElementById('battleTitle').textContent = win ? '⚔️ 勝利！' : '💀 敗退…';
+    document.getElementById('battleTitle').className = 'battle-title ' + (win ? 'win' : 'lose');
+    let html = '';
+    html += `<div class="battle-row"><span>目標</span><span>${targetName}</span></div>`;
+    html += `<div class="battle-row"><span>我方剩餘</span><span style="color:#4ade80">${unitCount(result.attLeft)} 單位</span></div>`;
+    if (result.defLeft) html += `<div class="battle-row"><span>敵方剩餘</span><span style="color:#f87171">${unitCount(result.defLeft)} 單位</span></div>`;
+    html += `<div class="battle-row"><span>我方損失</span><span>${Math.round(result.attLossPct * 100)}%</span></div>`;
+    if (win) {
+        html += `<div class="battle-row"><span>佔領領地</span><span style="color:#38bdf8">${targetName}</span></div>`;
+        if (reward) {
+            if (reward.gold) html += `<div class="battle-row"><span>戰利品</span><span style="color:#fbbf24">+${reward.gold}💰</span></div>`;
+            if (reward.dm) html += `<div class="battle-row"><span>暗物質</span><span style="color:#c084fc">+${reward.dm}🌌</span></div>`;
+        }
+    }
+    document.getElementById('battleBody').innerHTML = html;
+    document.getElementById('battleModal').classList.add('show');
+}
+function closeBattle() {
+    document.getElementById('battleModal').classList.remove('show');
+}
+
+/* ============================================================
+   UI 數值更新
+   ============================================================ */
+function resIcon(k) {
+    return { gold: '💰', food: '🌾', wood: '🪵', stone: '🪨', dm: '🌌' }[k] || k;
+}
+let _uiT = 0;
+function updateUIValues() {
+    _uiT++;
+    if (_uiT % 3 !== 0) return;
+    document.getElementById('uiGold').textContent = Math.floor(res.gold).toLocaleString();
+    document.getElementById('uiFood').textContent = Math.floor(res.food).toLocaleString();
+    document.getElementById('uiWood').textContent = Math.floor(res.wood).toLocaleString();
+    document.getElementById('uiStone').textContent = Math.floor(res.stone).toLocaleString();
+    document.getElementById('uiDm').textContent = Math.floor(res.dm);
+    document.getElementById('uiLand').textContent = getPlayerLandCount() + '/' + territories.length;
+}
+
+/* ============================================================
+   底部命令欄綁定
+   ============================================================ */
+document.querySelectorAll('.cmd-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const cmd = btn.dataset.cmd;
+        document.querySelectorAll('.cmd-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        buildMode = null;
+        attackMode = false;
+        document.getElementById('modeHint').classList.remove('show');
+        if (cmd === 'build') openBuildPanel();
+        else if (cmd === 'train') openTrainPanel();
+        else if (cmd === 'army') openArmyPanel();
+        else if (cmd === 'conquest') {
+            attackMode = true;
+            document.getElementById('modeHint').innerHTML = '🚩 點擊地圖上的敵方/中立領地發起遠征<br><span style="font-size:10px;color:#94a3b8">按 ESC 取消</span>';
+            document.getElementById('modeHint').classList.add('show');
+            closePanel();
+        }
+        else if (cmd === 'tech') openTechPanel();
+    });
+});
+
+/* ============================================================
+   存檔
+   ============================================================ */
+const SAVE_KEY = 'raingod_conquest_save_v2';
+function saveGame() {
+    try {
+        localStorage.setItem(SAVE_KEY, JSON.stringify({
+            res, buildings, territories, garrison, gameTime
+        }));
+    } catch (e) {}
+}
+function loadGame() {
+    try {
+        const raw = localStorage.getItem(SAVE_KEY);
+        if (!raw) return false;
+        const data = JSON.parse(raw);
+        if (!data || !data.res) return false;
+        res = data.res;
+        if (Array.isArray(data.buildings)) buildings = data.buildings;
+        if (Array.isArray(data.territories) && data.territories.length > 0) territories = data.territories;
+        if (data.garrison) garrison = data.garrison;
+        if (typeof data.gameTime === 'number') gameTime = data.gameTime;
+        return true;
+    } catch (e) { return false; }
+}
+
+/* ============================================================
+   主迴圈
+   ============================================================ */
+let running = true;
+function loop(now) {
+    const dt = Math.min(0.05, (now - lastFrame) / 1000);
+    lastFrame = now;
+    if (running) {
+        update(dt);
+        render();
+    }
+    requestAnimationFrame(loop);
+}
+
+/* ============================================================
+   啟動
+   ============================================================ */
+function boot() {
+    const loaded = loadGame();
+    if (!loaded) {
+        generateWorld();
+    } else if (territories.length === 0) {
+        generateWorld();
+    }
+    centerOnPlayer();
+    updateUIValues();
+    toast(loaded ? '🌍 歡迎回來，領主大人' : '🌍 歡迎來到雨神大亨 · 征服！點擊「遠征」開始擴張');
+    requestAnimationFrame(loop);
+}
+
+// roundRect polyfill
 if (!CanvasRenderingContext2D.prototype.roundRect) {
     CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
         if (typeof r === 'number') r = [r, r, r, r];
@@ -273,2054 +1737,10 @@ if (!CanvasRenderingContext2D.prototype.roundRect) {
     };
 }
 
-/* ---- 畫布尺寸 / DPR ---- */
-let W = window.innerWidth, H = window.innerHeight, DPR = Math.min(window.devicePixelRatio || 1, 2);
-const resize = () => {
-    W = window.innerWidth; H = window.innerHeight;
-    DPR = Math.min(window.devicePixelRatio || 1, 2);
-    cvs.width = Math.floor(W * DPR);
-    cvs.height = Math.floor(H * DPR);
-    cvs.style.width = W + 'px';
-    cvs.style.height = H + 'px';
-};
-window.addEventListener('resize', resize);
-resize();
+boot();
 
-/* =========================================================
-   資料定義
-   ========================================================= */
-const ITEMS = {
-    RAW:     { name: '原礦',   val: 10,     color: '#ef4444' },
-    STEEL:   { name: '鋼鐵',   val: 50,     color: '#f59e0b' },
-    SILICON: { name: '矽晶',   val: 80,     color: '#0284c7' },
-    CHIP:    { name: '晶片',   val: 300,    color: '#3b82f6' },
-    URANIUM: { name: '鈾礦',   val: 500,    color: '#10b981' },
-    BATTERY: { name: '核電池', val: 2500,   color: '#22c55e' },
-    CORE:    { name: '量子核心', val: 12000, color: '#a855f7' },
-    ANTIM:   { name: '反物質', val: 100000, color: '#e11d48' }
-};
-
-const TURRET_DEFS = {
-    gatling:  { name: '機槍塔',   icon: '🔫', cost: 1000,   range: 240, cd: 8,   dmg: 18,  color: '#f59e0b', desc: '高射速單體' },
-    laser:    { name: '雷射塔',   icon: '⚡', cost: 5000,   range: 350, cd: 26,  dmg: 62,  color: '#3b82f6', desc: '超遠射程光束' },
-    mortar:   { name: '迫擊砲塔', icon: '💥', cost: 20000,  range: 270, cd: 50,  dmg: 150, splash: 92, color: '#a855f7', desc: '範圍濺射' },
-    frost:    { name: '冰霜塔',   icon: '❄️', cost: 50000,  range: 220, cd: 14,  dmg: 6,   slow: 0.45, color: '#0284c7', desc: '凍結減速' },
-    venom:    { name: '毒液塔',   icon: '🧪', cost: 120000, range: 240, cd: 22,  dmg: 22,  poison: 14, color: '#84cc16', desc: '持續中毒傷害' },
-    tesla:    { name: '電磁塔',   icon: '🌩️', cost: 220000, range: 210, cd: 38,  dmg: 78,  chain: 3, color: '#facc15', desc: '連鎖閃電' },
-    blackhole:{ name: '黑洞塔',   icon: '🌌', cost: 420000, range: 280, cd: 5,   dmg: 10,  pull: true, color: '#c084fc', desc: '牽引持續傷害' },
-    missile:  { name: '導彈塔',   icon: '🚀', cost: 750000, range: 420, cd: 92,  dmg: 340, splash: 110, color: '#fb7185', desc: '追蹤範圍爆炸' },
-    railgun:  { name: '軌道砲',   icon: '🛰️', cost: 1600000,range: 620, cd: 150, dmg: 950, beam: true, color: '#22d3ee', desc: '穿透直線砲擊' }
-};
-const TURRET_ORDER = ['gatling', 'laser', 'mortar', 'frost', 'venom', 'tesla', 'blackhole', 'missile', 'railgun'];
-
-const ENEMY_DEFS = {
-    crawler:  { name: '異形蟲',  shape: 'bug',     hp: 55,   spd: 1.5, reward: 80,   color: '#ef4444', size: 15, bob: 0 },
-    runner:   { name: '疾風蟲',  shape: 'dart',    hp: 32,   spd: 3.0, reward: 95,   color: '#f59e0b', size: 12, bob: 1.5 },
-    tank:     { name: '裝甲蟲',  shape: 'hex',     hp: 240,  spd: 0.7, reward: 160,  color: '#64748b', size: 22, bob: 0 },
-    bomber:   { name: '爆裂蟲',  shape: 'diamond', hp: 48,   spd: 2.0, reward: 105,  color: '#22c55e', size: 14, bob: 2 },
-    splitter: { name: '分裂蟲',  shape: 'blob',    hp: 130,  spd: 1.2, reward: 190,  color: '#a855f7', size: 18, bob: 2.5, split: true },
-    healer:   { name: '治癒蟲',  shape: 'star',    hp: 160,  spd: 1.0, reward: 210,  color: '#14b8a6', size: 17, bob: 2, heal: true },
-    shield:   { name: '護盾蟲',  shape: 'ring',    hp: 210,  spd: 0.9, reward: 260,  color: '#0ea5e9', size: 20, bob: 0, shield: 180 },
-    phantom:  { name: '幽靈蟲',  shape: 'ghost',   hp: 110,  spd: 2.3, reward: 230,  color: '#c084fc', size: 16, bob: 3, alpha: 0.6 },
-    boss:     { name: '異形母巢', shape: 'boss',   hp: 2200, spd: 0.5, reward: 4200, color: '#e11d48', size: 38, bob: 0, glow: 26 }
-};
-
-const WAVE_MODS = [
-    { id: 'none',    name: '常規波次', icon: '⚔️', desc: '無特殊效果' },
-    { id: 'swarm',   name: '蜂群',     icon: '🐝', desc: '敵人數量 +50%，但更脆弱', hpMul: 0.7, countMul: 1.5 },
-    { id: 'armored', name: '裝甲',     icon: '🛡️', desc: '敵人生命 +60%', hpMul: 1.6, countMul: 0.9 },
-    { id: 'swift',   name: '疾風',     icon: '💨', desc: '敵人速度 +50%', spdMul: 1.5, countMul: 0.9 },
-    { id: 'horde',   name: '獸潮',     icon: '🌊', desc: '敵人數量翻倍', countMul: 2, hpMul: 0.8 },
-    { id: 'elite',   name: '精英',     icon: '👑', desc: '出現更多強力敵人', elite: true }
-];
-
-const ACHIEVEMENTS = [
-    { id: 'wave10',  name: '初露鋒芒',   desc: '到達第 10 波',  reward: 5,  check: s => s.bestWave >= 10 },
-    { id: 'wave25',  name: '雨神降臨',   desc: '到達第 25 波',  reward: 15, check: s => s.bestWave >= 25 },
-    { id: 'wave50',  name: '天災化身',   desc: '到達第 50 波',  reward: 40, check: s => s.bestWave >= 50 },
-    { id: 'kill500', name: '蟲族噩夢',   desc: '累計擊殺 500',  reward: 10, check: s => s.totalKills >= 500 },
-    { id: 'kill5000',name: '滅絕者',     desc: '累計擊殺 5000', reward: 35, check: s => s.totalKills >= 5000 },
-    { id: 'combo50', name: '連擊大師',   desc: '達成 50 連擊',  reward: 12, check: s => s.maxCombo >= 50 },
-    { id: 'tower20', name: '鋼鐵防線',   desc: '同時擁有 20 座塔', reward: 15, check: s => s.turretCount >= 20 },
-    { id: 'money1m', name: '百萬富翁',   desc: '持有 $1,000,000', reward: 20, check: s => s.money >= 1000000 }
-];
-
-/* =========================================================
-   遊戲狀態
-   ========================================================= */
-let money = 2000, darkMatter = 0, frame = 0;
-let bestWave = 0, totalKills = 0, maxCombo = 0;
-let minerLevel = 0, capacity = 4, techTier = 1;
-let playerDamageLevel = 0, turretDamageLevel = 0;
-
-let p = { x: 350, y: 350, r: 18, tx: 350, ty: 350, bag: [], atkRange: 220, cooldown: 0, angle: 0 };
-
-let bots = [], items = [], floatTexts = [], particles = [], bullets = [], beams = [], shocks = [], enemies = [], turrets = [];
-
-let shakeTime = 0;
-let talents = { dmgLv: 0, spdLv: 0, rangeLv: 0, critLv: 0, moneyLv: 0 };
-let wave = 1, waveTimer = 20 * 60, isWaveActive = false;
-let waveMod = WAVE_MODS[0];
-let skillCd = [0, 0, 0, 0];
-let isOverclocked = false, overclockTimer = 0;
-let freezeTimer = 0, singularityTimer = 0;
-let combo = 0, comboTimer = 0;
-let quest = { type: 'kill', target: 20, current: 0, reward: 1500, desc: '擊殺 20 隻異形蟲' };
-let achievements = {};
-let storageReady = false;
-let placingTurret = null;
-let selectedTurret = null;
-let mouseX = 0, mouseY = 0;
-
-/* =========================================================
-   存檔 / 讀檔
-   ========================================================= */
-function saveGame() {
-    if (!storageReady) return;
-    try {
-        localStorage.setItem(SAVE_KEY, JSON.stringify({
-            money, darkMatter, minerLevel, capacity, techTier, playerDamageLevel, turretDamageLevel,
-            player: { x: p.x, y: p.y, bag: [] },
-            bots: bots.map(b => ({ x: b.x, y: b.y, bag: [] })),
-            turrets: turrets.map(t => ({ x: t.x, y: t.y, type: t.type, lv: t.lv })),
-            talents, wave, bestWave, waveTimer, isWaveActive: false,
-            skillCd, isOverclocked, overclockTimer, quest, achievements, totalKills, maxCombo
-        }));
-    } catch (e) { /* ignore */ }
-}
-
-function loadGame(data) {
-    if (!data || typeof data !== 'object' || Array.isArray(data)) return;
-    const num = (v, f) => Number.isFinite(Number(v)) ? Number(v) : f;
-    const arr = v => Array.isArray(v) ? v.filter(o => o && typeof o === 'object').slice(0, 2000) : [];
-
-    money = Math.max(0, num(data.money, money));
-    darkMatter = Math.max(0, num(data.darkMatter, darkMatter));
-    minerLevel = Math.max(0, Math.floor(num(data.minerLevel, minerLevel)));
-    capacity = Math.max(1, Math.floor(num(data.capacity, capacity)));
-    techTier = Math.min(5, Math.max(1, Math.floor(num(data.techTier, techTier))));
-    playerDamageLevel = Math.max(0, Math.floor(num(data.playerDamageLevel, playerDamageLevel)));
-    turretDamageLevel = Math.max(0, Math.floor(num(data.turretDamageLevel, turretDamageLevel)));
-    if (data.player && typeof data.player === 'object') {
-        if (Number.isFinite(Number(data.player.x))) p.x = Number(data.player.x);
-        if (Number.isFinite(Number(data.player.y))) p.y = Number(data.player.y);
-    }
-    p.tx = p.x; p.ty = p.y;
-
-    bots = arr(data.bots).map(b => ({
-        x: num(b.x, 120), y: num(b.y, H / 2), bag: [], speed: 4.5,
-        phase: Math.random() * Math.PI * 2
-    }));
-    turrets = arr(data.turrets)
-        .filter(t => TURRET_DEFS[t.type])
-        .map(t => ({
-            x: num(t.x, 300), y: num(t.y, 300), type: t.type,
-            lv: Math.max(1, Math.floor(num(t.lv, 1))),
-            cd: 0, angle: 0, flash: 0
-        }));
-
-    if (data.talents && typeof data.talents === 'object') {
-        Object.keys(talents).forEach(k => { talents[k] = Math.max(0, Math.floor(num(data.talents[k], talents[k]))); });
-    }
-    wave = Math.max(1, Math.floor(num(data.wave, wave)));
-    bestWave = Math.max(0, Math.floor(num(data.bestWave, bestWave)));
-    totalKills = Math.max(0, Math.floor(num(data.totalKills, totalKills)));
-    maxCombo = Math.max(0, Math.floor(num(data.maxCombo, maxCombo)));
-    waveTimer = Math.max(0, Math.floor(num(data.waveTimer, waveTimer)));
-    isWaveActive = false;
-    if (Array.isArray(data.skillCd) && data.skillCd.length >= 4) {
-        skillCd = data.skillCd.slice(0, 4).map(v => Math.max(0, num(v, 0)));
-    }
-    isOverclocked = data.isOverclocked === true;
-    overclockTimer = Math.max(0, Math.floor(num(data.overclockTimer, overclockTimer)));
-    if (data.quest && typeof data.quest === 'object') quest = { ...quest, ...data.quest };
-    if (data.achievements && typeof data.achievements === 'object') achievements = { ...data.achievements };
-}
-
-/* =========================================================
-   Firebase / 排行榜（保留原有整合）
-   ========================================================= */
-async function openTycoonLeaderboard() {
-    if (!await window.raingodRequireAuth('排行榜')) return;
-    document.getElementById('tycoon-leaderboard').style.display = 'flex';
-    await refreshTycoonLeaderboard();
-}
-function closeTycoonLeaderboard() {
-    document.getElementById('tycoon-leaderboard').style.display = 'none';
-}
-async function refreshTycoonLeaderboard() {
-    const status = document.getElementById('tycoon-leaderboard-status');
-    const list = document.getElementById('tycoon-leaderboard-list');
-    if (!await window.raingodRequireAuth('排行榜')) return;
-    const uid = window.raingodCurrentUser.uid;
-    status.textContent = '排行榜載入中…';
-    try {
-        const response = await fetch(`${TYCOON_LEADERBOARD_URL}.json`);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        if (window.raingodCurrentUser?.uid !== uid) return;
-        const rows = await response.json() || {};
-        const entries = Object.entries(rows)
-            .filter(([, row]) => row && Number.isFinite(Number(row.wave)))
-            .sort((a, b) => Number(b[1].wave) - Number(a[1].wave) || Number(b[1].darkMatter || 0) - Number(a[1].darkMatter || 0))
-            .slice(0, 50);
-        list.replaceChildren();
-        entries.forEach(([entryUid, row], index) => {
-            const item = document.createElement('div');
-            item.className = 'tycoon-leaderboard-row';
-            const name = document.createElement('span');
-            name.textContent = `${index + 1}. ${row.name || '玩家'}${entryUid === uid ? '（你）' : ''}`;
-            const value = document.createElement('strong');
-            value.textContent = `第 ${Math.floor(Number(row.wave))} 波 · ${Math.floor(Number(row.darkMatter) || 0)} 暗物質`;
-            item.append(name, value);
-            list.appendChild(item);
-        });
-        status.textContent = entries.length ? `已載入 ${entries.length} 位玩家，依最高波數排序。` : '目前還沒有排行榜資料。';
-    } catch (error) {
-        console.error('載入雨神大亨排行榜失敗：', error);
-        status.textContent = '排行榜載入失敗，請稍後重試。';
-    }
-}
-async function uploadTycoonLeaderboardScore() {
-    const currentUser = window.raingodCurrentUser;
-    if (!currentUser) return;
-    const uid = currentUser.uid;
-    const scoreWave = Math.max(1, bestWave, wave);
-    const scoreDarkMatter = Math.floor(darkMatter);
-    const entryUrl = `${TYCOON_LEADERBOARD_URL}/${encodeURIComponent(uid)}.json`;
-    try {
-        const previousResponse = await fetch(entryUrl);
-        if (!previousResponse.ok) throw new Error(`HTTP ${previousResponse.status}`);
-        const previous = await previousResponse.json();
-        if (window.raingodCurrentUser?.uid !== uid) return;
-        if (previous && (Number(previous.wave) > scoreWave ||
-            (Number(previous.wave) === scoreWave && Number(previous.darkMatter) >= scoreDarkMatter))) return;
-        const response = await fetch(entryUrl, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                name: currentUser.displayName || (currentUser.email ? currentUser.email.split('@')[0] : '雨神玩家'),
-                wave: scoreWave,
-                darkMatter: scoreDarkMatter,
-                updatedAt: Date.now()
-            })
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    } catch (error) {
-        console.error('上傳雨神大亨排行榜失敗：', error);
-    }
-}
-async function initializeTycoon() {
-    await window.raingodFirebaseReady;
-    await window.raingodAuthReady;
-    await window.raingodBindStorage('raingod-tycoon', [SAVE_KEY], { [SAVE_KEY]: null }, data => {
-        loadGame(data[SAVE_KEY]);
-        storageReady = true;
-        saveGame();
-        if (window.raingodCurrentUser) uploadTycoonLeaderboardScore();
-    });
-    window.raingodOnAuthStateChanged(currentUser => {
-        const button = document.getElementById('tycoon-leaderboard-button');
-        button.textContent = currentUser ? '🏆 排行榜' : '🏆 登入後查看排行榜';
-        if (currentUser) uploadTycoonLeaderboardScore();
-        else {
-            closeTycoonLeaderboard();
-            document.getElementById('tycoon-leaderboard-list').replaceChildren();
-            document.getElementById('tycoon-leaderboard-status').textContent = '請登入帳號後查看。';
-        }
-    });
-    requestAnimationFrame(draw);
-}
-
-/* =========================================================
-   UI 建構
-   ========================================================= */
-function buildTurretListUI() {
-    const wrap = document.getElementById('turret-list');
-    wrap.replaceChildren();
-    TURRET_ORDER.forEach(id => {
-        const d = TURRET_DEFS[id];
-        const btn = document.createElement('button');
-        btn.className = 'btn';
-        btn.dataset.turret = id;
-        btn.innerHTML = `<span>${d.icon} ${d.name}<div class="desc">${d.desc}</div></span>
-                         <span style="color:${d.color}" data-cost="${id}">$${d.cost.toLocaleString()}</span>`;
-        btn.addEventListener('click', () => beginPlacement(id));
-        wrap.appendChild(btn);
-    });
-}
-
-function buildAchListUI() {
-    const wrap = document.getElementById('ach-list');
-    wrap.replaceChildren();
-    ACHIEVEMENTS.forEach(a => {
-        const row = document.createElement('div');
-        row.className = 'ach-row' + (achievements[a.id] ? ' done' : '');
-        row.dataset.ach = a.id;
-        row.innerHTML = `<span>${achievements[a.id] ? '✅' : '⬜'} ${a.name} · ${a.desc}</span><span>+${a.reward} DM</span>`;
-        wrap.appendChild(row);
-    });
-}
-
-function refreshAchUI() {
-    ACHIEVEMENTS.forEach(a => {
-        const row = document.querySelector(`.ach-row[data-ach="${a.id}"]`);
-        if (!row) return;
-        const done = !!achievements[a.id];
-        row.classList.toggle('done', done);
-        row.innerHTML = `<span>${done ? '✅' : '⬜'} ${a.name} · ${a.desc}</span><span>+${a.reward} DM</span>`;
-    });
-}
-
-function switchTab(tabId) {
-    document.querySelectorAll('.panel > div[id^="tab-"]').forEach(d => d.style.display = 'none');
-    const el = document.getElementById(tabId);
-    if (el) el.style.display = 'block';
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tabId));
-}
-
-function toggleTycoonShop(open) {
-    const ui = document.getElementById('ui');
-    const toggle = document.querySelector('.mobile-shop-toggle');
-    if (open === undefined) open = !ui.classList.contains('shop-open');
-    ui.classList.toggle('shop-open', open);
-    toggle.setAttribute('aria-expanded', String(open));
-}
-
-/* =========================================================
-   建築位置
-   ========================================================= */
-function getBuildings() {
-    const startX = 80, startY = 100;
-    const b = {
-        extractor: { x: startX, y: startY, w: 110, h: 70, color: '#ef4444', label: '採礦塔', kind: 'mine' },
-        smelter:   { x: startX, y: startY + 110, w: 110, h: 70, color: '#f59e0b', label: '鋼鐵廠', kind: 'smelt' },
-        hub:       { x: startX, y: H - 150, w: 140, h: 100, color: '#38bdf8', label: '總部基地', kind: 'hub' }
-    };
-    if (techTier >= 2) b.chipFab = { x: startX, y: startY + 220, w: 110, h: 70, color: '#3b82f6', label: '晶片廠', kind: 'chip' };
-    if (techTier >= 3) b.nukeFab = { x: startX, y: startY + 330, w: 110, h: 70, color: '#22c55e', label: '鈾能廠', kind: 'nuke' };
-    if (techTier >= 4) b.qFab    = { x: startX, y: startY + 440, w: 110, h: 70, color: '#a855f7', label: '量子合成', kind: 'quantum' };
-    if (techTier >= 5) b.antiFab = { x: startX, y: startY + 550, w: 110, h: 70, color: '#e11d48', label: '反物質所', kind: 'anti' };
-    return b;
-}
-
-/* =========================================================
-   工具函式
-   ========================================================= */
-const rnd = (a, b) => a + Math.random() * (b - a);
-const dist = (ax, ay, bx, by) => Math.hypot(ax - bx, ay - by);
-
-function triggerShake(d) { shakeTime = Math.max(shakeTime, d); }
-
-function addFloat(x, y, text, color, size) {
-    if (floatTexts.length > 90) floatTexts.shift();
-    floatTexts.push({ x, y, text, color: color || '#4ade80', alpha: 1, size: size || 14, vy: -0.9 });
-}
-
-function addParticles(x, y, color, count, speed) {
-    if (particles.length > 420) count = Math.min(count, 4);
-    const sp = speed || 8;
-    for (let i = 0; i < count; i++) {
-        const a = Math.random() * Math.PI * 2;
-        const v = rnd(0.4, 1) * sp;
-        particles.push({
-            x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v,
-            size: rnd(1.5, 4.5), color, alpha: 1, decay: rnd(0.02, 0.05)
-        });
-    }
-}
-
-function addShock(x, y, color, r, maxR, life) {
-    shocks.push({ x, y, color, r: r || 4, maxR: maxR || 80, life: life || 1 });
-}
-
-function addBeam(x1, y1, x2, y2, color, width, life) {
-    beams.push({ x1, y1, x2, y2, color, width: width || 3, life: life || 12, maxLife: life || 12 });
-}
-
-function getTurretCost(type) {
-    const owned = turrets.filter(t => t.type === type).length;
-    return Math.floor(TURRET_DEFS[type].cost * Math.pow(1.32, owned));
-}
-
-/* =========================================================
-   塔的建造 / 升級 / 出售
-   ========================================================= */
-function beginPlacement(type) {
-    const cost = getTurretCost(type);
-    if (money < cost) {
-        addFloat(W / 2, H / 2, '金錢不足！', '#ef4444', 16);
-        return;
-    }
-    placingTurret = type;
-    selectedTurret = null;
-    updateInspector();
-}
-
-function cancelPlacement() { placingTurret = null; }
-
-function placeTurret(type, x, y) {
-    const cost = getTurretCost(type);
-    if (money < cost) { placingTurret = null; return; }
-    // 避免和已有塔重疊
-    if (turrets.some(t => dist(t.x, t.y, x, y) < 32)) {
-        addFloat(x, y, '位置重疊', '#ef4444');
-        return;
-    }
-    if (x < 200 && y < 620) { /* 允許 */ }
-    money -= cost;
-    turrets.push({ x, y, type, lv: 1, cd: 0, angle: 0, flash: 0 });
-    addParticles(x, y, TURRET_DEFS[type].color, 14, 9);
-    addShock(x, y, TURRET_DEFS[type].color, 6, 60, 1);
-    addFloat(x, y - 24, '建造完成！', TURRET_DEFS[type].color, 13);
-    placingTurret = null;
-    saveGame();
-}
-
-function upgradeCost(t) {
-    const base = TURRET_DEFS[t.type].cost;
-    return Math.floor(base * 0.6 * Math.pow(1.55, t.lv - 1));
-}
-
-function sellValue(t) {
-    const base = TURRET_DEFS[t.type].cost;
-    return Math.floor(base * 0.5 * (1 + (t.lv - 1) * 0.3));
-}
-
-function selectTurretAt(x, y) {
-    let found = null, bestD = 34;
-    turrets.forEach(t => {
-        const d = dist(t.x, t.y, x, y);
-        if (d < bestD) { bestD = d; found = t; }
-    });
-    selectedTurret = found;
-    updateInspector();
-}
-
-function updateInspector() {
-    const box = document.getElementById('turret-inspector');
-    if (!selectedTurret || !turrets.includes(selectedTurret)) {
-        box.style.display = 'none';
-        selectedTurret = null;
-        return;
-    }
-    const t = selectedTurret;
-    const d = TURRET_DEFS[t.type];
-    const upCost = upgradeCost(t);
-    const sellV = sellValue(t);
-    box.style.display = 'flex';
-    box.innerHTML = `
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-            <strong style="color:${d.color}">${d.icon} ${d.name} Lv.${t.lv}</strong>
-            <span style="font-size:9px;color:#7dd3fc">射程 ${Math.round(d.range * (1 + talents.rangeLv * 0.1) * (1 + (t.lv - 1) * 0.06))}</span>
-        </div>
-        <div class="row">
-            <button class="btn" onclick="doUpgradeSelected()" ${money < upCost ? 'disabled' : ''}>升級 $${upCost.toLocaleString()}</button>
-            <button class="btn" style="border-color:#f87171" onclick="doSellSelected()">出售 +$${sellV.toLocaleString()}</button>
-        </div>
-        <div class="row">
-            <button class="btn" style="justify-content:center" onclick="deselectTurret()">取消選取</button>
-        </div>`;
-}
-
-function doUpgradeSelected() {
-    const t = selectedTurret;
-    if (!t) return;
-    const c = upgradeCost(t);
-    if (money < c) return;
-    money -= c;
-    t.lv++;
-    addParticles(t.x, t.y, TURRET_DEFS[t.type].color, 10, 7);
-    addFloat(t.x, t.y - 24, `Lv.${t.lv}`, TURRET_DEFS[t.type].color);
-    updateInspector();
-    saveGame();
-}
-
-function doSellSelected() {
-    const t = selectedTurret;
-    if (!t) return;
-    const v = sellValue(t);
-    money += v;
-    addFloat(t.x, t.y - 20, `+$${v.toLocaleString()}`, '#4ade80');
-    addParticles(t.x, t.y, '#94a3b8', 12, 6);
-    turrets = turrets.filter(x => x !== t);
-    selectedTurret = null;
-    updateInspector();
-    saveGame();
-}
-
-function deselectTurret() {
-    selectedTurret = null;
-    updateInspector();
-}
-
-/* =========================================================
-   技能
-   ========================================================= */
-function useSkill(n) {
-    if (skillCd[n - 1] > 0) return;
-    if (n === 1) {
-        isOverclocked = true; overclockTimer = 600; skillCd[0] = 1800;
-        addFloat(p.x, p.y - 30, '⚡ 系統超頻！', '#f59e0b', 16);
-        addShock(p.x, p.y, '#f59e0b', 8, 120, 1);
-    } else if (n === 2) {
-        skillCd[1] = 2400;
-        triggerShake(26);
-        addShock(W / 2, H / 2, '#e11d48', 10, Math.max(W, H), 1.6);
-        addFloat(W / 2, H / 2 - 60, '💥 軌道離子砲全螢幕打擊！', '#e11d48', 18);
-        enemies.slice().forEach(e => {
-            damageEnemy(e, 320 + wave * 70, '#e11d48', false);
-            addParticles(e.x, e.y, '#e11d48', 10, 10);
-        });
-    } else if (n === 3) {
-        freezeTimer = 300; skillCd[2] = 2100;
-        addFloat(W / 2, H / 2, '❄️ 時間凍結 5 秒！', '#7dd3fc', 17);
-        addShock(W / 2, H / 2, '#7dd3fc', 10, Math.max(W, H) * 0.8, 1.4);
-    } else if (n === 4) {
-        singularityTimer = 240; skillCd[3] = 2700;
-        addFloat(W / 2, H / 2, '🌀 引力奇點展開！', '#c084fc', 17);
-        addShock(W / 2, H / 2, '#c084fc', 10, Math.max(W, H) * 0.7, 1.4);
-    }
-}
-
-/* =========================================================
-   波次
-   ========================================================= */
-function pickWaveModifier() {
-    if (wave <= 3) return WAVE_MODS[0];
-    return WAVE_MODS[Math.floor(Math.random() * WAVE_MODS.length)];
-}
-
-function spawnWave() {
-    isWaveActive = true;
-    bestWave = Math.max(bestWave, wave);
-    waveMod = pickWaveModifier();
-
-    const isBossWave = (wave % 5 === 0);
-    let baseCount = 8 + wave * 4;
-    let count = Math.round(baseCount * (waveMod.countMul || 1));
-    count = Math.min(count, 90);
-
-    if (waveMod.name !== '常規波次') {
-        addFloat(W / 2, 130, `${waveMod.icon} ${waveMod.name}：${waveMod.desc}`, '#fbbf24', 15);
-    }
-
-    const hpMul = waveMod.hpMul || 1;
-    const spdMul = waveMod.spdMul || 1;
-
-    for (let i = 0; i < count; i++) {
-        setTimeout(() => {
-            if (!isWaveActive) return;
-            const r = Math.random();
-            let type = 'crawler';
-            if (r < 0.16) type = 'runner';
-            else if (r < 0.34) type = 'tank';
-            else if (r < 0.48) type = 'bomber';
-            else if (r < 0.62) type = 'splitter';
-            else if (r < 0.72) type = 'healer';
-            else if (r < 0.82) type = 'shield';
-            else if (r < 0.92) type = 'phantom';
-
-            if (waveMod.elite && r > 0.72) type = Math.random() < 0.5 ? 'shield' : 'tank';
-            if (isBossWave && i === count - 1) type = 'boss';
-
-            spawnEnemy(type, hpMul, spdMul);
-        }, i * 380);
-    }
-    saveGame();
-    uploadTycoonLeaderboardScore();
-}
-
-function spawnEnemy(type, hpMul, spdMul) {
-    const d = ENEMY_DEFS[type];
-    const scale = 1 + (wave - 1) * 0.22;
-    const hp = (d.hp + wave * 42) * scale * (hpMul || 1);
-    const e = {
-        type, x: W + 50 + Math.random() * 120,
-        y: rnd(90, H - 90),
-        hp, maxHp: hp,
-        shield: d.shield ? d.shield * scale : 0,
-        maxShield: d.shield ? d.shield * scale : 0,
-        speed: d.spd * (spdMul || 1) * (1 + Math.min(wave * 0.012, 0.5)),
-        baseSpeed: d.spd * (spdMul || 1) * (1 + Math.min(wave * 0.012, 0.5)),
-        reward: (d.reward + wave * 32),
-        seed: Math.random() * Math.PI * 2,
-        hitFlash: 0, slowT: 0, slowFactor: 1,
-        poison: 0, poisonDmg: 0,
-        dead: false, wave: 0
-    };
-    enemies.push(e);
-}
-
-/* =========================================================
-   傷害 / 擊殺
-   ========================================================= */
-function damageEnemy(e, dmg, color, crit) {
-    if (!e || e.dead) return;
-    let remain = dmg;
-    if (e.shield > 0) {
-        const absorbed = Math.min(e.shield, remain);
-        e.shield -= absorbed;
-        remain -= absorbed;
-        if (absorbed > 0) addParticles(e.x, e.y, '#38bdf8', 2, 5);
-    }
-    e.hp -= remain;
-    e.hitFlash = 4;
-    if (dmg >= 25 || crit) {
-        addFloat(e.x + rnd(-6, 6), e.y - 18, Math.round(dmg).toString(), crit ? '#fbbf24' : (color || '#fff'), crit ? 15 : 11);
-    }
-    if (e.hp <= 0) killEnemy(e);
-}
-
-function killEnemy(e) {
-    if (e.dead) return;
-    e.dead = true;
-
-    combo++; comboTimer = 200;
-    maxCombo = Math.max(maxCombo, combo);
-    totalKills++;
-
-    const comboMul = 1 + Math.min(combo, 60) * 0.015;
-    const moneyMul = (1 + darkMatter * 0.08) * (1 + talents.moneyLv * 0.25) * comboMul;
-    const gain = e.reward * moneyMul;
-    money += gain;
-
-    addFloat(e.x, e.y - 10, `+$${Math.floor(gain).toLocaleString()}`, '#4ade80', 12);
-    addParticles(e.x, e.y, ENEMY_DEFS[e.type].color, e.type === 'boss' ? 34 : 10, e.type === 'boss' ? 14 : 8);
-    if (e.type === 'boss') {
-        addShock(e.x, e.y, '#e11d48', 8, 160, 1.3);
-        triggerShake(20);
-    }
-
-    // 分裂
-    if (ENEMY_DEFS[e.type].split) {
-        for (let i = 0; i < 2; i++) {
-            const c = {
-                type: 'crawler', x: e.x + rnd(-14, 14), y: e.y + rnd(-14, 14),
-                hp: e.maxHp * 0.22, maxHp: e.maxHp * 0.22, shield: 0, maxShield: 0,
-                speed: e.baseSpeed * 1.3, baseSpeed: e.baseSpeed * 1.3,
-                reward: e.reward * 0.28, seed: Math.random() * 6.28,
-                hitFlash: 0, slowT: 0, slowFactor: 1, poison: 0, poisonDmg: 0, dead: false, wave: 0
-            };
-            enemies.push(c);
-        }
-    }
-
-    updateQuests('kill', 1);
-}
-
-/* =========================================================
-   任務 / 成就
-   ========================================================= */
-function updateQuests(type, amount) {
-    if (quest.type === type) {
-        quest.current += amount;
-        if (quest.current >= quest.target) {
-            money += quest.reward;
-            addFloat(W / 2, 150, `🎉 完成任務！+$${quest.reward}`, '#f59e0b', 16);
-            const targets = [30, 50, 80, 120];
-            const t = targets[Math.floor(Math.random() * targets.length)];
-            quest = { type: 'kill', target: t, current: 0, reward: t * 140, desc: `擊殺 ${t} 隻異形蟲` };
-        }
-    }
-}
-
-function checkAchievements() {
-    const snapshot = {
-        bestWave, totalKills, maxCombo, money,
-        turretCount: turrets.length
-    };
-    let changed = false;
-    ACHIEVEMENTS.forEach(a => {
-        if (achievements[a.id]) return;
-        if (a.check(snapshot)) {
-            achievements[a.id] = true;
-            darkMatter += a.reward;
-            changed = true;
-            addFloat(W / 2, 180, `🏆 成就達成：${a.name} +${a.reward} DM`, '#fbbf24', 15);
-            addParticles(W / 2, 180, '#fbbf24', 20, 10);
-        }
-    });
-    if (changed) { refreshAchUI(); saveGame(); }
-}
-
-/* =========================================================
-   購買 / 升級
-   ========================================================= */
-function buyBot() {
-    const cost = Math.floor(500 * Math.pow(1.3, bots.length));
-    if (money < cost) return;
-    money -= cost;
-    bots.push({
-        x: 120, y: H / 2, bag: [], speed: 4.5,
-        phase: Math.random() * Math.PI * 2
-    });
-    addParticles(120, H / 2, '#38bdf8', 10);
-    saveGame();
-}
-
-function upgrade(type) {
-    if (type === 'miner') {
-        const cost = Math.floor(1000 * Math.pow(1.5, minerLevel));
-        if (money < cost) return;
-        money -= cost; minerLevel++;
-    } else if (type === 'capacity') {
-        const cost = Math.floor(1500 * (capacity / 2));
-        if (money < cost) return;
-        money -= cost; capacity += 2;
-    } else if (type === 'playerDamage') {
-        const cost = Math.floor(1000 * Math.pow(1.6, playerDamageLevel));
-        if (money < cost) return;
-        money -= cost; playerDamageLevel++;
-    } else if (type === 'turretDamage') {
-        const cost = Math.floor(1500 * Math.pow(1.6, turretDamageLevel));
-        if (money < cost) return;
-        money -= cost; turretDamageLevel++;
-    }
-    saveGame();
-}
-
-function buyTalent(type) {
-    const key = type + 'Lv';
-    if (!(key in talents)) return;
-    const cost = (talents[key] + 1) * 5;
-    if (darkMatter < cost) return;
-    darkMatter -= cost;
-    talents[key]++;
-    addParticles(p.x, p.y, '#c084fc', 12);
-    saveGame();
-}
-
-function unlockTier(tier) {
-    const costs = { 2: 2500, 3: 25000, 4: 200000, 5: 2000000 };
-    if (techTier === tier - 1 && money >= costs[tier]) {
-        money -= costs[tier];
-        techTier = tier;
-        addFloat(W / 2, 150, `🔓 工廠升級至 Tier ${tier}`, '#38bdf8', 15);
-        saveGame();
-    }
-}
-
-function triggerRebirth() {
-    const earnedDM = Math.floor(money / 100000);
-    if (earnedDM <= 0 && money < 100000) {
-        addFloat(W / 2, H / 2, '至少需要 $100,000 才能轉生', '#ef4444', 15);
-        return;
-    }
-    darkMatter += Math.max(1, earnedDM);
-    money = 2000; minerLevel = 0; capacity = 4; techTier = 1;
-    playerDamageLevel = 0; turretDamageLevel = 0;
-    p.bag = []; bots = []; items = []; turrets = []; enemies = [];
-    bullets = []; beams = []; particles = []; shocks = []; selectedTurret = null;
-    wave = 1; waveTimer = 20 * 60; isWaveActive = false; combo = 0;
-    updateInspector();
-    addFloat(W / 2, H / 2, `🌌 量子轉生成功！+${Math.max(1, earnedDM)} DM`, '#c084fc', 20);
-    addShock(W / 2, H / 2, '#c084fc', 10, Math.max(W, H), 1.6);
-    triggerShake(30);
-    saveGame();
-}
-
-function triggerNextWave() {
-    if (!isWaveActive) { waveTimer = 0; saveGame(); }
-}
-
-/* =========================================================
-   輸入
-   ========================================================= */
-window.addEventListener('pointermove', e => {
-    mouseX = e.clientX; mouseY = e.clientY;
-    if (e.pointerType !== 'touch') { p.tx = e.clientX; p.ty = e.clientY; }
-});
-
-cvs.addEventListener('pointerdown', e => {
-    mouseX = e.clientX; mouseY = e.clientY;
-
-    if (placingTurret) {
-        placeTurret(placingTurret, e.clientX, e.clientY);
-        return;
-    }
-    // 嘗試選取塔
-    selectTurretAt(e.clientX, e.clientY);
-    if (!selectedTurret && e.pointerType === 'touch') { p.tx = e.clientX; p.ty = e.clientY; }
-});
-
-cvs.addEventListener('pointermove', e => {
-    if (e.pointerType === 'touch' && !placingTurret) { p.tx = e.clientX; p.ty = e.clientY; }
-});
-
-window.addEventListener('keydown', e => {
-    if (e.key === 'Escape') { placingTurret = null; deselectTurret(); }
-    if (e.key >= '1' && e.key <= '4') useSkill(parseInt(e.key, 10));
-});
-
-document.querySelectorAll('.skill-btn').forEach(btn => {
-    btn.addEventListener('click', () => useSkill(parseInt(btn.dataset.skill, 10)));
-});
-
-document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
-});
-
-document.getElementById('tab-prod').addEventListener('click', e => {
-    const b = e.target.closest('[data-unlock]');
-    if (b) unlockTier(parseInt(b.dataset.unlock, 10));
-});
-
-document.getElementById('tab-tech').addEventListener('click', e => {
-    const b = e.target.closest('[data-talent]');
-    if (b) buyTalent(b.dataset.talent);
-});
-
-/* =========================================================
-   更新邏輯
-   ========================================================= */
-function update() {
-    frame++;
-    const b = getBuildings();
-
-    // 玩家移動
-    p.x += (p.tx - p.x) * 0.18;
-    p.y += (p.ty - p.y) * 0.18;
-    p.atkRange = 220 * (1 + talents.rangeLv * 0.1);
-
-    // 冷卻
-    for (let i = 0; i < skillCd.length; i++) if (skillCd[i] > 0) skillCd[i]--;
-    if (overclockTimer > 0) { overclockTimer--; if (overclockTimer === 0) isOverclocked = false; }
-    if (freezeTimer > 0) freezeTimer--;
-    if (singularityTimer > 0) singularityTimer--;
-    if (comboTimer > 0) { comboTimer--; if (comboTimer === 0) combo = 0; }
-
-    // 波次
-    if (!isWaveActive) {
-        waveTimer--;
-        if (waveTimer <= 0) spawnWave();
-    } else if (enemies.length === 0) {
-        isWaveActive = false;
-        wave++;
-        waveTimer = 20 * 60;
-        const bonus = 1500 * wave * (1 + talents.moneyLv * 0.25);
-        money += bonus;
-        darkMatter += 1;
-        addFloat(W / 2, H / 2, `🎉 第 ${wave - 1} 波完成！+$${Math.floor(bonus).toLocaleString()}`, '#f59e0b', 18);
-        addShock(W / 2, H / 2, '#f59e0b', 10, 220, 1.4);
-        saveGame();
-        uploadTycoonLeaderboardScore();
-    }
-
-    // 產礦
-    const spawnInterval = isOverclocked ? 4 : Math.max(6, 35 - minerLevel * 4);
-    if (frame % spawnInterval === 0 && items.length < 50) {
-        items.push({
-            x: b.extractor.x + b.extractor.w + 15,
-            y: b.extractor.y + b.extractor.h / 2 + rnd(-18, 18),
-            type: 'RAW', bob: Math.random() * 6.28
-        });
-    }
-
-    // 機兵 AI
-    bots.forEach(bot => {
-        const speed = bot.speed * (1 + talents.spdLv * 0.15) * (isOverclocked ? 1.8 : 1);
-        let target;
-        if (bot.bag.length === 0) {
-            const it = items[0];
-            target = it ? { x: it.x, y: it.y } : { x: b.extractor.x + b.extractor.w + 15, y: b.extractor.y + b.extractor.h / 2 };
-        } else {
-            const top = bot.bag[bot.bag.length - 1];
-            if (top.type === 'RAW') target = center(b.smelter);
-            else if (top.type === 'STEEL' && b.chipFab) target = center(b.chipFab);
-            else if (top.type === 'CHIP' && b.nukeFab) target = center(b.nukeFab);
-            else if (top.type === 'BATTERY' && b.qFab) target = center(b.qFab);
-            else if (top.type === 'CORE' && b.antiFab) target = center(b.antiFab);
-            else target = center(b.hub);
-        }
-        const dx = target.x - bot.x, dy = target.y - bot.y, d = Math.hypot(dx, dy);
-        if (d > 5) { bot.x += (dx / d) * speed; bot.y += (dy / d) * speed; }
-        interact(bot, b);
-    });
-
-    interact(p, b);
-
-    // 玩家自動攻擊
-    p.cooldown--;
-    const dmgMult = (1 + darkMatter * 0.08) * (1 + talents.dmgLv * 0.2);
-    const critChance = talents.critLv * 0.05;
-    const basePlayerDmg = 30 * dmgMult * (1 + playerDamageLevel * 0.25);
-
-    if (p.cooldown <= 0 && enemies.length > 0) {
-        let target = null, bestD = p.atkRange;
-        enemies.forEach(e => { const d = dist(p.x, p.y, e.x, e.y); if (d < bestD) { bestD = d; target = e; } });
-        if (target) {
-            p.angle = Math.atan2(target.y - p.y, target.x - p.x);
-            const crit = Math.random() < critChance;
-            bullets.push({
-                x: p.x, y: p.y, target, dmg: basePlayerDmg * (crit ? 2 : 1),
-                speed: 16, color: crit ? '#fbbf24' : '#38bdf8', size: crit ? 6 : 4,
-                crit, kind: 'player'
-            });
-            p.cooldown = isOverclocked ? 4 : 9;
-            addParticles(p.x + Math.cos(p.angle) * 16, p.y + Math.sin(p.angle) * 16, '#7dd3fc', 2, 4);
-        }
-    }
-
-    // 防衛塔
-    turrets.forEach(t => {
-        if (t.cd > 0) t.cd--;
-        if (t.flash > 0) t.flash--;
-        const def = TURRET_DEFS[t.type];
-        const range = def.range * (1 + talents.rangeLv * 0.1) * (1 + (t.lv - 1) * 0.06);
-        const dmg = def.dmg * dmgMult * (1 + turretDamageLevel * 0.2) * Math.pow(1.22, t.lv - 1);
-
-        // 黑洞塔持續效果
-        if (t.type === 'blackhole') {
-            enemies.forEach(e => {
-                const d = dist(t.x, t.y, e.x, e.y);
-                if (d < range) {
-                    damageEnemy(e, dmg / 12, '#c084fc', false);
-                    e.x += (t.x - e.x) * 0.045;
-                    e.y += (t.y - e.y) * 0.045;
-                }
-            });
-            if (frame % 6 === 0) addParticles(t.x + rnd(-range * 0.6, range * 0.6), t.y + rnd(-range * 0.6, range * 0.6), '#c084fc', 1, 2);
-        }
-
-        if (t.cd > 0) return;
-
-        let target = null, bestD = range;
-        enemies.forEach(e => { const d = dist(t.x, t.y, e.x, e.y); if (d < bestD) { bestD = d; target = e; } });
-        if (!target) return;
-
-        t.angle = Math.atan2(target.y - t.y, target.x - t.x);
-        t.flash = 5;
-
-        if (t.type === 'gatling') {
-            const crit = Math.random() < critChance;
-            bullets.push({ x: t.x, y: t.y, target, dmg: dmg * (crit ? 2 : 1), speed: 18, color: crit ? '#fde047' : '#f59e0b', size: 3.5, crit, kind: 'gatling' });
-            t.cd = isOverclocked ? 3 : Math.max(3, def.cd - (t.lv - 1));
-        } else if (t.type === 'laser') {
-            addBeam(t.x, t.y, target.x, target.y, '#3b82f6', 4, 10);
-            damageEnemy(target, dmg, '#3b82f6', false);
-            addParticles(target.x, target.y, '#93c5fd', 6, 8);
-            t.cd = Math.max(8, def.cd - (t.lv - 1) * 2);
-        } else if (t.type === 'mortar') {
-            bullets.push({
-                x: t.x, y: t.y, target, dmg, speed: 9, color: '#a855f7',
-                splash: def.splash * (1 + (t.lv - 1) * 0.1), size: 7, kind: 'mortar'
-            });
-            t.cd = Math.max(18, def.cd - (t.lv - 1) * 3);
-        } else if (t.type === 'frost') {
-            addBeam(t.x, t.y, target.x, target.y, '#7dd3fc', 2, 8);
-            enemies.forEach(e => {
-                if (dist(e.x, e.y, target.x, target.y) < 70) {
-                    e.slowT = 150;
-                    e.slowFactor = Math.max(0.25, 1 - def.slow * (1 + (t.lv - 1) * 0.12));
-                    addParticles(e.x, e.y, '#7dd3fc', 3, 5);
-                }
-            });
-            damageEnemy(target, dmg, '#7dd3fc', false);
-            t.cd = Math.max(6, def.cd - (t.lv - 1));
-        } else if (t.type === 'venom') {
-            bullets.push({ x: t.x, y: t.y, target, dmg, speed: 12, color: '#84cc16', size: 5, kind: 'venom', poison: def.poison * (1 + (t.lv - 1) * 0.3) });
-            t.cd = Math.max(9, def.cd - (t.lv - 1) * 2);
-        } else if (t.type === 'tesla') {
-            let chainTarget = target;
-            const hit = new Set();
-            for (let c = 0; c < def.chain; c++) {
-                if (!chainTarget) break;
-                hit.add(chainTarget);
-                if (c === 0) addBeam(t.x, t.y, chainTarget.x, chainTarget.y, '#facc15', 3, 9);
-                else addBeam(prev.x, prev.y, chainTarget.x, chainTarget.y, '#fde047', 2.5, 8);
-                damageEnemy(chainTarget, dmg * Math.pow(0.72, c), '#facc15', false);
-                addParticles(chainTarget.x, chainTarget.y, '#fde047', 5, 8);
-                var prev = chainTarget;
-                let next = null, nd = 160;
-                enemies.forEach(e => {
-                    if (hit.has(e)) return;
-                    const d = dist(prev.x, prev.y, e.x, e.y);
-                    if (d < nd) { nd = d; next = e; }
-                });
-                chainTarget = next;
-            }
-            t.cd = Math.max(16, def.cd - (t.lv - 1) * 3);
-        } else if (t.type === 'missile') {
-            bullets.push({
-                x: t.x, y: t.y, target, dmg, speed: 8, color: '#fb7185',
-                splash: def.splash * (1 + (t.lv - 1) * 0.1), size: 6, kind: 'missile'
-            });
-            t.cd = Math.max(35, def.cd - (t.lv - 1) * 6);
-        } else if (t.type === 'railgun') {
-            const ang = Math.atan2(target.y - t.y, target.x - t.x);
-            const len = range * 1.6;
-            const ex = t.x + Math.cos(ang) * len, ey = t.y + Math.sin(ang) * len;
-            addBeam(t.x, t.y, ex, ey, '#22d3ee', 7, 14);
-            addShock(t.x, t.y, '#22d3ee', 6, 70, 1);
-            enemies.forEach(e => {
-                // 點到直線距離
-                const dx = ex - t.x, dy = ey - t.y;
-                const l2 = dx * dx + dy * dy;
-                let u = ((e.x - t.x) * dx + (e.y - t.y) * dy) / l2;
-                u = Math.max(0, Math.min(1, u));
-                const px = t.x + u * dx, py = t.y + u * dy;
-                if (dist(e.x, e.y, px, py) < 26) {
-                    damageEnemy(e, dmg, '#22d3ee', false);
-                    addParticles(e.x, e.y, '#67e8f9', 8, 10);
-                }
-            });
-            t.cd = Math.max(60, def.cd - (t.lv - 1) * 10);
-        }
-    });
-
-    // 子彈
-    for (let i = bullets.length - 1; i >= 0; i--) {
-        const bul = bullets[i];
-        const tx = bul.target && !bul.target.dead ? bul.target.x : (bul.lastX || bul.x);
-        const ty = bul.target && !bul.target.dead ? bul.target.y : (bul.lastY || bul.y);
-        bul.lastX = tx; bul.lastY = ty;
-
-        const dx = tx - bul.x, dy = ty - bul.y;
-        const d = Math.hypot(dx, dy);
-        if (d < 14) {
-            if (bul.splash) {
-                addShock(bul.x, bul.y, bul.color, 6, bul.splash, 1);
-                addParticles(bul.x, bul.y, bul.color, 12, 10);
-                enemies.forEach(e => {
-                    if (dist(bul.x, bul.y, e.x, e.y) < bul.splash) damageEnemy(e, bul.dmg, bul.color, false);
-                });
-                triggerShake(8);
-            } else if (bul.target && !bul.target.dead) {
-                damageEnemy(bul.target, bul.dmg, bul.color, bul.crit);
-                addParticles(bul.x, bul.y, bul.color, 4, 6);
-                if (bul.poison) { bul.target.poison = 180; bul.target.poisonDmg = bul.poison; }
-            }
-            bullets.splice(i, 1);
-        } else if (d > 0) {
-            bul.x += (dx / d) * bul.speed;
-            bul.y += (dy / d) * bul.speed;
-            if (bul.kind === 'missile' || bul.kind === 'mortar') {
-                addParticles(bul.x, bul.y, bul.color, 1, 1.5);
-            }
-        }
-    }
-
-    // 敵群
-    const freezeMul = freezeTimer > 0 ? 0.15 : 1;
-    enemies.forEach(e => {
-        if (e.dead) return;
-        if (e.hitFlash > 0) e.hitFlash--;
-        if (e.slowT > 0) e.slowT--;
-        const slow = e.slowT > 0 ? e.slowFactor : 1;
-
-        // 中毒
-        if (e.poison > 0) {
-            e.poison--;
-            damageEnemy(e, e.poisonDmg / 6, '#84cc16', false);
-            if (frame % 8 === 0) addParticles(e.x, e.y, '#84cc16', 1, 2);
-        }
-
-        // 治療蟲
-        if (ENEMY_DEFS[e.type].heal && frame % 30 === 0) {
-            enemies.forEach(o => {
-                if (o === e || o.dead) return;
-                if (dist(o.x, o.y, e.x, e.y) < 130) {
-                    o.hp = Math.min(o.maxHp, o.hp + o.maxHp * 0.06);
-                    addParticles(o.x, o.y, '#14b8a6', 3, 4);
-                }
-            });
-        }
-
-        // 引力奇點
-        if (singularityTimer > 0) {
-            const cx = W / 2, cy = H / 2;
-            e.x += (cx - e.x) * 0.012;
-            e.y += (cy - e.y) * 0.012;
-            if (frame % 10 === 0) damageEnemy(e, 12, '#c084fc', false);
-        }
-
-        e.x -= e.speed * slow * freezeMul;
-
-        if (!e.dead && e.x < -50) {
-            e.x = W + 50;
-            e.y = rnd(90, H - 90);
-            e.hp = Math.min(e.maxHp, e.hp + e.maxHp * 0.2);
-            addParticles(W, e.y, '#ef4444', 6, 6);
-        }
-    });
-
-    // 清理死亡敵人
-    if (enemies.some(e => e.dead)) {
-        enemies = enemies.filter(e => !e.dead);
-    }
-
-    // 特效
-    if (shakeTime > 0) shakeTime--;
-    for (let i = floatTexts.length - 1; i >= 0; i--) {
-        const f = floatTexts[i];
-        f.y += f.vy; f.alpha -= 0.018;
-        if (f.alpha <= 0) floatTexts.splice(i, 1);
-    }
-    for (let i = particles.length - 1; i >= 0; i--) {
-        const pt = particles[i];
-        pt.x += pt.vx; pt.y += pt.vy;
-        pt.vx *= 0.96; pt.vy *= 0.96;
-        pt.alpha -= pt.decay;
-        if (pt.alpha <= 0) particles.splice(i, 1);
-    }
-    for (let i = beams.length - 1; i >= 0; i--) {
-        beams[i].life--;
-        if (beams[i].life <= 0) beams.splice(i, 1);
-    }
-    for (let i = shocks.length - 1; i >= 0; i--) {
-        const s = shocks[i];
-        s.r += (s.maxR - s.r) * 0.14;
-        s.life -= 0.045;
-        if (s.life <= 0) shocks.splice(i, 1);
-    }
-
-    // 成就
-    if (frame % 30 === 0) checkAchievements();
-
-    // UI 同步
-    if (frame % 6 === 0) updateUI();
-    if (frame % 180 === 0) saveGame();
-}
-
-function center(bld) { return { x: bld.x + bld.w / 2, y: bld.y + bld.h / 2 }; }
-
-function processConvert(obj, from, to, bld) {
-    const idx = obj.bag.findIndex(i => i.type === from);
-    if (idx >= 0) {
-        obj.bag[idx] = { type: to };
-        addParticles(bld.x + bld.w / 2, bld.y + bld.h / 2, ITEMS[to].color, 5, 5);
-    }
-}
-
-function interact(obj, b) {
-    // 撿礦
-    for (let i = items.length - 1; i >= 0; i--) {
-        if (obj.bag.length >= capacity) break;
-        if (dist(obj.x, obj.y, items[i].x, items[i].y) < 30) {
-            obj.bag.push(items.splice(i, 1)[0]);
-        }
-    }
-
-    const cSmelt = center(b.smelter);
-    if (dist(obj.x, obj.y, cSmelt.x, cSmelt.y) < 52) processConvert(obj, 'RAW', 'STEEL', b.smelter);
-    if (b.chipFab) { const c = center(b.chipFab); if (dist(obj.x, obj.y, c.x, c.y) < 52) processConvert(obj, 'STEEL', 'CHIP', b.chipFab); }
-    if (b.nukeFab) { const c = center(b.nukeFab); if (dist(obj.x, obj.y, c.x, c.y) < 52) processConvert(obj, 'CHIP', 'BATTERY', b.nukeFab); }
-    if (b.qFab) { const c = center(b.qFab); if (dist(obj.x, obj.y, c.x, c.y) < 52) processConvert(obj, 'BATTERY', 'CORE', b.qFab); }
-    if (b.antiFab) { const c = center(b.antiFab); if (dist(obj.x, obj.y, c.x, c.y) < 52) processConvert(obj, 'CORE', 'ANTIM', b.antiFab); }
-
-    const cHub = center(b.hub);
-    if (dist(obj.x, obj.y, cHub.x, cHub.y) < 74 && obj.bag.length > 0) {
-        const mult = (1 + darkMatter * 0.08) * (1 + talents.moneyLv * 0.25);
-        const total = obj.bag.reduce((s, it) => s + ITEMS[it.type].val, 0) * mult;
-        obj.bag = [];
-        money += total;
-        addFloat(cHub.x, cHub.y - 30, `+$${Math.floor(total).toLocaleString()}`, '#4ade80', 13);
-    }
-}
-
-/* =========================================================
-   UI 更新
-   ========================================================= */
-function updateUI() {
-    document.getElementById('m').innerText = Math.floor(money).toLocaleString();
-    document.getElementById('dm').innerText = darkMatter;
-    document.getElementById('waveNum').innerText = wave;
-    document.getElementById('enemyCount').innerText = enemies.length;
-    document.getElementById('comboNum').innerText = combo;
-    document.getElementById('waveTimer').innerText = isWaveActive ? '戰鬥中' : Math.ceil(waveTimer / 60) + 's';
-
-    for (let i = 0; i < 4; i++) {
-        const el = document.getElementById('cd' + (i + 1));
-        const btn = document.querySelector(`.skill-btn[data-skill="${i + 1}"]`);
-        if (skillCd[i] > 0) {
-            el.innerText = Math.ceil(skillCd[i] / 60) + 's';
-            btn.classList.add('cooling');
-        } else {
-            el.innerText = '就緒';
-            btn.classList.remove('cooling');
-        }
-    }
-
-    document.getElementById('questText').innerText = quest.desc;
-    document.getElementById('questProg').innerText = `${quest.current}/${quest.target}`;
-
-    document.getElementById('tDmgCost').innerText = `${(talents.dmgLv + 1) * 5} DM`;
-    document.getElementById('tSpdCost').innerText = `${(talents.spdLv + 1) * 5} DM`;
-    document.getElementById('tRangeCost').innerText = `${(talents.rangeLv + 1) * 5} DM`;
-    document.getElementById('tCritCost').innerText = `${(talents.critLv + 1) * 5} DM`;
-    document.getElementById('tMoneyCost').innerText = `${(talents.moneyLv + 1) * 5} DM`;
-
-    // 塔價格
-    TURRET_ORDER.forEach(id => {
-        const el = document.querySelector(`[data-cost="${id}"]`);
-        if (!el) return;
-        const c = getTurretCost(id);
-        el.innerText = '$' + c.toLocaleString();
-        const btn = el.closest('button');
-        if (btn) btn.disabled = money < c;
-    });
-
-    document.getElementById('minerLv').innerText = minerLevel;
-    document.getElementById('capLv').innerText = capacity;
-    document.getElementById('bCost').innerText = `$${Math.floor(500 * Math.pow(1.3, bots.length)).toLocaleString()}`;
-    document.getElementById('mCost').innerText = `$${Math.floor(1000 * Math.pow(1.5, minerLevel)).toLocaleString()}`;
-    document.getElementById('cCost').innerText = `$${Math.floor(1500 * (capacity / 2)).toLocaleString()}`;
-    document.getElementById('playerDamageLv').innerText = playerDamageLevel;
-    document.getElementById('playerDamageCost').innerText = `$${Math.floor(1000 * Math.pow(1.6, playerDamageLevel)).toLocaleString()}`;
-    document.getElementById('turretDamageLv').innerText = turretDamageLevel;
-    document.getElementById('turretDamageCost').innerText = `$${Math.floor(1500 * Math.pow(1.6, turretDamageLevel)).toLocaleString()}`;
-
-    document.getElementById('rebirthGain').innerText = `+${Math.floor(money / 100000)} DM`;
-
-    // 工廠解鎖按鈕狀態
-    document.querySelectorAll('[data-unlock]').forEach(btn => {
-        const tier = parseInt(btn.dataset.unlock, 10);
-        btn.disabled = techTier !== tier - 1;
-        if (techTier >= tier) btn.style.opacity = '0.3';
-        else btn.style.opacity = '';
-    });
-
-    // 天賦按鈕
-    document.querySelectorAll('[data-talent]').forEach(btn => {
-        const key = btn.dataset.talent + 'Lv';
-        btn.disabled = darkMatter < (talents[key] + 1) * 5;
-    });
-
-    if (selectedTurret) updateInspector();
-}
-
-/* =========================================================
-   繪製
-   ========================================================= */
-function draw() {
-    const time = frame / 60;
-
-    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-    ctx.clearRect(0, 0, W, H);
-
-    // 背景
-    const bg = ctx.createRadialGradient(W * 0.5, H * 0.45, 60, W * 0.5, H * 0.45, Math.max(W, H) * 0.8);
-    bg.addColorStop(0, '#0b1729');
-    bg.addColorStop(1, '#020617');
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, W, H);
-
-    // 星空
-    for (let i = 0; i < 60; i++) {
-        const sx = ((i * 137.5) % W);
-        const sy = ((i * 219.3) % H);
-        const tw = 0.35 + 0.5 * Math.abs(Math.sin(time * 0.8 + i));
-        ctx.fillStyle = `rgba(148,197,253,${tw * 0.5})`;
-        ctx.fillRect(sx, sy, 1.6, 1.6);
-    }
-
-    // 網格
-    ctx.strokeStyle = 'rgba(30, 41, 59, 0.45)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (let x = 0; x < W; x += 56) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
-    for (let y = 0; y < H; y += 56) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
-    ctx.stroke();
-
-    ctx.save();
-    if (shakeTime > 0) {
-        const k = shakeTime / 26;
-        ctx.translate(rnd(-9, 9) * k, rnd(-9, 9) * k);
-    }
-
-    const b = getBuildings();
-
-    // 建築物
-    Object.values(b).forEach(bld => drawBuilding(bld, time));
-
-    // 塔
-    turrets.forEach(t => drawTurret(t, time));
-
-    // 放置預覽
-    if (placingTurret) {
-        const def = TURRET_DEFS[placingTurret];
-        const mx = mouseX || p.x, my = mouseY || p.y;
-        const range = def.range * (1 + talents.rangeLv * 0.1);
-        ctx.save();
-        ctx.globalAlpha = 0.28;
-        ctx.fillStyle = def.color;
-        ctx.beginPath(); ctx.arc(mx, my, range, 0, Math.PI * 2); ctx.fill();
-        ctx.globalAlpha = 0.7;
-        ctx.strokeStyle = def.color; ctx.lineWidth = 1.5;
-        ctx.setLineDash([6, 6]);
-        ctx.beginPath(); ctx.arc(mx, my, range, 0, Math.PI * 2); ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.globalAlpha = 0.85;
-        drawTurretShape(mx, my, placingTurret, 1, 0, time, 0);
-        ctx.restore();
-    }
-
-    // 選中的塔
-    if (selectedTurret && turrets.includes(selectedTurret)) {
-        const def = TURRET_DEFS[selectedTurret.type];
-        const range = def.range * (1 + talents.rangeLv * 0.1) * (1 + (selectedTurret.lv - 1) * 0.06);
-        ctx.save();
-        ctx.strokeStyle = def.color;
-        ctx.globalAlpha = 0.55;
-        ctx.lineWidth = 2;
-        ctx.setLineDash([8, 8]);
-        ctx.beginPath(); ctx.arc(selectedTurret.x, selectedTurret.y, range, 0, Math.PI * 2); ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.globalAlpha = 0.9;
-        ctx.beginPath(); ctx.arc(selectedTurret.x, selectedTurret.y, 30, 0, Math.PI * 2); ctx.stroke();
-        ctx.restore();
-    }
-
-    // 光束
-    beams.forEach(bm => {
-        const a = bm.life / bm.maxLife;
-        ctx.save();
-        ctx.globalAlpha = a;
-        ctx.strokeStyle = bm.color;
-        ctx.lineWidth = bm.width;
-        ctx.shadowColor = bm.color;
-        ctx.shadowBlur = 14;
-        ctx.beginPath();
-        ctx.moveTo(bm.x1, bm.y1);
-        ctx.lineTo(bm.x2, bm.y2);
-        ctx.stroke();
-        ctx.restore();
-    });
-
-    // 衝擊波
-    shocks.forEach(s => {
-        ctx.save();
-        ctx.globalAlpha = Math.max(0, s.life) * 0.6;
-        ctx.strokeStyle = s.color;
-        ctx.lineWidth = 3;
-        ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.stroke();
-        ctx.restore();
-    });
-
-    // 掉落物
-    items.forEach(it => {
-        const col = ITEMS[it.type].color;
-        const bob = Math.sin(time * 4 + (it.bob || 0)) * 3;
-        ctx.save();
-        ctx.translate(it.x, it.y + bob);
-        ctx.rotate(time * 1.2 + (it.bob || 0));
-        ctx.shadowColor = col; ctx.shadowBlur = 10;
-        ctx.fillStyle = col;
-        ctx.beginPath(); ctx.roundRect(-7, -7, 14, 14, 3); ctx.fill();
-        ctx.shadowBlur = 0;
-        ctx.fillStyle = 'rgba(255,255,255,0.55)';
-        ctx.beginPath(); ctx.roundRect(-4, -5, 5, 4, 1.5); ctx.fill();
-        ctx.restore();
-    });
-
-    // 子彈
-    bullets.forEach(bul => {
-        ctx.save();
-        ctx.shadowColor = bul.color;
-        ctx.shadowBlur = 10;
-        ctx.fillStyle = bul.color;
-        ctx.beginPath();
-        ctx.arc(bul.x, bul.y, bul.size || 4, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-    });
-
-    // 敵人
-    enemies.forEach(e => drawEnemy(e, time));
-
-    // 機兵
-    bots.forEach(bot => drawBot(bot, time));
-
-    // 玩家
-    drawPlayer(p, time);
-
-    // 粒子
-    particles.forEach(pt => {
-        ctx.globalAlpha = Math.max(0, pt.alpha);
-        ctx.fillStyle = pt.color;
-        ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI * 2); ctx.fill();
-    });
-    ctx.globalAlpha = 1;
-
-    // 浮動文字
-    floatTexts.forEach(f => {
-        ctx.globalAlpha = Math.max(0, f.alpha);
-        ctx.fillStyle = f.color;
-        ctx.font = `900 ${f.size}px 'Segoe UI', sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.shadowColor = 'rgba(0,0,0,0.8)';
-        ctx.shadowBlur = 4;
-        ctx.fillText(f.text, f.x, f.y);
-        ctx.shadowBlur = 0;
-    });
-    ctx.globalAlpha = 1;
-    ctx.textAlign = 'start';
-
-    // 凍結 / 奇點覆蓋
-    if (freezeTimer > 0) {
-        ctx.fillStyle = `rgba(125,211,252,${0.10 * (freezeTimer / 300)})`;
-        ctx.fillRect(0, 0, W, H);
-    }
-    if (singularityTimer > 0) {
-        const g = ctx.createRadialGradient(W / 2, H / 2, 10, W / 2, H / 2, Math.max(W, H) * 0.55);
-        g.addColorStop(0, `rgba(192,132,252,${0.25 * (singularityTimer / 240)})`);
-        g.addColorStop(1, 'rgba(192,132,252,0)');
-        ctx.fillStyle = g;
-        ctx.fillRect(0, 0, W, H);
-    }
-
-    ctx.restore();
-
-    update();
-    requestAnimationFrame(draw);
-}
-
-/* ---------- 建築繪製 ---------- */
-function drawBuilding(bld, time) {
-    const { x, y, w, h, color, label } = bld;
-    ctx.save();
-
-    // 底座陰影
-    ctx.fillStyle = 'rgba(0,0,0,0.45)';
-    ctx.beginPath(); ctx.roundRect(x + 4, y + 6, w, h, 10); ctx.fill();
-
-    // 主體
-    const g = ctx.createLinearGradient(x, y, x + w, y + h);
-    g.addColorStop(0, 'rgba(30,41,59,0.98)');
-    g.addColorStop(1, 'rgba(8,15,30,0.98)');
-    ctx.fillStyle = g;
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 12;
-    ctx.beginPath(); ctx.roundRect(x, y, w, h, 10); ctx.fill(); ctx.stroke();
-    ctx.shadowBlur = 0;
-
-    // 內部細節依類型
-    ctx.save();
-    ctx.beginPath(); ctx.roundRect(x + 2, y + 2, w - 4, h - 4, 8); ctx.clip();
-
-    if (bld.kind === 'mine') {
-        // 鑽頭
-        ctx.fillStyle = color;
-        const rot = time * 2;
-        ctx.translate(x + w / 2, y + h / 2);
-        ctx.rotate(rot);
-        ctx.beginPath();
-        ctx.moveTo(0, -16); ctx.lineTo(12, 10); ctx.lineTo(-12, 10);
-        ctx.closePath(); ctx.fill();
-        ctx.fillStyle = '#0f172a';
-        ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2); ctx.fill();
-    } else if (bld.kind === 'hub') {
-        // 總部：窗格 + 旋轉核心
-        for (let i = 0; i < 4; i++) {
-            for (let j = 0; j < 3; j++) {
-                const lit = Math.sin(time * 2 + i * 1.7 + j) > 0;
-                ctx.fillStyle = lit ? 'rgba(56,189,248,0.85)' : 'rgba(56,189,248,0.18)';
-                ctx.fillRect(x + 14 + i * 28, y + 14 + j * 22, 16, 12);
-            }
-        }
-        ctx.save();
-        ctx.translate(x + w / 2, y + h - 22);
-        ctx.rotate(time * 1.5);
-        ctx.strokeStyle = 'rgba(56,189,248,0.85)';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        for (let i = 0; i < 3; i++) {
-            const a = i * Math.PI * 2 / 3;
-            ctx.moveTo(Math.cos(a) * 11, Math.sin(a) * 11);
-            ctx.lineTo(Math.cos(a + Math.PI) * 11, Math.sin(a + Math.PI) * 11);
-        }
-        ctx.stroke();
-        ctx.restore();
-    } else {
-        // 工廠：管道 + 煙囪 + 指示燈
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(x + 16, y + h - 12);
-        ctx.lineTo(x + 16, y + 24);
-        ctx.lineTo(x + w - 16, y + 24);
-        ctx.stroke();
-        // 煙囪
-        ctx.fillStyle = color;
-        ctx.fillRect(x + w - 30, y + 10, 10, 24);
-        // 指示燈
-        for (let i = 0; i < 3; i++) {
-            const on = Math.sin(time * 3 + i * 2) > 0;
-            ctx.fillStyle = on ? color : 'rgba(100,116,139,0.5)';
-            ctx.beginPath(); ctx.arc(x + 26 + i * 18, y + h - 16, 3.5, 0, Math.PI * 2); ctx.fill();
-        }
-        // 輸送帶
-        ctx.strokeStyle = 'rgba(148,163,184,0.35)';
-        ctx.lineWidth = 6;
-        ctx.beginPath();
-        ctx.moveTo(x + 10, y + h - 8);
-        ctx.lineTo(x + w - 10, y + h - 8);
-        ctx.stroke();
-        const off = (time * 40) % 16;
-        ctx.strokeStyle = 'rgba(226,232,240,0.5)';
-        ctx.lineWidth = 2;
-        for (let i = -1; i < 8; i++) {
-            const px = x + 10 + ((i * 16 + off) % (w - 20));
-            ctx.beginPath();
-            ctx.moveTo(px, y + h - 12);
-            ctx.lineTo(px, y + h - 4);
-            ctx.stroke();
-        }
-    }
-    ctx.restore();
-
-    // 標籤
-    ctx.font = 'bold 11px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = 'rgba(2,6,23,0.85)';
-    const tw = ctx.measureText(label).width + 12;
-    ctx.beginPath(); ctx.roundRect(x + w / 2 - tw / 2, y - 20, tw, 16, 8); ctx.fill();
-    ctx.fillStyle = color;
-    ctx.fillText(label, x + w / 2, y - 8);
-    ctx.textAlign = 'start';
-
-    ctx.restore();
-}
-
-/* ---------- 塔繪製 ---------- */
-function drawTurret(t, time) {
-    drawTurretShape(t.x, t.y, t.type, t.lv, t.angle, time, t.flash);
-}
-
-function drawTurretShape(x, y, type, lv, angle, time, flash) {
-    const def = TURRET_DEFS[type];
-    const col = flash > 0 ? '#ffffff' : def.color;
-
-    ctx.save();
-    ctx.translate(x, y);
-
-    // 底座光環
-    const lg = ctx.createRadialGradient(0, 0, 4, 0, 0, 30);
-    lg.addColorStop(0, hexA(def.color, 0.35));
-    lg.addColorStop(1, hexA(def.color, 0));
-    ctx.fillStyle = lg;
-    ctx.beginPath(); ctx.arc(0, 0, 30, 0, Math.PI * 2); ctx.fill();
-
-    // 底座
-    ctx.fillStyle = '#0f172a';
-    ctx.strokeStyle = col;
-    ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.roundRect(-17, -17, 34, 34, 8); ctx.fill(); ctx.stroke();
-
-    // 等級小點
-    ctx.fillStyle = def.color;
-    for (let i = 0; i < Math.min(lv, 6); i++) {
-        ctx.beginPath();
-        ctx.arc(-13 + i * 5.2, 20, 1.8, 0, Math.PI * 2);
-        ctx.fill();
-    }
-
-    ctx.rotate(angle);
-    ctx.shadowColor = def.color;
-    ctx.shadowBlur = 10;
-
-    switch (type) {
-        case 'gatling': {
-            ctx.fillStyle = col;
-            ctx.beginPath(); ctx.roundRect(-2, -4, 20, 8, 3); ctx.fill();
-            ctx.fillStyle = '#f8fafc';
-            ctx.beginPath(); ctx.roundRect(14, -5, 8, 3, 1.5); ctx.fill();
-            ctx.beginPath(); ctx.roundRect(14, 2, 8, 3, 1.5); ctx.fill();
-            ctx.fillStyle = def.color;
-            ctx.beginPath(); ctx.arc(0, 0, 7, 0, Math.PI * 2); ctx.fill();
-            break;
-        }
-        case 'laser': {
-            ctx.fillStyle = col;
-            ctx.beginPath();
-            ctx.moveTo(20, 0); ctx.lineTo(4, -8); ctx.lineTo(-4, 0); ctx.lineTo(4, 8);
-            ctx.closePath(); ctx.fill();
-            ctx.fillStyle = '#dbeafe';
-            ctx.beginPath(); ctx.arc(-2, 0, 6, 0, Math.PI * 2); ctx.fill();
-            break;
-        }
-        case 'mortar': {
-            ctx.fillStyle = col;
-            ctx.beginPath(); ctx.roundRect(2, -6, 20, 12, 4); ctx.fill();
-            ctx.fillStyle = '#0f172a';
-            ctx.beginPath(); ctx.arc(21, 0, 4.5, 0, Math.PI * 2); ctx.fill();
-            ctx.fillStyle = def.color;
-            ctx.beginPath(); ctx.arc(-2, 0, 8, 0, Math.PI * 2); ctx.fill();
-            break;
-        }
-        case 'frost': {
-            ctx.rotate(time * 0.8);
-            ctx.fillStyle = col;
-            for (let i = 0; i < 6; i++) {
-                ctx.rotate(Math.PI / 3);
-                ctx.beginPath();
-                ctx.moveTo(0, 0); ctx.lineTo(6, -14); ctx.lineTo(-6, -14);
-                ctx.closePath(); ctx.fill();
-            }
-            ctx.fillStyle = '#e0f2fe';
-            ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2); ctx.fill();
-            break;
-        }
-        case 'venom': {
-            ctx.fillStyle = col;
-            ctx.beginPath(); ctx.roundRect(-6, -9, 22, 18, 6); ctx.fill();
-            ctx.fillStyle = '#ecfccb';
-            for (let i = 0; i < 3; i++) {
-                const bb = Math.sin(time * 4 + i * 2) * 2;
-                ctx.beginPath(); ctx.arc(6 + i * 5, -2 + bb, 2.4, 0, Math.PI * 2); ctx.fill();
-            }
-            break;
-        }
-        case 'tesla': {
-            ctx.fillStyle = col;
-            ctx.beginPath(); ctx.roundRect(-4, -4, 8, 20, 3); ctx.fill();
-            ctx.strokeStyle = '#fef08a';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            for (let i = 0; i < 4; i++) {
-                ctx.moveTo(0, -18 + i * 4);
-                ctx.lineTo((i % 2 ? 7 : -7), -16 + i * 4);
-            }
-            ctx.stroke();
-            ctx.fillStyle = '#fef9c3';
-            ctx.beginPath(); ctx.arc(0, -19, 5, 0, Math.PI * 2); ctx.fill();
-            break;
-        }
-        case 'blackhole': {
-            ctx.save();
-            ctx.rotate(time * 1.6);
-            const grd = ctx.createRadialGradient(0, 0, 2, 0, 0, 20);
-            grd.addColorStop(0, '#000000');
-            grd.addColorStop(0.55, def.color);
-            grd.addColorStop(1, 'rgba(192,132,252,0)');
-            ctx.fillStyle = grd;
-            ctx.beginPath(); ctx.arc(0, 0, 20, 0, Math.PI * 2); ctx.fill();
-            ctx.strokeStyle = '#f5d0fe';
-            ctx.lineWidth = 1.6;
-            ctx.beginPath(); ctx.ellipse(0, 0, 19, 7, 0, 0, Math.PI * 2); ctx.stroke();
-            ctx.beginPath(); ctx.ellipse(0, 0, 19, 7, Math.PI / 2, 0, Math.PI * 2); ctx.stroke();
-            ctx.fillStyle = '#000';
-            ctx.beginPath(); ctx.arc(0, 0, 7, 0, Math.PI * 2); ctx.fill();
-            ctx.restore();
-            break;
-        }
-        case 'missile': {
-            ctx.fillStyle = col;
-            ctx.beginPath(); ctx.roundRect(-8, -12, 26, 24, 5); ctx.fill();
-            ctx.fillStyle = '#0f172a';
-            for (let i = 0; i < 2; i++) {
-                for (let j = 0; j < 2; j++) {
-                    ctx.beginPath();
-                    ctx.arc(2 + i * 10, -6 + j * 12, 3.2, 0, Math.PI * 2);
-                    ctx.fill();
-                }
-            }
-            break;
-        }
-        case 'railgun': {
-            ctx.fillStyle = col;
-            ctx.beginPath(); ctx.roundRect(-6, -5, 34, 10, 3); ctx.fill();
-            ctx.strokeStyle = '#a5f3fc';
-            ctx.lineWidth = 2;
-            ctx.beginPath(); ctx.moveTo(6, -2.5); ctx.lineTo(26, -2.5); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(6, 2.5); ctx.lineTo(26, 2.5); ctx.stroke();
-            ctx.fillStyle = '#67e8f9';
-            ctx.beginPath(); ctx.arc(-4, 0, 7, 0, Math.PI * 2); ctx.fill();
-            break;
-        }
-    }
-    ctx.restore();
-    ctx.restore();
-}
-
-function hexA(hex, a) {
-    const c = hex.replace('#', '');
-    const n = parseInt(c.length === 3 ? c.split('').map(x => x + x).join('') : c, 16);
-    return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
-}
-
-/* ---------- 敵人繪製 ---------- */
-function drawEnemy(e, time) {
-    const def = ENEMY_DEFS[e.type];
-    const s = def.size;
-    const bob = Math.sin(time * 7 + e.seed) * (def.bob || 0);
-    const col = e.hitFlash > 0 ? '#ffffff' : def.color;
-
-    ctx.save();
-    ctx.translate(e.x, e.y + bob);
-    if (def.alpha) ctx.globalAlpha = def.alpha;
-
-    ctx.shadowColor = def.color;
-    ctx.shadowBlur = def.glow || 12;
-
-    switch (def.shape) {
-        case 'bug': {
-            ctx.strokeStyle = col;
-            ctx.lineWidth = 2;
-            for (let i = -1; i <= 1; i++) {
-                const wig = Math.sin(time * 12 + i * 2 + e.seed) * 3.5;
-                ctx.beginPath();
-                ctx.moveTo(i * s * 0.45, 0);
-                ctx.lineTo(i * s * 0.9, -s * 0.75 + wig);
-                ctx.stroke();
-                ctx.beginPath();
-                ctx.moveTo(i * s * 0.45, 0);
-                ctx.lineTo(i * s * 0.9, s * 0.75 - wig);
-                ctx.stroke();
-            }
-            ctx.fillStyle = col;
-            ctx.beginPath();
-            ctx.ellipse(0, 0, s, s * 0.72, 0, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = 'rgba(255,255,255,0.2)';
-            ctx.beginPath();
-            ctx.ellipse(-s * 0.2, -s * 0.22, s * 0.5, s * 0.28, -0.4, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = '#fff';
-            ctx.beginPath();
-            ctx.arc(-s * 0.62, -s * 0.16, s * 0.16, 0, Math.PI * 2);
-            ctx.arc(-s * 0.62, s * 0.16, s * 0.16, 0, Math.PI * 2);
-            ctx.fill();
-            break;
-        }
-        case 'dart': {
-            // 尾跡
-            const tg = ctx.createLinearGradient(0, 0, s * 3, 0);
-            tg.addColorStop(0, hexA(def.color, 0.55));
-            tg.addColorStop(1, hexA(def.color, 0));
-            ctx.fillStyle = tg;
-            ctx.beginPath();
-            ctx.moveTo(0, -s * 0.5); ctx.lineTo(s * 3, 0); ctx.lineTo(0, s * 0.5);
-            ctx.closePath(); ctx.fill();
-
-            ctx.fillStyle = col;
-            ctx.beginPath();
-            ctx.moveTo(s * 1.3, 0);
-            ctx.lineTo(-s * 0.8, -s * 0.72);
-            ctx.lineTo(-s * 0.35, 0);
-            ctx.lineTo(-s * 0.8, s * 0.72);
-            ctx.closePath(); ctx.fill();
-            ctx.fillStyle = '#fff';
-            ctx.beginPath(); ctx.arc(s * 0.35, 0, s * 0.2, 0, Math.PI * 2); ctx.fill();
-            break;
-        }
-        case 'hex': {
-            ctx.fillStyle = col;
-            ctx.beginPath();
-            for (let i = 0; i < 6; i++) {
-                const a = i * Math.PI / 3 + Math.PI / 6;
-                const px = Math.cos(a) * s, py = Math.sin(a) * s;
-                i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
-            }
-            ctx.closePath(); ctx.fill();
-            ctx.strokeStyle = 'rgba(255,255,255,0.55)';
-            ctx.lineWidth = 2;
-            ctx.stroke();
-            ctx.fillStyle = '#1e293b';
-            ctx.beginPath(); ctx.arc(0, 0, s * 0.45, 0, Math.PI * 2); ctx.fill();
-            ctx.fillStyle = '#f87171';
-            ctx.beginPath();
-            ctx.arc(0, 0, s * 0.22 + Math.sin(time * 6) * 1.5, 0, Math.PI * 2);
-            ctx.fill();
-            break;
-        }
-        case 'diamond': {
-            const pulse = 1 + Math.sin(time * 8 + e.seed) * 0.12;
-            ctx.save();
-            ctx.scale(pulse, pulse);
-            ctx.fillStyle = col;
-            ctx.beginPath();
-            ctx.moveTo(s, 0); ctx.lineTo(0, -s); ctx.lineTo(-s, 0); ctx.lineTo(0, s);
-            ctx.closePath(); ctx.fill();
-            ctx.fillStyle = 'rgba(255,255,255,0.45)';
-            ctx.beginPath();
-            ctx.moveTo(s * 0.55, 0); ctx.lineTo(0, -s * 0.55); ctx.lineTo(-s * 0.55, 0); ctx.lineTo(0, s * 0.55);
-            ctx.closePath(); ctx.fill();
-            ctx.restore();
-            break;
-        }
-        case 'blob': {
-            ctx.fillStyle = col;
-            ctx.beginPath();
-            for (let i = 0; i <= 12; i++) {
-                const a = (i / 12) * Math.PI * 2;
-                const rr = s * (0.82 + Math.sin(a * 3 + time * 3 + e.seed) * 0.16);
-                const px = Math.cos(a) * rr, py = Math.sin(a) * rr;
-                i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
-            }
-            ctx.closePath(); ctx.fill();
-            ctx.fillStyle = 'rgba(255,255,255,0.35)';
-            ctx.beginPath();
-            ctx.arc(-s * 0.25, -s * 0.25, s * 0.22, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.beginPath();
-            ctx.arc(s * 0.3, s * 0.1, s * 0.14, 0, Math.PI * 2);
-            ctx.fill();
-            break;
-        }
-        case 'star': {
-            ctx.save();
-            ctx.rotate(time * 0.9 + e.seed);
-            ctx.fillStyle = col;
-            ctx.beginPath();
-            for (let i = 0; i < 10; i++) {
-                const a = (i / 10) * Math.PI * 2 - Math.PI / 2;
-                const rr = i % 2 ? s * 0.45 : s;
-                const px = Math.cos(a) * rr, py = Math.sin(a) * rr;
-                i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
-            }
-            ctx.closePath(); ctx.fill();
-            ctx.restore();
-            // 治療光環
-            ctx.strokeStyle = hexA(def.color, 0.4 + Math.sin(time * 3) * 0.2);
-            ctx.lineWidth = 2;
-            ctx.beginPath(); ctx.arc(0, 0, s * 2.2, 0, Math.PI * 2); ctx.stroke();
-            break;
-        }
-        case 'ring': {
-            ctx.fillStyle = col;
-            ctx.beginPath(); ctx.arc(0, 0, s * 0.7, 0, Math.PI * 2); ctx.fill();
-            // 護盾弧
-            const shieldRatio = e.maxShield > 0 ? e.shield / e.maxShield : 0;
-            if (shieldRatio > 0) {
-                ctx.strokeStyle = '#7dd3fc';
-                ctx.lineWidth = 3.5;
-                ctx.shadowColor = '#7dd3fc';
-                ctx.shadowBlur = 14;
-                ctx.beginPath();
-                ctx.arc(0, 0, s * 1.15, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * shieldRatio);
-                ctx.stroke();
-            }
-            ctx.fillStyle = '#fff';
-            ctx.beginPath(); ctx.arc(0, 0, s * 0.24, 0, Math.PI * 2); ctx.fill();
-            break;
-        }
-        case 'ghost': {
-            ctx.globalAlpha = 0.62;
-            ctx.fillStyle = col;
-            ctx.beginPath();
-            ctx.arc(0, -s * 0.2, s * 0.85, Math.PI, 0);
-            for (let i = 0; i <= 4; i++) {
-                const px = s * 0.85 - (i / 4) * s * 1.7;
-                const py = s * 0.55 + (i % 2 ? s * 0.3 : 0);
-                ctx.lineTo(px, py);
-            }
-            ctx.closePath(); ctx.fill();
-            ctx.fillStyle = '#0f172a';
-            ctx.beginPath();
-            ctx.arc(-s * 0.28, -s * 0.28, s * 0.18, 0, Math.PI * 2);
-            ctx.arc(s * 0.28, -s * 0.28, s * 0.18, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.globalAlpha = 1;
-            break;
-        }
-        case 'boss': {
-            // 外環
-            ctx.save();
-            ctx.rotate(time * 0.7);
-            ctx.strokeStyle = hexA(def.color, 0.65);
-            ctx.lineWidth = 4;
-            ctx.beginPath();
-            for (let i = 0; i < 3; i++) {
-                const a = (i / 3) * Math.PI * 2;
-                ctx.moveTo(Math.cos(a) * s * 1.5, Math.sin(a) * s * 1.5);
-                ctx.arc(0, 0, s * 1.5, a, a + 1.1);
-            }
-            ctx.stroke();
-            ctx.restore();
-            // 本體
-            ctx.fillStyle = col;
-            ctx.beginPath();
-            for (let i = 0; i < 8; i++) {
-                const a = (i / 8) * Math.PI * 2 + time * 0.3;
-                const rr = i % 2 ? s * 0.7 : s;
-                const px = Math.cos(a) * rr, py = Math.sin(a) * rr;
-                i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
-            }
-            ctx.closePath(); ctx.fill();
-            // 核心眼
-            ctx.fillStyle = '#fde68a';
-            ctx.beginPath();
-            ctx.arc(0, 0, s * 0.34, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = '#7f1d1d';
-            ctx.beginPath();
-            ctx.arc(-s * 0.05, 0, s * 0.16, 0, Math.PI * 2);
-            ctx.fill();
-            break;
-        }
-    }
-    ctx.restore();
-
-    // 血條
-    const barW = Math.max(22, s * 2.2);
-    const topY = e.y + bob - s - (def.shape === 'boss' ? 26 : 12);
-    ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.beginPath(); ctx.roundRect(e.x - barW / 2, topY, barW, 4.5, 2); ctx.fill();
-    const hpRatio = Math.max(0, e.hp / e.maxHp);
-    const hpColor = hpRatio > 0.5 ? '#22c55e' : hpRatio > 0.22 ? '#f59e0b' : '#ef4444';
-    ctx.fillStyle = hpColor;
-    ctx.beginPath(); ctx.roundRect(e.x - barW / 2, topY, barW * hpRatio, 4.5, 2); ctx.fill();
-    if (e.maxShield > 0 && e.shield > 0) {
-        ctx.fillStyle = '#38bdf8';
-        ctx.beginPath(); ctx.roundRect(e.x - barW / 2, topY - 5, barW * (e.shield / e.maxShield), 3, 1.5); ctx.fill();
-    }
-    ctx.restore();
-}
-
-/* ---------- 機兵繪製 ---------- */
-function drawBot(bot, time) {
-    const x = bot.x, y = bot.y;
-    ctx.save();
-    ctx.translate(x, y);
-
-    // 推進器光
-    const gg = ctx.createRadialGradient(0, 12, 1, 0, 12, 16);
-    gg.addColorStop(0, 'rgba(56,189,248,0.7)');
-    gg.addColorStop(1, 'rgba(56,189,248,0)');
-    ctx.fillStyle = gg;
-    ctx.beginPath(); ctx.arc(0, 12, 16, 0, Math.PI * 2); ctx.fill();
-
-    // 旋翼
-    const spin = time * 16 + bot.phase;
-    ctx.strokeStyle = 'rgba(125,211,252,0.75)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(Math.cos(spin) * 15, Math.sin(spin) * 15);
-    ctx.lineTo(-Math.cos(spin) * 15, -Math.sin(spin) * 15);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(Math.cos(spin + Math.PI / 2) * 15, Math.sin(spin + Math.PI / 2) * 15);
-    ctx.lineTo(-Math.cos(spin + Math.PI / 2) * 15, -Math.sin(spin + Math.PI / 2) * 15);
-    ctx.stroke();
-
-    // 機身
-    const bg = ctx.createLinearGradient(-9, -9, 9, 9);
-    bg.addColorStop(0, '#7dd3fc');
-    bg.addColorStop(1, '#0369a1');
-    ctx.fillStyle = bg;
-    ctx.beginPath(); ctx.arc(0, 0, 9.5, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = '#e0f2fe';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    ctx.fillStyle = '#f0f9ff';
-    ctx.beginPath(); ctx.arc(0, 0, 3.4, 0, Math.PI * 2); ctx.fill();
-
-    ctx.restore();
-
-    drawStack(bot);
-}
-
-/* ---------- 玩家繪製 ---------- */
-function drawPlayer(obj, time) {
-    const x = obj.x, y = obj.y;
-
-    // 攻擊範圍
-    ctx.save();
-    ctx.strokeStyle = 'rgba(56,189,248,0.14)';
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([5, 8]);
-    ctx.beginPath(); ctx.arc(x, y, obj.atkRange, 0, Math.PI * 2); ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.restore();
-
-    // 光暈
-    const glow = ctx.createRadialGradient(x, y, 3, x, y, 40);
-    glow.addColorStop(0, 'rgba(56,189,248,0.45)');
-    glow.addColorStop(1, 'rgba(56,189,248,0)');
-    ctx.fillStyle = glow;
-    ctx.beginPath(); ctx.arc(x, y, 40, 0, Math.PI * 2); ctx.fill();
-
-    // 旋轉外環
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(time * 1.1);
-    ctx.strokeStyle = 'rgba(56,189,248,0.85)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    for (let i = 0; i < 3; i++) {
-        const a = (i / 3) * Math.PI * 2;
-        ctx.moveTo(Math.cos(a) * 21, Math.sin(a) * 21);
-        ctx.arc(0, 0, 21, a, a + Math.PI / 3.2);
-    }
-    ctx.stroke();
-    ctx.restore();
-
-    // 機身
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.beginPath();
-    for (let i = 0; i < 6; i++) {
-        const a = (i / 6) * Math.PI * 2 - Math.PI / 6;
-        const px = Math.cos(a) * 15, py = Math.sin(a) * 15;
-        i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
-    }
-    ctx.closePath();
-    const bodyG = ctx.createLinearGradient(-15, -15, 15, 15);
-    bodyG.addColorStop(0, '#bae6fd');
-    bodyG.addColorStop(0.5, '#38bdf8');
-    bodyG.addColorStop(1, '#0369a1');
-    ctx.fillStyle = bodyG;
-    ctx.shadowColor = '#38bdf8';
-    ctx.shadowBlur = 16;
-    ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.strokeStyle = '#e0f2fe';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    // 炮口
-    ctx.rotate(obj.angle || 0);
-    ctx.fillStyle = '#0c4a6e';
-    ctx.beginPath(); ctx.roundRect(9, -3.5, 14, 7, 3); ctx.fill();
-    ctx.fillStyle = '#7dd3fc';
-    ctx.beginPath(); ctx.roundRect(20, -2.5, 5, 5, 2); ctx.fill();
-
-    // 核心
-    ctx.rotate(-(obj.angle || 0));
-    ctx.fillStyle = '#f0f9ff';
-    ctx.beginPath(); ctx.arc(0, 0, 5.2, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#0284c7';
-    ctx.beginPath(); ctx.arc(0, 0, 2.4, 0, Math.PI * 2); ctx.fill();
-    ctx.restore();
-
-    drawStack(obj);
-}
-
-/* ---------- 背包堆疊 ---------- */
-function drawStack(obj) {
-    obj.bag.forEach((it, i) => {
-        const col = ITEMS[it.type].color;
-        ctx.save();
-        ctx.fillStyle = col;
-        ctx.globalAlpha = 0.95;
-        ctx.beginPath();
-        ctx.roundRect(obj.x - 10, obj.y - 30 - i * 8, 20, 6, 2);
-        ctx.fill();
-        ctx.restore();
-    });
-}
-
-/* =========================================================
-   初始化
-   ========================================================= */
-buildTurretListUI();
-buildAchListUI();
-updateInspector();
-updateUI();
-
-window.addEventListener('pagehide', saveGame);
 window.addEventListener('beforeunload', saveGame);
-
-initializeTycoon().catch(error => {
-    console.error('雨神大亨初始化失敗：', error);
-    const st = document.getElementById('tycoon-leaderboard-status');
-    if (st) st.textContent = '遊戲初始化失敗，請重新整理頁面。';
-    requestAnimationFrame(draw);
-});
+window.addEventListener('pagehide', saveGame);
 </script>
 </body>
 </html>
