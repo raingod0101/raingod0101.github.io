@@ -1011,7 +1011,128 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
       else if (type === 'origin') { g.save(); g.translate(x, y); g.rotate(time * 3 + i); g.fillStyle = cols[i % cols.length]; g.globalAlpha = alpha; g.beginPath(); g.arc(0, 0, s * 0.14 * (1 - t * 0.4), 0, 7); g.fill(); g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.globalAlpha = alpha * 0.9; g.beginPath(); g.arc(0, 0, s * 0.22 * (1 - t * 0.4), 0, 7); g.stroke(); g.restore(); }
     } g.globalAlpha = 1; g.restore();
   }
-  g.restore();
+function drawTrailOnPlayer(g, player, trailDef, time) {
+    if (!trailDef) return;
+    const type = trailDef.type;
+    const cols = trailDef.colors;
+    const t = time;
+    const isSimple = trailDef.id === 'trail_basic' || trailDef.id === 'trail_fire';
+    g.save();
+
+    // ── 【強特效專屬】精緻的雙層底座光環 ──
+    if (!isSimple) {
+      const ringR = 26 + Math.sin(t * 3) * 5; 
+      const ringGrad = g.createRadialGradient(0, 10, ringR * 0.1, 0, 10, ringR * 2.2);
+      ringGrad.addColorStop(0, hexA(cols[0], 0.85)); 
+      ringGrad.addColorStop(0.5, hexA(cols[Math.min(1, cols.length - 1)], 0.5)); 
+      ringGrad.addColorStop(1, hexA(cols[0], 0));
+      
+      g.fillStyle = ringGrad; 
+      g.beginPath(); 
+      g.ellipse(0, 10, ringR * 2.2, ringR * 0.8, 0, 0, 7); 
+      g.fill();
+
+      // 外發光環
+      g.strokeStyle = hexA(cols[0], 0.95); 
+      g.lineWidth = 3.5; 
+      g.shadowBlur = 18; 
+      g.shadowColor = cols[0]; 
+      g.beginPath(); 
+      g.ellipse(0, 10, ringR * 1.6, ringR * 0.65, 0, 0, 7); 
+      g.stroke(); 
+      g.shadowBlur = 0;
+    }
+
+    // ── 粒子數量調整：弱的更少（省效能），強的更多（更綿密） ──
+    const N = isSimple ? 5 : 28;
+    
+    for (let i = 0; i < N; i++) {
+      const phase = i / N; 
+      const angle = t * 2.2 + i * (Math.PI * 2 / N); 
+      const radius = 20 + Math.sin(t * 3 + i * 0.7) * 8 + phase * 6;
+      const x = Math.cos(angle) * radius; 
+      const y = Math.sin(angle) * radius * 0.65 - 10 + Math.sin(t * 4 + i * 1.3) * 6;
+      const alpha = isSimple ? 0.6 : (0.55 + 0.45 * Math.sin(t * 5 + i * 1.7)); 
+      const sz = (isSimple ? 4 : 5) + Math.sin(t * 4 + i * 1.5) * 2.5 + phase * 2; 
+      const col = cols[i % cols.length];
+
+      g.globalAlpha = alpha; 
+      // 弱特效完全不開 shadowBlur；強特效開啟強烈霓虹光
+      g.shadowBlur = isSimple ? 0 : 16; 
+      g.shadowColor = col;
+
+      // ── 弱特效：全部簡化成乾淨俐落的小圓點，不跑複雜形狀 ──
+      if (isSimple) {
+        g.fillStyle = col;
+        g.beginPath();
+        g.arc(x, y, sz * 0.7, 0, 7);
+        g.fill();
+        continue; // 直接跳過後面複雜的特效判斷
+      }
+
+      // ── 強特效：保留並強化原本豐富的圖形變化 ──
+      if (type === 'glow') { 
+        g.fillStyle = col; g.beginPath(); g.arc(x, y, sz * 0.6, 0, 7); g.fill(); 
+      }
+      else if (type === 'fire') { 
+        g.fillStyle = col; g.beginPath(); g.arc(x, y - phase * 8, sz * 0.8, 0, 7); g.fill(); 
+      }
+      else if (type === 'star' || type === 'galaxy') {
+        g.fillStyle = col; g.save(); g.translate(x, y); g.rotate(t * 2 + i);
+        g.beginPath(); 
+        for (let k = 0; k < 5; k++) { 
+          const ang = k * Math.PI * 2 / 5 - Math.PI / 2; 
+          const sx = Math.cos(ang) * sz, sy = Math.sin(ang) * sz; 
+          if (k === 0) g.moveTo(sx, sy); else g.lineTo(sx, sy); 
+          g.lineTo(Math.cos(ang + Math.PI / 5) * sz * 0.4, Math.sin(ang + Math.PI / 5) * sz * 0.4); 
+        }
+        g.closePath(); g.fill(); g.restore();
+      }
+      else if (type === 'rainbow') { 
+        g.strokeStyle = col; g.lineWidth = sz * 0.7; g.beginPath(); g.arc(0, 0, radius, angle - 0.35, angle + 0.35); g.stroke(); 
+      }
+      else if (type === 'petal') { 
+        g.fillStyle = col; g.save(); g.translate(x, y); g.rotate(angle + t); g.beginPath(); g.ellipse(0, 0, sz * 1.2, sz * 0.6, 0, 0, 7); g.fill(); g.restore(); 
+      }
+      else if (type === 'ice') { 
+        g.strokeStyle = col; g.lineWidth = sz * 0.4; g.save(); g.translate(x, y); g.rotate(angle + t * 0.5); g.beginPath(); g.moveTo(-sz, 0); g.lineTo(sz, 0); g.moveTo(0, -sz); g.lineTo(0, sz); g.stroke(); g.restore(); 
+      }
+      else if (type === 'void') { 
+        g.fillStyle = col; g.beginPath(); g.arc(x, y, sz * 1.1, 0, 7); g.fill(); 
+        g.strokeStyle = '#ff00aa'; g.lineWidth = 2; g.globalAlpha = alpha * 0.75; g.beginPath(); g.arc(x, y, sz * 1.8, 0, 7); g.stroke(); 
+      }
+      else if (type === 'gold') { 
+        g.fillStyle = col; g.save(); g.translate(x, y); g.rotate(angle); g.fillRect(-sz, -sz, sz * 2, sz * 2); g.restore(); 
+      }
+      else if (type === 'origin') { 
+        g.fillStyle = col; g.save(); g.translate(x, y); g.rotate(t * 3 + i); g.beginPath(); g.arc(0, 0, sz * 0.75, 0, 7); g.fill(); 
+        g.strokeStyle = '#fff'; g.lineWidth = 2; g.globalAlpha = alpha * 0.95; g.beginPath(); g.arc(0, 0, sz * 1.5, 0, 7); g.stroke(); g.restore(); 
+      }
+    }
+
+    // ── 【強特效專屬】額外增加 10 顆飄散向上的精緻浮游微粒 ──
+    if (!isSimple) {
+      for (let i = 0; i < 10; i++) {
+        const lifeT = ((t * 1.2 + i * 0.28) % 1); 
+        const yy = -22 - lifeT * 40; 
+        const xx = Math.sin(t * 4 + i * 2) * 12; 
+        const alpha = (1 - lifeT) * 0.85; 
+        const sz = 5 * (1 - lifeT * 0.4);
+        
+        g.globalAlpha = alpha; 
+        g.fillStyle = cols[i % cols.length]; 
+        g.shadowBlur = 12; 
+        g.shadowColor = cols[i % cols.length]; 
+        g.beginPath(); 
+        g.arc(xx, yy, sz, 0, 7); 
+        g.fill();
+      }
+    }
+
+    g.globalAlpha = 1; 
+    g.shadowBlur = 0; 
+    g.restore();
+}
 }
   function drawTrailPath(ctx, path, trailDef, time) {
     if (!trailDef || !path || path.length === 0) return; const type = trailDef.type; const cols = trailDef.colors; const isSimple = trailDef.id === 'trail_basic' || trailDef.id === 'trail_fire';
