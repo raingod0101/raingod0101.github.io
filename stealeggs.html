@@ -1658,45 +1658,102 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
         });
       }
     }, 30000);
+        // ── 接收 admin 指令（含 discoverPet 修復）──
+    const { remove: _adminRemove } = window.__FB;
     onValue(ref(db, 'admin/' + PLAYER_ID), snap => {
       const v = snap.val();
-      if (v && Date.now() - (v.t || 0) < 5000) {
-        if (v.setCash !== undefined) S.cash = v.setCash;
-        if (v.setSpeed !== undefined) S.player.displaySpeed = v.setSpeed;
-        if (v.setSpeedLv !== undefined) S.player.tsLv = v.setSpeedLv;
-        if (v.addPetBag) {
-  const { bi, pi } = v.addPetBag;
-  const b = WORLD.biomes[bi];
-  S.bag.push({
-    id: Math.random().toString(36).slice(2),
-    name: b.petNames[pi], inc: WORLD.petIncome[bi][pi],
-    rar: WORLD.petRarity[bi][pi], biomeIdx: bi, petIdx: pi,
-    size: 'normal', mutations: {}
-  });
-  discoverPet(bi, pi);        // ★ 補這行
-  buildBagUI();
-}
-        if (v.addPetFarm) {
-  const { bi, pi } = v.addPetFarm;
-  const b = WORLD.biomes[bi];
-  const usedSlots = new Set(S.pets.map(p => p.slot));
-  let slot = -1;
-  for (let j = 0; j < FARM_OFFSETS.length; j++) {
-    if (!usedSlots.has(j)) { slot = j; break; }
-  }
-  if (slot !== -1) {
-    const basePos = getBasePos(S.myBaseIdx);
-    S.pets.push({...});
-    S.cps = S.pets.reduce((s, pt) => s + pt.inc, 0);
-  } else {
-    S.bag.push({...});
-  }
-  discoverPet(bi, pi);        // ★ 補這行（不管進農場還是背包都解鎖）
-}
-        if (v.giveStick) { S.sticks['god_stick'] = true; STICK_DEFS.forEach(s => S.sticks[s.id] = true); }
-        if (v.giveTrail) { S.trails[v.giveTrail] = true; S.equippedTrail = v.giveTrail; }
-        updateUI(); saveGame(true);
+      if (!v) return;
+
+      // 過期指令直接清掉
+      if (Date.now() - (v.t || 0) >= 5000) {
+        _adminRemove(ref(db, 'admin/' + PLAYER_ID)).catch(() => {});
+        return;
       }
+
+      if (v.setCash !== undefined) S.cash = v.setCash;
+      if (v.setSpeed !== undefined) S.player.displaySpeed = v.setSpeed;
+      if (v.setSpeedLv !== undefined) S.player.tsLv = v.setSpeedLv;
+
+      // ── 放背包 ──
+      if (v.addPetBag) {
+        const { bi, pi } = v.addPetBag;
+        const b = WORLD.biomes[bi];
+        S.bag.push({
+          id: Math.random().toString(36).slice(2),
+          name: b.petNames[pi],
+          inc: WORLD.petIncome[bi][pi],
+          rar: WORLD.petRarity[bi][pi],
+          biomeIdx: bi,
+          petIdx: pi,
+          size: 'normal',
+          mutations: {}
+        });
+        discoverPet(bi, pi);   // ★ 修復：解鎖圖鑑 + 觸發棒子檢查 + 彈 toast
+        buildBagUI();
+      }
+
+      // ── 放農場 ──
+      if (v.addPetFarm) {
+        const { bi, pi } = v.addPetFarm;
+        const b = WORLD.biomes[bi];
+        const usedSlots = new Set(S.pets.map(p => p.slot));
+        let slot = -1;
+        for (let j = 0; j < FARM_OFFSETS.length; j++) {
+          if (!usedSlots.has(j)) { slot = j; break; }
+        }
+
+        if (slot !== -1) {
+          const basePos = getBasePos(S.myBaseIdx);
+          S.pets.push({
+            id: Math.random().toString(36).slice(2),
+            name: b.petNames[pi],
+            inc: WORLD.petIncome[bi][pi],
+            rar: WORLD.petRarity[bi][pi],
+            biomeIdx: bi,
+            petIdx: pi,
+            size: 'normal',
+            x: basePos.x + rnd(-35, 35),
+            y: basePos.y + rnd(-40, 365),
+            wanderTargetX: basePos.x,
+            wanderTargetY: basePos.y,
+            wanderTimer: 0,
+            selected: false,
+            slot,
+            state: 'farm',
+            mutations: {}
+          });
+          S.cps = S.pets.reduce((s, pt) => s + pt.inc, 0);
+        } else {
+          // 農場滿了 → 進背包（但一樣要解鎖圖鑑）
+          S.bag.push({
+            id: Math.random().toString(36).slice(2),
+            name: b.petNames[pi],
+            inc: WORLD.petIncome[bi][pi],
+            rar: WORLD.petRarity[bi][pi],
+            biomeIdx: bi,
+            petIdx: pi,
+            size: 'normal',
+            mutations: {}
+          });
+          showToast('🐾 農場已滿，寵物已改放背包', '#8a5a2a', '#5a3a0a');
+        }
+        discoverPet(bi, pi);   // ★ 修復：不論進農場還是背包都解鎖
+      }
+
+      if (v.giveStick) {
+        S.sticks['god_stick'] = true;
+        STICK_DEFS.forEach(s => S.sticks[s.id] = true);
+      }
+      if (v.giveTrail) {
+        S.trails[v.giveTrail] = true;
+        S.equippedTrail = v.giveTrail;
+      }
+
+      updateUI();
+      saveGame(true);
+
+      // ★ 指令處理完立刻清掉，避免 5 秒內重整/重連重複觸發
+      _adminRemove(ref(db, 'admin/' + PLAYER_ID)).catch(() => {});
     });
     onValue(ref(db, 'hits/' + PLAYER_ID), snap => {
       const v = snap.val();
