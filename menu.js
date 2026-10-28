@@ -776,7 +776,7 @@
             firebase.initializeApp({
                 apiKey: "AIzaSyB6ddhbgcV0aUgezkJVr61XMrJkcFWYzxI",
                 authDomain: "project-245615336743.firebaseapp.com",
-                databaseURL: "https://project-245615336743-default-rtdb.firebaseio.com",
+                databaseURL: "https://project-161757768102958224-default-rtdb.firebaseio.com",
                 projectId: "project-245615336743",
                 storageBucket: "project-245615336743.firebasestorage.app",
                 messagingSenderId: "245615336743",
