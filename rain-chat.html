@@ -1197,32 +1197,44 @@
                 refreshFriendsUI();
             });
 
-            function sendMessage() {
-                if (!activeFriendUid) return;
-                var text = msgInput.value.trim();
-                if (!text) {
-                    msgInput.focus();
-                    return;
-                }
-                var cid = chatIdFor(currentUid, activeFriendUid);
-                chatSendBtn.disabled = true;
-                db().ref('private_chats/' + cid + '/msgs').push({
-                    from: currentUid,
-                    to: activeFriendUid,
-                    name: currentUser.displayName || currentUsername,
-                    fromAvatar: currentAvatar || fallbackAvatar,
-                    text: text,
-                    ts: window.firebase.database.ServerValue.TIMESTAMP
-                }).then(function() {
-                    msgInput.value = '';
-                    msgInput.focus();
-                }).catch(function(e) {
-                    console.error('訊息傳送失敗', e.code, e.message);
-                    alert('訊息傳送失敗：' + (e.code || e.message || '未知錯誤'));
-                }).finally(function() {
-                    chatSendBtn.disabled = false;
-                });
-            }
+            var sending = false;
+
+function sendMessage() {
+    if (sending || !activeFriendUid) return;
+    var text = msgInput.value.trim();
+    if (!text) {
+        msgInput.focus();
+        return;
+    }
+
+    var cid = chatIdFor(currentUid, activeFriendUid);
+    var payload = {
+        from: currentUid,
+        to: activeFriendUid,
+        name: currentUser.displayName || currentUsername,
+        fromAvatar: currentAvatar || fallbackAvatar,
+        text: text,
+        ts: window.firebase.database.ServerValue.TIMESTAMP
+    };
+
+    // 先清空输入栏，再送出（不等 Firebase 回调）
+    sending = true;
+    msgInput.value = '';
+    msgInput.focus();
+    chatSendBtn.disabled = true;
+
+    db().ref('private_chats/' + cid + '/msgs').push(payload)
+      .catch(function(e) {
+          console.error('訊息傳送失敗', e.code, e.message);
+          // 失败时把文字填回去，避免用户白打
+          if (!msgInput.value) msgInput.value = text;
+          alert('訊息傳送失敗：' + (e.code || e.message || '未知錯誤'));
+      })
+      .finally(function() {
+          sending = false;
+          chatSendBtn.disabled = false;
+      });
+}
 
             chatSendBtn.addEventListener('click', sendMessage);
             msgInput.addEventListener('keydown', function(e) {
