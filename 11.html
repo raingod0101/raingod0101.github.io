@@ -80,7 +80,7 @@
         .tycoon-leaderboard-row { display: flex; justify-content: space-between; gap: 12px; padding: 10px 4px; border-bottom: 1px solid #26334a; }
         .mobile-shop-toggle, .mobile-panel-close { display: none; }
 
-        /* 世界地图专用 UI */
+        /* 世界地图 UI */
         #view-toggle {
             position: absolute; top: 160px; left: 15px; z-index: 30; pointer-events: auto;
             padding: 10px 18px; border: 2px solid #f59e0b; border-radius: 24px;
@@ -94,7 +94,7 @@
         .world-hud {
             position: absolute; top: 110px; left: 50%; transform: translateX(-50%);
             background: rgba(15,23,42,0.92); border: 1px solid #f59e0b; border-radius: 16px;
-            padding: 8px 18px; pointer-events: auto; display: flex; gap: 18px; align-items: center;
+            padding: 8px 18px; pointer-events: auto; display: flex; gap: 16px; align-items: center;
             backdrop-filter: blur(8px); font-size: 12px; font-weight: bold; color: #fcd34d;
             white-space: nowrap;
         }
@@ -175,10 +175,14 @@
             .world-hud {
                 top: calc(60px + env(safe-area-inset-top)) !important; left: 8px !important;
                 right: 8px !important; transform: none !important; width: auto !important;
-                font-size: 11px; gap: 10px; padding: 7px 10px; white-space: normal;
+                font-size: 10px; gap: 8px; padding: 7px 10px; white-space: normal;
                 flex-wrap: wrap; justify-content: center;
             }
-            #territory-panel { left: 8px; right: 8px; width: auto; bottom: 80px; max-height: 45vh; }
+            #territory-panel {
+                left: 8px; right: 8px; width: auto;
+                top: calc(120px + env(safe-area-inset-top));
+                bottom: auto; max-height: 38vh;
+            }
             .world-ctrl { bottom: calc(80px + env(safe-area-inset-bottom)); }
             .world-ctrl button { width: 40px; height: 40px; font-size: 16px; }
         }
@@ -279,7 +283,7 @@
 
             <div id="tab-army" style="display:none;">
                 <div class="quest-box" style="border-color:#f59e0b; color:#fcd34d;">
-                    🪖 切換到世界地圖，派軍隊攻打並佔領其他領土！
+                    🪖 切換到世界地圖，用鍵盤/搖桿移動指揮官，點擊領地發起進攻！
                 </div>
                 <button class="btn" onclick="recruitSoldier()">
                     <span>🪖 招募士兵 (現有 <span id="soldierCount">0</span>)</span><span style="color:#4ade80" id="soldierCost">$800</span>
@@ -319,9 +323,10 @@
     <div id="world-ui">
         <div class="world-hud">
             <span>🌍 世界地圖</span>
-            <span>🪖 軍隊：<span id="wSoldiers">0</span> 兵 · <span id="wTanks">0</span> 坦克</span>
-            <span>⚔️ 戰力：<span id="wPower" style="color:#fbbf24;">0</span></span>
-            <span>🛡️ 領地：<span id="wOwned">0</span>/<span id="wTotal">12</span></span>
+            <span>🪖 <span id="wSoldiers">0</span> 兵 · <span id="wTanks">0</span> 坦克</span>
+            <span>⚔️ <span id="wPower" style="color:#fbbf24;">0</span> 戰力</span>
+            <span>🛡️ <span id="wOwned">0</span>/<span id="wTotal">12</span> 領地</span>
+            <span style="font-size:10px; color:#94a3b8;">⌨️ WASD / 方向鍵 · 📱 右側搖桿</span>
         </div>
         <div class="world-ctrl">
             <button onclick="zoomWorld(1.2)" title="放大">＋</button>
@@ -357,14 +362,14 @@
 
     <script>
         // ============================================================
-        // 雨神大亨 · 帝國征途
-        // 原有基地玩法完整保留，新增超大地圖 + 軍隊領地爭奪
+        // 雨神大亨 · 帝國征途 v3
+        // 原有基地玩法完整保留 + 超大地圖 + 鍵盤/搖桿移動 + 領地爭奪
         // ============================================================
         const cvs = document.getElementById('c'), ctx = cvs.getContext('2d');
         const SAVE_KEY = 'raingod_tycoon_save_v3';
         const TYCOON_LEADERBOARD_URL = 'https://game-24b43-default-rtdb.firebaseio.com/raingod_tycoon_leaderboard';
 
-        // ---- 原有核心變數（不變）----
+        // ---- 原有核心變數 ----
         let money = 2000, darkMatter = 0, frame = 0;
         let bestWave = 0;
         let minerLevel = 0, capacity = 4, techTier = 1;
@@ -382,17 +387,20 @@
         let quest = { type: 'kill', target: 20, current: 0, reward: 1500, desc: '擊殺 20 隻異形蟲' };
         let storageReady = false;
 
-        // ---- 新增：世界地圖 + 軍隊系統 ----
-        let viewMode = 'base'; // 'base' | 'world'
+        // ---- 世界地圖系統 ----
+        let viewMode = 'base';
         const WORLD_W = 4800, WORLD_H = 3600;
         let camera = { x: WORLD_W/2, y: WORLD_H/2, zoom: 0.55 };
-        let dragging = false, dragStartX = 0, dragStartY = 0, dragCamX = 0, dragCamY = 0, dragMoved = false;
+        let commander = { x: 800, y: 1650 }; // 基地中心
+        let keys = {};
+        let joystick = { active: false, baseX: 0, baseY: 0, knobX: 0, knobY: 0, dx: 0, dy: 0, pointerId: null };
+        let tapStart = null;
         let selectedTerritoryId = null;
 
-        // 軍隊（獨立於原有 bots）
+        // 軍隊
         let army = { soldiers: 0, tanks: 0 };
 
-        // 領地定義：[id, 名稱, x, y, w, h, 初始守軍, 每波收益, 類型]
+        // 領地定義
         const TERRITORY_DEFS = [
             { id: 0, name: '雨神基地', x: 600, y: 1500, w: 400, h: 300, garrison: 0, income: 0, type: 'capital' },
             { id: 1, name: '廢棄礦場', x: 1300, y: 900, w: 340, h: 260, garrison: 15, income: 600, type: 'resource' },
@@ -408,7 +416,7 @@
             { id: 11, name: '星際首都', x: 4200, y: 3000, w: 420, h: 340, garrison: 2600, income: 800000, type: 'military' },
         ];
 
-        let worldMap = []; // 運行時狀態
+        let worldMap = [];
         function initWorldMap() {
             worldMap = TERRITORY_DEFS.map(def => ({
                 ...def,
@@ -419,8 +427,12 @@
         }
         initWorldMap();
 
+        function isTouchDevice() {
+            return 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+        }
+
         // ============================================================
-        // 存檔 / 讀檔（擴充）
+        // 存檔 / 讀檔
         // ============================================================
         function saveGame() {
             if (!storageReady) return;
@@ -428,7 +440,7 @@
                 money, darkMatter, minerLevel, capacity, techTier, playerDamageLevel, turretDamageLevel,
                 player: p, bots, turrets, talents, wave, bestWave, waveTimer,
                 isWaveActive, items, enemies, skillCd, isOverclocked, overclockTimer, quest,
-                army, worldMap, viewMode
+                army, worldMap, viewMode, commander
             }));
         }
 
@@ -466,7 +478,6 @@
                 army.tanks = Math.max(0, Math.floor(finiteOr(data.army.tanks, 0)));
             }
             if (Array.isArray(data.worldMap)) {
-                // 用存檔中的歸屬與守軍覆蓋
                 data.worldMap.forEach(saved => {
                     const t = worldMap.find(w => w.id === saved.id);
                     if (t) {
@@ -475,12 +486,16 @@
                     }
                 });
             }
+            if (data.commander && typeof data.commander === 'object') {
+                commander.x = Math.max(20, Math.min(WORLD_W - 20, finiteOr(data.commander.x, commander.x)));
+                commander.y = Math.max(20, Math.min(WORLD_H - 20, finiteOr(data.commander.y, commander.y)));
+            }
             if (data.viewMode === 'world') viewMode = 'world';
             updateWorldUIVisibility();
         }
 
         // ============================================================
-        // 排行榜（原有，保留）
+        // 排行榜（保留）
         // ============================================================
         async function openTycoonLeaderboard() {
             if (!await window.raingodRequireAuth('排行榜')) return;
@@ -574,7 +589,7 @@
         }
 
         // ============================================================
-        // 物品與原有基地邏輯（完整保留）
+        // 物品 / 原有基地邏輯
         // ============================================================
         const ITEMS = {
             RAW:     { name: '原礦', val: 10, color: '#ef4444' },
@@ -618,10 +633,35 @@
         const resize = () => { cvs.width = window.innerWidth; cvs.height = window.innerHeight; };
         window.addEventListener('resize', resize); resize();
 
-        // ---- 滑鼠 / 觸控（基地模式沿用，世界地圖另處理）----
-        window.addEventListener('pointermove', e => {
-            if (viewMode === 'base' && e.pointerType !== 'touch') { p.tx = e.clientX; p.ty = e.clientY; }
+        // ---- 輸入事件 ----
+        // 鍵盤
+        window.addEventListener('keydown', e => {
+            const k = e.key.toLowerCase();
+            if (['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(k)) {
+                keys[k] = true;
+                if (viewMode === 'world') e.preventDefault();
+            }
         });
+        window.addEventListener('keyup', e => {
+            const k = e.key.toLowerCase();
+            if (['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(k)) {
+                keys[k] = false;
+            }
+        });
+
+        // 基地模式：滑鼠 / 觸控跟隨
+        cvs.addEventListener('pointermove', e => {
+            if (viewMode === 'base' && e.pointerType === 'touch') { p.tx = e.clientX; p.ty = e.clientY; }
+        });
+        window.addEventListener('pointermove', e => {
+            if (viewMode === 'base') {
+                if (e.pointerType !== 'touch') { p.tx = e.clientX; p.ty = e.clientY; }
+            } else {
+                handleWorldPointerMove(e);
+            }
+        });
+
+        // 世界地圖：pointerdown 在 canvas 上
         cvs.addEventListener('pointerdown', e => {
             if (viewMode === 'base') {
                 if (e.pointerType === 'touch') { p.tx = e.clientX; p.ty = e.clientY; }
@@ -629,14 +669,9 @@
                 handleWorldPointerDown(e);
             }
         });
-        cvs.addEventListener('pointermove', e => {
-            if (viewMode === 'base') {
-                if (e.pointerType === 'touch') { p.tx = e.clientX; p.ty = e.clientY; }
-            } else {
-                handleWorldPointerMove(e);
-            }
-        });
-        cvs.addEventListener('pointerup', e => {
+
+        // 世界地圖：pointerup 在 window 上
+        window.addEventListener('pointerup', e => {
             if (viewMode === 'world') handleWorldPointerUp(e);
         });
 
@@ -648,7 +683,7 @@
             }
         }
 
-        // ---- 技能（保留原有 + 新增軍隊衝鋒）----
+        // ---- 技能 ----
         function useSkill(num) {
             if (skillCd[num-1] > 0) return;
             if (num === 1) {
@@ -674,7 +709,7 @@
             }
         }
 
-        // ---- 建造 / 升級（完整保留）----
+        // ---- 建造 / 升級 ----
         function buildTurret(type) {
             const costs = { gatling: 1000, laser: 5000, mortar: 20000, frost: 50000, blackhole: 200000 };
             let cost = costs[type] * Math.pow(1.3, turrets.filter(t=>t.type===type).length);
@@ -782,7 +817,7 @@
         }
 
         // ============================================================
-        // 軍隊系統（新增）
+        // 軍隊系統
         // ============================================================
         function getArmyPower() {
             return army.soldiers * 10 + army.tanks * 100;
@@ -809,7 +844,7 @@
         }
 
         // ============================================================
-        // 世界地圖視圖切換與相機
+        // 視圖切換
         // ============================================================
         function updateWorldUIVisibility() {
             const worldUI = document.getElementById('world-ui');
@@ -834,7 +869,11 @@
             viewMode = mode;
             updateWorldUIVisibility();
             if (mode === 'world') {
-                centerOnCapital();
+                // 指挥官回到基地中心
+                const cap = worldMap.find(t => t.type === 'capital');
+                if (cap) { commander.x = cap.x + cap.w/2; commander.y = cap.y + cap.h/2; }
+                camera.x = commander.x;
+                camera.y = commander.y;
                 refreshWorldHUD();
             }
             saveGame();
@@ -843,8 +882,8 @@
         function centerOnCapital() {
             const cap = worldMap.find(t => t.type === 'capital');
             if (cap) {
-                camera.x = cap.x + cap.w/2;
-                camera.y = cap.y + cap.h/2;
+                commander.x = cap.x + cap.w/2;
+                commander.y = cap.y + cap.h/2;
             }
         }
 
@@ -852,7 +891,7 @@
             camera.zoom = Math.max(0.25, Math.min(1.6, camera.zoom * factor));
         }
 
-        // 世界座標 -> 螢幕座標
+        // 世界座標 <-> 螢幕座標
         function worldToScreen(wx, wy) {
             return {
                 x: (wx - camera.x) * camera.zoom + cvs.width/2,
@@ -866,28 +905,61 @@
             };
         }
 
-        // ---- 世界地圖指標事件 ----
+        // ---- 摇杆 ----
+        function getJoystickCenter() {
+            return { x: cvs.width - 100, y: cvs.height - 100 };
+        }
+
+        function updateKnob(cx, cy) {
+            const dx = cx - joystick.baseX;
+            const dy = cy - joystick.baseY;
+            const dist = Math.hypot(dx, dy);
+            const maxDist = 55;
+            const clamped = Math.min(dist, maxDist);
+            const angle = Math.atan2(dy, dx);
+            joystick.knobX = joystick.baseX + Math.cos(angle) * clamped;
+            joystick.knobY = joystick.baseY + Math.sin(angle) * clamped;
+            const norm = clamped / maxDist;
+            joystick.dx = Math.cos(angle) * norm;
+            joystick.dy = Math.sin(angle) * norm;
+            if (dist < 5) { joystick.dx = 0; joystick.dy = 0; }
+        }
+
         function handleWorldPointerDown(e) {
-            dragging = true;
-            dragMoved = false;
-            dragStartX = e.clientX;
-            dragStartY = e.clientY;
-            dragCamX = camera.x;
-            dragCamY = camera.y;
+            // 触摸设备：检查是否在摇杆区域
+            if (e.pointerType === 'touch' && isTouchDevice()) {
+                const jc = getJoystickCenter();
+                if (Math.hypot(e.clientX - jc.x, e.clientY - jc.y) < 90) {
+                    joystick.active = true;
+                    joystick.pointerId = e.pointerId;
+                    joystick.baseX = jc.x;
+                    joystick.baseY = jc.y;
+                    updateKnob(e.clientX, e.clientY);
+                    return;
+                }
+            }
+            // 否则记录点击起点
+            tapStart = { x: e.clientX, y: e.clientY, moved: false };
         }
+
         function handleWorldPointerMove(e) {
-            if (!dragging) return;
-            const dx = e.clientX - dragStartX;
-            const dy = e.clientY - dragStartY;
-            if (Math.abs(dx) > 5 || Math.abs(dy) > 5) dragMoved = true;
-            camera.x = dragCamX - dx / camera.zoom;
-            camera.y = dragCamY - dy / camera.zoom;
-            camera.x = Math.max(0, Math.min(WORLD_W, camera.x));
-            camera.y = Math.max(0, Math.min(WORLD_H, camera.y));
+            if (joystick.active && e.pointerId === joystick.pointerId) {
+                updateKnob(e.clientX, e.clientY);
+                return;
+            }
+            if (tapStart) {
+                if (Math.hypot(e.clientX - tapStart.x, e.clientY - tapStart.y) > 12) tapStart.moved = true;
+            }
         }
+
         function handleWorldPointerUp(e) {
-            if (!dragMoved && dragging) {
-                // 點擊：檢查是否點到領地
+            if (joystick.active && e.pointerId === joystick.pointerId) {
+                joystick.active = false;
+                joystick.dx = 0; joystick.dy = 0;
+                joystick.pointerId = null;
+                return;
+            }
+            if (tapStart && !tapStart.moved) {
                 const w = screenToWorld(e.clientX, e.clientY);
                 const hit = worldMap.find(t =>
                     w.x >= t.x && w.x <= t.x + t.w && w.y >= t.y && w.y <= t.y + t.h
@@ -895,9 +967,11 @@
                 if (hit) {
                     selectedTerritoryId = hit.id;
                     showTerritoryPanel(hit);
+                } else {
+                    closeTerritoryPanel();
                 }
             }
-            dragging = false;
+            tapStart = null;
         }
 
         // ---- 領地面板 ----
@@ -941,19 +1015,16 @@
                 alert(`軍隊戰力不足！需要 ${required} 戰力，目前只有 ${power}。\n請先招募更多士兵或坦克。`);
                 return;
             }
-            // 計算損失
             const ratio = required / Math.max(1, power);
             const lossSoldiers = Math.floor(army.soldiers * ratio * 0.45);
             const lossTanks = Math.floor(army.tanks * ratio * 0.25);
             army.soldiers = Math.max(0, army.soldiers - lossSoldiers);
             army.tanks = Math.max(0, army.tanks - lossTanks);
 
-            // 佔領成功
             t.owner = 'player';
             t.garrisonCurrent = 0;
             t.conqueredAt = frame;
 
-            // 特效
             triggerShake(15);
             spawnFloatText(cvs.width/2, cvs.height/2, `🎉 成功佔領 ${t.name}！`, '#fbbf24');
             spawnFloatText(cvs.width/2, cvs.height/2 + 30, `損失 ${lossSoldiers} 兵 · ${lossTanks} 坦克`, '#ef4444');
@@ -972,7 +1043,6 @@
             document.getElementById('wOwned').textContent = owned;
             document.getElementById('wTotal').textContent = total;
 
-            // 同步基地 UI
             document.getElementById('territoryCount').textContent = owned;
             document.getElementById('territoryMax').textContent = total;
             document.getElementById('soldierCount').textContent = army.soldiers;
@@ -985,7 +1055,7 @@
         }
 
         // ============================================================
-        // 基地更新邏輯（原有 update 主體，保持不變）
+        // 基地更新
         // ============================================================
         function updateBase() {
             const b = getBuildings();
@@ -997,7 +1067,6 @@
             } else {
                 if (enemies.length === 0) {
                     isWaveActive = false; wave++; waveTimer = 20 * 60;
-                    // 基地波次收益 + 領地收益
                     const territoryIncome = worldMap.filter(t => t.owner === 'player' && t.type !== 'capital')
                         .reduce((s, t) => s + t.income, 0);
                     const baseIncome = 1200 * wave;
@@ -1012,13 +1081,11 @@
                 }
             }
 
-            // 產礦
             const spawnInterval = isOverclocked ? 4 : Math.max(6, 35 - minerLevel * 4);
             if(frame % spawnInterval === 0 && items.length < 50) {
                 items.push({ x: b.extractor.x + b.extractor.w + 15, y: b.extractor.y + b.extractor.h/2 + (Math.random()-0.5)*30, type: 'RAW' });
             }
 
-            // 機兵 AI
             bots.forEach(bot => {
                 let speed = (bot.speed * (1 + talents.spdLv * 0.15)) * (isOverclocked ? 1.8 : 1);
                 let target = null;
@@ -1041,7 +1108,6 @@
 
             interact(p, b);
 
-            // 玩家電漿砲
             p.cooldown--;
             let totalDmgMult = (1 + darkMatter * 0.1) * (1 + talents.dmgLv * 0.2);
             if (p.cooldown <= 0 && enemies.length > 0) {
@@ -1052,7 +1118,6 @@
                 }
             }
 
-            // 防衛塔射擊
             turrets.forEach(t => {
                 t.cd--;
                 if (t.cd <= 0 && enemies.length > 0) {
@@ -1085,7 +1150,6 @@
                 }
             });
 
-            // 子彈傷害
             for (let i = bullets.length - 1; i >= 0; i--) {
                 let bul = bullets[i];
                 let dx = bul.tx - bul.x, dy = bul.ty - bul.y, dist = Math.hypot(dx, dy);
@@ -1110,7 +1174,6 @@
                 }
             }
 
-            // 敵人
             for (let i = enemies.length - 1; i >= 0; i--) {
                 let e = enemies[i];
                 e.x -= e.speed;
@@ -1131,16 +1194,39 @@
         }
 
         // ============================================================
-        // 世界地圖更新（新增）
+        // 世界地圖更新（键盘 + 摇杆）
         // ============================================================
         function updateWorld() {
+            // 移动向量
+            let mvx = 0, mvy = 0;
+            if (keys['w'] || keys['arrowup']) mvy -= 1;
+            if (keys['s'] || keys['arrowdown']) mvy += 1;
+            if (keys['a'] || keys['arrowleft']) mvx -= 1;
+            if (keys['d'] || keys['arrowright']) mvx += 1;
+            if (joystick.active) {
+                mvx += joystick.dx;
+                mvy += joystick.dy;
+            }
+            const len = Math.hypot(mvx, mvy);
+            if (len > 0.05) {
+                mvx /= len; mvy /= len;
+                const speed = 620; // 世界单位/秒
+                const dt = 1 / 60;
+                commander.x = Math.max(20, Math.min(WORLD_W - 20, commander.x + mvx * speed * dt));
+                commander.y = Math.max(20, Math.min(WORLD_H - 20, commander.y + mvy * speed * dt));
+            }
+
+            // 相机平滑跟随
+            camera.x += (commander.x - camera.x) * 0.12;
+            camera.y += (commander.y - camera.y) * 0.12;
+
             if (shakeTime > 0) shakeTime--;
             for(let i = floatTexts.length-1; i>=0; i--) { floatTexts[i].y -= 1; floatTexts[i].alpha -= 0.02; if(floatTexts[i].alpha<=0) floatTexts.splice(i,1); }
             for(let i = particles.length-1; i>=0; i--) { particles[i].x += particles[i].vx; particles[i].y += particles[i].vy; particles[i].alpha -= 0.04; if(particles[i].alpha<=0) particles.splice(i,1); }
         }
 
         // ============================================================
-        // UI 同步（抽離自原 update 尾段）
+        // UI 同步
         // ============================================================
         function syncUI() {
             document.getElementById('m').innerText = Math.floor(money).toLocaleString();
@@ -1182,11 +1268,10 @@
         }
 
         // ============================================================
-        // 主迴圈調度
+        // 主更新
         // ============================================================
         function update() {
             frame++;
-            // 技能冷卻（兩種模式都跑）
             for (let i = 0; i < skillCd.length; i++) { if (skillCd[i] > 0) skillCd[i]--; }
             if (overclockTimer > 0) { overclockTimer--; if (overclockTimer === 0) isOverclocked = false; }
 
@@ -1200,7 +1285,7 @@
         }
 
         // ============================================================
-        // 基地繪製（完整保留原繪製邏輯）
+        // 基地繪製
         // ============================================================
         function drawBase() {
             ctx.save();
@@ -1214,7 +1299,6 @@
 
             const b = getBuildings();
 
-            // 建築物
             Object.values(b).forEach(bld => {
                 ctx.shadowColor = bld.color; ctx.shadowBlur = 10;
                 ctx.fillStyle = 'rgba(15, 23, 42, 0.9)'; ctx.strokeStyle = bld.color; ctx.lineWidth = 2.5;
@@ -1224,7 +1308,6 @@
                 ctx.fillText(bld.label, bld.x + bld.w/2, bld.y - 8);
             });
 
-            // 防衛塔
             turrets.forEach(t => {
                 let colorMap = { gatling: '#f59e0b', laser: '#3b82f6', mortar: '#a855f7', frost: '#0284c7', blackhole: '#c084fc' };
                 ctx.fillStyle = colorMap[t.type];
@@ -1232,13 +1315,11 @@
                 ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
             });
 
-            // 子彈
             bullets.forEach(bul => {
                 ctx.fillStyle = bul.color;
                 ctx.beginPath(); ctx.arc(bul.x, bul.y, bul.splash ? 7 : 4, 0, Math.PI * 2); ctx.fill();
             });
 
-            // 敵人
             enemies.forEach(e => {
                 let sizeMap = { normal: 14, runner: 10, tank: 20, bomber: 12, boss: 32 };
                 let colorMap = { normal: '#ef4444', runner: '#f59e0b', tank: '#64748b', bomber: '#22c55e', boss: '#e11d48' };
@@ -1251,26 +1332,22 @@
                 ctx.fillStyle = '#22c55e'; ctx.fillRect(e.x - barW/2, e.y - sizeMap[e.type] - 10, (e.hp / e.maxHp) * barW, 4);
             });
 
-            // 掉落物
             items.forEach(it => {
                 ctx.fillStyle = ITEMS[it.type].color;
                 ctx.beginPath(); ctx.roundRect(it.x - 7, it.y - 7, 14, 14, 3); ctx.fill();
             });
 
-            // 機兵
             bots.forEach(bot => {
                 ctx.fillStyle = '#38bdf8'; ctx.beginPath(); ctx.arc(bot.x, bot.y, 12, 0, Math.PI * 2); ctx.fill();
                 drawStack(bot);
             });
 
-            // 玩家
             ctx.strokeStyle = 'rgba(56, 189, 248, 0.15)'; ctx.lineWidth = 1;
             ctx.beginPath(); ctx.arc(p.x, p.y, p.atkRange, 0, Math.PI * 2); ctx.stroke();
             ctx.fillStyle = '#38bdf8'; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
             ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
             drawStack(p);
 
-            // 特效
             particles.forEach(pt => { ctx.fillStyle = pt.color; ctx.globalAlpha = Math.max(0, pt.alpha); ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1; });
             floatTexts.forEach(ft => { ctx.fillStyle = ft.color; ctx.globalAlpha = Math.max(0, ft.alpha); ctx.font = 'bold 15px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(ft.text, ft.x, ft.y); ctx.globalAlpha = 1; });
 
@@ -1285,7 +1362,7 @@
         }
 
         // ============================================================
-        // 世界地圖繪製（新增）
+        // 世界地圖繪製
         // ============================================================
         function drawWorld() {
             ctx.save();
@@ -1315,7 +1392,7 @@
             ctx.lineWidth = 2;
             ctx.strokeRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y);
 
-            // 網格（世界座標）
+            // 網格
             const gridSize = 200;
             ctx.strokeStyle = 'rgba(56, 189, 248, 0.06)';
             ctx.lineWidth = 1;
@@ -1333,14 +1410,12 @@
                 const s = worldToScreen(t.x, t.y);
                 const w = t.w * camera.zoom;
                 const h = t.h * camera.zoom;
-                // 視口裁剪
                 if (s.x + w < -20 || s.y + h < -20 || s.x > cvs.width + 20 || s.y > cvs.height + 20) return;
 
                 const isSelected = t.id === selectedTerritoryId;
                 const ownerColor = t.owner === 'player' ? '#22c55e' :
                                    t.owner === 'enemy' ? '#ef4444' : '#94a3b8';
 
-                // 領地底色
                 ctx.shadowColor = ownerColor;
                 ctx.shadowBlur = isSelected ? 25 : 10;
                 const bgGrad = ctx.createLinearGradient(s.x, s.y, s.x + w, s.y + h);
@@ -1362,19 +1437,16 @@
                 ctx.roundRect(s.x, s.y, w, h, 14 * camera.zoom);
                 ctx.fill();
 
-                // 邊框
                 ctx.strokeStyle = ownerColor;
                 ctx.lineWidth = isSelected ? 4 : 2.5;
                 ctx.stroke();
                 ctx.shadowBlur = 0;
 
-                // 名稱
                 ctx.fillStyle = '#f8fafc';
                 ctx.font = `bold ${Math.max(10, 15 * camera.zoom)}px sans-serif`;
                 ctx.textAlign = 'center';
                 ctx.fillText(t.name, s.x + w/2, s.y + h/2 - 12 * camera.zoom);
 
-                // 歸屬 / 守軍
                 ctx.font = `${Math.max(8, 11 * camera.zoom)}px sans-serif`;
                 let sub = '';
                 if (t.owner === 'player') sub = '🟢 已佔領';
@@ -1383,20 +1455,40 @@
                 ctx.fillStyle = ownerColor;
                 ctx.fillText(sub, s.x + w/2, s.y + h/2 + 12 * camera.zoom);
 
-                // 收益
                 if (t.owner === 'player' && t.income > 0) {
                     ctx.fillStyle = '#4ade80';
                     ctx.font = `${Math.max(8, 10 * camera.zoom)}px sans-serif`;
                     ctx.fillText(`+$${t.income.toLocaleString()}/波`, s.x + w/2, s.y + h/2 + 28 * camera.zoom);
                 }
 
-                // 基地特殊標記
                 if (t.type === 'capital') {
                     ctx.fillStyle = '#fbbf24';
                     ctx.font = `bold ${Math.max(10, 13 * camera.zoom)}px sans-serif`;
                     ctx.fillText('🏠', s.x + w/2, s.y + 20 * camera.zoom);
                 }
             });
+
+            // 繪製指揮官（玩家）
+            const cs = worldToScreen(commander.x, commander.y);
+            const pulse = 1 + Math.sin(frame * 0.12) * 0.15;
+            // 外光晕
+            ctx.shadowColor = '#38bdf8';
+            ctx.shadowBlur = 30;
+            ctx.fillStyle = 'rgba(56, 189, 248, 0.9)';
+            ctx.beginPath(); ctx.arc(cs.x, cs.y, 16 * pulse, 0, Math.PI * 2); ctx.fill();
+            ctx.shadowBlur = 0;
+            // 外环
+            ctx.strokeStyle = '#fbbf24';
+            ctx.lineWidth = 2.5;
+            ctx.beginPath(); ctx.arc(cs.x, cs.y, 22, 0, Math.PI * 2); ctx.stroke();
+            // 中心
+            ctx.fillStyle = '#fff';
+            ctx.beginPath(); ctx.arc(cs.x, cs.y, 8, 0, Math.PI * 2); ctx.fill();
+            // 名字
+            ctx.fillStyle = '#fbbf24';
+            ctx.font = 'bold 11px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('🪖 指挥官', cs.x, cs.y - 30);
 
             // 特效
             particles.forEach(pt => { ctx.fillStyle = pt.color; ctx.globalAlpha = Math.max(0, pt.alpha); ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1; });
@@ -1405,24 +1497,34 @@
             // 小地圖
             drawMinimap();
 
+            // 搖桿（僅觸控設備）
+            if (isTouchDevice()) drawJoystick();
+
             ctx.restore();
         }
 
         function drawMinimap() {
             const mw = 180, mh = 135;
             const mx = cvs.width - mw - 16, my = cvs.height - mh - 16;
+            // 如果搖桿在右下角，小地圖移到右上角
+            const mmx = isTouchDevice() ? cvs.width - mw - 16 : cvs.width - mw - 16;
+            const mmy = isTouchDevice() ? 80 : cvs.height - mh - 16;
             ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
             ctx.strokeStyle = '#38bdf8';
             ctx.lineWidth = 1.5;
-            ctx.beginPath(); ctx.roundRect(mx, my, mw, mh, 8); ctx.fill(); ctx.stroke();
+            ctx.beginPath(); ctx.roundRect(mmx, mmy, mw, mh, 8); ctx.fill(); ctx.stroke();
 
             const scaleX = mw / WORLD_W, scaleY = mh / WORLD_H;
             worldMap.forEach(t => {
                 const ownerColor = t.owner === 'player' ? '#22c55e' :
                                    t.owner === 'enemy' ? '#ef4444' : '#94a3b8';
                 ctx.fillStyle = ownerColor;
-                ctx.fillRect(mx + t.x * scaleX, my + t.y * scaleY, Math.max(3, t.w * scaleX), Math.max(3, t.h * scaleY));
+                ctx.fillRect(mmx + t.x * scaleX, mmy + t.y * scaleY, Math.max(3, t.w * scaleX), Math.max(3, t.h * scaleY));
             });
+
+            // 指挥官位置
+            ctx.fillStyle = '#38bdf8';
+            ctx.beginPath(); ctx.arc(mmx + commander.x * scaleX, mmy + commander.y * scaleY, 4, 0, Math.PI*2); ctx.fill();
 
             // 相機視口
             const viewW = cvs.width / camera.zoom;
@@ -1430,15 +1532,44 @@
             ctx.strokeStyle = '#fbbf24';
             ctx.lineWidth = 1.5;
             ctx.strokeRect(
-                mx + (camera.x - viewW/2) * scaleX,
-                my + (camera.y - viewH/2) * scaleY,
+                mmx + (camera.x - viewW/2) * scaleX,
+                mmy + (camera.y - viewH/2) * scaleY,
                 viewW * scaleX,
                 viewH * scaleY
             );
         }
 
+        function drawJoystick() {
+            const jc = getJoystickCenter();
+            ctx.save();
+            ctx.globalAlpha = 0.85;
+            // 底座
+            ctx.strokeStyle = 'rgba(56, 189, 248, 0.6)';
+            ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.arc(jc.x, jc.y, 60, 0, Math.PI*2); ctx.stroke();
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.55)';
+            ctx.beginPath(); ctx.arc(jc.x, jc.y, 60, 0, Math.PI*2); ctx.fill();
+            // 十字裝飾
+            ctx.strokeStyle = 'rgba(56, 189, 248, 0.3)';
+            ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(jc.x - 60, jc.y); ctx.lineTo(jc.x + 60, jc.y); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(jc.x, jc.y - 60); ctx.lineTo(jc.x, jc.y + 60); ctx.stroke();
+            // 摇杆頭
+            const kx = joystick.active ? joystick.knobX : jc.x;
+            const ky = joystick.active ? joystick.knobY : jc.y;
+            ctx.shadowColor = '#38bdf8';
+            ctx.shadowBlur = joystick.active ? 15 : 5;
+            ctx.fillStyle = joystick.active ? 'rgba(56, 189, 248, 0.95)' : 'rgba(56, 189, 248, 0.5)';
+            ctx.beginPath(); ctx.arc(kx, ky, 26, 0, Math.PI*2); ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(kx, ky, 26, 0, Math.PI*2); ctx.stroke();
+            ctx.restore();
+        }
+
         // ============================================================
-        // 轉換與倉庫交互（完整保留）
+        // 交互 / 轉換
         // ============================================================
         function processConvert(obj, from, to, bld) {
             if (obj.bag.some(i => i.type === from)) {
