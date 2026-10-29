@@ -1646,7 +1646,7 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
     setInterval(() => {
       if (!S.player) return;
       set(mePosRef, { x: Math.round(S.player.x), y: Math.round(S.player.y), t: serverTimestamp() }).catch(() => {});
-    }, 200);
+    }, 80);
     let lastInfoHash = '';
     function pushInfo(force) {
       const info = {
@@ -1841,11 +1841,12 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
       // ★ 指令處理完立刻清掉，避免 5 秒內重整/重連重複觸發
       _adminRemove(ref(db, 'admin/' + PLAYER_ID)).catch(() => {});
     });
-    onValue(ref(db, 'hits/' + PLAYER_ID), snap => {
+        onValue(ref(db, 'hits/' + PLAYER_ID), snap => {
       const v = snap.val();
       if (!v || Date.now() - (v.t || 0) > 3000) return;
       if (v.fx !== undefined || v.fy !== undefined) triggerKnockback(v.fx || 400, v.fy || -400);
-      if (v.stealEgg && S.player.carry) {
+      // ★ 只有在非安全區（偷蛋區）才會被搶蛋；安全區內蛋不會掉
+      if (v.stealEgg && S.player.carry && S.player.y < S.safeLineY) {
         const drop = S.player.carry; S.player.carry = null; S.tensionActive = false;
         const dropX = clamp(S.player.x + rnd(-40, 40), 30, WORLD_W - 30); const dropY = clamp(S.player.y + rnd(-40, 40), MIN_Y, MAX_Y);
         S.eggs.push({ ...drop, x: dropX, y: dropY, collected: false, origX: dropX, origY: dropY });
@@ -1856,8 +1857,9 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
       if (v.fx !== undefined || v.fy !== undefined) showToast(`💥 你被 ${v.by || '玩家'} 打飛了！`, '#8a2a2a', '#5a0a0a');
     });
   }
-  function updateRemoteInterp(dt){
-    const k = 1 - Math.pow(0.0005, dt);
+    function updateRemoteInterp(dt){
+    // 提高收斂速度，讓遠端玩家更平滑地追上目標位置
+    const k = 1 - Math.pow(0.00001, dt);
     for (const entry of REMOTE_PLAYERS.values()) {
       entry.cur.x += (entry.target.x - entry.cur.x) * k;
       entry.cur.y += (entry.target.y - entry.cur.y) * k;
@@ -1881,7 +1883,7 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
     }
     if(!target){ showToast(stick ? '附近沒有可攻擊的玩家，揮空了！' : '空手揮了一下，沒有目標', '#5a5a5a', '#3a3a3a'); return; }
     const dx=target.x-p.x, dy=target.y-p.y; const len=Math.hypot(dx,dy)||1; const { db, ref, set } = window.__FB;
-    set(ref(db, 'hits/' + target.id), { by: S.playerName, byId: PLAYER_ID, byStick: stick ? stick.id : 'bare', byStickName: stick ? stick.name : '空手', fx: (dx/len)*power, fy: (dy/len)*power, stealEgg: !!target.carry && !!stick, t: Date.now() });
+        set(ref(db, 'hits/' + target.id), { by: S.playerName, byId: PLAYER_ID, byStick: stick ? stick.id : 'bare', byStickName: stick ? stick.name : '空手', fx: (dx/len)*power, fy: (dy/len)*power, stealEgg: !!target.carry, t: Date.now() });
     if (target.carry && stick) showToast(`🥚 搶到 ${target.name||'玩家'} 的蛋！`, '#ffaa20', '#cc7700');
     else if (stick) showToast(`💥 打中了 ${target.name||'玩家'}！`, '#ff8a20', '#aa5a00');
     else showToast(`👊 空手打了 ${target.name||'玩家'} 一下（無傷害）`, '#8a8a6a', '#5a5a3a');
