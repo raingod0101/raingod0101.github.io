@@ -352,7 +352,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
   var IMG_TTL_MS = 24 * 60 * 60 * 1000;
   var DAILY_IMAGE_LIMIT = 5;
   var ADMIN_USERNAME = 'raingod';
-  var IMG_MAX_BYTES = 280 * 1024;   // 280KB 上限（含 data URL 編碼）
+  var IMG_MAX_BYTES = 280 * 1024;
 
   // ===== DOM =====
   var loginRequired = document.getElementById('login-required');
@@ -463,7 +463,6 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
   }
 
-  // 壓縮圖片。可多次呼叫（第一次失敗會用更小參數再壓）
   function compressImage(file,maxDim,quality){
     return new Promise(function(resolve,reject){
       var reader=new FileReader();
@@ -512,16 +511,37 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
       return cur-1;
     }).catch(function(){});
   }
-  // 依指定日期退還一張配額（收回圖片用）
+
+  // ==== 依指定日期退款（含 transaction + set 備援 + 明確結果）====
   function refundImageQuotaForDate(dateKey){
-    if(!currentUsername||!dateKey) return Promise.resolve();
+    if(!currentUsername||!dateKey) return Promise.resolve({ok:false,reason:'missing-params'});
     var ref=db().ref('users/'+currentUsername+'/imageQuota/'+dateKey);
+
     return ref.transaction(function(cur){
       cur=cur||0;
-      if(cur<=0) return;
+      if(cur<=0) return;      // abort（已為 0）
       return cur-1;
-    }).catch(function(e){ console.warn('退還配額失敗',e); });
+    }).then(function(result){
+      if(result.committed){
+        return {ok:true,method:'transaction',newVal:result.snapshot.val()};
+      }
+      // transaction abort（cur<=0）
+      return {ok:false,reason:'already-zero'};
+    }).catch(function(err){
+      console.warn('[退款] transaction 失敗，嘗試 set 備援',err);
+      return ref.once('value').then(function(snap){
+        var cur=snap.val()||0;
+        if(cur<=0) return {ok:false,reason:'already-zero'};
+        return ref.set(cur-1).then(function(){
+          return {ok:true,method:'set',newVal:cur-1};
+        });
+      }).catch(function(err2){
+        console.error('[退款] set 備援也失敗',err2);
+        return {ok:false,reason:'permission-denied',error:err2};
+      });
+    });
   }
+
   function updateQuotaHint(){
     if(!currentUsername||!activeChat.type){ imgQuotaHint.textContent=''; return; }
     getImageQuotaUsed().then(function(used){
@@ -1127,7 +1147,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     }
   });
 
-  // ==== 刪除群組（建立者限定）====
+  // ==== 刪除群組 ====
   function deleteGroup(gid){
     var g=groupsCache[gid];
     if(!g||g.role!=='owner'){ alert('只有群組建立者可以刪除群組。'); return; }
@@ -1514,23 +1534,28 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     chatBox.scrollTop=chatBox.scrollHeight;
   }
 
-  // ==== 收回（含管理員刪除、圖片退配額）====
+  // ==== 收回（含圖片退配額）====
   function doRecall(kind,cid,msgId,m,isSelf){
     var confirmMsg = isSelf
       ? '確定要收回這則訊息嗎？收回後訊息內容會從資料庫刪除。'
       : '確定要以管理員權限刪除這則訊息嗎？此操作無法復原。';
     if(!confirm(confirmMsg)) return;
 
+    // 判斷是否要退款
     var shouldRefund = isSelf && m && m.type==='image';
     var refundDateKey = '';
     if(shouldRefund){
-      if(m.quotaKey){
-        refundDateKey = m.quotaKey;
-      }else if(m.expireAt){
-        refundDateKey = dateKeyFromTs(m.expireAt - IMG_TTL_MS);
-      }else if(m.ts){
-        refundDateKey = dateKeyFromTs(m.ts);
-      }
+      if(m.quotaKey) refundDateKey = m.quotaKey;
+      else if(m.expireAt) refundDateKey = dateKeyFromTs(m.expireAt - IMG_TTL_MS);
+      else if(m.ts && typeof m.ts==='number') refundDateKey = dateKeyFromTs(m.ts);
+      else refundDateKey = quotaDateKey();   // 全部 fallback 失敗 → 退今天
+
+      console.log('[doRecall] 退款診斷',{
+        quotaKey:m.quotaKey,
+        expireAt:m.expireAt,
+        ts:m.ts,
+        resolvedDateKey:refundDateKey
+      });
     }
 
     var baseRef=kind==='private'?db().ref('private_chats/'+cid):db().ref('groups/'+cid);
@@ -1543,15 +1568,21 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
       senderName: m.name||'',
       ts: window.firebase.database.ServerValue.TIMESTAMP
     };
+
     baseRef.update(updates).then(function(){
-      if(shouldRefund && refundDateKey){
-        return refundImageQuotaForDate(refundDateKey).then(function(){
-          console.log('[圖片] 收回退還配額 date='+refundDateKey);
+      if(!shouldRefund) return;
+      if(!refundDateKey) return;
+      return refundImageQuotaForDate(refundDateKey).then(function(result){
+        if(result.ok){
+          console.log('[退款] 成功 date='+refundDateKey+' method='+result.method+' new='+result.newVal);
           updateQuotaHint();
-        });
-      }
+        }else{
+          console.error('[退款] 失敗 reason='+result.reason, result);
+          alert('收回成功，但退還圖片額度失敗（'+result.reason+'）。\n\n請至 Firebase Console 檢查 Realtime Database 規則，確認 users/'+currentUsername+'/imageQuota 有寫入權限。');
+        }
+      });
     }).catch(function(e){
-      alert('操作失敗：'+errorMessage(e));
+      alert('收回失敗：'+errorMessage(e));
     });
   }
 
@@ -1639,7 +1670,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendMessage(); }
   });
 
-  // ===== 傳圖片（data URL + 每日上限 + 寫入驗證 + 三段式壓縮）=====
+  // ===== 傳圖片 =====
   imgUploadBtn.addEventListener('click',function(){ imgFileInput.click(); });
   imgFileInput.addEventListener('change',function(){
     var file=imgFileInput.files&&imgFileInput.files[0];
@@ -1655,7 +1686,6 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     imgUploadBtn.disabled=true;
     setUploadStatus('正在壓縮圖片…',false);
 
-    // 三段式壓縮：1000px/0.78 → 800px/0.7 → 600px/0.62
     compressImage(file,1000,0.78).then(function(dataUrl){
       console.log('[圖片] 第一段 size='+(dataUrl.length/1024).toFixed(1)+'KB');
       if(dataUrl.length <= IMG_MAX_BYTES) return dataUrl;
@@ -1700,7 +1730,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
             if(!v||v.type!=='image'||!v.imageData){
               throw new Error('圖片資料不完整（可能被 rules 過濾）。');
             }
-            console.log('[圖片] 寫入成功 size='+dataUrl.length);
+            console.log('[圖片] 寫入成功 size='+dataUrl.length+' quotaKey='+v.quotaKey);
           });
         }).catch(function(e){
           refundImageQuota();
