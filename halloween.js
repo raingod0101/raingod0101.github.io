@@ -6,7 +6,7 @@
  *  - 商店只能對「孵化器中的蛋」使用碎片
  *  - 變異結果明顯提示（成功 / 失敗）
  *  - 蛋 / 寵物萬聖節變異特效
- *  - 變異倍率：每隻萬聖節變異寵物 +25% 收益、+10% 孵蛋速度
+ *  - 變異倍率：每隻萬聖節變異寵物 收益 ×2、每顆變異蛋 孵蛋速度 ×1.10
  *    使用主遊戲通用 API：G.setMutationCashMul / G.setMutationHatchMul
  * =================================================================== */
 (function () {
@@ -27,13 +27,13 @@
     const MUTATION_ID = 'halloween';
     const MUTATION_DEF = { name: '萬聖節', icon: '🎃', color: '#ff8a20' };
     const FRAGMENT_PRICE = 100;
-    const MUTATION_SUCCESS_RATE = 0.10;
+    const MUTATION_SUCCESS_RATE = 0.25;   // ★ 改為 25%
     const CANDY_INTERVAL = 5;
     const REFRESH_MS = 5 * 60 * 1000;
 
     // ★ 變異倍率常數（每隻帶萬聖節變異的寵物對應的加成）
-    const MUTATION_CASH_MUL_PER_PET = 1.25;   // +25% 收益
-    const MUTATION_HATCH_MUL_PER_EGG = 1.10;  // +10% 孵蛋速度（針對有變異的蛋）
+    const MUTATION_CASH_MUL_PER_PET = 2.0;    // ★ 每隻變異寵物收益 ×2
+    const MUTATION_HATCH_MUL_PER_EGG = 1.10;  // 每顆變異蛋孵蛋速度 ×1.10
 
     const HW = {
       active: false,
@@ -64,6 +64,24 @@
 
       if (G.setMutationCashMul) G.setMutationCashMul(cashMul);
       if (G.setMutationHatchMul) G.setMutationHatchMul(hatchMul);
+    }
+
+    // 取得「實際總收益倍率」（含訂閱 ×2）
+    function getTotalCashMul() {
+      const subMul = S.subscriptionVerified ? 2 : 1;
+      const mutMul = G.getMutationCashMul ? G.getMutationCashMul() : 1;
+      return subMul * mutMul;
+    }
+    // 取得「實際總孵蛋倍率」（含軌跡、夜晚、變異）
+    function getTotalHatchMul() {
+      let trailMul = 1;
+      if (G.TRAIL_DEFS) {
+        const trail = G.TRAIL_DEFS.find(t => t.id === S.equippedTrail);
+        if (trail) trailMul = trail.mult;
+      }
+      const nightMul = S.night ? 10 : 1;
+      const mutMul = G.getMutationHatchMul ? G.getMutationHatchMul() : 1;
+      return trailMul * nightMul * mutMul;
     }
 
     // 明顯的變異結果提示（不會被商店面板蓋住）
@@ -182,12 +200,12 @@
         <div class="halloween-info">
           <span>🎃 代幣：<b id="hwTokens">0</b></span>
           <span>🧩 碎片：<b id="hwFragments">0</b></span>
-          <span>💰 收益：<b id="hwCashMul">×1.25</b></span>
-          <span>⏳ 孵蛋：<b id="hwHatchMul">×1.10</b></span>
+          <span>💰 總收益：<b id="hwCashMul">×1.00</b></span>
+          <span>⏳ 總孵蛋：<b id="hwHatchMul">×1.00</b></span>
         </div>
         <div class="halloween-shop-item">
           <div class="hs-name">🎃 萬聖節變異碎片</div>
-          <div class="hs-desc">使用後有 <b>10%</b> 機率讓「孵化器中的蛋」獲得【萬聖節變異】。<br>蛋孵出時寵物會繼承變異。<br>每隻變異寵物 <b>+25% 收益</b>，每顆變異蛋 <b>+10% 孵蛋速度</b>。<br>每顆蛋同種變異只能上一次，不同變異可疊加。</div>
+          <div class="hs-desc">使用後有 <b>25%</b> 機率讓「孵化器中的蛋」獲得【萬聖節變異】。<br>蛋孵出時寵物會繼承變異。<br>每隻變異寵物 <b>收益 ×2</b>，每顆變異蛋 <b>孵蛋速度 ×1.10</b>。<br>每顆蛋同種變異只能上一次，不同變異可疊加。</div>
           <button id="btnBuyFrag">購買（100 🎃）</button>
         </div>
         <div class="halloween-eggs-title">孵化器中的蛋（使用碎片）：</div>
@@ -295,11 +313,11 @@
       const fragEl = document.getElementById('hwFragments'); if (fragEl) fragEl.textContent = HW.fragments;
       const buyBtn = document.getElementById('btnBuyFrag'); if (buyBtn) buyBtn.disabled = HW.tokens < FRAGMENT_PRICE;
 
-      // ★ 顯示當前變異倍率
+      // ★ 顯示「實際總倍率」（含訂閱 / 軌跡 / 夜晚 / 變異）
       const cashMulEl = document.getElementById('hwCashMul');
       const hatchMulEl = document.getElementById('hwHatchMul');
-      if (cashMulEl && G.getMutationCashMul) cashMulEl.textContent = '×' + G.getMutationCashMul().toFixed(2);
-      if (hatchMulEl && G.getMutationHatchMul) hatchMulEl.textContent = '×' + G.getMutationHatchMul().toFixed(2);
+      if (cashMulEl) cashMulEl.textContent = '×' + getTotalCashMul().toFixed(2);
+      if (hatchMulEl) hatchMulEl.textContent = '×' + getTotalHatchMul().toFixed(2);
 
       const grid = document.getElementById('hwEggList'); if (!grid) return;
       grid.innerHTML = '';
