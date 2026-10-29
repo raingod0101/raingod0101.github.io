@@ -1,466 +1,1050 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>煙火 | Raingod</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>爆炸煙火 | Raingod</title>
     <style>
-        * { box-sizing: border-box; user-select: none; }
-        body { margin: 0; background: #020205; overflow: hidden; font-family: 'Segoe UI', Roboto, sans-serif; }
-        canvas { display: block; cursor: crosshair; }
-
-        /* HUD 數據列 */
-        #hud {
-            position: absolute; top: 15px; left: 15px; color: #fff;
-            background: rgba(10, 10, 20, 0.85); backdrop-filter: blur(12px);
-            padding: 12px 24px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.15);
-            box-shadow: 0 10px 30px rgba(0,0,0,0.8); pointer-events: none;
-            display: flex; gap: 20px; align-items: center; z-index: 10;
+        :root {
+            --neon: #00f2ff; --pink: #ff007b; --gold: #ffcc00; --purple: #bc13fe;
+            --bg: #020205; --white: #ffffff; --emerald: #00ff88; --orange: #ff6600;
         }
-        .hud-item { display: flex; flex-direction: column; }
-        .hud-label { font-size: 10px; color: #8e8ea0; text-transform: uppercase; letter-spacing: 1px; }
-        .hud-value { font-size: 20px; font-weight: 800; color: #fff; }
-        #money { color: #ffd700; text-shadow: 0 0 12px rgba(255,215,0,0.5); }
-
-        /* COMBO / 救濟金提示 */
-        #combo-popup {
-            position: absolute; top: 85px; left: 20px; color: #00f0ff;
-            font-size: 22px; font-weight: 900; pointer-events: none; opacity: 0;
-            transition: opacity 0.2s, transform 0.2s; transform: scale(0.8);
-            text-shadow: 0 0 15px rgba(0,240,255,0.9); z-index: 10;
+        * { box-sizing: border-box; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+        html, body {
+            margin: 0; padding: 0; height: 100%; overflow: hidden;
+            background: var(--bg); font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex; flex-direction: column;
         }
+        #nav_bar { height: 60px; background: #0a0a14; border-bottom: 1px solid #333; z-index: 100; }
+        #game-container {
+            flex-grow: 1; position: relative; overflow: hidden;
+            cursor: crosshair; touch-action: none;
+        }
+        canvas { display: block; width: 100%; height: 100%; }
 
-        /* 商店面板 */
-        #shop-panel {
-            position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%);
+        #hud { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; padding: 15px; box-sizing: border-box; z-index: 10; }
+        .stat-group { display: flex; flex-direction: column; gap: 8px; pointer-events: auto; }
+        .panel { background: rgba(0, 0, 0, 0.85); border: 1px solid #222; border-left: 4px solid var(--neon); padding: 8px 15px; backdrop-filter: blur(5px); }
+        .label { color: #888; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; }
+        .value { color: #fff; font-size: 18px; font-weight: 900; }
+
+        .ctrl-btn { padding: 10px 14px; background: #111; color: #fff; border: 1px solid var(--pink); cursor: pointer; pointer-events: auto; font-weight: bold; font-size: 12px; transition: 0.2s; }
+        .ctrl-btn:active { background: var(--pink); color: #000; }
+        .ctrl-btn:disabled { color: #777; border-color: #555; cursor: not-allowed; opacity: 0.6; }
+
+        #boss-hud {
+            position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
+            width: 60%; max-width: 500px; display: none; flex-direction: column; align-items: center; z-index: 30;
+        }
+        #boss-name { color: var(--pink); font-weight: 900; letter-spacing: 2px; margin-bottom: 4px; text-shadow: 0 0 10px var(--pink); }
+        #boss-bar-wrap { width: 100%; height: 14px; background: rgba(0,0,0,0.8); border: 2px solid var(--pink); border-radius: 7px; overflow: hidden; }
+        #boss-bar-fill { width: 100%; height: 100%; background: linear-gradient(90deg, var(--pink), var(--purple)); transition: width 0.1s linear; }
+
+        .modal {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 90%; max-width: 500px; height: 75vh;
+            overflow-y: auto; background: rgba(5, 5, 12, 0.98);
+            border: 2px solid var(--neon); padding: 20px; display: none;
+            pointer-events: auto; z-index: 100; touch-action: auto;
+            box-shadow: 0 0 30px rgba(0,242,255,0.2);
+        }
+        .card { background: #0a0a0f; margin-bottom: 10px; padding: 12px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #222; }
+        .card-title { color: var(--neon); font-size: 14px; font-weight: bold; }
+        .btn-act { background: var(--gold); border: none; padding: 8px 12px; font-weight: 900; min-width: 80px; cursor: pointer; }
+        .btn-act:disabled { background: #333; color: #666; cursor: not-allowed; }
+
+        #combo-wrap { position: absolute; bottom: 20px; left: 20px; }
+        .combo-n { font-size: 45px; color: #fff; line-height: 0.7; font-style: italic; font-weight: 900; opacity: 0.5; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-thumb { background: var(--neon); }
+
+        #firework-panel {
+            position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
             background: rgba(8, 8, 16, 0.92); backdrop-filter: blur(16px);
-            padding: 12px; border-radius: 18px; border: 1px solid rgba(255,255,255,0.15);
-            display: flex; gap: 10px; max-width: 98vw; overflow-x: auto;
-            box-shadow: 0 12px 40px rgba(0,0,0,0.9); z-index: 10;
+            padding: 8px 12px; border-radius: 18px; border: 1px solid rgba(255,255,255,0.15);
+            display: flex; gap: 8px; max-width: 98vw; overflow-x: auto;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.9); z-index: 20;
             scrollbar-width: thin; scrollbar-color: rgba(0,240,255,0.4) transparent;
         }
-        #shop-panel::-webkit-scrollbar { height: 6px; }
-        #shop-panel::-webkit-scrollbar-thumb { background: rgba(0,240,255,0.4); border-radius: 3px; }
+        #firework-panel::-webkit-scrollbar { height: 5px; }
+        #firework-panel::-webkit-scrollbar-thumb { background: rgba(0,240,255,0.4); border-radius: 3px; }
 
         .firework-card {
             background: rgba(255,255,255,0.03); border: 2px solid rgba(255,255,255,0.08);
-            border-radius: 12px; padding: 10px; min-width: 125px; text-align: center;
+            border-radius: 10px; padding: 6px 8px; min-width: 105px; text-align: center;
             cursor: pointer; transition: all 0.2s ease; position: relative; color: #fff;
             display: flex; flex-direction: column; justify-content: space-between; flex-shrink: 0;
+            font-size: 10px;
         }
-        .firework-card:hover { transform: translateY(-4px); background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.3); }
-        .firework-card.active { border-color: #00f0ff; box-shadow: 0 0 20px rgba(0, 240, 255, 0.4); background: rgba(0, 240, 255, 0.1); }
+        .firework-card:hover { transform: translateY(-3px); background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.3); }
+        .firework-card.active { border-color: #00f0ff; box-shadow: 0 0 16px rgba(0, 240, 255, 0.4); background: rgba(0, 240, 255, 0.1); }
         .firework-card.locked { opacity: 0.45; filter: grayscale(0.9); }
-        
-        .fw-name { font-weight: 800; font-size: 13px; margin-bottom: 2px; white-space: nowrap; color: #fff; }
-        .fw-cost { font-size: 11px; color: #ffd700; margin-bottom: 6px; }
+        .fw-name { font-weight: 800; font-size: 11px; margin-bottom: 2px; white-space: nowrap; }
+        .fw-cost { font-size: 9px; color: #ffd700; margin-bottom: 3px; }
         .fw-action {
-            font-size: 11px; padding: 5px; border-radius: 6px; background: #2563eb; color: white;
+            font-size: 9px; padding: 3px; border-radius: 4px; background: #2563eb; color: white;
             border: none; cursor: pointer; width: 100%; transition: 0.2s; font-weight: 700;
         }
         .fw-action:disabled { background: #334155; cursor: not-allowed; opacity: 0.6; }
 
-        /* 特殊升級按鈕群 */
         .upgrade-btn {
-            border: none; border-radius: 12px; padding: 8px 14px; color: white;
+            border: none; border-radius: 10px; padding: 6px 10px; color: white;
             font-weight: bold; cursor: pointer; display: flex; flex-direction: column;
-            justify-content: center; align-items: center; min-width: 125px; transition: 0.2s;
-            flex-shrink: 0;
+            justify-content: center; align-items: center; min-width: 105px; transition: 0.2s;
+            flex-shrink: 0; font-size: 10px;
         }
         .auto-upgrade { background: linear-gradient(135deg, #059669, #10b981); }
-        .auto-upgrade:hover { transform: translateY(-3px); box-shadow: 0 0 15px rgba(16, 185, 129, 0.5); }
-        
+        .auto-upgrade:hover { box-shadow: 0 0 12px rgba(16, 185, 129, 0.5); }
         .frenzy-btn { background: linear-gradient(135deg, #d97706, #f59e0b); }
-        .frenzy-btn:hover { transform: translateY(-3px); box-shadow: 0 0 15px rgba(245, 158, 11, 0.5); }
+        .frenzy-btn:hover { box-shadow: 0 0 12px rgba(245, 158, 11, 0.5); }
+        .upgrade-btn:disabled { background: #334155 !important; opacity: 0.5; cursor: not-allowed; }
 
-        .upgrade-btn:disabled { background: #334155 !important; opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+        #combo-popup {
+            position: absolute; top: 85px; left: 20px; color: #00f0ff;
+            font-size: 22px; font-weight: 900; pointer-events: none; opacity: 0;
+            transition: opacity 0.2s, transform 0.2s; transform: scale(0.8);
+            text-shadow: 0 0 15px rgba(0,240,255,0.9); z-index: 15;
+        }
     </style>
 </head>
 <body>
     <link rel="stylesheet" href="menu.css">
     <div id="nav_bar"></div>
     <script src="menu.js"></script>
-    <div id="hud">
-        <div class="hud-item">
-            <span class="hud-label">資金 (MONEY)</span>
-            <span class="hud-value" id="money">\$100</span>
+
+    <div id="game-container">
+        <canvas id="canvas"></canvas>
+        <div id="hud">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <div class="stat-group">
+                    <div class="panel"><div class="label">CREDITS</div><div class="value">$ <span id="money-display">0</span></div></div>
+                    <div class="panel" style="border-left-color: var(--pink);"><div class="label">CLICK DMG</div><div class="value">DMG <span id="damage-display">1</span></div></div>
+                    <div class="panel" style="border-left-color: var(--gold);"><div class="label">TALENT PTS</div><div class="value">TP <span id="tp-display">0</span></div></div>
+                </div>
+                <div class="stat-group">
+                    <button class="ctrl-btn" onclick="toggleModal('shop-window')">商店 (SHOP)</button>
+                    <button class="ctrl-btn" style="border-color:var(--gold)" onclick="toggleModal('talent-window')">天賦 (TALENTS)</button>
+                    <button id="leaderboard-btn" class="ctrl-btn" style="border-color:var(--neon)" onclick="toggleLeaderboard()">登入後查看排行榜</button>
+                    <button id="boss-btn" class="ctrl-btn" style="border-color:var(--pink); background:#200;" onclick="spawnBoss()">召喚 BOSS</button>
+                    <button id="prestige-btn" class="ctrl-btn" style="border-color: var(--gold); display:none;" onclick="doPrestige()">轉生 (ASCEND)</button>
+                </div>
+            </div>
+
+            <div id="boss-hud">
+                <div id="boss-name">BOSS ENTERING...</div>
+                <div id="boss-bar-wrap"><div id="boss-bar-fill"></div></div>
+            </div>
+
+            <div id="combo-wrap">
+                <div class="label" style="color:var(--neon)">CHAIN STREAK</div>
+                <div class="combo-n" id="combo-display">0</div>
+            </div>
+            <div id="combo-popup">COMBO x2.5!</div>
         </div>
-        <div class="hud-item">
-            <span class="hud-label">目前選擇</span>
-            <span class="hud-value" id="current-selected" style="color: #00f0ff; font-size: 15px;">仙女棒</span>
+
+        <div id="firework-panel"></div>
+
+        <div id="shop-window" class="modal">
+            <h2 style="color:#fff; border-bottom: 2px solid var(--neon); padding-bottom:10px; margin-top:0;">基礎強化 (UPGRADES)</h2>
+            <div id="shop-content"></div>
+            <button onclick="toggleModal('shop-window')" style="width:100%; margin-top:20px; padding:12px; background:#222; color:#fff; border:none; cursor:pointer; font-weight:bold;">關閉</button>
         </div>
-        <div class="hud-item">
-            <span class="hud-label">螢幕粒子數</span>
-            <span class="hud-value" id="count">0</span>
+
+        <div id="talent-window" class="modal">
+            <h2 style="color:var(--gold); border-bottom: 2px solid var(--gold); padding-bottom:10px; margin-top:0;">天賦天梯樹 (TALENT TREE)</h2>
+            <p style="color:#aaa; font-size:12px;">透過轉生獲得天賦點數 (TP)，天賦效果跨轉生永久保留。</p>
+            <div id="talent-content"></div>
+            <button onclick="toggleModal('talent-window')" style="width:100%; margin-top:20px; padding:12px; background:#222; color:#fff; border:none; cursor:pointer; font-weight:bold;">關閉</button>
+        </div>
+
+        <div id="leaderboard-window" class="modal">
+            <h2 style="color:var(--neon); border-bottom:2px solid var(--neon); padding-bottom:10px; margin-top:0;">🏆 轉生排行榜</h2>
+            <p id="leaderboard-status" style="color:#aaa; font-size:12px;">登入帳號後即可查看排行榜。</p>
+            <div id="leaderboard-list"></div>
+            <button onclick="refreshLeaderboard()" style="width:100%; margin-top:10px; padding:12px; background:#123; color:#fff; border:1px solid var(--neon); cursor:pointer; font-weight:bold;">重新整理</button>
+            <button onclick="toggleModal('leaderboard-window')" style="width:100%; margin-top:10px; padding:12px; background:#222; color:#fff; border:none; cursor:pointer; font-weight:bold;">關閉</button>
         </div>
     </div>
 
-    <div id="combo-popup">COMBO x2.5!</div>
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d', { alpha: false });
+        const container = document.getElementById('game-container');
 
-    <div id="shop-panel">
-        <button class="upgrade-btn auto-upgrade" id="btn-auto-launch" onclick="upgradeAutoLauncher()">
-            <span style="font-size: 12px;">自動發射陣列</span>
-            <span id="auto-cost" style="font-size: 10px; color: #e2e8f0; margin-top: 2px;">\$150 (Lv.0)</span>
-        </button>
-        <button class="upgrade-btn frenzy-btn" id="btn-frenzy" onclick="upgradeFrenzy()">
-            <span style="font-size: 12px;">多重併發解鎖</span>
-            <span id="frenzy-cost" style="font-size: 10px; color: #e2e8f0; margin-top: 2px;">\$500 (1發/次)</span>
-        </button>
-    </div>
+        const MOB_TYPES = {
+            COMMON:   { name: 'Drone', color: '#00f2ff', hp: 2, reward: 15, size: 30, behavior: 'normal' },
+            ELITE:    { name: 'Hunter', color: '#ff007b', hp: 12, reward: 120, size: 45, behavior: 'fast' },
+            VOID:     { name: 'Void', color: '#bc13fe', hp: 60, reward: 750, size: 55, behavior: 'sine' },
+            MAGMA:    { name: 'Magma', color: '#ff6600', hp: 300, reward: 4500, size: 65, behavior: 'jitter' },
+            SOLAR:    { name: 'Solar', color: '#ffcc00', hp: 1800, reward: 30000, size: 85, behavior: 'pulse' },
+            RAINGOD:  { name: 'RAINGOD', color: '#00ff88', hp: 12000, reward: 250000, size: 140, behavior: 'chaos' },
+            CREATOR:  { name: '創世神', color: '#ffeeaa', hp: 100000, reward: 2500000, size: 180, behavior: 'vortex' },
+            ZENITH:   { name: '絕對頂點', color: '#ffffff', hp: 800000, reward: 20000000, size: 210, behavior: 'chaos' }
+        };
 
-    <canvas id="canvas"></canvas>
+        // 煙火定義：power 決定每顆粒子的傷害（越高越強）
+        const FIREWORKS = [
+            { id: 0,  name: "仙女棒",     cost: 0,        unlockCost: 0,          unlocked: true,  color: "#ffaa00", count: 35,  force: 6,  power: 1,       type: "normal" },
+            { id: 1,  name: "雙倍爆裂",   cost: 35,       unlockCost: 150,        unlocked: false, color: "#00f0ff", count: 50,  force: 8,  power: 3,       type: "split" },
+            { id: 2,  name: "牡丹禮花",   cost: 100,      unlockCost: 600,        unlocked: false, color: "#ff007f", count: 90,  force: 11, power: 8,       type: "peony" },
+            { id: 3,  name: "土星環帶",   cost: 250,      unlockCost: 1500,       unlocked: false, color: "#00ff88", count: 120, force: 10, power: 18,      type: "ring" },
+            { id: 4,  name: "心形密語",   cost: 600,      unlockCost: 3500,       unlocked: false, color: "#ff3366", count: 130, force: 9,  power: 42,      type: "heart" },
+            { id: 5,  name: "金色柳樹",   cost: 1500,     unlockCost: 8000,       unlocked: false, color: "#ffeeaa", count: 160, force: 13, power: 95,      type: "willow" },
+            { id: 6,  name: "七彩連鎖",   cost: 3500,     unlockCost: 20000,      unlocked: false, color: "rainbow", count: 200, force: 15, power: 210,     type: "chain" },
+            { id: 7,  name: "螺旋風暴",   cost: 8000,     unlockCost: 50000,      unlocked: false, color: "#ff9900", count: 220, force: 14, power: 470,     type: "spiral" },
+            { id: 8,  name: "翡翠矩陣",   cost: 20000,    unlockCost: 120000,     unlocked: false, color: "#00ffaa", count: 250, force: 17, power: 1050,    type: "matrix" },
+            { id: 9,  name: "十字星芒",   cost: 45000,    unlockCost: 280000,     unlocked: false, color: "#ffff00", count: 280, force: 16, power: 2350,    type: "cross" },
+            { id: 10, name: "藍色流星雨", cost: 100000,   unlockCost: 650000,     unlocked: false, color: "#3388ff", count: 320, force: 18, power: 5200,    type: "meteor" },
+            { id: 11, name: "紫金盛宴",   cost: 250000,   unlockCost: 1500000,    unlocked: false, color: "#cc44ff", count: 380, force: 20, power: 11500,   type: "peony" },
+            { id: 12, name: "量子方塊",   cost: 600000,   unlockCost: 3800000,    unlocked: false, color: "#00ffff", count: 300, force: 15, power: 28000,   type: "cube" },
+            { id: 13, name: "超新星爆發", cost: 1500000,  unlockCost: 9000000,    unlocked: false, color: "#ffffff", count: 500, force: 24, power: 62000,   type: "supernova" },
+            { id: 14, name: "黑洞引力",   cost: 4000000,  unlockCost: 22000000,   unlocked: false, color: "#aa00ff", count: 450, force: 22, power: 145000,  type: "blackhole" },
+            { id: 15, name: "核爆夜空",   cost: 10000000, unlockCost: 55000000,   unlocked: false, color: "#ff2200", count: 700, force: 28, power: 310000,  type: "nuke" },
+            { id: 16, name: "極光狂想曲", cost: 25000000, unlockCost: 140000000,  unlocked: false, color: "aurora",  count: 850, force: 26, power: 680000,  type: "aurora" },
+            { id: 17, name: "銀河星系",   cost: 65000000, unlockCost: 380000000,  unlocked: false, color: "galaxy",  count: 1000,force: 30, power: 1500000, type: "galaxy" },
+            { id: 18, name: "創世之光",   cost: 180000000,unlockCost: 1000000000, unlocked: false, color: "#ffffff", count: 1400,force: 34, power: 3200000, type: "supernova" },
+            { id: 19, name: "終極宇宙盛宴",cost:500000000,unlockCost: 3000000000, unlocked: false, color: "rainbow",count: 2000,force: 40, power: 7500000, type: "nuke" }
+        ];
 
-<script>
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d', { alpha: false });
-let w, h, entities = [], rockets = [];
+        const SAVE_KEY = 'raingod_fusion_v3_save';
+        const LEADERBOARD_URL = 'https://game-24b43-default-rtdb.firebaseio.com/explosion_clicker_leaderboard';
 
-let gameState = {
-    money: 100,
-    selectedFirework: 0,
-    autoLaunchLevel: 0,
-    autoLaunchTimer: 0,
-    frenzyLevel: 1
-};
+        let gameData = createDefaultGameData();
+        let width, height, combo = 0;
+        let cubes = [], particles = [], floaters = [];
+        let rockets = [], fragments = [];
+        let activeBoss = null;
+        let gameStarted = false;
+        let leaderboardTimer = null;
+        let bossSpawnCount = 0;
+        let bossCooldownTime = 0;
+        let bossCooldownTimer = null;
 
-// 煙火清單（仙女棒成本調整為 0 免費保底）
-const FIREWORKS = [
-    { id: 0,  name: "仙女棒",     cost: 0,        unlockCost: 0,          unlocked: true,  color: "#ffaa00", count: 35,  force: 6,  baseReturn: 5,      type: "normal" },
-    { id: 1,  name: "雙倍爆裂",   cost: 35,       unlockCost: 150,        unlocked: false, color: "#00f0ff", count: 50,  force: 8,  baseReturn: 22,     type: "split" },
-    { id: 2,  name: "牡丹禮花",   cost: 100,      unlockCost: 600,        unlocked: false, color: "#ff007f", count: 90,  force: 11, baseReturn: 65,     type: "peony" },
-    { id: 3,  name: "土星環帶",   cost: 250,      unlockCost: 1500,       unlocked: false, color: "#00ff88", count: 120, force: 10, baseReturn: 160,    type: "ring" },
-    { id: 4,  name: "心形密語",   cost: 600,      unlockCost: 3500,       unlocked: false, color: "#ff3366", count: 130, force: 9,  baseReturn: 400,    type: "heart" },
-    { id: 5,  name: "金色柳樹",   cost: 1500,     unlockCost: 8000,       unlocked: false, color: "#ffeeaa", count: 160, force: 13, baseReturn: 1000,   type: "willow" },
-    { id: 6,  name: "七彩連鎖",   cost: 3500,     unlockCost: 20000,      unlocked: false, color: "rainbow", count: 200, force: 15, baseReturn: 2300,   type: "chain" },
-    { id: 7,  name: "螺旋風暴",   cost: 8000,     unlockCost: 50000,      unlocked: false, color: "#ff9900", count: 220, force: 14, baseReturn: 5300,   type: "spiral" },
-    { id: 8,  name: "翡翠矩陣",   cost: 20000,    unlockCost: 120000,     unlocked: false, color: "#00ffaa", count: 250, force: 17, baseReturn: 13500,  type: "matrix" },
-    { id: 9,  name: "十字星芒",   cost: 45000,    unlockCost: 280000,     unlocked: false, color: "#ffff00", count: 280, force: 16, baseReturn: 31000,  type: "cross" },
-    { id: 10, name: "藍色流星雨", cost: 100000,   unlockCost: 650000,     unlocked: false, color: "#3388ff", count: 320, force: 18, baseReturn: 70000,  type: "meteor" },
-    { id: 11, name: "紫金盛宴",   cost: 250000,   unlockCost: 1500000,    unlocked: false, color: "#cc44ff", count: 380, force: 20, baseReturn: 175000, type: "peony" },
-    { id: 12, name: "量子方塊",   cost: 600000,   unlockCost: 3800000,    unlocked: false, color: "#00ffff", count: 300, force: 15, baseReturn: 420000, type: "cube" },
-    { id: 13, name: "超新星爆發", cost: 1500000,  unlockCost: 9000000,    unlocked: false, color: "#ffffff", count: 500, force: 24, baseReturn: 1100000,type: "supernova" },
-    { id: 14, name: "黑洞引力",   cost: 4000000,  unlockCost: 22000000,   unlocked: false, color: "#aa00ff", count: 450, force: 22, baseReturn: 3000000,type: "blackhole" },
-    { id: 15, name: "核爆夜空",   cost: 10000000, unlockCost: 55000000,   unlocked: false, color: "#ff2200", count: 700, force: 28, baseReturn: 7500000,type: "nuke" },
-    { id: 16, name: "極光狂想曲", cost: 25000000, unlockCost: 140000000,  unlocked: false, color: "aurora",  count: 850, force: 26, baseReturn: 19000000,type: "aurora" },
-    { id: 17, name: "銀河星系",   cost: 65000000, unlockCost: 380000000,  unlocked: false, color: "galaxy",  count: 1000,force: 30, baseReturn: 50000000,type: "galaxy" },
-    { id: 18, name: "創世之光",   cost: 180000000,unlockCost: 1000000000, unlocked: false, color: "#ffffff", count: 1400,force: 34, baseReturn: 140000000,type: "supernova" },
-    { id: 19, name: "終極宇宙盛宴",cost:500000000,unlockCost: 3000000000, unlocked: false, color: "rainbow",count: 2000,force: 40, baseReturn: 400000000,type: "nuke" }
-];
+        let fireworkState = {
+            selectedFirework: 0,
+            autoLaunchLevel: 0,
+            autoLaunchTimer: 0,
+            frenzyLevel: 1
+        };
 
-const resize = () => { w = canvas.width = window.innerWidth; h = canvas.height = window.innerHeight; };
-window.onresize = resize;
-resize();
-
-// Rocket
-class Rocket {
-    constructor(startX, startY, targetX, targetY, fwConfig) {
-        this.x = startX; this.y = startY;
-        this.targetY = targetY; this.targetX = targetX;
-        this.fw = fwConfig;
-        
-        const angle = Math.atan2(targetY - startY, targetX - startX);
-        const dist = Math.hypot(targetX - startX, targetY - startY);
-        const speed = Math.min(dist / 20, 22);
-        
-        this.vx = Math.cos(angle) * speed;
-        this.vy = Math.sin(angle) * speed;
-        this.dead = false;
-    }
-    update() {
-        this.x += this.vx; this.y += this.vy;
-        if (Math.random() < 0.6) {
-            entities.push(new Fragment(this.x, this.y, (Math.random()-0.5)*1.5, (Math.random()-0.5)*1.5 + 1, "#ffaa00", 2, 0.04, false, 0, 0.05, 1));
+        function createDefaultGameData() {
+            return {
+                money: 0, totalEarned: 0, prestige: 1, tp: 0,
+                upgrades: {
+                    range: { lv: 1, cost: 100, mult: 1.45, name: "共振距離", desc: "擴大連鎖爆炸的傳播範圍" },
+                    luck: { lv: 1, cost: 200, mult: 1.8, name: "命運干涉", desc: "降低弱怪機率，大幅提升稀有與極限怪出現率" }
+                },
+                talents: {
+                    critDmg: { lv: 0, max: 10, cost: 1, name: "超頻暴擊", desc: "點擊暴擊傷害倍率 +50% / 級" },
+                    chainAtk: { lv: 0, max: 5, cost: 2, name: "量子連鎖", desc: "連鎖傳導傷害提升 +15% / 級" },
+                    goldMult: { lv: 0, max: 10, cost: 1, name: "點金術", desc: "所有金幣收益增加 +20% / 級" }
+                },
+                fireworks: FIREWORKS.map(f => ({ unlocked: f.unlocked })),
+                fireworkUpgrades: { autoLaunchLevel: 0, frenzyLevel: 1 }
+            };
         }
-        if (this.vy < 0 && this.y <= this.targetY) {
-            this.explode();
-            this.dead = true;
+
+        async function init() {
+            width = canvas.width = container.clientWidth;
+            height = canvas.height = container.clientHeight;
+            await window.raingodFirebaseReady;
+            await window.raingodAuthReady;
+            window.raingodBindStorage('explosion-clicker', [SAVE_KEY], { [SAVE_KEY]: null }, data => {
+                gameData = createDefaultGameData();
+                loadGame(data[SAVE_KEY]);
+                gameStarted = true;
+                refreshUI();
+                renderFireworkShop();
+                scheduleLeaderboardUpload();
+            });
+            window.raingodOnAuthStateChanged(user => {
+                const button = document.getElementById('leaderboard-btn');
+                button.textContent = user ? '排行榜 (RANK)' : '登入後查看排行榜';
+                if (!user) {
+                    document.getElementById('leaderboard-window').style.display = 'none';
+                    document.getElementById('leaderboard-list').replaceChildren();
+                    document.getElementById('leaderboard-status').textContent = '登入帳號後即可查看排行榜。';
+                }
+            });
         }
-    }
-    explode() {
-        const heightBonus = this.y < h * 0.4 ? 1.3 : (this.y < h * 0.7 ? 1.1 : 0.9);
-        createExplosion(this.x, this.y, this.fw, heightBonus);
-    }
-    draw() {
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(this.x - 1.5, this.y - 1.5, 3, 9);
-    }
-}
 
-// Fragment
-class Fragment {
-    constructor(x, y, vx, vy, color, size, lifeDecay = 0.015, split = false, earnings = 0, gravity = 0.05, comboMult = 1) {
-        this.x = x; this.y = y;
-        this.vx = vx; this.vy = vy;
-        this.color = color;
-        this.size = size;
-        this.life = 1.0;
-        this.lifeDecay = lifeDecay;
-        this.split = split;
-        this.earnings = earnings;
-        this.gravity = gravity;
-        this.comboMult = comboMult;
-        this.checkedCombo = false;
-    }
-    update() {
-        this.x += this.vx; this.y += this.vy;
-        this.vy += this.gravity;
-        this.vx *= 0.98; this.vy *= 0.98;
-        this.life -= this.lifeDecay;
+        function saveGame() {
+            if (!gameStarted) return;
+            gameData.fireworks = FIREWORKS.map(f => ({ unlocked: f.unlocked }));
+            gameData.fireworkUpgrades = { autoLaunchLevel: fireworkState.autoLaunchLevel, frenzyLevel: fireworkState.frenzyLevel };
+            localStorage.setItem(SAVE_KEY, JSON.stringify(gameData));
+            scheduleLeaderboardUpload();
+        }
 
-        if(this.x < 0 || this.x > w) this.vx *= -0.7;
-        if(this.y < 0 || this.y > h) this.vy *= -0.7;
+        function loadGame() {
+            const localData = localStorage.getItem(SAVE_KEY);
+            if (localData) {
+                try {
+                    const parsed = JSON.parse(localData);
+                    gameData = { ...gameData, ...parsed };
+                    if (!gameData.upgrades.luck) {
+                        gameData.upgrades.luck = { lv: 1, cost: 200, mult: 1.8, name: "命運干涉", desc: "降低弱怪機率，大幅提升稀有與極限怪出現率" };
+                    }
+                    if (gameData.fireworks) {
+                        gameData.fireworks.forEach((fw, i) => { if (FIREWORKS[i]) FIREWORKS[i].unlocked = fw.unlocked; });
+                    }
+                    if (gameData.fireworkUpgrades) {
+                        fireworkState.autoLaunchLevel = gameData.fireworkUpgrades.autoLaunchLevel || 0;
+                        fireworkState.frenzyLevel = gameData.fireworkUpgrades.frenzyLevel || 1;
+                    }
+                } catch(e) { console.error(e); }
+            }
+        }
 
-        if (!this.checkedCombo && this.life > 0.8) {
-            this.checkedCombo = true;
-            let nearby = 0;
-            for (let i = 0; i < entities.length; i += 8) {
-                let other = entities[i];
-                if (other !== this && Math.abs(other.x - this.x) < 45 && Math.abs(other.y - this.y) < 45) {
-                    nearby++;
+        // 點擊基礎傷害（很低，主要靠煙火）
+        function getAtkPower() {
+            return 1 + Math.floor(gameData.prestige * 0.5);
+        }
+
+        function getUpgradeCost(upKey) {
+            const up = gameData.upgrades[upKey];
+            return Math.floor(up.cost * Math.pow(up.mult, up.lv - 1));
+        }
+
+        // ---------- 方塊 ----------
+        class Cube {
+            constructor() {
+                const luckLv = gameData.upgrades.luck.lv;
+                const weights = {
+                    COMMON:  Math.max(10, 600 - luckLv * 80),
+                    ELITE:   Math.max(20, 300 - luckLv * 30),
+                    VOID:    150 + luckLv * 40,
+                    MAGMA:   80 + luckLv * 50,
+                    SOLAR:   30 + luckLv * 40,
+                    RAINGOD: 5 + luckLv * 25,
+                    CREATOR: 1 + luckLv * 10,
+                    ZENITH:  0.2 + luckLv * 4
+                };
+                let totalWeight = 0;
+                for (let k in weights) totalWeight += weights[k];
+                let randomNum = Math.random() * totalWeight;
+                let chosenType = MOB_TYPES.COMMON;
+                for (let k in weights) {
+                    if (randomNum < weights[k]) { chosenType = MOB_TYPES[k]; break; }
+                    randomNum -= weights[k];
+                }
+                this.type = chosenType;
+                this.x = Math.random() * (width - 100) + 50;
+                this.y = Math.random() * (height - 100) + 50;
+                this.size = this.type.size;
+                const hpScale = Math.pow(1.15, gameData.prestige - 1);
+                this.hp = Math.max(1, Math.floor(this.type.hp * hpScale));
+                this.maxHp = this.hp;
+                this.color = this.type.color;
+                this.vx = (Math.random() - 0.5) * 2;
+                this.vy = (Math.random() - 0.5) * 2;
+                this.tick = Math.random() * 100;
+                this.dead = false;
+            }
+            update() {
+                this.tick += 0.05;
+                switch(this.type.behavior) {
+                    case 'fast': this.x += this.vx * 2.5; this.y += this.vy * 2.5; break;
+                    case 'sine': this.x += this.vx; this.y += Math.sin(this.tick) * 4; break;
+                    case 'jitter': this.x += this.vx + (Math.random()-0.5)*4; this.y += this.vy + (Math.random()-0.5)*4; break;
+                    case 'pulse': this.size = this.type.size + Math.sin(this.tick * 2) * 6; this.x += this.vx; this.y += this.vy; break;
+                    case 'vortex': this.x += this.vx + Math.cos(this.tick) * 3; this.y += this.vy + Math.sin(this.tick) * 3; break;
+                    case 'chaos': this.vx += (Math.random()-0.5)*0.3; this.vy += (Math.random()-0.5)*0.3; this.x += this.vx; this.y += this.vy; break;
+                    default: this.x += this.vx; this.y += this.vy;
+                }
+                if(this.x < 30 || this.x > width - 30) this.vx *= -1;
+                if(this.y < 30 || this.y > height - 30) this.vy *= -1;
+            }
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.strokeStyle = this.color;
+                ctx.lineWidth = 3;
+                ctx.shadowBlur = 10; ctx.shadowColor = this.color;
+                ctx.strokeRect(-this.size/2, -this.size/2, this.size, this.size);
+                let p = Math.max(0, this.hp / this.maxHp);
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = '#111'; ctx.fillRect(-20, -this.size/2 - 12, 40, 5);
+                ctx.fillStyle = this.color; ctx.fillRect(-20, -this.size/2 - 12, 40 * p, 5);
+                ctx.restore();
+            }
+            explode() {
+                combo++;
+                let goldBonus = 1 + (gameData.talents.goldMult.lv * 0.2);
+                let reward = this.type.reward * Math.pow(1.5, gameData.prestige - 1) * goldBonus;
+                gameData.money += reward;
+                gameData.totalEarned += reward;
+                spawnEffect(this.x, this.y, this.color);
+                spawnText(this.x, this.y, `+$${Math.floor(reward).toLocaleString()}`, this.color);
+                let range = 100 + (gameData.upgrades.range.lv * 20);
+                let chainFactor = 0.6 + (gameData.talents.chainAtk.lv * 0.15);
+                cubes.forEach(c => {
+                    if(!c.dead && Math.hypot(this.x - c.x, this.y - c.y) < range) {
+                        setTimeout(() => c.takeDamage(getAtkPower() * chainFactor), 60);
+                    }
+                });
+                if(gameData.totalEarned >= 50000) document.getElementById('prestige-btn').style.display = 'block';
+                refreshUI(); saveGame();
+            }
+            takeDamage(dmg) {
+                if(this.dead) return;
+                let isCrit = Math.random() < 0.25;
+                if(isCrit) {
+                    let critMult = 2.0 + (gameData.talents.critDmg.lv * 0.5);
+                    dmg *= critMult;
+                    spawnText(this.x, this.y - 10, `CRIT! ${Math.floor(dmg).toLocaleString()}`, '#ffcc00', 16);
+                }
+                this.hp -= dmg;
+                if(this.hp <= 0) { this.dead = true; this.explode(); }
+            }
+        }
+
+        // ---------- Boss ----------
+        class Boss {
+            constructor() {
+                this.name = `【滅世核心·虛空主宰 MK-${bossSpawnCount + 1}】`;
+                this.x = width / 2;
+                this.y = height / 3;
+                this.size = 180;
+                let baseHp = 150000;
+                let scale = Math.pow(1.8, gameData.prestige - 1) * Math.pow(1.8, bossSpawnCount);
+                this.maxHp = Math.floor(baseHp * scale);
+                this.hp = this.maxHp;
+                this.color = "#ff007b";
+                this.dead = false;
+                document.getElementById('boss-hud').style.display = 'flex';
+                document.getElementById('boss-name').innerText = this.name;
+                this.updateBar();
+            }
+            updateBar() {
+                let pct = Math.max(0, (this.hp / this.maxHp) * 100);
+                document.getElementById('boss-bar-fill').style.width = `${pct}%`;
+            }
+            update() {
+                this.x += Math.sin(Date.now() * 0.002) * 3;
+                this.y += Math.cos(Date.now() * 0.001) * 1.5;
+            }
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.strokeStyle = this.color;
+                ctx.lineWidth = 6;
+                ctx.shadowBlur = 25; ctx.shadowColor = this.color;
+                ctx.strokeRect(-this.size/2, -this.size/2, this.size, this.size);
+                ctx.rotate(Date.now() * 0.001);
+                ctx.strokeStyle = '#00f2ff';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(-this.size/4, -this.size/4, this.size/2, this.size/2);
+                ctx.restore();
+            }
+            takeDamage(dmg) {
+                if(this.dead) return;
+                this.hp -= dmg;
+                this.updateBar();
+                spawnEffect(this.x + (Math.random()-0.5)*100, this.y + (Math.random()-0.5)*100, this.color);
+                if(this.hp <= 0) { this.dead = true; this.onDefeat(); }
+            }
+            onDefeat() {
+                document.getElementById('boss-hud').style.display = 'none';
+                activeBoss = null;
+                bossSpawnCount++;
+                let rewardMoney = this.maxHp * 1.2;
+                let rewardTP = 2 + Math.floor(gameData.prestige * 1.2);
+                gameData.money += rewardMoney;
+                gameData.tp += rewardTP;
+                spawnText(width/2, height/2, `BOSS CLEAR! +${rewardTP} TP`, '#ffcc00', 30);
+                startBossCooldown(30);
+                refreshUI(); saveGame();
+            }
+        }
+
+        function startBossCooldown(seconds) {
+            bossCooldownTime = seconds;
+            const btn = document.getElementById('boss-btn');
+            btn.disabled = true;
+            clearInterval(bossCooldownTimer);
+            bossCooldownTimer = setInterval(() => {
+                bossCooldownTime--;
+                if (bossCooldownTime <= 0) {
+                    clearInterval(bossCooldownTimer);
+                    btn.disabled = false;
+                    btn.innerText = '召喚 BOSS';
+                } else {
+                    btn.innerText = `冷卻中 (${bossCooldownTime}s)`;
+                }
+            }, 1000);
+        }
+
+        function spawnBoss() {
+            if(activeBoss || bossCooldownTime > 0) return;
+            activeBoss = new Boss();
+        }
+
+        // ---------- 煙火火箭與粒子 ----------
+        class Rocket {
+            constructor(startX, startY, targetX, targetY, fwConfig) {
+                this.x = startX; this.y = startY;
+                this.targetY = targetY; this.targetX = targetX;
+                this.fw = fwConfig;
+                const angle = Math.atan2(targetY - startY, targetX - startX);
+                const dist = Math.hypot(targetX - startX, targetY - startY);
+                const speed = Math.min(dist / 20, 22);
+                this.vx = Math.cos(angle) * speed;
+                this.vy = Math.sin(angle) * speed;
+                this.dead = false;
+            }
+            update() {
+                this.x += this.vx; this.y += this.vy;
+                if (Math.random() < 0.6) {
+                    fragments.push(new Fragment(this.x, this.y, (Math.random()-0.5)*1.5, (Math.random()-0.5)*1.5 + 1, "#ffaa00", 2, 0.04, 0, 0.05, 1));
+                }
+                if (this.vy < 0 && this.y <= this.targetY) {
+                    this.explode();
+                    this.dead = true;
                 }
             }
-            if (nearby > 15) this.comboMult *= 2.5;
-            else if (nearby > 6) this.comboMult *= 1.5;
-
-            if (this.comboMult > 2.0) showMsg(`COMBO x${this.comboMult.toFixed(1)}!`);
+            explode() {
+                const heightBonus = this.y < height * 0.4 ? 1.3 : (this.y < height * 0.7 ? 1.1 : 0.9);
+                createFireworkExplosion(this.x, this.y, this.fw, heightBonus);
+            }
+            draw() {
+                ctx.fillStyle = "#ffffff";
+                ctx.fillRect(this.x - 1.5, this.y - 1.5, 3, 9);
+            }
         }
 
-        if (this.life <= 0 && this.earnings > 0) {
-            addMoney(this.earnings * this.comboMult);
-            this.earnings = 0;
-        }
-    }
-}
+        // 煙火粒子：碰到怪物即消失並造成傷害
+        class Fragment {
+            constructor(x, y, vx, vy, color, size, lifeDecay = 0.015, damage = 0, gravity = 0.05, comboMult = 1) {
+                this.x = x; this.y = y;
+                this.vx = vx; this.vy = vy;
+                this.color = color;
+                this.size = size;
+                this.life = 1.0;
+                this.lifeDecay = lifeDecay;
+                this.damage = damage;
+                this.gravity = gravity;
+                this.comboMult = comboMult;
+                this.checkedCombo = false;
+                this.hit = false; // 是否已擊中目標
+            }
+            update() {
+                if (this.hit) return; // 已擊中則不再更新
 
-function createExplosion(x, y, fw, heightBonus) {
-    const isRainbow = fw.color === "rainbow";
-    const isAurora = fw.color === "aurora";
-    const isGalaxy = fw.color === "galaxy";
-    const earnPerParticle = (fw.baseReturn * heightBonus) / fw.count;
+                this.x += this.vx; this.y += this.vy;
+                this.vy += this.gravity;
+                this.vx *= 0.98; this.vy *= 0.98;
+                this.life -= this.lifeDecay;
 
-    for(let i = 0; i < fw.count; i++) {
-        let angle = Math.random() * Math.PI * 2;
-        let speed = (Math.random() * 0.8 + 0.2) * fw.force;
-        let color = fw.color;
+                if(this.x < 0 || this.x > width) this.vx *= -0.7;
+                if(this.y < 0 || this.y > height) this.vy *= -0.7;
 
-        if (isRainbow) color = `hsl(${Math.random() * 360}, 100%, 65%)`;
-        else if (isAurora) color = `hsl(${120 + Math.random() * 100}, 100%, 60%)`;
-        else if (isGalaxy) color = `hsl(${240 + Math.random() * 80}, 100%, 70%)`;
+                // 碰撞判定：先檢查 Boss，再檢查方塊
+                if (this.damage > 0) {
+                    // Boss
+                    if (activeBoss && !activeBoss.dead) {
+                        if (Math.hypot(this.x - activeBoss.x, this.y - activeBoss.y) < activeBoss.size/2 + this.size) {
+                            const dmg = this.damage * this.comboMult;
+                            activeBoss.takeDamage(dmg);
+                            spawnText(activeBoss.x, activeBoss.y - 30, `-${Math.floor(dmg).toLocaleString()}`, '#ff6600', 16);
+                            this.hit = true;
+                            return;
+                        }
+                    }
+                    // 方塊
+                    for (let i = cubes.length - 1; i >= 0; i--) {
+                        const c = cubes[i];
+                        if (!c.dead && Math.hypot(this.x - c.x, this.y - c.y) < c.size/2 + this.size) {
+                            const dmg = this.damage * this.comboMult;
+                            c.takeDamage(dmg);
+                            spawnText(c.x, c.y - 15, `-${Math.floor(dmg).toLocaleString()}`, '#ff6600', 12);
+                            this.hit = true;
+                            return;
+                        }
+                    }
+                }
 
-        let decay = 0.01 + Math.random() * 0.015;
-        let gravity = 0.04;
-        let size = Math.random() * 2 + 2;
-
-        if (fw.type === "ring") {
-            angle = (i / fw.count) * Math.PI * 2;
-            speed = fw.force * (0.9 + Math.random() * 0.2);
-        } else if (fw.type === "heart") {
-            const t = (i / fw.count) * Math.PI * 2;
-            const hx = 16 * Math.pow(Math.sin(t), 3);
-            const hy = -(13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t));
-            angle = Math.atan2(hy, hx);
-            speed = Math.hypot(hx, hy) * (fw.force / 16);
-        } else if (fw.type === "cross") {
-            angle = Math.floor(Math.random() * 4) * (Math.PI / 2) + (Math.random() - 0.5) * 0.1;
-        } else if (fw.type === "cube") {
-            const side = Math.floor(Math.random() * 4);
-            angle = side * (Math.PI / 2) + (Math.random() * 0.4);
-            speed = (0.5 + Math.random() * 0.5) * fw.force;
-        } else if (fw.type === "spiral") {
-            angle = i * 0.2;
-            speed = (i / fw.count) * fw.force;
-        } else if (fw.type === "blackhole") {
-            gravity = -0.02;
-            decay = 0.005;
-        } else if (fw.type === "willow") {
-            decay = 0.006; gravity = 0.02; size = 1.8;
-        } else if (fw.type === "supernova" || fw.type === "nuke") {
-            size = Math.random() * 4 + 3; decay = 0.006;
-        }
-
-        entities.push(new Fragment(
-            x, y, 
-            Math.cos(angle) * speed, 
-            Math.sin(angle) * speed, 
-            color, size, decay,
-            fw.type === "split" || fw.type === "chain",
-            earnPerParticle, gravity, 1
-        ));
-    }
-}
-
-function showMsg(text) {
-    const popup = document.getElementById('combo-popup');
-    popup.innerText = text;
-    popup.style.opacity = '1';
-    popup.style.transform = 'scale(1.1)';
-    clearTimeout(window.comboTimer);
-    window.comboTimer = setTimeout(() => {
-        popup.style.opacity = '0';
-        popup.style.transform = 'scale(0.8)';
-    }, 900);
-}
-
-canvas.addEventListener('mousedown', (e) => {
-    if (e.clientY > window.innerHeight - 90) return;
-
-    const fw = FIREWORKS[gameState.selectedFirework];
-    const totalCost = fw.cost * gameState.frenzyLevel;
-
-    if (gameState.money >= totalCost) {
-        addMoney(-totalCost);
-        for(let i = 0; i < gameState.frenzyLevel; i++) {
-            const offsetX = (Math.random() - 0.5) * 120;
-            const offsetY = (Math.random() - 0.5) * 80;
-            rockets.push(new Rocket(w / 2, h, e.clientX + offsetX, e.clientY + offsetY, fw));
-        }
-    }
-});
-
-function addMoney(amount) {
-    gameState.money += amount;
-
-    // 【破產救援機制】錢少於 \$10 且畫面空了，自動補助 \$20 救援金！
-    if (gameState.money < 10 && entities.length === 0 && rockets.length === 0) {
-        gameState.money += 20;
-        showMsg("獲得破產救濟金 \$20！");
-    }
-
-    document.getElementById('money').innerText = `$${Math.floor(gameState.money).toLocaleString()}`;
-    updateShopUI();
-}
-
-function upgradeAutoLauncher() {
-    const cost = Math.floor(150 * Math.pow(1.8, gameState.autoLaunchLevel));
-    if (gameState.money >= cost) {
-        addMoney(-cost);
-        gameState.autoLaunchLevel++;
-        document.getElementById('auto-cost').innerText = `$${Math.floor(150 * Math.pow(1.8, gameState.autoLaunchLevel)).toLocaleString()} (Lv.${gameState.autoLaunchLevel})`;
-    }
-}
-
-function upgradeFrenzy() {
-    const cost = Math.floor(500 * Math.pow(2.5, gameState.frenzyLevel));
-    if (gameState.money >= cost) {
-        addMoney(-cost);
-        gameState.frenzyLevel++;
-        document.getElementById('frenzy-cost').innerText = `$${Math.floor(500 * Math.pow(2.5, gameState.frenzyLevel)).toLocaleString()} (${gameState.frenzyLevel}發/次)`;
-    }
-}
-
-function selectOrUnlockFW(id) {
-    const fw = FIREWORKS[id];
-    if (!fw.unlocked) {
-        if (gameState.money >= fw.unlockCost) {
-            addMoney(-fw.unlockCost);
-            fw.unlocked = true;
-            gameState.selectedFirework = id;
-            renderShop();
-        }
-    } else {
-        gameState.selectedFirework = id;
-        document.getElementById('current-selected').innerText = fw.name;
-        renderShop();
-    }
-}
-
-function renderShop() {
-    const panel = document.getElementById('shop-panel');
-    const existingCards = panel.querySelectorAll('.firework-card');
-    existingCards.forEach(c => c.remove());
-
-    FIREWORKS.forEach((fw) => {
-        const card = document.createElement('div');
-        card.className = `firework-card ${fw.unlocked ? '' : 'locked'} ${gameState.selectedFirework === fw.id ? 'active' : ''}`;
-        
-        let actionBtnText = fw.unlocked ? (gameState.selectedFirework === fw.id ? '裝備中' : '選擇') : `解鎖 $${fw.unlockCost.toLocaleString()}`;
-        
-        card.innerHTML = `
-            <div class="fw-name">${fw.name}</div>
-            <div class="fw-cost">${fw.cost === 0 ? '免費' : '單發 $' + fw.cost.toLocaleString()}</div>
-            <button class="fw-action" ${fw.unlocked && gameState.selectedFirework === fw.id ? 'disabled' : ''}>${actionBtnText}</button>
-        `;
-        
-        card.onclick = () => selectOrUnlockFW(fw.id);
-        panel.insertBefore(card, document.getElementById('btn-auto-launch'));
-    });
-}
-
-function updateShopUI() {
-    const btnAuto = document.getElementById('btn-auto-launch');
-    const autoCost = Math.floor(150 * Math.pow(1.8, gameState.autoLaunchLevel));
-    btnAuto.disabled = gameState.money < autoCost;
-
-    const btnFrenzy = document.getElementById('btn-frenzy');
-    const frenzyCost = Math.floor(500 * Math.pow(2.5, gameState.frenzyLevel));
-    btnFrenzy.disabled = gameState.money < frenzyCost;
-
-    const cards = document.querySelectorAll('.firework-card');
-    cards.forEach((card, index) => {
-        const fw = FIREWORKS[index];
-        const btn = card.querySelector('.fw-action');
-        if (!fw.unlocked) {
-            btn.disabled = gameState.money < fw.unlockCost;
-        }
-    });
-}
-
-function loop() {
-    ctx.fillStyle = 'rgba(2, 2, 5, 0.2)';
-    ctx.fillRect(0, 0, w, h);
-
-    if (gameState.autoLaunchLevel > 0) {
-        gameState.autoLaunchTimer++;
-        const interval = Math.max(5, 60 - gameState.autoLaunchLevel * 6);
-        if (gameState.autoLaunchTimer >= interval) {
-            gameState.autoLaunchTimer = 0;
-            const unlockedFWs = FIREWORKS.filter(f => f.unlocked);
-            const randomFW = unlockedFWs[Math.floor(Math.random() * unlockedFWs.length)];
-            const rx = Math.random() * (w * 0.85) + w * 0.075;
-            const ry = Math.random() * (h * 0.55) + h * 0.1;
-            rockets.push(new Rocket(w / 2, h, rx, ry, randomFW));
-        }
-    }
-
-    for(let i = rockets.length - 1; i >= 0; i--) {
-        rockets[i].update();
-        rockets[i].draw();
-        if(rockets[i].dead) rockets.splice(i, 1);
-    }
-
-    const nextEntities = [];
-    ctx.globalCompositeOperation = 'lighter';
-
-    for(let i = 0; i < entities.length; i++) {
-        const p = entities[i];
-        p.update();
-
-        if(p.split && p.life < 0.45 && Math.random() > 0.96) {
-            const smallFW = { count: 3, force: 4, color: p.color, baseReturn: p.earnings * 3, type: 'normal' };
-            createExplosion(p.x, p.y, smallFW, 1.0);
-            p.split = false;
+                // Combo 判定（僅在未擊中時）
+                if (!this.checkedCombo && this.life > 0.8) {
+                    this.checkedCombo = true;
+                    let nearby = 0;
+                    for (let i = 0; i < fragments.length; i += 8) {
+                        let other = fragments[i];
+                        if (other !== this && Math.abs(other.x - this.x) < 45 && Math.abs(other.y - this.y) < 45) nearby++;
+                    }
+                    if (nearby > 15) this.comboMult *= 2.5;
+                    else if (nearby > 6) this.comboMult *= 1.5;
+                    if (this.comboMult > 2.0) showComboMsg(`COMBO x${this.comboMult.toFixed(1)}!`);
+                }
+            }
         }
 
-        if(p.life > 0) {
-            ctx.fillStyle = p.color;
-            ctx.globalAlpha = Math.max(0, p.life);
-            ctx.fillRect(p.x, p.y, p.size, p.size);
-            nextEntities.push(p);
+        function createFireworkExplosion(x, y, fw, heightBonus) {
+            const isRainbow = fw.color === "rainbow";
+            const isAurora = fw.color === "aurora";
+            const isGalaxy = fw.color === "galaxy";
+            // 每顆粒子的傷害 = 煙火 power * 高度加成
+            const particleDamage = Math.floor(fw.power * heightBonus);
+
+            for(let i = 0; i < fw.count; i++) {
+                let angle = Math.random() * Math.PI * 2;
+                let speed = (Math.random() * 0.8 + 0.2) * fw.force;
+                let color = fw.color;
+
+                if (isRainbow) color = `hsl(${Math.random() * 360}, 100%, 65%)`;
+                else if (isAurora) color = `hsl(${120 + Math.random() * 100}, 100%, 60%)`;
+                else if (isGalaxy) color = `hsl(${240 + Math.random() * 80}, 100%, 70%)`;
+
+                let decay = 0.01 + Math.random() * 0.015;
+                let gravity = 0.04;
+                let size = Math.random() * 2 + 2;
+
+                if (fw.type === "ring") {
+                    angle = (i / fw.count) * Math.PI * 2;
+                    speed = fw.force * (0.9 + Math.random() * 0.2);
+                } else if (fw.type === "heart") {
+                    const t = (i / fw.count) * Math.PI * 2;
+                    const hx = 16 * Math.pow(Math.sin(t), 3);
+                    const hy = -(13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t));
+                    angle = Math.atan2(hy, hx);
+                    speed = Math.hypot(hx, hy) * (fw.force / 16);
+                } else if (fw.type === "cross") {
+                    angle = Math.floor(Math.random() * 4) * (Math.PI / 2) + (Math.random() - 0.5) * 0.1;
+                } else if (fw.type === "cube") {
+                    const side = Math.floor(Math.random() * 4);
+                    angle = side * (Math.PI / 2) + (Math.random() * 0.4);
+                    speed = (0.5 + Math.random() * 0.5) * fw.force;
+                } else if (fw.type === "spiral") {
+                    angle = i * 0.2;
+                    speed = (i / fw.count) * fw.force;
+                } else if (fw.type === "blackhole") {
+                    gravity = -0.02;
+                    decay = 0.005;
+                } else if (fw.type === "willow") {
+                    decay = 0.006; gravity = 0.02; size = 1.8;
+                } else if (fw.type === "supernova" || fw.type === "nuke") {
+                    size = Math.random() * 4 + 3; decay = 0.006;
+                }
+
+                fragments.push(new Fragment(
+                    x, y,
+                    Math.cos(angle) * speed,
+                    Math.sin(angle) * speed,
+                    color, size, decay,
+                    particleDamage,
+                    gravity, 1
+                ));
+            }
         }
-    }
 
-    ctx.globalAlpha = 1.0;
-    ctx.globalCompositeOperation = 'source-over';
-    entities = nextEntities;
+        function showComboMsg(text) {
+            const popup = document.getElementById('combo-popup');
+            popup.innerText = text;
+            popup.style.opacity = '1';
+            popup.style.transform = 'scale(1.1)';
+            clearTimeout(window.comboTimer);
+            window.comboTimer = setTimeout(() => {
+                popup.style.opacity = '0';
+                popup.style.transform = 'scale(0.8)';
+            }, 900);
+        }
 
-    document.getElementById('count').innerText = (entities.length + rockets.length).toLocaleString();
+        // ---------- 金錢與 UI ----------
+        function addMoney(amount) {
+            gameData.money += amount;
+            gameData.totalEarned += Math.max(0, amount);
+            if (gameData.money < 10 && fragments.length === 0 && rockets.length === 0) {
+                gameData.money += 20;
+                showComboMsg("獲得破產救濟金 $20！");
+            }
+            refreshUI();
+            saveGame();
+        }
 
-    requestAnimationFrame(loop);
-}
+        function refreshUI() {
+            document.getElementById('money-display').innerText = Math.floor(gameData.money).toLocaleString();
+            document.getElementById('damage-display').innerText = Math.floor(getAtkPower()).toLocaleString();
+            document.getElementById('tp-display').innerText = gameData.tp;
+            document.getElementById('combo-display').innerText = combo;
+            if(gameData.totalEarned >= 50000) document.getElementById('prestige-btn').style.display = 'block';
+        }
 
-renderShop();
-updateShopUI();
-loop();
-</script>
+        function spawnEffect(x, y, color) {
+            for(let i=0; i<12; i++) {
+                particles.push({ x, y, vx:(Math.random()-0.5)*10, vy:(Math.random()-0.5)*10, life:1, color });
+            }
+        }
+
+        function spawnText(x, y, txt, color, size = 14) {
+            floaters.push({ x, y, txt, color, size, life:1.2, vy:-1.5 });
+        }
+
+        // ---------- 商店與天賦 ----------
+        function toggleModal(id) {
+            const el = document.getElementById(id);
+            el.style.display = el.style.display === 'block' ? 'none' : 'block';
+            if(el.style.display === 'block') {
+                if(id === 'shop-window') renderShop();
+                if(id === 'talent-window') renderTalents();
+            }
+        }
+
+        function renderShop() {
+            const cont = document.getElementById('shop-content');
+            cont.innerHTML = '';
+            for(let k in gameData.upgrades) {
+                const up = gameData.upgrades[k];
+                const cost = getUpgradeCost(k);
+                cont.innerHTML += `<div class="card">
+                    <div><div class="card-title">${up.name} [LV.${up.lv}]</div><small style="color:#888">${up.desc}</small></div>
+                    <button class="btn-act" onclick="buyUpgrade('${k}')" ${gameData.money < cost ? 'disabled' : ''}>$${cost.toLocaleString()}</button>
+                </div>`;
+            }
+        }
+
+        function renderTalents() {
+            const cont = document.getElementById('talent-content');
+            cont.innerHTML = '';
+            for(let k in gameData.talents) {
+                const t = gameData.talents[k];
+                const isMax = t.lv >= t.max;
+                cont.innerHTML += `<div class="card">
+                    <div><div class="card-title">${t.name} [LV.${t.lv}/${t.max}]</div><small style="color:#aaa">${t.desc}</small></div>
+                    <button class="btn-act" onclick="buyTalent('${k}')" ${gameData.tp < t.cost || isMax ? 'disabled' : ''}>${isMax ? 'MAX' : t.cost + ' TP'}</button>
+                </div>`;
+            }
+        }
+
+        window.buyUpgrade = (k) => {
+            const cost = getUpgradeCost(k);
+            if(gameData.money >= cost) {
+                gameData.money -= cost;
+                gameData.upgrades[k].lv++;
+                refreshUI(); saveGame(); renderShop();
+            }
+        }
+
+        window.buyTalent = (k) => {
+            const t = gameData.talents[k];
+            if(gameData.tp >= t.cost && t.lv < t.max) {
+                gameData.tp -= t.cost;
+                t.lv++;
+                refreshUI(); saveGame(); renderTalents();
+            }
+        }
+
+        function doPrestige() {
+            let tpEarned = Math.max(1, Math.floor(Math.log10(gameData.totalEarned) - 3));
+            gameData.tp += tpEarned;
+            gameData.prestige++;
+            gameData.money = 0; gameData.totalEarned = 0;
+            bossSpawnCount = 0;
+            for (let k in gameData.upgrades) gameData.upgrades[k].lv = 1;
+            document.getElementById('prestige-btn').style.display = 'none';
+            refreshUI(); saveGame();
+        }
+
+        // ---------- 煙火商店 ----------
+        function renderFireworkShop() {
+            const panel = document.getElementById('firework-panel');
+            panel.innerHTML = '';
+
+            const autoBtn = document.createElement('button');
+            autoBtn.id = 'btn-auto-launch';
+            autoBtn.className = 'upgrade-btn auto-upgrade';
+            autoBtn.onclick = upgradeAutoLauncher;
+            autoBtn.innerHTML = `<span style="font-size:12px;">自動發射陣列</span>
+                <span style="font-size:10px; color:#e2e8f0; margin-top:2px;">$${Math.floor(150 * Math.pow(1.8, fireworkState.autoLaunchLevel)).toLocaleString()} (Lv.${fireworkState.autoLaunchLevel})</span>`;
+            panel.appendChild(autoBtn);
+
+            const frenzyBtn = document.createElement('button');
+            frenzyBtn.id = 'btn-frenzy';
+            frenzyBtn.className = 'upgrade-btn frenzy-btn';
+            frenzyBtn.onclick = upgradeFrenzy;
+            frenzyBtn.innerHTML = `<span style="font-size:12px;">多重併發解鎖</span>
+                <span style="font-size:10px; color:#e2e8f0; margin-top:2px;">$${Math.floor(500 * Math.pow(2.5, fireworkState.frenzyLevel)).toLocaleString()} (${fireworkState.frenzyLevel}發/次)</span>`;
+            panel.appendChild(frenzyBtn);
+
+            FIREWORKS.forEach((fw) => {
+                const card = document.createElement('div');
+                card.className = `firework-card ${fw.unlocked ? '' : 'locked'} ${fireworkState.selectedFirework === fw.id ? 'active' : ''}`;
+                let actionBtnText = fw.unlocked ? (fireworkState.selectedFirework === fw.id ? '裝備中' : '選擇') : `解鎖 $${fw.unlockCost.toLocaleString()}`;
+                card.innerHTML = `
+                    <div class="fw-name">${fw.name}</div>
+                    <div class="fw-cost">${fw.cost === 0 ? '免費' : '單發 $' + fw.cost.toLocaleString()}</div>
+                    <button class="fw-action" ${fw.unlocked && fireworkState.selectedFirework === fw.id ? 'disabled' : ''}>${actionBtnText}</button>
+                `;
+                card.onclick = () => selectOrUnlockFW(fw.id);
+                panel.insertBefore(card, autoBtn);
+            });
+
+            updateFireworkButtons();
+        }
+
+        function selectOrUnlockFW(id) {
+            const fw = FIREWORKS[id];
+            if (!fw.unlocked) {
+                if (gameData.money >= fw.unlockCost) {
+                    addMoney(-fw.unlockCost);
+                    fw.unlocked = true;
+                    fireworkState.selectedFirework = id;
+                    renderFireworkShop();
+                }
+            } else {
+                fireworkState.selectedFirework = id;
+                renderFireworkShop();
+            }
+        }
+
+        function upgradeAutoLauncher() {
+            const cost = Math.floor(150 * Math.pow(1.8, fireworkState.autoLaunchLevel));
+            if (gameData.money >= cost) {
+                addMoney(-cost);
+                fireworkState.autoLaunchLevel++;
+                renderFireworkShop();
+                saveGame();
+            }
+        }
+
+        function upgradeFrenzy() {
+            const cost = Math.floor(500 * Math.pow(2.5, fireworkState.frenzyLevel));
+            if (gameData.money >= cost) {
+                addMoney(-cost);
+                fireworkState.frenzyLevel++;
+                renderFireworkShop();
+                saveGame();
+            }
+        }
+
+        function updateFireworkButtons() {
+            const autoCost = Math.floor(150 * Math.pow(1.8, fireworkState.autoLaunchLevel));
+            const autoBtn = document.getElementById('btn-auto-launch');
+            if (autoBtn) autoBtn.disabled = gameData.money < autoCost;
+
+            const frenzyCost = Math.floor(500 * Math.pow(2.5, fireworkState.frenzyLevel));
+            const frenzyBtn = document.getElementById('btn-frenzy');
+            if (frenzyBtn) frenzyBtn.disabled = gameData.money < frenzyCost;
+
+            document.querySelectorAll('.firework-card').forEach((card, idx) => {
+                const fw = FIREWORKS[idx];
+                if (fw && !fw.unlocked) {
+                    const btn = card.querySelector('.fw-action');
+                    if (btn) btn.disabled = gameData.money < fw.unlockCost;
+                }
+            });
+        }
+
+        // ---------- 排行榜 ----------
+        window.toggleLeaderboard = async () => {
+            if (!await window.raingodRequireAuth('排行榜')) return;
+            const modal = document.getElementById('leaderboard-window');
+            modal.style.display = modal.style.display === 'block' ? 'none' : 'block';
+            if (modal.style.display === 'block') await window.refreshLeaderboard();
+        };
+
+        window.refreshLeaderboard = async () => {
+            const status = document.getElementById('leaderboard-status');
+            const list = document.getElementById('leaderboard-list');
+            if (!await window.raingodRequireAuth('排行榜')) return;
+            const uid = window.raingodCurrentUser.uid;
+            status.textContent = '排行榜載入中…';
+            try {
+                const response = await fetch(`${LEADERBOARD_URL}.json`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                if (window.raingodCurrentUser?.uid !== uid) return;
+                const rows = await response.json() || {};
+                const entries = Object.entries(rows)
+                    .filter(([, row]) => row && Number.isFinite(Number(row.prestige)))
+                    .map(([entryUid, row]) => ({ uid: entryUid, ...row }))
+                    .sort((a, b) => Number(b.prestige) - Number(a.prestige) ||
+                        Number(b.tp) - Number(a.tp) || Number(b.totalEarned) - Number(a.totalEarned))
+                    .slice(0, 50);
+                if (!entries.length) {
+                    list.innerHTML = '<div class="card"><span style="color:#aaa">目前還沒有排行榜資料</span></div>';
+                } else {
+                    list.innerHTML = entries.map((entry, index) => `
+                        <div class="card">
+                            <span class="card-title">${index + 1}. ${escapeLeaderboardText(entry.name || '玩家')}</span>
+                            <span style="color:#fff">轉生 ${Number(entry.prestige) || 1}｜TP ${Number(entry.tp) || 0}</span>
+                        </div>`).join('');
+                }
+                status.textContent = `已載入 ${entries.length} 位玩家，依轉生次數排序。`;
+            } catch (error) {
+                console.error('載入排行榜失敗：', error);
+                status.textContent = '排行榜載入失敗，請稍後重試。';
+            }
+        };
+
+        function escapeLeaderboardText(value) {
+            return String(value).replace(/[&<>"']/g, char => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            })[char]);
+        }
+
+        function scheduleLeaderboardUpload() {
+            if (!gameStarted || !window.raingodCurrentUser) return;
+            clearTimeout(leaderboardTimer);
+            leaderboardTimer = setTimeout(uploadLeaderboardScore, 1200);
+        }
+
+        async function uploadLeaderboardScore() {
+            const user = window.raingodCurrentUser;
+            if (!gameStarted || !user) return;
+            const uid = user.uid;
+            const username = user.email ? user.email.split('@')[0] : '玩家';
+            const payload = {
+                name: username,
+                prestige: Math.max(1, Number(gameData.prestige) || 1),
+                tp: Math.max(0, Number(gameData.tp) || 0),
+                totalEarned: Math.max(0, Number(gameData.totalEarned) || 0),
+                updatedAt: Date.now()
+            };
+            try {
+                const response = await fetch(`${LEADERBOARD_URL}/${encodeURIComponent(uid)}.json`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            } catch (error) {
+                console.error('上傳排行榜失敗：', error);
+            }
+        }
+
+        // ---------- 主迴圈 ----------
+        function loop() {
+            ctx.fillStyle = 'rgba(2, 2, 5, 0.25)';
+            ctx.fillRect(0, 0, width, height);
+
+            if(cubes.length < 20) cubes.push(new Cube());
+            cubes = cubes.filter(c => !c.dead);
+            cubes.forEach(c => { c.update(); c.draw(); });
+
+            if(activeBoss) { activeBoss.update(); activeBoss.draw(); }
+
+            particles = particles.filter(p => (p.life -= 0.03) > 0);
+            particles.forEach(p => {
+                p.x += p.vx; p.y += p.vy;
+                ctx.fillStyle = p.color; ctx.globalAlpha = p.life;
+                ctx.fillRect(p.x, p.y, 3, 3);
+            });
+
+            floaters = floaters.filter(f => (f.life -= 0.02) > 0);
+            floaters.forEach(f => {
+                f.y += f.vy; ctx.fillStyle = f.color; ctx.globalAlpha = f.life;
+                ctx.font = `bold ${f.size || 14}px Segoe UI`; ctx.fillText(f.txt, f.x, f.y);
+            });
+
+            // 自動發射
+            if (fireworkState.autoLaunchLevel > 0) {
+                fireworkState.autoLaunchTimer++;
+                const interval = Math.max(5, 60 - fireworkState.autoLaunchLevel * 6);
+                if (fireworkState.autoLaunchTimer >= interval) {
+                    fireworkState.autoLaunchTimer = 0;
+                    const unlockedFWs = FIREWORKS.filter(f => f.unlocked);
+                    if (unlockedFWs.length) {
+                        const randomFW = unlockedFWs[Math.floor(Math.random() * unlockedFWs.length)];
+                        const rx = Math.random() * (width * 0.85) + width * 0.075;
+                        const ry = Math.random() * (height * 0.55) + height * 0.1;
+                        rockets.push(new Rocket(width / 2, height, rx, ry, randomFW));
+                    }
+                }
+            }
+
+            // 火箭
+            for(let i = rockets.length - 1; i >= 0; i--) {
+                rockets[i].update();
+                rockets[i].draw();
+                if(rockets[i].dead) rockets.splice(i, 1);
+            }
+
+            // 煙火粒子（碎片）
+            ctx.globalCompositeOperation = 'lighter';
+            const nextFragments = [];
+            for (let i = 0; i < fragments.length; i++) {
+                const p = fragments[i];
+                p.update();
+                // 已擊中的粒子不再顯示
+                if (p.life > 0 && !p.hit) {
+                    ctx.fillStyle = p.color;
+                    ctx.globalAlpha = Math.max(0, p.life);
+                    ctx.fillRect(p.x, p.y, p.size, p.size);
+                    nextFragments.push(p);
+                }
+            }
+            fragments = nextFragments;
+            ctx.globalAlpha = 1.0;
+            ctx.globalCompositeOperation = 'source-over';
+
+            updateFireworkButtons();
+            requestAnimationFrame(loop);
+        }
+
+        // ---------- 點擊處理：點擊怪物時也會發射煙火 ----------
+        function handleAction(ex, ey) {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = ex - rect.left;
+            const mouseY = ey - rect.top;
+
+            if (mouseY > height - 90) return;
+
+            const fw = FIREWORKS[fireworkState.selectedFirework];
+            const totalCost = fw.cost * fireworkState.frenzyLevel;
+            let clickedTarget = false;
+
+            // 1. 檢查是否點擊到 Boss
+            if (activeBoss && !activeBoss.dead) {
+                if (Math.hypot(mouseX - activeBoss.x, mouseY - activeBoss.y) < activeBoss.size / 1.2) {
+                    activeBoss.takeDamage(getAtkPower());
+                    clickedTarget = true;
+                }
+            }
+
+            // 2. 檢查是否點擊到方塊
+            if (!clickedTarget) {
+                for (let i = cubes.length - 1; i >= 0; i--) {
+                    const c = cubes[i];
+                    if (!c.dead && Math.hypot(mouseX - c.x, mouseY - c.y) < (c.size/1.5) + 30) {
+                        c.takeDamage(getAtkPower());
+                        clickedTarget = true;
+                        break;
+                    }
+                }
+            }
+
+            // 3. 無論是否點擊到目標，只要有足夠金錢就發射煙火
+            //    如果點擊到目標，煙火在目標位置爆炸；否則在點擊位置爆炸
+            if (gameData.money >= totalCost && totalCost >= 0) {
+                if (totalCost > 0) addMoney(-totalCost);
+                const targetX = clickedTarget ? mouseX : mouseX;
+                const targetY = clickedTarget ? mouseY : mouseY;
+                for (let i = 0; i < fireworkState.frenzyLevel; i++) {
+                    const offsetX = (Math.random() - 0.5) * 120;
+                    const offsetY = (Math.random() - 0.5) * 80;
+                    rockets.push(new Rocket(width / 2, height, targetX + offsetX, targetY + offsetY, fw));
+                }
+            }
+
+            if (!clickedTarget) combo = 0;
+            refreshUI();
+        }
+
+        canvas.addEventListener('mousedown', (e) => handleAction(e.clientX, e.clientY));
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            handleAction(touch.clientX, touch.clientY);
+        }, { passive: false });
+
+        window.onresize = () => {
+            width = canvas.width = container.clientWidth;
+            height = canvas.height = container.clientHeight;
+        };
+
+        window.onload = () => {
+            init();
+            loop();
+        };
+    </script>
 </body>
 </html>
