@@ -492,54 +492,36 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     return db().ref('users/'+currentUsername+'/imageQuota/'+quotaDateKey())
       .once('value').then(function(s){ return s.val()||0; });
   }
+
+  // ==== 簡化版：扣額度 ====
   function consumeImageQuota(){
     var ref=db().ref('users/'+currentUsername+'/imageQuota/'+quotaDateKey());
-    return ref.transaction(function(cur){
-      cur=cur||0;
-      if(cur>=DAILY_IMAGE_LIMIT) return;
-      return cur+1;
-    }).then(function(result){
-      if(!result.committed) throw new Error('DAILY_LIMIT');
-      return result.snapshot.val();
+    return ref.once('value').then(function(snap){
+      var cur=snap.val()||0;
+      if(cur>=DAILY_IMAGE_LIMIT){
+        throw new Error('DAILY_LIMIT');
+      }
+      return ref.set(cur+1);
     });
   }
+
+  // ==== 簡化版：退今天額度 ====
   function refundImageQuota(){
     var ref=db().ref('users/'+currentUsername+'/imageQuota/'+quotaDateKey());
-    return ref.transaction(function(cur){
-      cur=cur||0;
-      if(cur<=0) return;
-      return cur-1;
-    }).catch(function(){});
+    return ref.once('value').then(function(snap){
+      var cur=snap.val()||0;
+      if(cur>0) return ref.set(cur-1);
+    }).catch(function(e){ console.warn('[退款] 失敗',e); });
   }
 
-  // ==== 依指定日期退款（含 transaction + set 備援 + 明確結果）====
+  // ==== 簡化版：退指定日期額度 ====
   function refundImageQuotaForDate(dateKey){
-    if(!currentUsername||!dateKey) return Promise.resolve({ok:false,reason:'missing-params'});
+    if(!currentUsername||!dateKey) return Promise.resolve();
     var ref=db().ref('users/'+currentUsername+'/imageQuota/'+dateKey);
-
-    return ref.transaction(function(cur){
-      cur=cur||0;
-      if(cur<=0) return;      // abort（已為 0）
-      return cur-1;
-    }).then(function(result){
-      if(result.committed){
-        return {ok:true,method:'transaction',newVal:result.snapshot.val()};
-      }
-      // transaction abort（cur<=0）
-      return {ok:false,reason:'already-zero'};
-    }).catch(function(err){
-      console.warn('[退款] transaction 失敗，嘗試 set 備援',err);
-      return ref.once('value').then(function(snap){
-        var cur=snap.val()||0;
-        if(cur<=0) return {ok:false,reason:'already-zero'};
-        return ref.set(cur-1).then(function(){
-          return {ok:true,method:'set',newVal:cur-1};
-        });
-      }).catch(function(err2){
-        console.error('[退款] set 備援也失敗',err2);
-        return {ok:false,reason:'permission-denied',error:err2};
-      });
-    });
+    return ref.once('value').then(function(snap){
+      var cur=snap.val()||0;
+      if(cur>0) return ref.set(cur-1);
+    }).catch(function(e){ console.warn('[退款] 失敗',e); });
   }
 
   function updateQuotaHint(){
@@ -1534,28 +1516,20 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     chatBox.scrollTop=chatBox.scrollHeight;
   }
 
-  // ==== 收回（含圖片退配額）====
+  // ==== 收回（超簡化，不再彈窗報錯）====
   function doRecall(kind,cid,msgId,m,isSelf){
     var confirmMsg = isSelf
       ? '確定要收回這則訊息嗎？收回後訊息內容會從資料庫刪除。'
       : '確定要以管理員權限刪除這則訊息嗎？此操作無法復原。';
     if(!confirm(confirmMsg)) return;
 
-    // 判斷是否要退款
     var shouldRefund = isSelf && m && m.type==='image';
     var refundDateKey = '';
     if(shouldRefund){
       if(m.quotaKey) refundDateKey = m.quotaKey;
       else if(m.expireAt) refundDateKey = dateKeyFromTs(m.expireAt - IMG_TTL_MS);
       else if(m.ts && typeof m.ts==='number') refundDateKey = dateKeyFromTs(m.ts);
-      else refundDateKey = quotaDateKey();   // 全部 fallback 失敗 → 退今天
-
-      console.log('[doRecall] 退款診斷',{
-        quotaKey:m.quotaKey,
-        expireAt:m.expireAt,
-        ts:m.ts,
-        resolvedDateKey:refundDateKey
-      });
+      else refundDateKey = quotaDateKey();
     }
 
     var baseRef=kind==='private'?db().ref('private_chats/'+cid):db().ref('groups/'+cid);
@@ -1570,17 +1544,11 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     };
 
     baseRef.update(updates).then(function(){
-      if(!shouldRefund) return;
-      if(!refundDateKey) return;
-      return refundImageQuotaForDate(refundDateKey).then(function(result){
-        if(result.ok){
-          console.log('[退款] 成功 date='+refundDateKey+' method='+result.method+' new='+result.newVal);
+      if(shouldRefund && refundDateKey){
+        refundImageQuotaForDate(refundDateKey).then(function(){
           updateQuotaHint();
-        }else{
-          console.error('[退款] 失敗 reason='+result.reason, result);
-          alert('收回成功，但退還圖片額度失敗（'+result.reason+'）。\n\n請至 Firebase Console 檢查 Realtime Database 規則，確認 users/'+currentUsername+'/imageQuota 有寫入權限。');
-        }
-      });
+        });
+      }
     }).catch(function(e){
       alert('收回失敗：'+errorMessage(e));
     });
@@ -1721,18 +1689,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
           ts:window.firebase.database.ServerValue.TIMESTAMP
         };
         var msgRef=db().ref(basePath+'/msgs/'+msgId);
-        return msgRef.set(payload).then(function(){
-          return msgRef.once('value').then(function(snap){
-            if(!snap.exists()){
-              throw new Error('圖片寫入後無法讀取，請檢查資料庫 rules 是否允許讀取 msgs。');
-            }
-            var v=snap.val();
-            if(!v||v.type!=='image'||!v.imageData){
-              throw new Error('圖片資料不完整（可能被 rules 過濾）。');
-            }
-            console.log('[圖片] 寫入成功 size='+dataUrl.length+' quotaKey='+v.quotaKey);
-          });
-        }).catch(function(e){
+        return msgRef.set(payload).catch(function(e){
           refundImageQuota();
           throw e;
         });
