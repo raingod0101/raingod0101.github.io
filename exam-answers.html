@@ -1,134 +1,2459 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Raingod | 會考答案</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>雨神大亨 · 帝国征途 | 军队对决版</title>
     <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            padding: 20px;
-            background-color: #f8f9fa;
+        * { touch-action: none; user-select: none; box-sizing: border-box; }
+        body { margin: 0; background: #020617; overflow: hidden; font-family: 'Segoe UI', system-ui, sans-serif; }
+        #ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
+        
+        .top-bar {
+            position: absolute !important;
+            top: 110px !important;
+            left: 50% !important;
+            transform: translateX(-50%) !important;
+            background: rgba(15, 23, 42, 0.92);
+            border: 1px solid #38bdf8;
+            box-shadow: 0 0 20px rgba(56, 189, 248, 0.2);
+            padding: 8px 20px;
+            border-radius: 30px;
+            pointer-events: auto;
+            backdrop-filter: blur(8px);
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            white-space: nowrap;
+            z-index: 999 !important;
         }
-        h2 {
-            text-align: center;
-            color: #2c3e50;
-            margin-bottom: 20px;
+        .hud-item { font-size: 13px; font-weight: bold; color: #f8fafc; }
+        .money { color: #4ade80; font-size: 16px; font-weight: 900; }
+        .dark-matter { color: #c084fc; font-size: 13px; }
+
+        .skill-bar {
+            position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 8px; pointer-events: auto;
+            z-index: 50;
         }
-        .table-container {
-            overflow-x: auto;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            border-radius: 8px;
-            background: white;
-            max-width: 1000px;
-            margin: 0 auto;
+        .skill-btn {
+            background: rgba(15, 23, 42, 0.9); border: 1px solid #38bdf8; color: #fff;
+            padding: 8px 12px; border-radius: 8px; font-size: 11px; font-weight: bold; cursor: pointer;
+            display: flex; flex-direction: column; align-items: center; transition: all 0.2s;
         }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            text-align: center;
+        .skill-btn:hover:not(:disabled) { background: #0284c7; }
+        .skill-btn:disabled { opacity: 0.4; border-color: #475569; cursor: not-allowed; }
+
+        .panel { 
+            position: absolute; bottom: 15px; right: 15px; 
+            width: 340px; max-height: 82vh; overflow-y: auto;
+            background: rgba(15, 23, 42, 0.95); border: 1px solid #334155; border-radius: 12px;
+            pointer-events: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8); backdrop-filter: blur(8px);
+            z-index: 100;
         }
-        th, td {
-            padding: 12px 15px;
-            border-bottom: 1px solid #e0e0e0;
+        .panel::-webkit-scrollbar { width: 4px; }
+        .panel::-webkit-scrollbar-thumb { background: #38bdf8; border-radius: 4px; }
+
+        .tabs { display: flex; gap: 4px; margin-bottom: 4px; flex-wrap: wrap; }
+        .tab-btn { 
+            flex: 1 0 30%; background: #1e293b; color: #94a3b8; border: none; padding: 6px 2px; 
+            font-size: 10px; font-weight: bold; border-radius: 6px; cursor: pointer;
         }
-        th {
-            background-color: #34495e;
-            color: white;
-            font-weight: 600;
+        .tab-btn.active { background: #0284c7; color: #fff; }
+
+        .btn { 
+            background: linear-gradient(135deg, #1e293b, #0f172a); color: #fff; border: 1px solid #38bdf8; 
+            padding: 8px 10px; font-weight: bold; font-size: 11px; border-radius: 8px; cursor: pointer; 
+            display: flex; justify-content: space-between; align-items: center; transition: all 0.2s;
         }
-        tr:nth-child(even) {
-            background-color: #f9f9f9;
+        .btn:hover:not(:disabled) { background: linear-gradient(135deg, #0284c7, #0369a1); border-color: #38bdf8; }
+        .btn:disabled { opacity: 0.35; border-color: #475569; cursor: not-allowed; }
+        .rebirth-btn { background: linear-gradient(135deg, #7e22ce, #581c87); border-color: #c084fc; }
+
+        .quest-box {
+            background: rgba(30, 41, 59, 0.6); border: 1px dashed #38bdf8; padding: 6px 8px;
+            border-radius: 6px; font-size: 10px; color: #e2e8f0; margin-bottom: 2px;
         }
-        tr:hover {
-            background-color: #f1f1f1;
+        
+        #tycoon-leaderboard-button { position: absolute; top: 160px; right: 15px; z-index: 20; pointer-events: auto; padding: 9px 14px; border: 1px solid #38bdf8; border-radius: 20px; color: #fff; background: rgba(15,23,42,0.9); font-weight: bold; cursor: pointer; }
+        #tycoon-leaderboard { position: fixed; inset: 0; z-index: 2000; display: none; align-items: center; justify-content: center; padding: 16px; background: rgba(2,6,23,0.94); color: #fff; }
+        .tycoon-leaderboard-card { width: min(520px, 100%); max-height: 80vh; overflow-y: auto; padding: 20px; border: 1px solid #38bdf8; border-radius: 16px; background: #0b1020; }
+        .tycoon-leaderboard-row { display: flex; justify-content: space-between; gap: 12px; padding: 10px 4px; border-bottom: 1px solid #26334a; }
+        .mobile-shop-toggle, .mobile-panel-close { display: none; }
+
+        /* 世界地图 UI */
+        #view-toggle {
+            position: absolute; top: 160px; left: 15px; z-index: 30; pointer-events: auto;
+            padding: 10px 18px; border: 2px solid #f59e0b; border-radius: 24px;
+            background: linear-gradient(135deg, #b45309, #78350f); color: #fff;
+            font-weight: 900; font-size: 13px; cursor: pointer; box-shadow: 0 0 20px rgba(245,158,11,0.4);
         }
-        .thead-dark th {
-            border: 1px solid #2c3e50;
+        #world-ui {
+            position: absolute; inset: 0; pointer-events: none; z-index: 20; display: none;
+        }
+        #world-ui.active { display: block; }
+        .world-hud {
+            position: absolute; top: 110px; left: 50%; transform: translateX(-50%);
+            background: rgba(15,23,42,0.92); border: 1px solid #f59e0b; border-radius: 16px;
+            padding: 8px 18px; pointer-events: auto; display: flex; gap: 16px; align-items: center;
+            backdrop-filter: blur(8px); font-size: 12px; font-weight: bold; color: #fcd34d;
+            white-space: nowrap;
+        }
+        .world-ctrl {
+            position: absolute; bottom: 15px; left: 15px; pointer-events: auto;
+            display: flex; flex-direction: column; gap: 6px;
+        }
+        .world-ctrl button {
+            width: 46px; height: 46px; border-radius: 12px; border: 1px solid #38bdf8;
+            background: rgba(15,23,42,0.92); color: #fff; font-weight: bold; font-size: 18px;
+            cursor: pointer;
+        }
+        #territory-panel {
+            position: absolute; bottom: 15px; right: 15px; width: 300px; max-height: 70vh;
+            overflow-y: auto; background: rgba(15,23,42,0.96); border: 1px solid #f59e0b;
+            border-radius: 12px; padding: 14px; pointer-events: auto; color: #fff;
+            display: none; flex-direction: column; gap: 8px;
+            z-index: 100;
+        }
+        #territory-panel.active { display: flex; }
+        #territory-panel h3 { margin: 0; color: #fcd34d; font-size: 15px; }
+        .terr-row { display: flex; justify-content: space-between; font-size: 12px; color: #cbd5e1; }
+        .terr-bar { height: 8px; background: #1e293b; border-radius: 4px; overflow: hidden; }
+        .terr-bar > div { height: 100%; background: linear-gradient(90deg, #ef4444, #f59e0b); transition: width 0.3s; }
+
+        /* 战斗画面特效 — 全面强化！ */
+        #battle-overlay {
+            position: fixed; inset: 0; z-index: 1500; display: none;
+            pointer-events: none;
+        }
+        #battle-overlay.active { display: block; }
+        .battle-flash {
+            position: absolute; inset: 0;
+            background: radial-gradient(circle, rgba(239,68,68,0.35) 0%, transparent 70%);
+            animation: battleFlash 0.8s ease-out forwards;
+        }
+        @keyframes battleFlash {
+            0% { opacity: 0.9; transform: scale(0.8); }
+            100% { opacity: 0; transform: scale(1.6); }
+        }
+        .battle-text {
+            position: absolute; top: 35%; left: 50%; transform: translate(-50%, -50%);
+            font-size: 38px; font-weight: 900; color: #fbbf24;
+            text-shadow: 0 0 20px #f59e0b, 0 0 40px #ef4444;
+            animation: battleTextAnim 1.4s ease-out forwards;
+            white-space: nowrap; letter-spacing: 2px;
+        }
+        @keyframes battleTextAnim {
+            0% { opacity: 0; transform: translate(-50%, -50%) scale(0.2); }
+            30% { opacity: 1; transform: translate(-50%, -50%) scale(1.3); }
+            70% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+            100% { opacity: 0; transform: translate(-50%, -50%) scale(1.6) translateY(-40px); }
+        }
+
+        /* 军队行军中，在战场实时显示血条等 */
+        .march-bar {
+            position: absolute; bottom: 120px; left: 50%; transform: translateX(-50%);
+            width: 260px; height: 18px; background: rgba(0,0,0,0.7);
+            border: 1px solid #f59e0b; border-radius: 10px; overflow: hidden;
+            pointer-events: none; z-index: 200;
+        }
+        .march-bar > div {
+            height: 100%; width: 0%; background: linear-gradient(90deg, #ef4444, #f59e0b);
+            transition: width 0.05s linear;
+        }
+
+        @media (max-width: 700px), (max-height: 500px) and (pointer: coarse) {
+            .nav-content { gap: 6px; padding: 0 8px !important; }
+            .brand { flex: 0 0 auto; white-space: nowrap; }
+            .nav-links {
+                flex: 1; min-width: 0; justify-content: space-evenly; gap: 0 !important; margin-left: 4px !important;
+            }
+            .nav-item { padding: 6px 3px !important; font-size: 11px !important; white-space: nowrap; }
+            .login-btn { flex: 0 0 auto; padding: 6px 8px !important; white-space: nowrap; }
+
+            .top-bar {
+                top: calc(60px + env(safe-area-inset-top)) !important; left: 8px !important;
+                width: calc(100% - 16px) !important; transform: none !important;
+                display: grid; grid-template-columns: 1fr 1fr; gap: 5px 8px;
+                padding: 7px 10px; border-radius: 12px; white-space: normal;
+            }
+            .hud-item { font-size: 11px; }
+            .money { font-size: 14px; }
+            .dark-matter { font-size: 11px; }
+
+            #tycoon-leaderboard-button { top: 132px; right: 8px; max-width: 46%; padding: 8px 10px; font-size: 11px; }
+            #view-toggle { top: 132px; left: 8px; padding: 8px 12px; font-size: 11px; }
+
+            .skill-bar {
+                bottom: max(8px, env(safe-area-inset-bottom));
+                left: 8px; right: 8px; transform: none; gap: 5px;
+            }
+            .skill-btn { flex: 1; min-width: 0; padding: 7px 4px; font-size: 9px; }
+
+            .panel {
+                display: none; left: 0; right: 0; bottom: 0; width: 100%; max-height: 52dvh;
+                padding: 10px max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+                border-radius: 14px 14px 0 0; touch-action: pan-y; -webkit-overflow-scrolling: touch;
+            }
+            #ui.shop-open .panel { display: flex; }
+            #ui.shop-open .skill-bar { display: none; }
+            .mobile-panel-close {
+                display: block; align-self: flex-end; padding: 7px 12px; border: 1px solid #64748b;
+                border-radius: 8px; background: #1e293b; color: #fff; font-weight: bold; touch-action: manipulation;
+            }
+            .mobile-shop-toggle {
+                display: block; position: absolute; right: 10px; bottom: calc(62px + env(safe-area-inset-bottom));
+                z-index: 15; padding: 9px 13px; border: 1px solid #38bdf8; border-radius: 20px;
+                background: rgba(15, 23, 42, 0.95); color: #fff; font-weight: bold;
+                pointer-events: auto; touch-action: manipulation;
+            }
+            #ui.shop-open .mobile-shop-toggle { display: none; }
+
+            .tab-btn { min-height: 38px; font-size: 10px; }
+            .btn { min-height: 40px; font-size: 11px; touch-action: manipulation; }
+            #tycoon-leaderboard { padding: max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom)); }
+            .tycoon-leaderboard-card { max-height: 85dvh; padding: 14px; touch-action: pan-y; -webkit-overflow-scrolling: touch; }
+            .tycoon-leaderboard-row { flex-direction: column; gap: 4px; }
+
+            .world-hud {
+                top: calc(60px + env(safe-area-inset-top)) !important; left: 8px !important;
+                right: 8px !important; transform: none !important; width: auto !important;
+                font-size: 10px; gap: 8px; padding: 7px 10px; white-space: normal;
+                flex-wrap: wrap; justify-content: center;
+            }
+            #territory-panel {
+                left: 8px; right: 8px; width: auto;
+                top: calc(120px + env(safe-area-inset-top));
+                bottom: auto; max-height: 38vh;
+            }
+            .world-ctrl { bottom: calc(80px + env(safe-area-inset-bottom)); }
+            .world-ctrl button { width: 40px; height: 40px; font-size: 16px; }
+            .battle-text { font-size: 22px; }
+            .march-bar { width: 200px; bottom: 100px; }
         }
     </style>
 </head>
 <body>
-<link rel="stylesheet" href="menu.css">
+    <link rel="stylesheet" href="menu.css">
+    <div id="nav_bar"></div>
+    <script src="menu.js"></script>
+    <canvas id="c"></canvas>
+    <div id="ui">
+        <div class="top-bar">
+            <div class="hud-item">$<span id="m" class="money">0</span></div>
+            <div class="hud-item dark-matter">🌌 暗物質: <span id="dm">0</span></div>
+            <div class="hud-item" style="color: #ef4444;">⚔️ 第 <span id="waveNum">1</span> 波 (剩餘 <span id="enemyCount">0</span>)</div>
+            <div class="hud-item" style="color:#4ade80;">🛡️ 領地 <span id="territoryCount">0</span>/<span id="territoryMax">12</span></div>
+        </div>
 
-<div id="nav_bar"></div>
+        <div class="skill-bar">
+            <button class="skill-btn" onclick="useSkill(1)">
+                <span>⚡ 超頻過載</span><span id="cd1" style="font-size:9px; color:#f59e0b;">就緒</span>
+            </button>
+            <button class="skill-btn" onclick="useSkill(2)">
+                <span>💥 軌道砲轟炸</span><span id="cd2" style="font-size:9px; color:#f59e0b;">就緒</span>
+            </button>
+            <button class="skill-btn" onclick="useSkill(3)">
+                <span>🪖 軍隊衝鋒</span><span id="cd3" style="font-size:9px; color:#f59e0b;">就緒</span>
+            </button>
+        </div>
 
-<script src="menu.js"></script>
-    <h2>會考答案</h2>
+        <div class="panel" id="tycoon-panel">
+            <button class="mobile-panel-close" type="button" onclick="toggleTycoonShop(false)">收起商店 ▲</button>
+            <div class="quest-box">
+                🎯 任務：<span id="questText">載入中...</span> (<span id="questProg">0/0</span>)
+            </div>
 
-    <div class="table-container">
-        <table>
-            <thead>
-                <tr class="thead-dark">
-                    <th>題號</th>
-                    <th>國文</th>
-                    <th>英語閱讀</th>
-                    <th>英語聽力</th>
-                    <th>數學</th>
-                    <th>社會</th>
-                    <th>自然</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr><td>1</td><td>B</td><td>B</td><td>C</td><td>C</td><td>A</td><td>A</td></tr>
-                <tr><td>2</td><td>A</td><td>A</td><td>C</td><td>D</td><td>D</td><td>C</td></tr>
-                <tr><td>3</td><td>D</td><td>B</td><td>C</td><td>C</td><td>C</td><td>B</td></tr>
-                <tr><td>4</td><td>A</td><td>C</td><td>B</td><td>B</td><td>A</td><td>B</td></tr>
-                <tr><td>5</td><td>D</td><td>C</td><td>B</td><td>C</td><td>A</td><td>C</td></tr>
-                <tr><td>6</td><td>D</td><td>D</td><td>C</td><td>B</td><td>D</td><td>D</td></tr>
-                <tr><td>7</td><td>C</td><td>C</td><td>A</td><td>A</td><td>D</td><td>B</td></tr>
-                <tr><td>8</td><td>C</td><td>A</td><td>A</td><td>C</td><td>B</td><td>C</td></tr>
-                <tr><td>9</td><td>C</td><td>C</td><td>A</td><td>B</td><td>A</td><td>C</td></tr>
-                <tr><td>10</td><td>D</td><td>A</td><td>B</td><td>D</td><td>C</td><td>A</td></tr>
-                <tr><td>11</td><td>B</td><td>C</td><td>B</td><td>A</td><td>C</td><td>C</td></tr>
-                <tr><td>12</td><td>D</td><td>A</td><td>A</td><td>B</td><td>D</td><td>D</td></tr>
-                <tr><td>13</td><td>A</td><td>D</td><td>A</td><td>D</td><td>C</td><td>B</td></tr>
-                <tr><td>14</td><td>B</td><td>D</td><td>B</td><td>B</td><td>A</td><td>C</td></tr>
-                <tr><td>15</td><td>A</td><td>A</td><td>A</td><td>C</td><td>C</td><td>B</td></tr>
-                <tr><td>16</td><td>A</td><td>A</td><td>C</td><td>A</td><td>A</td><td>A</td></tr>
-                <tr><td>17</td><td>D</td><td>D</td><td>B</td><td>A</td><td>B</td><td>A</td></tr>
-                <tr><td>18</td><td>D</td><td>B</td><td>A</td><td>B</td><td>B</td><td>A</td></tr>
-                <tr><td>19</td><td>A</td><td>D</td><td>A</td><td>D</td><td>A</td><td>D</td></tr>
-                <tr><td>20</td><td>B</td><td>C</td><td>B</td><td>C</td><td>B</td><td>C</td></tr>
-                <tr><td>21</td><td>D</td><td>D</td><td>A</td><td>D</td><td>D</td><td>D</td></tr>
-                <tr><td>22</td><td>C</td><td>D</td><td></td><td>C</td><td>C</td><td>D</td></tr>
-                <tr><td>23</td><td>B</td><td>B</td><td></td><td>B</td><td>B</td><td>C</td></tr>
-                <tr><td>24</td><td>B</td><td>D</td><td></td><td>B</td><td>B</td><td>D</td></tr>
-                <tr><td>25</td><td>A</td><td>D</td><td></td><td>D</td><td>A</td><td>B</td></tr>
-                <tr><td>26</td><td>B</td><td>C</td><td></td><td></td><td>B</td><td>A</td></tr>
-                <tr><td>27</td><td>B</td><td>D</td><td></td><td></td><td>A</td><td>A</td></tr>
-                <tr><td>28</td><td>A</td><td>C</td><td></td><td></td><td>A</td><td>C</td></tr>
-                <tr><td>29</td><td>D</td><td>A</td><td></td><td></td><td>B</td><td>C</td></tr>
-                <tr><td>30</td><td>D</td><td>A</td><td></td><td></td><td>A</td><td>A</td></tr>
-                <tr><td>31</td><td>C</td><td>B</td><td></td><td></td><td>B</td><td>B</td></tr>
-                <tr><td>32</td><td>A</td><td>D</td><td></td><td></td><td>D</td><td>B</td></tr>
-                <tr><td>33</td><td>C</td><td>C</td><td></td><td></td><td>A</td><td>B</td></tr>
-                <tr><td>34</td><td>B</td><td>A</td><td></td><td></td><td>C</td><td>D</td></tr>
-                <tr><td>35</td><td>C</td><td>A</td><td></td><td></td><td>C</td><td>C</td></tr>
-                <tr><td>36</td><td>C</td><td>B</td><td></td><td></td><td>C</td><td>D</td></tr>
-                <tr><td>37</td><td>C</td><td>B</td><td></td><td></td><td>D</td><td>B</td></tr>
-                <tr><td>38</td><td>A</td><td>C</td><td></td><td></td><td>D</td><td>C</td></tr>
-                <tr><td>39</td><td>C</td><td>B</td><td></td><td></td><td>B</td><td>D</td></tr>
-                <tr><td>40</td><td>C</td><td>B</td><td></td><td></td><td>A</td><td>A</td></tr>
-                <tr><td>41</td><td>B</td><td>B</td><td></td><td></td><td>B</td><td>B</td></tr>
-                <tr><td>42</td><td>B</td><td>B</td><td></td><td></td><td>D</td><td>D</td></tr>
-                <tr><td>43</td><td></td><td>C</td><td></td><td></td><td>B</td><td>B</td></tr>
-                <tr><td>44</td><td></td><td></td><td></td><td></td><td>D</td><td>C</td></tr>
-                <tr><td>45</td><td></td><td></td><td></td><td></td><td>C</td><td>D</td></tr>
-                <tr><td>46</td><td></td><td></td><td></td><td></td><td>A</td><td>C</td></tr>
-                <tr><td>47</td><td></td><td></td><td></td><td></td><td>C</td><td>A</td></tr>
-                <tr><td>48</td><td></td><td></td><td></td><td></td><td>B</td><td>D</td></tr>
-                <tr><td>49</td><td></td><td></td><td></td><td></td><td>D</td><td>D</td></tr>
-                <tr><td>50</td><td></td><td></td><td></td><td></td><td>A</td><td>A</td></tr>
-                <tr><td>51</td><td></td><td></td><td></td><td></td><td>C</td><td></td></tr>
-                <tr><td>52</td><td></td><td></td><td></td><td></td><td>B</td><td></td></tr>
-                <tr><td>53</td><td></td><td></td><td></td><td></td><td>B</td><td></td></tr>
-                <tr><td>54</td><td></td><td></td><td></td><td></td><td>D</td><td></td></tr>
-            </tbody>
-        </table>
+            <div class="tabs">
+                <button class="tab-btn active" onclick="switchTab('tab-turret')">⚔️ 武器塔</button>
+                <button class="tab-btn" onclick="switchTab('tab-prod')">🏭 工廠解鎖</button>
+                <button class="tab-btn" onclick="switchTab('tab-upg')">⚙️ 基礎升級</button>
+                <button class="tab-btn" onclick="switchTab('tab-army')">🪖 軍隊</button>
+                <button class="tab-btn" onclick="switchTab('tab-tech')">🌌 暗天賦</button>
+            </div>
+
+            <div id="tab-turret">
+                <button class="btn" onclick="buildTurret('gatling')">
+                    <span>🔫 機槍塔</span><span style="color:#4ade80" id="costGatling">$1,000</span>
+                </button>
+                <button class="btn" onclick="buildTurret('laser')">
+                    <span>⚡ 雷射塔</span><span style="color:#4ade80" id="costLaser">$5,000</span>
+                </button>
+                <button class="btn" onclick="buildTurret('mortar')">
+                    <span>💥 迫擊砲塔</span><span style="color:#4ade80" id="costMortar">$20,000</span>
+                </button>
+                <button class="btn" onclick="buildTurret('frost')">
+                    <span>❄️ 緩慢冰凍塔</span><span style="color:#4ade80" id="costFrost">$50,000</span>
+                </button>
+                <button class="btn" onclick="buildTurret('blackhole')">
+                    <span>🌌 暗物質黑洞塔</span><span style="color:#c084fc" id="costBlackhole">$200,000</span>
+                </button>
+                <button class="btn" style="background: linear-gradient(135deg, #b91c1c, #991b1b); border-color: #f87171; margin-top:4px;" onclick="triggerNextWave()">
+                    <span>⚠️️ 立即召喚下一波敵人</span>
+                </button>
+            </div>
+
+            <div id="tab-prod" style="display:none;">
+                <button class="btn" onclick="unlockTier(2)">
+                    <span>🔓 矽晶/晶片廠</span><span style="color:#4ade80">$2,500</span>
+                </button>
+                <button class="btn" onclick="unlockTier(3)">
+                    <span>🔓 鈾能/電池中心</span><span style="color:#4ade80">$25,000</span>
+                </button>
+                <button class="btn" onclick="unlockTier(4)">
+                    <span>🔓 量子合成廠</span><span style="color:#4ade80">$200,000</span>
+                </button>
+                <button class="btn" onclick="unlockTier(5)">
+                    <span>🔓 反物質研究所</span><span style="color:#4ade80">$2,000,000</span>
+                </button>
+            </div>
+
+            <div id="tab-upg" style="display:none;">
+                <button class="btn" onclick="buyBot()">
+                    <span>🤖 雇用運輸機兵</span><span style="color:#4ade80" id="bCost">$500</span>
+                </button>
+                <button class="btn" onclick="upgrade('miner')">
+                    <span>⚙️ 採礦速率 Lv.<span id="minerLv">0</span></span><span style="color:#4ade80" id="mCost">$1,000</span>
+                </button>
+                <button class="btn" onclick="upgrade('capacity')">
+                    <span>🎒 機兵容量 Lv.<span id="capLv">4</span></span><span style="color:#4ade80" id="cCost">$1,500</span>
+                </button>
+                <button class="btn" onclick="upgrade('playerDamage')">
+                    <span>⚔️ 玩家傷害 Lv.<span id="playerDamageLv">0</span>（+25%）</span><span style="color:#4ade80" id="playerDamageCost">$1,000</span>
+                </button>
+                <button class="btn" onclick="upgrade('turretDamage')">
+                    <span>🛡️ 防衛塔傷害 Lv.<span id="turretDamageLv">0</span>（+20%）</span><span style="color:#4ade80" id="turretDamageCost">$1,500</span>
+                </button>
+            </div>
+
+            <div id="tab-army" style="display:none;">
+                <div class="quest-box" style="border-color:#f59e0b; color:#fcd34d;">
+                    🪖 切換到世界地圖，用鍵盤/搖桿移動指揮官，點擊領地發起進攻！
+                </div>
+                <button class="btn" onclick="recruitSoldier()">
+                    <span>🪖 招募士兵 (現有 <span id="soldierCount">0</span>)</span><span style="color:#4ade80" id="soldierCost">$800</span>
+                </button>
+                <button class="btn" onclick="recruitTank()">
+                    <span>🚀 生產坦克 (現有 <span id="tankCount">0</span>)</span><span style="color:#4ade80" id="tankCost">$5,000</span>
+                </button>
+                <button class="btn" onclick="switchView('world')" style="background: linear-gradient(135deg, #b45309, #78350f); border-color: #fbbf24;">
+                    <span>🌍 前往世界地圖</span>
+                </button>
+                <div class="quest-box" style="margin-top:4px;">
+                    總戰力：<span id="armyPower" style="color:#fbbf24;">0</span> ｜ 已佔領：<span id="ownedTerritories">無</span>
+                </div>
+            </div>
+
+            <div id="tab-tech" style="display:none;">
+                <button class="btn rebirth-btn" onclick="buyTalent('dmg')">
+                    <span>🧬 基因傷害 +20%</span><span style="color:#c084fc" id="tDmgCost">5 DM</span>
+                </button>
+                <button class="btn rebirth-btn" onclick="buyTalent('speed')">
+                    <span>🤖 自動化機兵速度 +15%</span><span style="color:#c084fc" id="tSpdCost">5 DM</span>
+                </button>
+                <button class="btn rebirth-btn" onclick="buyTalent('army')">
+                    <span>🪖 軍隊攻擊力 +30%</span><span style="color:#c084fc" id="tArmyCost">5 DM</span>
+                </button>
+                <button class="btn rebirth-btn" style="margin-top:8px;" onclick="triggerRebirth()">
+                    <span>🌌 暗物質量子轉生</span><span style="color:#c084fc" id="rebirthGain">+0 DM</span>
+                </button>
+            </div>
+        </div>
+        <button class="mobile-shop-toggle" type="button" aria-controls="tycoon-panel" aria-expanded="false" onclick="toggleTycoonShop()">🛠️ 建造 / 升級</button>
     </div>
 
+    <button id="view-toggle" onclick="switchView('world')">🌍 世界地圖</button>
+
+    <div id="world-ui">
+        <div class="world-hud">
+            <span>🌍 世界地圖</span>
+            <span>🪖 <span id="wSoldiers">0</span> 兵 · <span id="wTanks">0</span> 坦克</span>
+            <span>⚔️ <span id="wPower" style="color:#fbbf24;">0</span> 戰力</span>
+            <span>🛡️ <span id="wOwned">0</span>/<span id="wTotal">12</span> 領地</span>
+            <span style="font-size:10px; color:#94a3b8;">⌨️ WASD / 方向鍵 · 📱 右側搖桿</span>
+        </div>
+        <div class="world-ctrl">
+            <button onclick="zoomWorld(1.2)" title="放大">＋</button>
+            <button onclick="zoomWorld(1/1.2)" title="縮小">－</button>
+            <button onclick="centerOnCapital()" title="回到基地">🏠</button>
+            <button onclick="switchView('base')" title="返回基地" style="border-color:#4ade80;">↩</button>
+        </div>
+        <div id="territory-panel">
+            <h3 id="terrName">選擇領地</h3>
+            <div class="terr-row"><span>歸屬</span><span id="terrOwner">中立</span></div>
+            <div class="terr-row"><span>守軍</span><span id="terrGarrison">0</span></div>
+            <div class="terr-row"><span>每波收益</span><span id="terrIncome" style="color:#4ade80;">$0</span></div>
+            <div class="terr-bar"><div id="terrBar" style="width:0%;"></div></div>
+            <button class="btn" id="attackBtn" onclick="attackSelected()" style="background: linear-gradient(135deg, #b91c1c, #7f1d1d); border-color: #f87171; margin-top:6px;">
+                <span>⚔️ 發起進攻</span><span id="attackCost" style="color:#fbbf24;">需要 0 戰力</span>
+            </button>
+            <button class="btn" onclick="closeTerritoryPanel()" style="border-color:#64748b;">關閉</button>
+        </div>
+    </div>
+
+    <div id="battle-overlay"></div>
+
+    <button id="tycoon-leaderboard-button" onclick="openTycoonLeaderboard()">🏆 登入後查看排行榜</button>
+    <div id="tycoon-leaderboard">
+        <div class="tycoon-leaderboard-card">
+            <h2 style="color:#38bdf8; margin-top:0;">🏆 雨神大亨排行榜</h2>
+            <p id="tycoon-leaderboard-status" style="color:#aaa;">請登入帳號後查看。</p>
+            <div id="tycoon-leaderboard-list"></div>
+            <div style="display:flex; gap:8px; justify-content:center; margin-top:14px;">
+                <button class="btn" onclick="refreshTycoonLeaderboard()">重新整理</button>
+                <button class="btn" onclick="closeTycoonLeaderboard()">關閉</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================================
+        // 雨神大亨 · 帝国征途 v5.0 — 军队对决版
+        // 新增：世界地图上，军队行军 + 实时战斗画面（血条、士兵互殴、战损）
+        // ============================================================
+        const cvs = document.getElementById('c'), ctx = cvs.getContext('2d');
+        const SAVE_KEY = 'raingod_tycoon_save_v5';
+        const TYCOON_LEADERBOARD_URL = 'https://game-24b43-default-rtdb.firebaseio.com/raingod_tycoon_leaderboard';
+
+        // ---- 核心變數 ----
+        let money = 2000, darkMatter = 0, frame = 0;
+        let bestWave = 0;
+        let minerLevel = 0, capacity = 4, techTier = 1;
+        let playerDamageLevel = 0, turretDamageLevel = 0;
+        let p = { x: 350, y: 350, r: 18, tx: 350, ty: 350, bag: [], atkRange: 220, cooldown: 0, facing: 0, walkCycle: 0 };
+        let bots = [], items = [], floatTexts = [], particles = [], bullets = [];
+        let turrets = [], enemies = [];
+        let shakeTime = 0;
+        let talents = { dmgLv: 0, spdLv: 0, armyLv: 0 };
+        let wave = 1;
+        let waveTimer = 20 * 60;
+        let isWaveActive = false;
+        let skillCd = [0, 0, 0];
+        let isOverclocked = false, overclockTimer = 0;
+        let quest = { type: 'kill', target: 20, current: 0, reward: 1500, desc: '擊殺 20 隻異形蟲' };
+        let storageReady = false;
+
+        // 工厂动画状态
+        let factoryAnim = {};
+        let forgeSparks = [];
+
+        // 世界地圖
+        let viewMode = 'base';
+        const WORLD_W = 4800, WORLD_H = 3600;
+        let camera = { x: WORLD_W/2, y: WORLD_H/2, zoom: 0.55 };
+        let commander = { x: 800, y: 1650, facing: 0, walkCycle: 0, marching: false };
+        let keys = {};
+        let joystick = { active: false, baseX: 0, baseY: 0, knobX: 0, knobY: 0, dx: 0, dy: 0, pointerId: null };
+        let tapStart = null;
+        let selectedTerritoryId = null;
+        let army = { soldiers: 0, tanks: 0 };
+
+        // ================= 军队战斗系统（全新！） =================
+        let armyMarch = {
+            active: false, progress: 0, from: null, to: null,
+            soldiers: 0, tanks: 0, result: null, targetId: null,
+            // 战斗过程数据
+            battleActive: false,
+            battleTimer: 0,
+            playerUnits: [],   // {hp, maxHp, x, y, type}
+            enemyUnits: [],    // {hp, maxHp, x, y, type}
+            battlePhase: 'march', // 'march' | 'fight' | 'done'
+            report: null,
+            lossSoldiers: 0, lossTanks: 0,
+            enemyLoss: 0
+        };
+
+        let battleEffects = [];
+
+        // 领地定义
+        const TERRITORY_DEFS = [
+            { id: 0, name: '雨神基地', x: 600, y: 1500, w: 400, h: 300, garrison: 0, income: 0, type: 'capital' },
+            { id: 1, name: '廢棄礦場', x: 1300, y: 900, w: 340, h: 260, garrison: 15, income: 600, type: 'resource' },
+            { id: 2, name: '晶片工業區', x: 1800, y: 1500, w: 360, h: 280, garrison: 40, income: 1500, type: 'resource' },
+            { id: 3, name: '核能電廠', x: 2300, y: 800, w: 340, h: 280, garrison: 90, income: 3200, type: 'resource' },
+            { id: 4, name: '量子實驗室', x: 2700, y: 1600, w: 380, h: 300, garrison: 160, income: 7000, type: 'resource' },
+            { id: 5, name: '反物質坑', x: 3200, y: 1000, w: 340, h: 280, garrison: 260, income: 15000, type: 'resource' },
+            { id: 6, name: '異星殖民地', x: 3600, y: 1800, w: 400, h: 320, garrison: 420, income: 32000, type: 'military' },
+            { id: 7, name: '軌道電梯', x: 4100, y: 900, w: 340, h: 280, garrison: 650, income: 60000, type: 'military' },
+            { id: 8, name: '深空要塞', x: 4200, y: 2200, w: 380, h: 320, garrison: 900, income: 120000, type: 'military' },
+            { id: 9, name: '暗物質神殿', x: 2400, y: 2600, w: 400, h: 320, garrison: 1300, income: 220000, type: 'military' },
+            { id: 10, name: '終極兵器庫', x: 3400, y: 2800, w: 380, h: 300, garrison: 1800, income: 400000, type: 'military' },
+            { id: 11, name: '星際首都', x: 4200, y: 3000, w: 420, h: 340, garrison: 2600, income: 800000, type: 'military' },
+        ];
+
+        let worldMap = [];
+        function initWorldMap() {
+            worldMap = TERRITORY_DEFS.map(def => ({
+                ...def,
+                owner: def.type === 'capital' ? 'player' : (def.garrison >= 200 ? 'enemy' : 'neutral'),
+                garrisonCurrent: def.garrison,
+                conqueredAt: 0,
+            }));
+        }
+        initWorldMap();
+
+        function isTouchDevice() {
+            return 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+        }
+
+        // ============================================================
+        // 存檔 / 讀檔
+        // ============================================================
+        function saveGame() {
+            if (!storageReady) return;
+            localStorage.setItem(SAVE_KEY, JSON.stringify({
+                money, darkMatter, minerLevel, capacity, techTier, playerDamageLevel, turretDamageLevel,
+                player: p, bots, turrets, talents, wave, bestWave, waveTimer,
+                isWaveActive, items, enemies, skillCd, isOverclocked, overclockTimer, quest,
+                army, worldMap, viewMode, commander
+            }));
+        }
+
+        function loadGame(data) {
+            if (!data || typeof data !== 'object' || Array.isArray(data)) return;
+            const finiteOr = (value, fallback) => Number.isFinite(Number(value)) ? Number(value) : fallback;
+            const objectArray = value => Array.isArray(value) ? value.filter(item => item && typeof item === 'object').slice(0, 1000) : [];
+            money = Math.max(0, finiteOr(data.money, money));
+            darkMatter = Math.max(0, finiteOr(data.darkMatter, darkMatter));
+            minerLevel = Math.max(0, Math.floor(finiteOr(data.minerLevel, minerLevel)));
+            capacity = Math.max(1, Math.floor(finiteOr(data.capacity, capacity)));
+            techTier = Math.min(5, Math.max(1, Math.floor(finiteOr(data.techTier, techTier))));
+            playerDamageLevel = Math.max(0, Math.floor(finiteOr(data.playerDamageLevel, playerDamageLevel)));
+            turretDamageLevel = Math.max(0, Math.floor(finiteOr(data.turretDamageLevel, turretDamageLevel)));
+            if (data.player && typeof data.player === 'object') Object.assign(p, data.player);
+            bots = objectArray(data.bots);
+            turrets = objectArray(data.turrets);
+            if (data.talents && typeof data.talents === 'object') talents = { ...talents, ...data.talents };
+            wave = Math.max(1, Math.floor(finiteOr(data.wave, wave)));
+            bestWave = Math.max(0, Math.floor(finiteOr(data.bestWave, bestWave)));
+            waveTimer = Math.max(0, Math.floor(finiteOr(data.waveTimer, waveTimer)));
+            const wasWaveActive = data.isWaveActive === true;
+            isWaveActive = false;
+            items = objectArray(data.items);
+            enemies = wasWaveActive ? [] : objectArray(data.enemies);
+            if (wasWaveActive) waveTimer = 0;
+            if (Array.isArray(data.skillCd)) {
+                for (let i = 0; i < Math.min(3, data.skillCd.length); i++) skillCd[i] = Math.max(0, finiteOr(data.skillCd[i], 0));
+            }
+            isOverclocked = data.isOverclocked === true;
+            overclockTimer = Math.max(0, Math.floor(finiteOr(data.overclockTimer, overclockTimer)));
+            if (data.quest && typeof data.quest === 'object') quest = { ...quest, ...data.quest };
+            if (data.army && typeof data.army === 'object') {
+                army.soldiers = Math.max(0, Math.floor(finiteOr(data.army.soldiers, 0)));
+                army.tanks = Math.max(0, Math.floor(finiteOr(data.army.tanks, 0)));
+            }
+            if (Array.isArray(data.worldMap)) {
+                data.worldMap.forEach(saved => {
+                    const t = worldMap.find(w => w.id === saved.id);
+                    if (t) {
+                        if (saved.owner) t.owner = saved.owner;
+                        if (Number.isFinite(Number(saved.garrisonCurrent))) t.garrisonCurrent = Math.max(0, Math.floor(Number(saved.garrisonCurrent)));
+                    }
+                });
+            }
+            if (data.commander && typeof data.commander === 'object') {
+                commander.x = Math.max(20, Math.min(WORLD_W - 20, finiteOr(data.commander.x, commander.x)));
+                commander.y = Math.max(20, Math.min(WORLD_H - 20, finiteOr(data.commander.y, commander.y)));
+            }
+            if (data.viewMode === 'world') viewMode = 'world';
+            updateWorldUIVisibility();
+        }
+
+        // ============================================================
+        // 排行榜（保留）
+        // ============================================================
+        async function openTycoonLeaderboard() {
+            if (!await window.raingodRequireAuth('排行榜')) return;
+            document.getElementById('tycoon-leaderboard').style.display = 'flex';
+            await refreshTycoonLeaderboard();
+        }
+        function closeTycoonLeaderboard() {
+            document.getElementById('tycoon-leaderboard').style.display = 'none';
+        }
+        async function refreshTycoonLeaderboard() {
+            const status = document.getElementById('tycoon-leaderboard-status');
+            const list = document.getElementById('tycoon-leaderboard-list');
+            if (!await window.raingodRequireAuth('排行榜')) return;
+            const uid = window.raingodCurrentUser.uid;
+            status.textContent = '排行榜載入中…';
+            try {
+                const response = await fetch(`${TYCOON_LEADERBOARD_URL}.json`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                if (window.raingodCurrentUser?.uid !== uid) return;
+                const rows = await response.json() || {};
+                const entries = Object.entries(rows)
+                    .filter(([, row]) => row && Number.isFinite(Number(row.wave)))
+                    .sort((a, b) => Number(b[1].wave) - Number(a[1].wave) || Number(b[1].darkMatter || 0) - Number(a[1].darkMatter || 0))
+                    .slice(0, 50);
+                list.replaceChildren();
+                entries.forEach(([entryUid, row], index) => {
+                    const item = document.createElement('div');
+                    item.className = 'tycoon-leaderboard-row';
+                    const name = document.createElement('span');
+                    name.textContent = `${index + 1}. ${row.name || '玩家'}${entryUid === uid ? '（你）' : ''}`;
+                    const value = document.createElement('strong');
+                    value.textContent = `第 ${Math.floor(Number(row.wave))} 波 · ${Math.floor(Number(row.darkMatter) || 0)} 暗物質`;
+                    item.append(name, value);
+                    list.appendChild(item);
+                });
+                status.textContent = entries.length ? `已載入 ${entries.length} 位玩家，依最高波數排序。` : '目前還沒有排行榜資料。';
+            } catch (error) {
+                console.error('載入雨神大亨排行榜失敗：', error);
+                status.textContent = '排行榜載入失敗，請稍後重試。';
+            }
+        }
+        async function uploadTycoonLeaderboardScore() {
+            const currentUser = window.raingodCurrentUser;
+            if (!currentUser) return;
+            const uid = currentUser.uid;
+            const scoreWave = Math.max(1, bestWave, wave);
+            const scoreDarkMatter = Math.floor(darkMatter);
+            const entryUrl = `${TYCOON_LEADERBOARD_URL}/${encodeURIComponent(uid)}.json`;
+            try {
+                const previousResponse = await fetch(entryUrl);
+                if (!previousResponse.ok) throw new Error(`HTTP ${previousResponse.status}`);
+                const previous = await previousResponse.json();
+                if (window.raingodCurrentUser?.uid !== uid) return;
+                if (previous && (Number(previous.wave) > scoreWave ||
+                    (Number(previous.wave) === scoreWave && Number(previous.darkMatter) >= scoreDarkMatter))) return;
+                const response = await fetch(entryUrl, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: currentUser.displayName || (currentUser.email ? currentUser.email.split('@')[0] : '雨神玩家'),
+                        wave: scoreWave,
+                        darkMatter: scoreDarkMatter,
+                        updatedAt: Date.now()
+                    })
+                });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            } catch (error) {
+                console.error('上傳雨神大亨排行榜失敗：', error);
+            }
+        }
+        async function initializeTycoon() {
+            await window.raingodFirebaseReady;
+            await window.raingodAuthReady;
+            await window.raingodBindStorage('raingod-tycoon', [SAVE_KEY], { [SAVE_KEY]: null }, data => {
+                loadGame(data[SAVE_KEY]);
+                storageReady = true;
+                saveGame();
+                if (window.raingodCurrentUser) uploadTycoonLeaderboardScore();
+            });
+            window.raingodOnAuthStateChanged(currentUser => {
+                const button = document.getElementById('tycoon-leaderboard-button');
+                button.textContent = currentUser ? '🏆 排行榜' : '🏆 登入後查看排行榜';
+                if (currentUser) uploadTycoonLeaderboardScore();
+                else {
+                    closeTycoonLeaderboard();
+                    document.getElementById('tycoon-leaderboard-list').replaceChildren();
+                    document.getElementById('tycoon-leaderboard-status').textContent = '請登入帳號後查看。';
+                }
+            });
+            draw();
+        }
+
+        // ============================================================
+        // 物品 / 原有基地邏輯
+        // ============================================================
+        const ITEMS = {
+            RAW:     { name: '原礦', val: 10, color: '#ef4444' },
+            STEEL:   { name: '鋼鐵', val: 50, color: '#f59e0b' },
+            SILICON: { name: '矽晶', val: 80, color: '#0284c7' },
+            CHIP:    { name: '晶片', val: 300, color: '#3b82f6' },
+            URANIUM: { name: '鈾礦', val: 500, color: '#10b981' },
+            BATTERY: { name: '核電池', val: 2500, color: '#22c55e' },
+            CORE:    { name: '量子核心', val: 12000, color: '#a855f7' },
+            ANTIM:   { name: '反物質', val: 100000, color: '#e11d48' }
+        };
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.panel > div[id^="tab-"]').forEach(d => d.style.display = 'none');
+            document.getElementById(tabId).style.display = 'block';
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            if (event) event.target.classList.add('active');
+        }
+
+        function toggleTycoonShop(open = !document.getElementById('ui').classList.contains('shop-open')) {
+            const ui = document.getElementById('ui');
+            const toggle = document.querySelector('.mobile-shop-toggle');
+            ui.classList.toggle('shop-open', open);
+            toggle.setAttribute('aria-expanded', String(open));
+        }
+
+        // ============================================================
+        // 建築位置
+        // ============================================================
+        function getBuildings() {
+            const startX = 60, startY = 80;
+            const b = {
+                extractor: { x: startX, y: startY, w: 130, h: 85, color: '#ef4444', label: '🔴 採礦塔', type: 'extractor' },
+                smelter:   { x: startX, y: startY + 150, w: 130, h: 85, color: '#f59e0b', label: '🟠 鋼鐵廠', type: 'smelter' },
+                hub:       { x: cvs.width - 200, y: 200, w: 160, h: 110, color: '#38bdf8', label: '💎 總部基地', type: 'hub' }
+            };
+            if (techTier >= 2) b.chipFab = { x: startX, y: startY + 300, w: 130, h: 85, color: '#3b82f6', label: '🔵 晶片廠', type: 'chipFab' };
+            if (techTier >= 3) b.nukeFab = { x: startX, y: startY + 450, w: 130, h: 85, color: '#22c55e', label: '🟢 鈾能廠', type: 'nukeFab' };
+            if (techTier >= 4) b.qFab    = { x: startX, y: startY + 600, w: 130, h: 85, color: '#a855f7', label: '🟣 量子合成', type: 'qFab' };
+            if (techTier >= 5) b.antiFab = { x: startX, y: startY + 750, w: 130, h: 85, color: '#e11d48', label: '💎 反物質所', type: 'antiFab' };
+            return b;
+        }
+
+        const resize = () => { cvs.width = window.innerWidth; cvs.height = window.innerHeight; };
+        window.addEventListener('resize', resize); resize();
+
+        // ---- 輸入 ----
+        window.addEventListener('keydown', e => {
+            const k = e.key.toLowerCase();
+            if (['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(k)) {
+                keys[k] = true;
+                if (viewMode === 'world') e.preventDefault();
+            }
+        });
+        window.addEventListener('keyup', e => {
+            const k = e.key.toLowerCase();
+            if (['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(k)) {
+                keys[k] = false;
+            }
+        });
+
+        cvs.addEventListener('pointermove', e => {
+            if (viewMode === 'base' && e.pointerType === 'touch') { p.tx = e.clientX; p.ty = e.clientY; }
+        });
+        window.addEventListener('pointermove', e => {
+            if (viewMode === 'base') {
+                if (e.pointerType !== 'touch') { p.tx = e.clientX; p.ty = e.clientY; }
+            } else {
+                handleWorldPointerMove(e);
+            }
+        });
+        cvs.addEventListener('pointerdown', e => {
+            if (viewMode === 'base') {
+                if (e.pointerType === 'touch') { p.tx = e.clientX; p.ty = e.clientY; }
+            } else {
+                handleWorldPointerDown(e);
+            }
+        });
+        window.addEventListener('pointerup', e => {
+            if (viewMode === 'world') handleWorldPointerUp(e);
+        });
+
+        function triggerShake(duration = 10) { shakeTime = duration; }
+        function spawnFloatText(x, y, text, color='#4ade80') { floatTexts.push({ x, y, text, color, alpha: 1 }); }
+        function spawnParticles(x, y, color, count=6) {
+            for(let i=0; i<count; i++) {
+                particles.push({ x, y, vx: (Math.random()-0.5)*8, vy: (Math.random()-0.5)*8, size: Math.random()*5+2, color, alpha: 1 });
+            }
+        }
+
+        // ---- 技能 ----
+        function useSkill(num) {
+            if (skillCd[num-1] > 0) return;
+            if (num === 1) {
+                isOverclocked = true; overclockTimer = 600; skillCd[0] = 1800;
+                spawnFloatText(p.x, p.y, "⚡ 系統極速超頻！", "#f59e0b");
+            } else if (num === 2) {
+                enemies.forEach(e => { e.hp -= 300 + wave * 60; spawnParticles(e.x, e.y, '#e11d48', 12); });
+                triggerShake(25); skillCd[1] = 2400;
+                spawnFloatText(cvs.width/2, cvs.height/2, "💥 軌道離子砲全螢幕打擊！", "#e11d48");
+            } else if (num === 3) {
+                const power = getArmyPower();
+                if (power > 0) {
+                    enemies.forEach(e => {
+                        e.hp -= power * 0.8;
+                        spawnParticles(e.x, e.y, '#f59e0b', 10);
+                    });
+                    triggerShake(15);
+                    skillCd[2] = 3600;
+                    spawnFloatText(p.x, p.y - 30, `🪖 軍隊衝鋒！戰力 ${Math.floor(power)}`, '#f59e0b');
+                    for (let i = 0; i < Math.min(8, army.soldiers + army.tanks); i++) {
+                        battleEffects.push({
+                            type: 'soldierCharge',
+                            x: p.x + (Math.random()-0.5)*100,
+                            y: p.y + (Math.random()-0.5)*100,
+                            vx: 8 + Math.random()*4,
+                            vy: (Math.random()-0.5)*2,
+                            life: 60,
+                            maxLife: 60
+                        });
+                    }
+                } else {
+                    spawnFloatText(p.x, p.y - 30, "❌ 沒有軍隊！請先招募士兵", '#ef4444');
+                }
+            }
+        }
+
+        // ---- 建造 / 升級 ----
+        function buildTurret(type) {
+            const costs = { gatling: 1000, laser: 5000, mortar: 20000, frost: 50000, blackhole: 200000 };
+            let cost = costs[type] * Math.pow(1.3, turrets.filter(t=>t.type===type).length);
+            if (money >= cost) {
+                money -= cost;
+                let tx = 260 + Math.random() * 200;
+                let ty = 100 + Math.random() * (cvs.height - 220);
+                turrets.push({ x: tx, y: ty, type, cd: 0, range: type==='laser'?350:(type==='blackhole'?280:240), angle: 0 });
+                spawnFloatText(tx, ty, `防禦塔建造完成！`, '#38bdf8');
+            }
+        }
+        function triggerNextWave() { if (!isWaveActive) { waveTimer = 0; saveGame(); } }
+
+        function spawnWave() {
+            isWaveActive = true;
+            bestWave = Math.max(bestWave, wave);
+            saveGame();
+            uploadTycoonLeaderboardScore();
+            let count = 8 + wave * 4;
+            let isBossWave = (wave % 5 === 0);
+            for (let i = 0; i < count; i++) {
+                setTimeout(() => {
+                    let type = 'normal';
+                    let rand = Math.random();
+                    if (rand < 0.25) type = 'runner';
+                    else if (rand < 0.45) type = 'tank';
+                    else if (rand < 0.6) type = 'bomber';
+                    if (isBossWave && i === count - 1) type = 'boss';
+                    let hpMap = { normal: 50, runner: 30, tank: 180, bomber: 40, boss: 1800 + wave * 600 };
+                    let spdMap = { normal: 1.5, runner: 2.8, tank: 0.8, bomber: 2.0, boss: 0.5 };
+                    enemies.push({
+                        x: cvs.width + 40,
+                        y: 80 + Math.random() * (cvs.height - 160),
+                        type,
+                        hp: (hpMap[type] + wave * 35),
+                        maxHp: (hpMap[type] + wave * 35),
+                        speed: spdMap[type],
+                        reward: (type === 'boss' ? 3500 : 80) + wave * 30,
+                        anim: Math.random() * Math.PI * 2
+                    });
+                }, i * 400);
+            }
+        }
+
+        function buyBot() {
+            let cost = Math.floor(500 * Math.pow(1.3, bots.length));
+            if(money >= cost) { money -= cost; bots.push({ x: 120, y: cvs.height/2, bag: [], speed: 4.5, walkCycle: 0, facing: 0 }); saveGame(); }
+        }
+        function upgrade(type) {
+            if (type === 'miner') {
+                let cost = Math.floor(1000 * Math.pow(1.5, minerLevel));
+                if (money >= cost) { money -= cost; minerLevel++; saveGame(); }
+            } else if (type === 'capacity') {
+                let cost = Math.floor(1500 * (capacity / 2));
+                if (money >= cost) { money -= cost; capacity += 2; saveGame(); }
+            } else if (type === 'playerDamage') {
+                let cost = Math.floor(1000 * Math.pow(1.6, playerDamageLevel));
+                if (money >= cost) { money -= cost; playerDamageLevel++; saveGame(); }
+            } else if (type === 'turretDamage') {
+                let cost = Math.floor(1500 * Math.pow(1.6, turretDamageLevel));
+                if (money >= cost) { money -= cost; turretDamageLevel++; saveGame(); }
+            }
+        }
+        function buyTalent(type) {
+            if (type === 'dmg' && darkMatter >= (talents.dmgLv + 1) * 5) {
+                darkMatter -= (talents.dmgLv + 1) * 5; talents.dmgLv++;
+            } else if (type === 'speed' && darkMatter >= (talents.spdLv + 1) * 5) {
+                darkMatter -= (talents.spdLv + 1) * 5; talents.spdLv++;
+            } else if (type === 'army' && darkMatter >= (talents.armyLv + 1) * 5) {
+                darkMatter -= (talents.armyLv + 1) * 5; talents.armyLv++;
+            }
+            saveGame();
+        }
+        function unlockTier(tier) {
+            const costs = { 2: 2500, 3: 25000, 4: 200000, 5: 2000000 };
+            if (money >= costs[tier] && techTier === tier - 1) {
+                money -= costs[tier]; techTier = tier; saveGame();
+            }
+        }
+        function triggerRebirth() {
+            let earnedDM = Math.floor(money / 100000);
+            if (earnedDM > 0 || money >= 100000) {
+                darkMatter += Math.max(1, earnedDM);
+                money = 2000; minerLevel = 0; capacity = 4; techTier = 1;
+                playerDamageLevel = 0; turretDamageLevel = 0;
+                p.bag = []; bots = []; items = []; turrets = []; enemies = []; wave = 1;
+                army.soldiers = 0; army.tanks = 0;
+                initWorldMap();
+                spawnFloatText(cvs.width/2, cvs.height/2, `🌌 暗物質量子轉生成功！`, '#c084fc');
+                triggerShake(30);
+                saveGame();
+            }
+        }
+
+        function updateQuests(type, amount = 1) {
+            if (quest.type === type) {
+                quest.current += amount;
+                if (quest.current >= quest.target) {
+                    money += quest.reward;
+                    spawnFloatText(cvs.width/2, 100, `🎉 完成任務！獲得 +$${quest.reward}`, '#f59e0b');
+                    let targets = [30, 50, 100];
+                    let t = targets[Math.floor(Math.random() * targets.length)];
+                    quest = { type: 'kill', target: t, current: 0, reward: t * 120, desc: `擊殺 ${t} 隻異形蟲` };
+                }
+            }
+        }
+
+        // ============================================================
+        // 军队系统
+        // ============================================================
+        function getArmyPower() {
+            return army.soldiers * 10 + army.tanks * 100;
+        }
+
+        function recruitSoldier() {
+            const cost = Math.floor(800 * Math.pow(1.2, army.soldiers));
+            if (money >= cost) {
+                money -= cost;
+                army.soldiers++;
+                spawnFloatText(p.x, p.y - 20, `🪖 招募士兵 (總計 ${army.soldiers})`, '#f59e0b');
+                saveGame();
+            }
+        }
+
+        function recruitTank() {
+            const cost = Math.floor(5000 * Math.pow(1.3, army.tanks));
+            if (money >= cost) {
+                money -= cost;
+                army.tanks++;
+                spawnFloatText(p.x, p.y - 20, `🚀 生產坦克 (總計 ${army.tanks})`, '#f59e0b');
+                saveGame();
+            }
+        }
+
+        // ============================================================
+        // 視圖切換
+        // ============================================================
+        function updateWorldUIVisibility() {
+            const worldUI = document.getElementById('world-ui');
+            const baseUI = document.getElementById('ui');
+            const viewToggle = document.getElementById('view-toggle');
+            const lbBtn = document.getElementById('tycoon-leaderboard-button');
+            if (viewMode === 'world') {
+                worldUI.classList.add('active');
+                baseUI.style.display = 'none';
+                viewToggle.style.display = 'none';
+                lbBtn.style.display = 'none';
+            } else {
+                worldUI.classList.remove('active');
+                baseUI.style.display = 'block';
+                viewToggle.style.display = 'block';
+                lbBtn.style.display = 'block';
+                closeTerritoryPanel();
+            }
+        }
+
+        function switchView(mode) {
+            if (mode === 'world' && viewMode === 'base') {
+                // 切换时重置行军
+                armyMarch.active = false;
+                armyMarch.battleActive = false;
+            }
+            viewMode = mode;
+            updateWorldUIVisibility();
+            if (mode === 'world') {
+                const cap = worldMap.find(t => t.type === 'capital');
+                if (cap) { commander.x = cap.x + cap.w/2; commander.y = cap.y + cap.h/2; }
+                camera.x = commander.x;
+                camera.y = commander.y;
+                refreshWorldHUD();
+            }
+            saveGame();
+        }
+
+        function centerOnCapital() {
+            const cap = worldMap.find(t => t.type === 'capital');
+            if (cap) {
+                commander.x = cap.x + cap.w/2;
+                commander.y = cap.y + cap.h/2;
+            }
+        }
+
+        function zoomWorld(factor) {
+            camera.zoom = Math.max(0.25, Math.min(1.6, camera.zoom * factor));
+        }
+
+        function worldToScreen(wx, wy) {
+            return {
+                x: (wx - camera.x) * camera.zoom + cvs.width/2,
+                y: (wy - camera.y) * camera.zoom + cvs.height/2
+            };
+        }
+        function screenToWorld(sx, sy) {
+            return {
+                x: (sx - cvs.width/2) / camera.zoom + camera.x,
+                y: (sy - cvs.height/2) / camera.zoom + camera.y
+            };
+        }
+
+        function getJoystickCenter() {
+            return { x: cvs.width - 100, y: cvs.height - 100 };
+        }
+
+        function updateKnob(cx, cy) {
+            const dx = cx - joystick.baseX;
+            const dy = cy - joystick.baseY;
+            const dist = Math.hypot(dx, dy);
+            const maxDist = 55;
+            const clamped = Math.min(dist, maxDist);
+            const angle = Math.atan2(dy, dx);
+            joystick.knobX = joystick.baseX + Math.cos(angle) * clamped;
+            joystick.knobY = joystick.baseY + Math.sin(angle) * clamped;
+            const norm = clamped / maxDist;
+            joystick.dx = Math.cos(angle) * norm;
+            joystick.dy = Math.sin(angle) * norm;
+            if (dist < 5) { joystick.dx = 0; joystick.dy = 0; }
+        }
+
+        function handleWorldPointerDown(e) {
+            if (e.pointerType === 'touch' && isTouchDevice()) {
+                const jc = getJoystickCenter();
+                if (Math.hypot(e.clientX - jc.x, e.clientY - jc.y) < 90) {
+                    joystick.active = true;
+                    joystick.pointerId = e.pointerId;
+                    joystick.baseX = jc.x;
+                    joystick.baseY = jc.y;
+                    updateKnob(e.clientX, e.clientY);
+                    return;
+                }
+            }
+            tapStart = { x: e.clientX, y: e.clientY, moved: false };
+        }
+
+        function handleWorldPointerMove(e) {
+            if (joystick.active && e.pointerId === joystick.pointerId) {
+                updateKnob(e.clientX, e.clientY);
+                return;
+            }
+            if (tapStart) {
+                if (Math.hypot(e.clientX - tapStart.x, e.clientY - tapStart.y) > 12) tapStart.moved = true;
+            }
+        }
+
+        function handleWorldPointerUp(e) {
+            if (joystick.active && e.pointerId === joystick.pointerId) {
+                joystick.active = false;
+                joystick.dx = 0; joystick.dy = 0;
+                joystick.pointerId = null;
+                return;
+            }
+            if (tapStart && !tapStart.moved) {
+                const w = screenToWorld(e.clientX, e.clientY);
+                const hit = worldMap.find(t =>
+                    w.x >= t.x && w.x <= t.x + t.w && w.y >= t.y && w.y <= t.y + t.h
+                );
+                if (hit) {
+                    selectedTerritoryId = hit.id;
+                    showTerritoryPanel(hit);
+                } else {
+                    closeTerritoryPanel();
+                }
+            }
+            tapStart = null;
+        }
+
+        function showTerritoryPanel(t) {
+            const panel = document.getElementById('territory-panel');
+            panel.classList.add('active');
+            document.getElementById('terrName').textContent = `📍 ${t.name}`;
+            const ownerText = t.owner === 'player' ? '🟢 已佔領' : (t.owner === 'enemy' ? '🔴 敵軍' : '⚪ 中立');
+            document.getElementById('terrOwner').textContent = ownerText;
+            document.getElementById('terrGarrison').textContent = t.garrisonCurrent + ' 守軍';
+            document.getElementById('terrIncome').textContent = '$' + t.income.toLocaleString() + ' / 波';
+            const bar = document.getElementById('terrBar');
+            const ratio = t.owner === 'player' ? 100 : Math.min(100, (t.garrisonCurrent / 500) * 100);
+            bar.style.width = ratio + '%';
+            const attackBtn = document.getElementById('attackBtn');
+            const attackCost = document.getElementById('attackCost');
+            if (t.owner === 'player') {
+                attackBtn.disabled = true;
+                attackCost.textContent = '已佔領';
+            } else if (t.type === 'capital') {
+                attackBtn.disabled = true;
+                attackCost.textContent = '無法攻擊';
+            } else {
+                attackBtn.disabled = false;
+                attackCost.textContent = `需要 ${Math.ceil(t.garrisonCurrent * 1.2)} 戰力`;
+            }
+        }
+        function closeTerritoryPanel() {
+            document.getElementById('territory-panel').classList.remove('active');
+            selectedTerritoryId = null;
+        }
+
+        // ============================================================
+        // ★★★ 攻击领地 — 行军与实时战斗（核心改造） ★★★
+        // ============================================================
+        function attackSelected() {
+            if (selectedTerritoryId === null) return;
+            if (armyMarch.active || armyMarch.battleActive) return;
+            const t = worldMap.find(x => x.id === selectedTerritoryId);
+            if (!t || t.owner === 'player' || t.type === 'capital') return;
+            const power = getArmyPower();
+            const required = Math.ceil(t.garrisonCurrent * 1.2);
+            if (power < required) {
+                alert(`軍隊戰力不足！需要 ${required} 戰力，目前只有 ${power}。\n請先招募更多士兵或坦克。`);
+                return;
+            }
+
+            // 初始化行军+战斗
+            armyMarch.active = true;
+            armyMarch.progress = 0;
+            armyMarch.from = { x: commander.x, y: commander.y };
+            armyMarch.to = { x: t.x + t.w/2, y: t.y + t.h/2 };
+            armyMarch.soldiers = army.soldiers;
+            armyMarch.tanks = army.tanks;
+            armyMarch.result = null;
+            armyMarch.targetId = t.id;
+            armyMarch.battleActive = true;
+            armyMarch.battlePhase = 'march';
+            armyMarch.battleTimer = 0;
+            armyMarch.playerUnits = [];
+            armyMarch.enemyUnits = [];
+            armyMarch.report = null;
+            armyMarch.lossSoldiers = 0;
+            armyMarch.lossTanks = 0;
+            armyMarch.enemyLoss = 0;
+
+            // 生成我方单位（每个士兵/坦克一个单位，但为了画面不卡顿，坦克合并成较大单位）
+            const playerUnitCount = Math.min(24, army.soldiers + army.tanks * 3);
+            for (let i = 0; i < playerUnitCount; i++) {
+                const isTank = i >= army.soldiers || Math.random() < (army.tanks / Math.max(1, army.soldiers + army.tanks)) * 0.7;
+                const maxHp = isTank ? 80 : 25;
+                armyMarch.playerUnits.push({
+                    hp: maxHp, maxHp: maxHp,
+                    x: t.x + t.w/2 + (Math.random()-0.5) * (t.w * 0.6),
+                    y: t.y + t.h/2 + (Math.random()-0.5) * (t.h * 0.6),
+                    type: isTank ? 'tank' : 'soldier',
+                    side: 'player',
+                    attackTimer: Math.random() * 30,
+                    target: null
+                });
+            }
+
+            // 生成敌方单位
+            const enemyUnitCount = Math.min(30, Math.ceil(t.garrisonCurrent / 4));
+            for (let i = 0; i < enemyUnitCount; i++) {
+                const maxHp = 20 + Math.floor(t.garrisonCurrent / enemyUnitCount * 0.8);
+                armyMarch.enemyUnits.push({
+                    hp: maxHp, maxHp: maxHp,
+                    x: t.x + t.w/2 + (Math.random()-0.5) * (t.w * 0.7),
+                    y: t.y + t.h/2 + (Math.random()-0.5) * (t.h * 0.7),
+                    type: 'enemy',
+                    side: 'enemy',
+                    attackTimer: Math.random() * 30,
+                    target: null
+                });
+            }
+
+            closeTerritoryPanel();
+
+            // 行军尘土
+            for (let i = 0; i < Math.min(20, army.soldiers + army.tanks); i++) {
+                battleEffects.push({
+                    type: 'marchDust',
+                    x: commander.x + (Math.random()-0.5)*40,
+                    y: commander.y + (Math.random()-0.5)*40,
+                    vx: 0, vy: 0,
+                    life: 90, maxLife: 90,
+                    size: 3 + Math.random()*4
+                });
+            }
+        }
+
+        // 战斗更新（每帧）
+        function updateBattle(dt) {
+            if (!armyMarch.battleActive) return;
+
+            // 阶段1：行军
+            if (armyMarch.battlePhase === 'march') {
+                armyMarch.progress += 0.006;
+                if (armyMarch.progress >= 1) {
+                    armyMarch.progress = 1;
+                    armyMarch.battlePhase = 'fight';
+                    armyMarch.battleTimer = 0;
+                }
+                return;
+            }
+
+            // 阶段2：交战
+            if (armyMarch.battlePhase === 'fight') {
+                armyMarch.battleTimer++;
+
+                const players = armyMarch.playerUnits;
+                const enemies = armyMarch.enemyUnits;
+
+                // 每个单位攻击
+                players.forEach(u => {
+                    if (u.hp <= 0) return;
+                    u.attackTimer--;
+                    if (u.attackTimer <= 0) {
+                        u.attackTimer = 20 + Math.random() * 25;
+                        // 找最近的敌方单位
+                        let target = enemies.find(e => e.hp > 0);
+                        if (target) {
+                            // 简单的伤害
+                            const dmg = u.type === 'tank' ? 30 + Math.random() * 20 : 10 + Math.random() * 8;
+                            target.hp -= dmg;
+                            // 特效
+                            spawnParticles(target.x, target.y, '#f59e0b', 3);
+                            if (target.hp <= 0) {
+                                spawnParticles(target.x, target.y, '#ef4444', 6);
+                                armyMarch.enemyLoss++;
+                            }
+                        }
+                    }
+                });
+
+                enemies.forEach(u => {
+                    if (u.hp <= 0) return;
+                    u.attackTimer--;
+                    if (u.attackTimer <= 0) {
+                        u.attackTimer = 30 + Math.random() * 30;
+                        let target = players.find(p => p.hp > 0);
+                        if (target) {
+                            const dmg = 8 + Math.random() * 15;
+                            target.hp -= dmg;
+                            spawnParticles(target.x, target.y, '#ef4444', 3);
+                            if (target.hp <= 0) {
+                                spawnParticles(target.x, target.y, '#38bdf8', 6);
+                                if (target.type === 'soldier') armyMarch.lossSoldiers++;
+                                else armyMarch.lossTanks++;
+                            }
+                        }
+                    }
+                });
+
+                // 检查是否结束
+                const alivePlayers = players.filter(p => p.hp > 0).length;
+                const aliveEnemies = enemies.filter(e => e.hp > 0).length;
+
+                if (aliveEnemies === 0 || alivePlayers === 0) {
+                    // 战斗结束
+                    armyMarch.battlePhase = 'done';
+                    armyMarch.battleActive = false;
+
+                    // 结算
+                    const t = worldMap.find(x => x.id === armyMarch.targetId);
+                    if (t && aliveEnemies === 0) {
+                        // 胜利
+                        t.owner = 'player';
+                        t.garrisonCurrent = 0;
+                        t.conqueredAt = frame;
+
+                        // 计算实际损失（用实际生成的单位数折算回原始军队）
+                        const totalPlayerUnits = players.length;
+                        const lostUnits = players.filter(p => p.hp <= 0).length;
+                        const lossRatio = lostUnits / Math.max(1, totalPlayerUnits);
+                        const realLossSoldiers = Math.floor(army.soldiers * lossRatio * 0.9);
+                        const realLossTanks = Math.floor(army.tanks * lossRatio * 0.7);
+                        army.soldiers = Math.max(0, army.soldiers - realLossSoldiers);
+                        army.tanks = Math.max(0, army.tanks - realLossTanks);
+
+                        armyMarch.report = {
+                            victory: true,
+                            territory: t.name,
+                            soldiersLost: realLossSoldiers,
+                            tanksLost: realLossTanks,
+                            enemiesKilled: armyMarch.enemyLoss
+                        };
+
+                        showBattleText(`⚔️ 佔領 ${t.name}！`, '#fbbf24');
+                        triggerShake(25);
+                        // 胜利特效
+                        for (let i = 0; i < 40; i++) {
+                            particles.push({
+                                x: t.x + t.w/2 + (Math.random()-0.5)*200,
+                                y: t.y + t.h/2 + (Math.random()-0.5)*150,
+                                vx: (Math.random()-0.5)*15,
+                                vy: (Math.random()-0.5)*15,
+                                size: 3 + Math.random()*8,
+                                color: Math.random() > 0.5 ? '#fbbf24' : '#22c55e',
+                                alpha: 1
+                            });
+                        }
+                    } else {
+                        // 失败
+                        const totalPlayerUnits = players.length;
+                        const lostUnits = players.filter(p => p.hp <= 0).length;
+                        const lossRatio = Math.min(1, lostUnits / Math.max(1, totalPlayerUnits));
+                        const realLossSoldiers = Math.floor(army.soldiers * Math.max(0.35, lossRatio * 0.8));
+                        const realLossTanks = Math.floor(army.tanks * Math.max(0.2, lossRatio * 0.6));
+                        army.soldiers = Math.max(0, army.soldiers - realLossSoldiers);
+                        army.tanks = Math.max(0, army.tanks - realLossTanks);
+
+                        armyMarch.report = {
+                            victory: false,
+                            territory: t ? t.name : '未知',
+                            soldiersLost: realLossSoldiers,
+                            tanksLost: realLossTanks,
+                            enemiesKilled: armyMarch.enemyLoss
+                        };
+
+                        showBattleText(`💀 進攻失敗...`, '#ef4444');
+                        triggerShake(20);
+                    }
+
+                    // 清理战场效果
+                    setTimeout(() => {
+                        armyMarch.active = false;
+                        armyMarch.battleActive = false;
+                        armyMarch.playerUnits = [];
+                        armyMarch.enemyUnits = [];
+                    }, 1500);
+
+                    refreshWorldHUD();
+                    saveGame();
+                }
+            }
+        }
+
+        function resolveBattle() {
+            // 此函数已由 updateBattle 替代，保留空壳以防调用错误
+        }
+
+        function showBattleText(text, color) {
+            const overlay = document.getElementById('battle-overlay');
+            overlay.classList.add('active');
+            overlay.innerHTML = '';
+            const flash = document.createElement('div');
+            flash.className = 'battle-flash';
+            overlay.appendChild(flash);
+            const txt = document.createElement('div');
+            txt.className = 'battle-text';
+            txt.textContent = text;
+            txt.style.color = color || '#fbbf24';
+            overlay.appendChild(txt);
+            setTimeout(() => {
+                overlay.classList.remove('active');
+                overlay.innerHTML = '';
+            }, 1400);
+        }
+
+        function refreshWorldHUD() {
+            const owned = worldMap.filter(t => t.owner === 'player').length;
+            const total = worldMap.length;
+            document.getElementById('wSoldiers').textContent = army.soldiers;
+            document.getElementById('wTanks').textContent = army.tanks;
+            document.getElementById('wPower').textContent = getArmyPower();
+            document.getElementById('wOwned').textContent = owned;
+            document.getElementById('wTotal').textContent = total;
+
+            document.getElementById('territoryCount').textContent = owned;
+            document.getElementById('territoryMax').textContent = total;
+            document.getElementById('soldierCount').textContent = army.soldiers;
+            document.getElementById('tankCount').textContent = army.tanks;
+            document.getElementById('soldierCost').textContent = '$' + Math.floor(800 * Math.pow(1.2, army.soldiers)).toLocaleString();
+            document.getElementById('tankCost').textContent = '$' + Math.floor(5000 * Math.pow(1.3, army.tanks)).toLocaleString();
+            document.getElementById('armyPower').textContent = getArmyPower();
+            const ownedNames = worldMap.filter(t => t.owner === 'player' && t.type !== 'capital').map(t => t.name);
+            document.getElementById('ownedTerritories').textContent = ownedNames.length ? ownedNames.join('、') : '無';
+        }
+
+        // ============================================================
+        // 基地更新（保留原样）
+        // ============================================================
+        function updateBase() {
+            const b = getBuildings();
+            p.x += (p.tx - p.x) * 0.18; p.y += (p.ty - p.y) * 0.18;
+
+            const moveDx = p.tx - p.x, moveDy = p.ty - p.y;
+            if (Math.hypot(moveDx, moveDy) > 3) {
+                p.facing = Math.atan2(moveDy, moveDx);
+                p.walkCycle += 0.3;
+            } else {
+                p.walkCycle += 0.06;
+            }
+
+            updateFactoryAnim();
+
+            if (!isWaveActive) {
+                waveTimer--;
+                if (waveTimer <= 0) spawnWave();
+            } else {
+                if (enemies.length === 0) {
+                    isWaveActive = false; wave++; waveTimer = 20 * 60;
+                    const territoryIncome = worldMap.filter(t => t.owner === 'player' && t.type !== 'capital')
+                        .reduce((s, t) => s + t.income, 0);
+                    const baseIncome = 1200 * wave;
+                    money += baseIncome + territoryIncome;
+                    darkMatter += 1;
+                    spawnFloatText(cvs.width/2, cvs.height/2, `🎉 第 ${wave-1} 波完成！+$${(baseIncome+territoryIncome).toLocaleString()}`, '#f59e0b');
+                    if (territoryIncome > 0) {
+                        spawnFloatText(cvs.width/2, cvs.height/2 + 26, `🛡️ 領地貢獻 +$${territoryIncome.toLocaleString()}`, '#4ade80');
+                    }
+                    saveGame();
+                    uploadTycoonLeaderboardScore();
+                }
+            }
+
+            const spawnInterval = isOverclocked ? 4 : Math.max(6, 35 - minerLevel * 4);
+            if(frame % spawnInterval === 0 && items.length < 50) {
+                items.push({ x: b.extractor.x + b.extractor.w + 15, y: b.extractor.y + b.extractor.h/2 + (Math.random()-0.5)*30, type: 'RAW' });
+            }
+
+            bots.forEach(bot => {
+                let speed = (bot.speed * (1 + talents.spdLv * 0.15)) * (isOverclocked ? 1.8 : 1);
+                let target = null;
+                if (bot.bag.length === 0) {
+                    let it = items[0];
+                    target = it ? { x: it.x, y: it.y } : { x: b.extractor.x + b.extractor.w + 15, y: b.extractor.y + b.extractor.h/2 };
+                } else {
+                    let top = bot.bag[bot.bag.length - 1];
+                    if (top.type === 'RAW') target = { x: b.smelter.x + b.smelter.w/2, y: b.smelter.y + b.smelter.h/2 };
+                    else if (top.type === 'STEEL' && b.chipFab) target = { x: b.chipFab.x + b.chipFab.w/2, y: b.chipFab.y + b.chipFab.h/2 };
+                    else if (top.type === 'CHIP' && b.nukeFab) target = { x: b.nukeFab.x + b.nukeFab.w/2, y: b.nukeFab.y + b.nukeFab.h/2 };
+                    else if (top.type === 'BATTERY' && b.qFab) target = { x: b.qFab.x + b.qFab.w/2, y: b.qFab.y + b.qFab.h/2 };
+                    else if (top.type === 'CORE' && b.antiFab) target = { x: b.antiFab.x + b.antiFab.w/2, y: b.antiFab.y + b.antiFab.h/2 };
+                    else target = { x: b.hub.x + b.hub.w/2, y: b.hub.y + b.hub.h/2 };
+                }
+                let dx = target.x - bot.x, dy = target.y - bot.y, dist = Math.hypot(dx, dy);
+                if(dist > 5) {
+                    bot.x += (dx / dist) * speed; bot.y += (dy / dist) * speed;
+                    bot.facing = Math.atan2(dy, dx);
+                    bot.walkCycle += 0.25;
+                } else {
+                    bot.walkCycle += 0.05;
+                }
+                interact(bot, b);
+            });
+
+            interact(p, b);
+
+            p.cooldown--;
+            let totalDmgMult = (1 + darkMatter * 0.1) * (1 + talents.dmgLv * 0.2);
+            if (p.cooldown <= 0 && enemies.length > 0) {
+                let target = enemies.find(e => Math.hypot(p.x - e.x, p.y - e.y) < p.atkRange);
+                if (target) {
+                    bullets.push({ x: p.x, y: p.y, tx: target.x, ty: target.y, dmg: 30 * totalDmgMult * (1 + playerDamageLevel * 0.25), speed: 15, color: '#38bdf8' });
+                    p.cooldown = isOverclocked ? 4 : 9;
+                }
+            }
+
+            turrets.forEach(t => {
+                t.cd--;
+                if (t.cd <= 0 && enemies.length > 0) {
+                    let target = enemies.find(e => Math.hypot(t.x - e.x, t.y - e.y) < t.range);
+                    if (target) {
+                        if (t.type === 'gatling') {
+                            bullets.push({ x: t.x, y: t.y, tx: target.x, ty: target.y, dmg: 18 * totalDmgMult * (1 + turretDamageLevel * 0.2), speed: 16, color: '#f59e0b' });
+                            t.cd = isOverclocked ? 3 : 8;
+                        } else if (t.type === 'laser') {
+                            bullets.push({ x: t.x, y: t.y, tx: target.x, ty: target.y, dmg: 60 * totalDmgMult * (1 + turretDamageLevel * 0.2), speed: 22, color: '#3b82f6' });
+                            t.cd = 24;
+                        } else if (t.type === 'mortar') {
+                            bullets.push({ x: t.x, y: t.y, tx: target.x, ty: target.y, dmg: 140 * totalDmgMult * (1 + turretDamageLevel * 0.2), speed: 11, color: '#a855f7', splash: 90 });
+                            t.cd = 48;
+                        } else if (t.type === 'frost') {
+                            target.speed = Math.max(0.4, target.speed * 0.5);
+                            spawnParticles(target.x, target.y, '#0284c7', 4);
+                            t.cd = 15;
+                        } else if (t.type === 'blackhole') {
+                            enemies.forEach(e => {
+                                if (Math.hypot(t.x - e.x, t.y - e.y) < t.range) {
+                                    e.hp -= 8 * totalDmgMult * (1 + turretDamageLevel * 0.2);
+                                    e.x += (t.x - e.x) * 0.05;
+                                }
+                            });
+                            spawnParticles(t.x, t.y, '#c084fc', 3);
+                            t.cd = 5;
+                        }
+                    }
+                }
+            });
+
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                let bul = bullets[i];
+                let dx = bul.tx - bul.x, dy = bul.ty - bul.y, dist = Math.hypot(dx, dy);
+                if (dist < 12) {
+                    if (bul.splash) {
+                        enemies.forEach(e => {
+                            if (Math.hypot(bul.x - e.x, bul.y - e.y) < bul.splash) {
+                                e.hp -= bul.dmg; spawnParticles(e.x, e.y, bul.color, 6);
+                            }
+                        });
+                        triggerShake(10);
+                    } else {
+                        enemies.forEach(e => {
+                            if (Math.hypot(bul.x - e.x, bul.y - e.y) < 25) {
+                                e.hp -= bul.dmg; spawnParticles(e.x, e.y, bul.color, 3);
+                            }
+                        });
+                    }
+                    bullets.splice(i, 1);
+                } else {
+                    bul.x += (dx / dist) * bul.speed; bul.y += (dy / dist) * bul.speed;
+                }
+            }
+
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                let e = enemies[i];
+                e.x -= e.speed;
+                e.anim = (e.anim || 0) + 0.1;
+                if (e.hp <= 0) {
+                    money += e.reward;
+                    updateQuests('kill', 1);
+                    spawnFloatText(e.x, e.y, `+$${Math.floor(e.reward)}`, '#4ade80');
+                    spawnParticles(e.x, e.y, '#22c55e', 8);
+                    enemies.splice(i, 1);
+                    continue;
+                }
+                if (e.x < -40) e.x = cvs.width + 40;
+            }
+
+            if (shakeTime > 0) shakeTime--;
+            for(let i = floatTexts.length-1; i>=0; i--) { floatTexts[i].y -= 1; floatTexts[i].alpha -= 0.02; if(floatTexts[i].alpha<=0) floatTexts.splice(i,1); }
+            for(let i = particles.length-1; i>=0; i--) { particles[i].x += particles[i].vx; particles[i].y += particles[i].vy; particles[i].alpha -= 0.04; if(particles[i].alpha<=0) particles.splice(i,1); }
+            for(let i = battleEffects.length-1; i>=0; i--) {
+                const ef = battleEffects[i];
+                if (ef.type === 'soldierCharge') {
+                    ef.x += ef.vx; ef.y += ef.vy; ef.life--;
+                    ef.vx *= 0.98;
+                } else if (ef.type === 'marchDust') {
+                    ef.x += (Math.random()-0.5)*2;
+                    ef.y += (Math.random()-0.5)*2;
+                    ef.life--;
+                }
+                if (ef.life <= 0) battleEffects.splice(i, 1);
+            }
+            for(let i = forgeSparks.length-1; i>=0; i--) {
+                const sp = forgeSparks[i];
+                sp.x += sp.vx; sp.y += sp.vy; sp.vy += 0.3; sp.life--;
+                if (sp.life <= 0) forgeSparks.splice(i, 1);
+            }
+        }
+
+        function updateFactoryAnim() {
+            const b = getBuildings();
+            const factories = ['smelter', 'chipFab', 'nukeFab', 'qFab', 'antiFab'];
+            factories.forEach(key => {
+                if (!b[key]) return;
+                const f = b[key];
+                if (!factoryAnim[key]) factoryAnim[key] = { timer: 0, active: false, progress: 0 };
+                const fa = factoryAnim[key];
+                fa.timer++;
+                if (!fa.active && fa.timer > 60 && Math.random() < 0.02) {
+                    fa.active = true;
+                    fa.progress = 0;
+                    fa.timer = 0;
+                }
+                if (fa.active) {
+                    fa.progress += 0.03;
+                    if (Math.random() < 0.4) {
+                        forgeSparks.push({
+                            x: f.x + f.w/2 + (Math.random()-0.5)*40,
+                            y: f.y + f.h/2 + (Math.random()-0.5)*30,
+                            vx: (Math.random()-0.5)*3,
+                            vy: -2 - Math.random()*3,
+                            color: f.color,
+                            life: 20 + Math.random()*15,
+                            size: 1 + Math.random()*2
+                        });
+                    }
+                    if (fa.progress >= 1) {
+                        fa.active = false;
+                        fa.progress = 0;
+                        for (let i = 0; i < 8; i++) {
+                            particles.push({
+                                x: f.x + f.w/2, y: f.y + f.h/2,
+                                vx: (Math.random()-0.5)*6, vy: (Math.random()-0.5)*6,
+                                size: 2 + Math.random()*3, color: f.color, alpha: 1
+                            });
+                        }
+                    }
+                }
+            });
+        }
+
+        // ============================================================
+        // 世界地图更新
+        // ============================================================
+        function updateWorld() {
+            let mvx = 0, mvy = 0;
+            if (keys['w'] || keys['arrowup']) mvy -= 1;
+            if (keys['s'] || keys['arrowdown']) mvy += 1;
+            if (keys['a'] || keys['arrowleft']) mvx -= 1;
+            if (keys['d'] || keys['arrowright']) mvx += 1;
+            if (joystick.active) {
+                mvx += joystick.dx;
+                mvy += joystick.dy;
+            }
+            const len = Math.hypot(mvx, mvy);
+            commander.marching = len > 0.05;
+            if (len > 0.05) {
+                mvx /= len; mvy /= len;
+                const speed = 620;
+                const dt = 1 / 60;
+                commander.x = Math.max(20, Math.min(WORLD_W - 20, commander.x + mvx * speed * dt));
+                commander.y = Math.max(20, Math.min(WORLD_H - 20, commander.y + mvy * speed * dt));
+                commander.facing = Math.atan2(mvy, mvx);
+                commander.walkCycle += 0.3;
+            } else {
+                commander.walkCycle += 0.05;
+            }
+
+            camera.x += (commander.x - camera.x) * 0.12;
+            camera.y += (commander.y - camera.y) * 0.12;
+
+            // 战斗更新（新）
+            updateBattle(1/60);
+
+            // 行军阶段时，军队位置随进度移动
+            if (armyMarch.battleActive && armyMarch.battlePhase === 'march') {
+                // 已在 updateBattle 中更新进度
+            } else if (armyMarch.active && !armyMarch.battleActive) {
+                // 已结束
+                armyMarch.active = false;
+            }
+
+            if (shakeTime > 0) shakeTime--;
+            for(let i = floatTexts.length-1; i>=0; i--) { floatTexts[i].y -= 1; floatTexts[i].alpha -= 0.02; if(floatTexts[i].alpha<=0) floatTexts.splice(i,1); }
+            for(let i = particles.length-1; i>=0; i--) { particles[i].x += particles[i].vx; particles[i].y += particles[i].vy; particles[i].alpha -= 0.04; if(particles[i].alpha<=0) particles.splice(i,1); }
+            for(let i = battleEffects.length-1; i>=0; i--) {
+                const ef = battleEffects[i];
+                if (ef.type === 'marchDust') {
+                    ef.x += (Math.random()-0.5)*3;
+                    ef.y += (Math.random()-0.5)*3;
+                    ef.life--;
+                }
+                if (ef.life <= 0) battleEffects.splice(i, 1);
+            }
+        }
+
+        // ============================================================
+        // UI 同步
+        // ============================================================
+        function syncUI() {
+            document.getElementById('m').innerText = Math.floor(money).toLocaleString();
+            document.getElementById('dm').innerText = darkMatter;
+            document.getElementById('waveNum').innerText = wave;
+            document.getElementById('enemyCount').innerText = enemies.length;
+
+            document.getElementById('cd1').innerText = skillCd[0] > 0 ? `${Math.ceil(skillCd[0]/60)}s` : '就緒';
+            document.getElementById('cd2').innerText = skillCd[1] > 0 ? `${Math.ceil(skillCd[1]/60)}s` : '就緒';
+            document.getElementById('cd3').innerText = skillCd[2] > 0 ? `${Math.ceil(skillCd[2]/60)}s` : '就緒';
+
+            document.getElementById('questText').innerText = quest.desc;
+            document.getElementById('questProg').innerText = `${quest.current}/${quest.target}`;
+
+            document.getElementById('tDmgCost').innerText = `${(talents.dmgLv + 1) * 5} DM`;
+            document.getElementById('tSpdCost').innerText = `${(talents.spdLv + 1) * 5} DM`;
+            document.getElementById('tArmyCost').innerText = `${(talents.armyLv + 1) * 5} DM`;
+
+            const getTurretCost = (type, base) => Math.floor(base * Math.pow(1.3, turrets.filter(t=>t.type===type).length));
+            document.getElementById('costGatling').innerText = `$${getTurretCost('gatling', 1000).toLocaleString()}`;
+            document.getElementById('costLaser').innerText = `$${getTurretCost('laser', 5000).toLocaleString()}`;
+            document.getElementById('costMortar').innerText = `$${getTurretCost('mortar', 20000).toLocaleString()}`;
+            document.getElementById('costFrost').innerText = `$${getTurretCost('frost', 50000).toLocaleString()}`;
+            document.getElementById('costBlackhole').innerText = `$${getTurretCost('blackhole', 200000).toLocaleString()}`;
+
+            document.getElementById('minerLv').innerText = minerLevel;
+            document.getElementById('capLv').innerText = capacity;
+            document.getElementById('bCost').innerText = `$${Math.floor(500 * Math.pow(1.3, bots.length)).toLocaleString()}`;
+            document.getElementById('mCost').innerText = `$${Math.floor(1000 * Math.pow(1.5, minerLevel)).toLocaleString()}`;
+            document.getElementById('cCost').innerText = `$${Math.floor(1500 * (capacity / 2)).toLocaleString()}`;
+            document.getElementById('playerDamageLv').innerText = playerDamageLevel;
+            document.getElementById('playerDamageCost').innerText = `$${Math.floor(1000 * Math.pow(1.6, playerDamageLevel)).toLocaleString()}`;
+            document.getElementById('turretDamageLv').innerText = turretDamageLevel;
+            document.getElementById('turretDamageCost').innerText = `$${Math.floor(1500 * Math.pow(1.6, turretDamageLevel)).toLocaleString()}`;
+
+            document.getElementById('rebirthGain').innerText = `+${Math.floor(money / 100000)} DM`;
+
+            refreshWorldHUD();
+        }
+
+        function update() {
+            frame++;
+            for (let i = 0; i < skillCd.length; i++) { if (skillCd[i] > 0) skillCd[i]--; }
+            if (overclockTimer > 0) { overclockTimer--; if (overclockTimer === 0) isOverclocked = false; }
+
+            if (viewMode === 'base') {
+                updateBase();
+            } else {
+                updateWorld();
+            }
+            syncUI();
+            if (frame % 180 === 0) saveGame();
+        }
+
+        // ============================================================
+        // 基地绘制（与原版一致，略作精简，但保留全部内容）
+        // ============================================================
+        function drawBase() {
+            ctx.save();
+            ctx.clearRect(0, 0, cvs.width, cvs.height);
+            if (shakeTime > 0) ctx.translate((Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8);
+            ctx.fillStyle = '#020617'; ctx.fillRect(0, 0, cvs.width, cvs.height);
+
+            ctx.strokeStyle = 'rgba(30, 41, 59, 0.25)'; ctx.lineWidth = 1;
+            for (let x = 0; x < cvs.width; x += 50) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, cvs.height); ctx.stroke(); }
+            for (let y = 0; y < cvs.height; y += 50) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(cvs.width, y); ctx.stroke(); }
+
+            const b = getBuildings();
+
+            Object.values(b).forEach(bld => {
+                drawBuilding(bld);
+            });
+
+            turrets.forEach(t => {
+                drawTurret(t);
+            });
+
+            bullets.forEach(bul => {
+                ctx.shadowColor = bul.color; ctx.shadowBlur = 10;
+                ctx.fillStyle = bul.color;
+                ctx.beginPath(); ctx.arc(bul.x, bul.y, bul.splash ? 8 : 4, 0, Math.PI * 2); ctx.fill();
+                ctx.shadowBlur = 0;
+            });
+
+            enemies.forEach(e => {
+                drawEnemy(e);
+            });
+
+            items.forEach(it => {
+                ctx.shadowColor = ITEMS[it.type].color; ctx.shadowBlur = 8;
+                ctx.fillStyle = ITEMS[it.type].color;
+                ctx.beginPath(); ctx.roundRect(it.x - 7, it.y - 7, 14, 14, 3); ctx.fill();
+                ctx.shadowBlur = 0;
+            });
+
+            bots.forEach(bot => {
+                drawWorkerBot(bot);
+            });
+
+            drawPlayer();
+
+            forgeSparks.forEach(sp => {
+                ctx.fillStyle = sp.color;
+                ctx.globalAlpha = Math.min(1, sp.life / 20);
+                ctx.beginPath(); ctx.arc(sp.x, sp.y, sp.size, 0, Math.PI*2); ctx.fill();
+                ctx.globalAlpha = 1;
+            });
+
+            battleEffects.forEach(ef => {
+                if (ef.type === 'soldierCharge') {
+                    ctx.save();
+                    ctx.globalAlpha = ef.life / ef.maxLife;
+                    drawSoldierAt(ef.x, ef.y, 0, 0.5);
+                    ctx.restore();
+                } else if (ef.type === 'marchDust') {
+                    ctx.fillStyle = `rgba(148, 163, 184, ${ef.life/90 * 0.5})`;
+                    ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.size, 0, Math.PI*2); ctx.fill();
+                }
+            });
+
+            particles.forEach(pt => { ctx.fillStyle = pt.color; ctx.globalAlpha = Math.max(0, pt.alpha); ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1; });
+            floatTexts.forEach(ft => { ctx.fillStyle = ft.color; ctx.globalAlpha = Math.max(0, ft.alpha); ctx.font = 'bold 15px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(ft.text, ft.x, ft.y); ctx.globalAlpha = 1; });
+
+            ctx.restore();
+        }
+
+        function drawBuilding(bld) {
+            ctx.save();
+            const cx = bld.x + bld.w/2, cy = bld.y + bld.h/2;
+            const fa = factoryAnim[bld.type];
+            const pulse = fa && fa.active ? 1 + Math.sin(frame * 0.3) * 0.08 : 1;
+
+            ctx.shadowColor = bld.color;
+            ctx.shadowBlur = fa && fa.active ? 25 : 12;
+
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.95)';
+            ctx.strokeStyle = bld.color;
+            ctx.lineWidth = 2.5;
+
+            if (bld.type === 'hub') {
+                ctx.beginPath();
+                for (let i = 0; i < 6; i++) {
+                    const angle = i * Math.PI/3 - Math.PI/6;
+                    const px = cx + Math.cos(angle) * (bld.w/2) * pulse;
+                    const py = cy + Math.sin(angle) * (bld.h/2) * pulse;
+                    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+                }
+                ctx.closePath(); ctx.fill(); ctx.stroke();
+                const radarAngle = frame * 0.05;
+                ctx.beginPath(); ctx.arc(cx, cy, 28, radarAngle, radarAngle + Math.PI * 0.5);
+                ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 2; ctx.stroke();
+                ctx.beginPath(); ctx.arc(cx, cy, 12, 0, Math.PI*2); ctx.fillStyle = '#38bdf8'; ctx.fill();
+                ctx.beginPath(); ctx.arc(cx, cy, 6, 0, Math.PI*2); ctx.fillStyle = '#fff'; ctx.fill();
+            } else if (bld.type === 'extractor') {
+                ctx.beginPath(); ctx.ellipse(cx, cy + 10, bld.w/2.5, bld.h/3, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+                const drillAngle = frame * 0.1;
+                ctx.save();
+                ctx.translate(cx, cy - 10);
+                ctx.rotate(drillAngle);
+                ctx.fillStyle = bld.color;
+                ctx.beginPath();
+                for (let i = 0; i < 4; i++) {
+                    const a = i * Math.PI/2;
+                    ctx.moveTo(0, 0);
+                    ctx.lineTo(Math.cos(a) * 20, Math.sin(a) * 20);
+                }
+                ctx.strokeStyle = bld.color; ctx.lineWidth = 4; ctx.stroke();
+                ctx.restore();
+                ctx.fillStyle = '#f59e0b';
+                ctx.fillRect(cx - 20, cy + 15, 40, 10);
+            } else {
+                ctx.beginPath(); ctx.roundRect(bld.x, bld.y, bld.w, bld.h, 8); ctx.fill(); ctx.stroke();
+                ctx.fillStyle = bld.color + '80';
+                ctx.fillRect(bld.x + 10, bld.y - 20, 14, 30);
+                ctx.fillRect(bld.x + 34, bld.y - 15, 14, 25);
+                if (fa && fa.active) {
+                    for (let i = 0; i < 3; i++) {
+                        const smokeY = bld.y - 20 - ((frame * 2 + i * 15) % 40);
+                        ctx.fillStyle = `rgba(148, 163, 184, ${0.4 - i * 0.1})`;
+                        ctx.beginPath(); ctx.arc(bld.x + 17 + Math.sin(frame*0.1 + i)*5, smokeY, 6 + i*2, 0, Math.PI*2); ctx.fill();
+                    }
+                }
+                const gearAngle = frame * 0.03;
+                ctx.save();
+                ctx.translate(cx, cy + 5);
+                ctx.rotate(gearAngle);
+                ctx.strokeStyle = bld.color;
+                ctx.lineWidth = 2;
+                for (let i = 0; i < 8; i++) {
+                    const a = i * Math.PI / 4;
+                    ctx.beginPath();
+                    ctx.moveTo(Math.cos(a) * 12, Math.sin(a) * 12);
+                    ctx.lineTo(Math.cos(a) * 20, Math.sin(a) * 20);
+                    ctx.stroke();
+                }
+                ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI*2); ctx.stroke();
+                ctx.restore();
+                if (fa && fa.active) {
+                    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+                    ctx.fillRect(bld.x + 10, bld.y + bld.h - 8, bld.w - 20, 5);
+                    ctx.fillStyle = bld.color;
+                    ctx.fillRect(bld.x + 10, bld.y + bld.h - 8, (bld.w - 20) * fa.progress, 5);
+                }
+            }
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#f8fafc'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center';
+            ctx.fillText(bld.label, bld.x + bld.w/2, bld.y - 28);
+            ctx.restore();
+        }
+
+        function drawTurret(t) {
+            const colors = { gatling: '#f59e0b', laser: '#3b82f6', mortar: '#a855f7', frost: '#0284c7', blackhole: '#c084fc' };
+            const c = colors[t.type];
+            ctx.save();
+            ctx.shadowColor = c; ctx.shadowBlur = 15;
+            ctx.fillStyle = '#1e293b';
+            ctx.beginPath(); ctx.arc(t.x, t.y + 8, 20, 0, Math.PI*2); ctx.fill();
+            ctx.strokeStyle = c; ctx.lineWidth = 2; ctx.stroke();
+
+            ctx.fillStyle = c;
+            if (t.type === 'gatling') {
+                ctx.beginPath(); ctx.roundRect(t.x - 12, t.y - 22, 24, 30, 4); ctx.fill();
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(t.x - 6, t.y - 30, 12, 10);
+                const ang = frame * 0.15;
+                ctx.save(); ctx.translate(t.x, t.y - 25); ctx.rotate(ang);
+                ctx.fillStyle = '#fff'; ctx.fillRect(-15, -2, 30, 4);
+                ctx.restore();
+            } else if (t.type === 'laser') {
+                ctx.beginPath(); ctx.moveTo(t.x, t.y - 35); ctx.lineTo(t.x + 14, t.y + 5); ctx.lineTo(t.x - 14, t.y + 5); ctx.closePath(); ctx.fill();
+                ctx.fillStyle = '#fff';
+                ctx.beginPath(); ctx.arc(t.x, t.y - 22, 5, 0, Math.PI*2); ctx.fill();
+            } else if (t.type === 'mortar') {
+                ctx.beginPath(); ctx.ellipse(t.x, t.y - 5, 18, 10, 0, 0, Math.PI*2); ctx.fill();
+                ctx.fillRect(t.x - 7, t.y - 30, 14, 25);
+                ctx.fillStyle = '#fff';
+                ctx.beginPath(); ctx.arc(t.x, t.y - 32, 6, 0, Math.PI*2); ctx.fill();
+            } else if (t.type === 'frost') {
+                for (let i = 0; i < 6; i++) {
+                    const a = i * Math.PI/3 + frame * 0.01;
+                    ctx.beginPath();
+                    ctx.moveTo(t.x, t.y);
+                    ctx.lineTo(t.x + Math.cos(a)*22, t.y + Math.sin(a)*22);
+                    ctx.strokeStyle = c; ctx.lineWidth = 3; ctx.stroke();
+                }
+                ctx.beginPath(); ctx.arc(t.x, t.y, 12, 0, Math.PI*2); ctx.fillStyle = c; ctx.fill();
+            } else if (t.type === 'blackhole') {
+                ctx.beginPath(); ctx.arc(t.x, t.y, 25, 0, Math.PI*2); ctx.strokeStyle = c; ctx.lineWidth = 3; ctx.stroke();
+                const bhGrad = ctx.createRadialGradient(t.x, t.y, 2, t.x, t.y, 18);
+                bhGrad.addColorStop(0, '#000');
+                bhGrad.addColorStop(1, c);
+                ctx.fillStyle = bhGrad;
+                ctx.beginPath(); ctx.arc(t.x, t.y, 18, 0, Math.PI*2); ctx.fill();
+                for (let i = 0; i < 4; i++) {
+                    const a = frame * 0.05 + i * Math.PI/2;
+                    const r = 22 + Math.sin(frame * 0.1 + i) * 4;
+                    ctx.fillStyle = '#c084fc';
+                    ctx.beginPath(); ctx.arc(t.x + Math.cos(a)*r, t.y + Math.sin(a)*r, 3, 0, Math.PI*2); ctx.fill();
+                }
+            }
+            ctx.shadowBlur = 0;
+            ctx.restore();
+        }
+
+        function drawEnemy(e) {
+            const anim = e.anim || 0;
+            const sizes = { normal: 16, runner: 12, tank: 22, bomber: 14, boss: 36 };
+            const colors = { normal: '#ef4444', runner: '#f59e0b', tank: '#64748b', bomber: '#22c55e', boss: '#e11d48' };
+            const sz = sizes[e.type];
+            const c = colors[e.type];
+            ctx.save();
+            ctx.shadowColor = c; ctx.shadowBlur = e.type === 'boss' ? 25 : 8;
+            ctx.fillStyle = c;
+
+            if (e.type === 'normal') {
+                ctx.beginPath();
+                for (let i = 0; i < 5; i++) {
+                    const ax = e.x + Math.sin(anim + i * 0.8) * 6;
+                    const ay = e.y - sz + i * (sz * 2 / 4);
+                    ctx.arc(ax, ay, sz * 0.6 - i * 1.5, 0, Math.PI*2);
+                }
+                ctx.fill();
+                ctx.fillStyle = '#fff';
+                ctx.beginPath(); ctx.arc(e.x - 5, e.y - 8, 3, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(e.x + 5, e.y - 8, 3, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#000';
+                ctx.beginPath(); ctx.arc(e.x - 5, e.y - 8, 1.5, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(e.x + 5, e.y - 8, 1.5, 0, Math.PI*2); ctx.fill();
+            } else if (e.type === 'runner') {
+                ctx.beginPath();
+                ctx.moveTo(e.x + Math.sin(anim)*3, e.y - sz);
+                ctx.lineTo(e.x + sz, e.y + Math.sin(anim)*3);
+                ctx.lineTo(e.x, e.y + sz);
+                ctx.lineTo(e.x - sz, e.y - Math.sin(anim)*3);
+                ctx.closePath(); ctx.fill();
+                ctx.fillStyle = '#fff';
+                ctx.beginPath(); ctx.arc(e.x, e.y, 3, 0, Math.PI*2); ctx.fill();
+            } else if (e.type === 'tank') {
+                ctx.beginPath(); ctx.ellipse(e.x, e.y, sz, sz * 0.7, 0, 0, Math.PI*2); ctx.fill();
+                ctx.strokeStyle = '#475569'; ctx.lineWidth = 3;
+                ctx.beginPath();
+                for (let i = -2; i <= 2; i++) {
+                    ctx.moveTo(e.x + i * 7, e.y - sz * 0.5);
+                    ctx.lineTo(e.x + i * 7, e.y + sz * 0.5);
+                }
+                ctx.stroke();
+                ctx.fillStyle = '#fff';
+                ctx.beginPath(); ctx.arc(e.x - 8, e.y - 5, 4, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(e.x + 8, e.y - 5, 4, 0, Math.PI*2); ctx.fill();
+            } else if (e.type === 'bomber') {
+                ctx.beginPath(); ctx.ellipse(e.x, e.y, sz, sz*0.7, Math.sin(anim)*0.2, 0, Math.PI*2); ctx.fill();
+                ctx.strokeStyle = c; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.moveTo(e.x, e.y - sz*0.7); ctx.lineTo(e.x + 5, e.y - sz - 5); ctx.stroke();
+                ctx.fillStyle = '#f59e0b';
+                ctx.beginPath(); ctx.arc(e.x + 5, e.y - sz - 5, 3 + Math.sin(anim*2)*2, 0, Math.PI*2); ctx.fill();
+            } else if (e.type === 'boss') {
+                ctx.beginPath();
+                for (let i = 0; i < 12; i++) {
+                    const a = i * Math.PI/6;
+                    const r = sz * (i % 2 === 0 ? 1 : 0.7) * (1 + Math.sin(anim + i) * 0.1);
+                    const px = e.x + Math.cos(a) * r;
+                    const py = e.y + Math.sin(a) * r;
+                    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+                }
+                ctx.closePath(); ctx.fill();
+                ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+                ctx.fillStyle = '#fbbf24';
+                ctx.beginPath(); ctx.arc(e.x, e.y, 10 + Math.sin(anim*2)*3, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#fff';
+                ctx.beginPath(); ctx.arc(e.x - 12, e.y - 10, 5, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(e.x + 12, e.y - 10, 5, 0, Math.PI*2); ctx.fill();
+            }
+            ctx.shadowBlur = 0;
+            const barW = sz * 2.2;
+            ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(e.x - barW/2, e.y - sz - 14, barW, 5);
+            ctx.fillStyle = '#22c55e'; ctx.fillRect(e.x - barW/2, e.y - sz - 14, (e.hp / e.maxHp) * barW, 5);
+            ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.strokeRect(e.x - barW/2, e.y - sz - 14, barW, 5);
+            ctx.restore();
+        }
+
+        function drawWorkerBot(bot) {
+            const walk = Math.sin(bot.walkCycle || 0) * 3;
+            ctx.save();
+            ctx.shadowColor = '#38bdf8'; ctx.shadowBlur = 12;
+            ctx.fillStyle = '#0ea5e9';
+            ctx.beginPath(); ctx.roundRect(bot.x - 12, bot.y - 14 + walk * 0.3, 24, 24, 5); ctx.fill();
+            ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 2; ctx.stroke();
+            ctx.fillStyle = '#e0f2fe';
+            ctx.beginPath(); ctx.arc(bot.x, bot.y - 18, 8, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#0284c7';
+            ctx.beginPath(); ctx.arc(bot.x - 3, bot.y - 19, 2, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(bot.x + 3, bot.y - 19, 2, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#334155';
+            ctx.fillRect(bot.x - 14, bot.y + 8, 28, 5);
+            ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.moveTo(bot.x, bot.y - 26); ctx.lineTo(bot.x + 4, bot.y - 32); ctx.stroke();
+            ctx.fillStyle = '#ef4444';
+            ctx.beginPath(); ctx.arc(bot.x + 4, bot.y - 32, 2 + Math.sin(frame*0.2)*1, 0, Math.PI*2); ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.restore();
+            drawStack(bot);
+        }
+
+        function drawPlayer() {
+            const walk = Math.sin(p.walkCycle || 0) * 4;
+            ctx.save();
+            ctx.strokeStyle = 'rgba(56, 189, 248, 0.15)'; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.arc(p.x, p.y, p.atkRange, 0, Math.PI * 2); ctx.stroke();
+
+            ctx.shadowColor = '#38bdf8'; ctx.shadowBlur = 25;
+            ctx.fillStyle = '#0284c7';
+            ctx.fillRect(p.x - 12, p.y + 8 + walk, 8, 14);
+            ctx.fillRect(p.x + 4, p.y + 8 - walk, 8, 14);
+            ctx.fillStyle = '#0ea5e9';
+            ctx.beginPath(); ctx.roundRect(p.x - 16, p.y - 14, 32, 28, 6); ctx.fill();
+            ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 2; ctx.stroke();
+            ctx.fillStyle = '#fbbf24';
+            ctx.beginPath(); ctx.arc(p.x, p.y, 6 + Math.sin(frame*0.1)*1, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#e0f2fe';
+            ctx.beginPath(); ctx.roundRect(p.x - 10, p.y - 30, 20, 16, 5); ctx.fill();
+            ctx.fillStyle = '#0284c7';
+            ctx.beginPath(); ctx.roundRect(p.x - 8, p.y - 28, 16, 6, 2); ctx.fill();
+            ctx.fillStyle = '#38bdf8';
+            ctx.beginPath(); ctx.arc(p.x - 3, p.y - 25, 2, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(p.x + 3, p.y - 25, 2, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#f59e0b';
+            ctx.fillRect(p.x - 22, p.y - 10, 8, 14);
+            ctx.fillRect(p.x + 14, p.y - 10, 8, 14);
+            ctx.fillStyle = '#0ea5e9';
+            ctx.fillRect(p.x - 24, p.y - 2 + walk * 0.5, 8, 18);
+            ctx.fillRect(p.x + 16, p.y - 2 - walk * 0.5, 8, 18);
+            ctx.fillStyle = '#f59e0b';
+            ctx.beginPath(); ctx.moveTo(p.x - 8, p.y + 20); ctx.lineTo(p.x, p.y + 30 + Math.sin(frame*0.3)*3); ctx.lineTo(p.x + 8, p.y + 20); ctx.closePath(); ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.restore();
+            drawStack(p);
+        }
+
+        function drawSoldierAt(x, y, facing, scale) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(scale, scale);
+            ctx.fillStyle = '#f59e0b';
+            ctx.beginPath(); ctx.arc(0, -8, 6, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#b45309';
+            ctx.fillRect(-5, -2, 10, 12);
+            ctx.fillStyle = '#1e293b';
+            ctx.fillRect(-8, 0, 16, 3);
+            ctx.fillStyle = '#f59e0b';
+            ctx.fillRect(-4, 10, 3, 6);
+            ctx.fillRect(1, 10, 3, 6);
+            ctx.restore();
+        }
+
+        function drawStack(obj) {
+            obj.bag.forEach((it, i) => {
+                ctx.fillStyle = ITEMS[it.type].color;
+                ctx.beginPath(); ctx.roundRect(obj.x - 10, obj.y - 40 - (i * 8), 20, 6, 2); ctx.fill();
+            });
+        }
+
+        // ============================================================
+        // 世界地图绘制 — 包含战斗实时可视化！
+        // ============================================================
+        function drawWorld() {
+            ctx.save();
+            ctx.clearRect(0, 0, cvs.width, cvs.height);
+
+            if (shakeTime > 0) ctx.translate((Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8);
+
+            const grad = ctx.createRadialGradient(cvs.width/2, cvs.height/2, 100, cvs.width/2, cvs.height/2, Math.max(cvs.width, cvs.height));
+            grad.addColorStop(0, '#0b1020');
+            grad.addColorStop(1, '#020617');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, cvs.width, cvs.height);
+
+            for (let i = 0; i < 120; i++) {
+                const sx = ((i * 137.5 + frame * 0.02) % 1) * cvs.width;
+                const sy = ((i * 91.3 + frame * 0.01) % 1) * cvs.height;
+                ctx.fillStyle = `rgba(255,255,255,${0.15 + (i % 5) * 0.08})`;
+                ctx.fillRect(sx, sy, 1.5, 1.5);
+            }
+
+            const tl = worldToScreen(0, 0);
+            const br = worldToScreen(WORLD_W, WORLD_H);
+            ctx.strokeStyle = 'rgba(56, 189, 248, 0.25)';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y);
+
+            const gridSize = 200;
+            ctx.strokeStyle = 'rgba(56, 189, 248, 0.06)';
+            ctx.lineWidth = 1;
+            for (let gx = 0; gx <= WORLD_W; gx += gridSize) {
+                const a = worldToScreen(gx, 0), b2 = worldToScreen(gx, WORLD_H);
+                ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b2.x, b2.y); ctx.stroke();
+            }
+            for (let gy = 0; gy <= WORLD_H; gy += gridSize) {
+                const a = worldToScreen(0, gy), b2 = worldToScreen(WORLD_W, gy);
+                ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b2.x, b2.y); ctx.stroke();
+            }
+
+            // 绘制领地
+            worldMap.forEach(t => {
+                const s = worldToScreen(t.x, t.y);
+                const w = t.w * camera.zoom;
+                const h = t.h * camera.zoom;
+                if (s.x + w < -20 || s.y + h < -20 || s.x > cvs.width + 20 || s.y > cvs.height + 20) return;
+
+                const isSelected = t.id === selectedTerritoryId;
+                const ownerColor = t.owner === 'player' ? '#22c55e' :
+                                   t.owner === 'enemy' ? '#ef4444' : '#94a3b8';
+
+                ctx.shadowColor = ownerColor;
+                ctx.shadowBlur = isSelected ? 30 : 12;
+
+                ctx.save();
+                if (t.type === 'capital') {
+                    ctx.beginPath();
+                    ctx.arc(s.x + w/2, s.y + h/2, Math.min(w, h)/2, 0, Math.PI*2);
+                } else if (t.type === 'resource') {
+                    ctx.beginPath();
+                    ctx.roundRect(s.x, s.y, w, h, 20 * camera.zoom);
+                } else {
+                    ctx.beginPath();
+                    const cx2 = s.x + w/2, cy2 = s.y + h/2;
+                    const rw = w/2, rh = h/2;
+                    for (let i = 0; i < 6; i++) {
+                        const a = i * Math.PI/3 - Math.PI/6;
+                        const px = cx2 + Math.cos(a) * rw;
+                        const py = cy2 + Math.sin(a) * rh;
+                        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+                    }
+                    ctx.closePath();
+                }
+
+                const bgGrad = ctx.createLinearGradient(s.x, s.y, s.x + w, s.y + h);
+                if (t.type === 'capital') {
+                    bgGrad.addColorStop(0, 'rgba(56, 189, 248, 0.4)');
+                    bgGrad.addColorStop(1, 'rgba(14, 165, 233, 0.15)');
+                } else if (t.owner === 'player') {
+                    bgGrad.addColorStop(0, 'rgba(34, 197, 94, 0.3)');
+                    bgGrad.addColorStop(1, 'rgba(22, 163, 74, 0.1)');
+                } else if (t.owner === 'enemy') {
+                    bgGrad.addColorStop(0, 'rgba(239, 68, 68, 0.3)');
+                    bgGrad.addColorStop(1, 'rgba(185, 28, 28, 0.1)');
+                } else {
+                    bgGrad.addColorStop(0, 'rgba(148, 163, 184, 0.25)');
+                    bgGrad.addColorStop(1, 'rgba(71, 85, 105, 0.08)');
+                }
+                ctx.fillStyle = bgGrad;
+                ctx.fill();
+                ctx.strokeStyle = ownerColor;
+                ctx.lineWidth = isSelected ? 4 : 2.5;
+                ctx.stroke();
+                ctx.restore();
+
+                ctx.save();
+                ctx.shadowColor = ownerColor; ctx.shadowBlur = 8;
+                ctx.fillStyle = ownerColor;
+                if (t.type === 'capital') {
+                    ctx.fillRect(s.x + w/2 - 7, s.y + h/2 - 20, 14, 21);
+                } else if (t.type === 'resource') {
+                    ctx.beginPath();
+                    ctx.moveTo(s.x + w/2, s.y + h/2 - 15 * camera.zoom);
+                    ctx.lineTo(s.x + w/2 + 12 * camera.zoom, s.y + h/2);
+                    ctx.lineTo(s.x + w/2, s.y + h/2 + 15 * camera.zoom);
+                    ctx.lineTo(s.x + w/2 - 12 * camera.zoom, s.y + h/2);
+                    ctx.closePath(); ctx.fill();
+                } else {
+                    ctx.font = `${Math.max(12, 20 * camera.zoom)}px sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.fillText('⚔️', s.x + w/2, s.y + h/2 + 5 * camera.zoom);
+                }
+                ctx.restore();
+
+                ctx.fillStyle = '#f8fafc';
+                ctx.font = `bold ${Math.max(10, 14 * camera.zoom)}px sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.fillText(t.name, s.x + w/2, s.y + h/2 - 30 * camera.zoom);
+
+                ctx.font = `${Math.max(8, 10 * camera.zoom)}px sans-serif`;
+                let sub = '';
+                if (t.owner === 'player') sub = '🟢 已佔領';
+                else if (t.owner === 'enemy') sub = `🔴 守軍 ${t.garrisonCurrent}`;
+                else sub = `⚪ 守軍 ${t.garrisonCurrent}`;
+                ctx.fillStyle = ownerColor;
+                ctx.fillText(sub, s.x + w/2, s.y + h/2 + 22 * camera.zoom);
+
+                if (t.owner === 'player' && t.income > 0) {
+                    ctx.fillStyle = '#4ade80';
+                    ctx.fillText(`+$${t.income.toLocaleString()}`, s.x + w/2, s.y + h/2 + 36 * camera.zoom);
+                }
+                ctx.shadowBlur = 0;
+            });
+
+            // ★★★ 军队行军 + 实时战斗绘制 ★★★
+            if (armyMarch.active && armyMarch.from && armyMarch.to) {
+                const from = worldToScreen(armyMarch.from.x, armyMarch.from.y);
+                const to = worldToScreen(armyMarch.to.x, armyMarch.to.y);
+
+                if (armyMarch.battlePhase === 'march') {
+                    // 行军阶段：显示移动中的军队
+                    const px = from.x + (to.x - from.x) * armyMarch.progress;
+                    const py = from.y + (to.y - from.y) * armyMarch.progress;
+
+                    for (let i = 0; i < Math.min(14, armyMarch.soldiers + armyMarch.tanks); i++) {
+                        const offsetX = (i % 5 - 2) * 16;
+                        const offsetY = (Math.floor(i / 5) - 1) * 16;
+                        drawSoldierAt(px + offsetX, py + offsetY, 0, 0.6);
+                    }
+
+                    // 尘土
+                    for (let i = 0; i < 5; i++) {
+                        ctx.fillStyle = `rgba(148, 163, 184, ${0.3 - i * 0.05})`;
+                        ctx.beginPath();
+                        ctx.arc(px + (Math.random()-0.5)*40, py + (Math.random()-0.5)*40 + i*6, 4 + i*2, 0, Math.PI*2);
+                        ctx.fill();
+                    }
+
+                    // 行军进度条
+                    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+                    ctx.fillRect(cvs.width/2 - 100, 100, 200, 8);
+                    ctx.fillStyle = '#f59e0b';
+                    ctx.fillRect(cvs.width/2 - 100, 100, 200 * armyMarch.progress, 8);
+                    ctx.fillStyle = '#fff';
+                    ctx.font = 'bold 12px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('⚔️ 军队行军中...', cvs.width/2, 95);
+                } else if (armyMarch.battlePhase === 'fight') {
+                    // ★ 战斗画面：双方单位互殴，显示血条！
+                    // 将所有单位转换到屏幕坐标
+                    const drawUnit = (unit, isPlayer) => {
+                        const pos = worldToScreen(unit.x, unit.y);
+                        const sz = unit.type === 'tank' ? 10 : 6;
+                        const c = isPlayer ? (unit.type === 'tank' ? '#fbbf24' : '#38bdf8') : '#ef4444';
+
+                        ctx.save();
+                        // 血条背景
+                        const barW = sz * 3.5;
+                        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                        ctx.fillRect(pos.x - barW/2, pos.y - sz - 12, barW, 4);
+                        // 血条
+                        const hpRatio = unit.hp / unit.maxHp;
+                        ctx.fillStyle = isPlayer ? '#22c55e' : '#ef4444';
+                        ctx.fillRect(pos.x - barW/2, pos.y - sz - 12, barW * hpRatio, 4);
+
+                        // 单位身体
+                        ctx.shadowColor = c;
+                        ctx.shadowBlur = 12;
+                        ctx.fillStyle = c;
+                        if (unit.type === 'tank') {
+                            // 坦克：方块
+                            ctx.beginPath();
+                            ctx.roundRect(pos.x - sz, pos.y - sz*0.6, sz*2, sz*1.2, 3);
+                            ctx.fill();
+                            ctx.fillStyle = '#fff';
+                            ctx.beginPath(); ctx.arc(pos.x, pos.y - 2, 3, 0, Math.PI*2); ctx.fill();
+                        } else {
+                            // 士兵：圆形
+                            ctx.beginPath();
+                            ctx.arc(pos.x, pos.y, sz, 0, Math.PI*2);
+                            ctx.fill();
+                            // 小头盔
+                            ctx.fillStyle = isPlayer ? '#e0f2fe' : '#fca5a5';
+                            ctx.beginPath();
+                            ctx.arc(pos.x, pos.y - sz*0.6, sz*0.5, 0, Math.PI*2);
+                            ctx.fill();
+                        }
+                        ctx.shadowBlur = 0;
+                        ctx.restore();
+                    };
+
+                    // 绘制所有存活单位
+                    armyMarch.playerUnits.forEach(u => { if (u.hp > 0) drawUnit(u, true); });
+                    armyMarch.enemyUnits.forEach(u => { if (u.hp > 0) drawUnit(u, false); });
+
+                    // 战斗提示 + 进度
+                    const totalUnits = armyMarch.playerUnits.length + armyMarch.enemyUnits.length;
+                    const aliveUnits = armyMarch.playerUnits.filter(u=>u.hp>0).length + armyMarch.enemyUnits.filter(u=>u.hp>0).length;
+                    const progress = 1 - (aliveUnits / Math.max(1, totalUnits));
+
+                    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                    ctx.fillRect(cvs.width/2 - 120, 100, 240, 10);
+                    ctx.fillStyle = '#ef4444';
+                    ctx.fillRect(cvs.width/2 - 120, 100, 240 * progress, 10);
+                    ctx.fillStyle = '#fff';
+                    ctx.font = 'bold 14px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('⚔️ 交战中...', cvs.width/2, 92);
+
+                    // 双方剩余数量
+                    ctx.font = 'bold 12px sans-serif';
+                    ctx.fillStyle = '#38bdf8';
+                    ctx.textAlign = 'right';
+                    ctx.fillText(`我方 ${armyMarch.playerUnits.filter(u=>u.hp>0).length}`, cvs.width/2 - 10, 130);
+                    ctx.fillStyle = '#ef4444';
+                    ctx.textAlign = 'left';
+                    ctx.fillText(`敌方 ${armyMarch.enemyUnits.filter(u=>u.hp>0).length}`, cvs.width/2 + 10, 130);
+                }
+            }
+
+            // 绘制指挥官
+            const cs = worldToScreen(commander.x, commander.y);
+            const pulse = 1 + Math.sin(frame * 0.12) * 0.15;
+            const walk = Math.sin(commander.walkCycle || 0) * 3;
+
+            ctx.shadowColor = '#38bdf8';
+            ctx.shadowBlur = 30;
+            ctx.fillStyle = 'rgba(56, 189, 248, 0.9)';
+            ctx.beginPath(); ctx.arc(cs.x, cs.y, 16 * pulse, 0, Math.PI * 2); ctx.fill();
+            ctx.shadowBlur = 0;
+
+            ctx.save();
+            ctx.translate(cs.x, cs.y);
+            ctx.fillStyle = '#0284c7';
+            ctx.fillRect(-8, 6 + walk, 6, 10);
+            ctx.fillRect(2, 6 - walk, 6, 10);
+            ctx.fillStyle = '#0ea5e9';
+            ctx.beginPath(); ctx.roundRect(-12, -10, 24, 20, 5); ctx.fill();
+            ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 2; ctx.stroke();
+            ctx.fillStyle = '#fbbf24';
+            ctx.beginPath(); ctx.arc(0, 0, 4 + Math.sin(frame*0.1)*1, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#e0f2fe';
+            ctx.beginPath(); ctx.roundRect(-8, -22, 16, 12, 4); ctx.fill();
+            ctx.fillStyle = '#0284c7';
+            ctx.beginPath(); ctx.roundRect(-6, -20, 12, 4, 2); ctx.fill();
+            ctx.fillStyle = '#f59e0b';
+            ctx.fillRect(-18, -6, 6, 10);
+            ctx.fillRect(12, -6, 6, 10);
+            ctx.restore();
+
+            ctx.strokeStyle = '#fbbf24';
+            ctx.lineWidth = 2.5;
+            ctx.beginPath(); ctx.arc(cs.x, cs.y, 24, 0, Math.PI * 2); ctx.stroke();
+
+            ctx.fillStyle = '#fbbf24';
+            ctx.font = 'bold 11px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('🪖 指挥官', cs.x, cs.y - 35);
+
+            particles.forEach(pt => { ctx.fillStyle = pt.color; ctx.globalAlpha = Math.max(0, pt.alpha); ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1; });
+            floatTexts.forEach(ft => { ctx.fillStyle = ft.color; ctx.globalAlpha = Math.max(0, ft.alpha); ctx.font = 'bold 15px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(ft.text, ft.x, ft.y); ctx.globalAlpha = 1; });
+
+            battleEffects.forEach(ef => {
+                if (ef.type === 'marchDust') {
+                    ctx.fillStyle = `rgba(148, 163, 184, ${ef.life/90 * 0.5})`;
+                    ctx.beginPath(); ctx.arc(ef.x, ef.y, ef.size, 0, Math.PI*2); ctx.fill();
+                }
+            });
+
+            drawMinimap();
+            if (isTouchDevice()) drawJoystick();
+
+            ctx.restore();
+        }
+
+        function drawMinimap() {
+            const mw = 180, mh = 135;
+            const mmx = isTouchDevice() ? cvs.width - mw - 16 : cvs.width - mw - 16;
+            const mmy = isTouchDevice() ? 80 : cvs.height - mh - 16;
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.roundRect(mmx, mmy, mw, mh, 8); ctx.fill(); ctx.stroke();
+
+            const scaleX = mw / WORLD_W, scaleY = mh / WORLD_H;
+            worldMap.forEach(t => {
+                const ownerColor = t.owner === 'player' ? '#22c55e' :
+                                   t.owner === 'enemy' ? '#ef4444' : '#94a3b8';
+                ctx.fillStyle = ownerColor;
+                ctx.fillRect(mmx + t.x * scaleX, mmy + t.y * scaleY, Math.max(3, t.w * scaleX), Math.max(3, t.h * scaleY));
+            });
+
+            ctx.fillStyle = '#38bdf8';
+            ctx.beginPath(); ctx.arc(mmx + commander.x * scaleX, mmy + commander.y * scaleY, 4, 0, Math.PI*2); ctx.fill();
+
+            const viewW = cvs.width / camera.zoom;
+            const viewH = cvs.height / camera.zoom;
+            ctx.strokeStyle = '#fbbf24';
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(
+                mmx + (camera.x - viewW/2) * scaleX,
+                mmy + (camera.y - viewH/2) * scaleY,
+                viewW * scaleX,
+                viewH * scaleY
+            );
+        }
+
+        function drawJoystick() {
+            const jc = getJoystickCenter();
+            ctx.save();
+            ctx.globalAlpha = 0.85;
+            ctx.strokeStyle = 'rgba(56, 189, 248, 0.6)';
+            ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.arc(jc.x, jc.y, 60, 0, Math.PI*2); ctx.stroke();
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.55)';
+            ctx.beginPath(); ctx.arc(jc.x, jc.y, 60, 0, Math.PI*2); ctx.fill();
+            ctx.strokeStyle = 'rgba(56, 189, 248, 0.3)';
+            ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(jc.x - 60, jc.y); ctx.lineTo(jc.x + 60, jc.y); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(jc.x, jc.y - 60); ctx.lineTo(jc.x, jc.y + 60); ctx.stroke();
+            const kx = joystick.active ? joystick.knobX : jc.x;
+            const ky = joystick.active ? joystick.knobY : jc.y;
+            ctx.shadowColor = '#38bdf8';
+            ctx.shadowBlur = joystick.active ? 15 : 5;
+            ctx.fillStyle = joystick.active ? 'rgba(56, 189, 248, 0.95)' : 'rgba(56, 189, 248, 0.5)';
+            ctx.beginPath(); ctx.arc(kx, ky, 26, 0, Math.PI*2); ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(kx, ky, 26, 0, Math.PI*2); ctx.stroke();
+            ctx.restore();
+        }
+
+        // ============================================================
+        // 交互 / 转换
+        // ============================================================
+        function processConvert(obj, from, to, bld) {
+            if (obj.bag.some(i => i.type === from)) {
+                let idx = obj.bag.findIndex(i => i.type === from);
+                obj.bag[idx] = { type: to };
+                spawnParticles(bld.x + bld.w/2, bld.y + bld.h/2, ITEMS[to].color, 6);
+                for (let i = 0; i < 5; i++) {
+                    forgeSparks.push({
+                        x: bld.x + bld.w/2 + (Math.random()-0.5)*30,
+                        y: bld.y + bld.h/2 + (Math.random()-0.5)*20,
+                        vx: (Math.random()-0.5)*3,
+                        vy: -2 - Math.random()*3,
+                        color: ITEMS[to].color,
+                        life: 20 + Math.random()*15,
+                        size: 1 + Math.random()*2
+                    });
+                }
+            }
+        }
+        function interact(obj, b) {
+            for (let i = items.length - 1; i >= 0; i--) {
+                if (Math.hypot(obj.x - items[i].x, obj.y - items[i].y) < 30 && obj.bag.length < capacity) {
+                    obj.bag.push(items.splice(i, 1)[0]);
+                }
+            }
+            if (Math.hypot(obj.x - (b.smelter.x + b.smelter.w/2), obj.y - (b.smelter.y + b.smelter.h/2)) < 50) processConvert(obj, 'RAW', 'STEEL', b.smelter);
+            if (b.chipFab && Math.hypot(obj.x - (b.chipFab.x + b.chipFab.w/2), obj.y - (b.chipFab.y + b.chipFab.h/2)) < 50) processConvert(obj, 'STEEL', 'CHIP', b.chipFab);
+            if (b.nukeFab && Math.hypot(obj.x - (b.nukeFab.x + b.nukeFab.w/2), obj.y - (b.nukeFab.y + b.nukeFab.h/2)) < 50) processConvert(obj, 'CHIP', 'BATTERY', b.nukeFab);
+            if (b.qFab && Math.hypot(obj.x - (b.qFab.x + b.qFab.w/2), obj.y - (b.qFab.y + b.qFab.h/2)) < 50) processConvert(obj, 'BATTERY', 'CORE', b.qFab);
+            if (b.antiFab && Math.hypot(obj.x - (b.antiFab.x + b.antiFab.w/2), obj.y - (b.antiFab.y + b.antiFab.h/2)) < 50) processConvert(obj, 'CORE', 'ANTIM', b.antiFab);
+            if (Math.hypot(obj.x - (b.hub.x + b.hub.w/2), obj.y - (b.hub.y + b.hub.h/2)) < 70) {
+                if (obj.bag.length > 0) {
+                    let mult = 1 + (darkMatter * 0.1);
+                    let total = obj.bag.reduce((sum, item) => sum + (ITEMS[item.type].val * mult), 0);
+                    obj.bag = []; money += total;
+                    spawnFloatText(b.hub.x, b.hub.y - 20, `+$${Math.floor(total).toLocaleString()}`, '#4ade80');
+                }
+            }
+        }
+
+        // ============================================================
+        // 主绘制
+        // ============================================================
+        function draw() {
+            if (viewMode === 'base') {
+                drawBase();
+            } else {
+                drawWorld();
+            }
+            update();
+            requestAnimationFrame(draw);
+        }
+
+        window.addEventListener('pagehide', saveGame);
+        window.addEventListener('beforeunload', saveGame);
+        initializeTycoon().catch(error => {
+            console.error('雨神大亨初始化失敗：', error);
+            document.getElementById('tycoon-leaderboard-status').textContent = '遊戲初始化失敗，請重新整理頁面。';
+        });
+    </script>
 </body>
 </html>
