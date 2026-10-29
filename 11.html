@@ -1,1623 +1,1369 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html lang="zh-Hant">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>雨神大亨 · 帝国征途 | Raingod Empire</title>
-    <style>
-        * { touch-action: none; user-select: none; box-sizing: border-box; }
-        body { margin: 0; background: #020617; overflow: hidden; font-family: 'Segoe UI', system-ui, sans-serif; }
-        #ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
-        
-        .top-bar {
-            position: absolute !important;
-            top: 110px !important;
-            left: 50% !important;
-            transform: translateX(-50%) !important;
-            background: rgba(15, 23, 42, 0.92);
-            border: 1px solid #38bdf8;
-            box-shadow: 0 0 20px rgba(56, 189, 248, 0.2);
-            padding: 8px 20px;
-            border-radius: 30px;
-            pointer-events: auto;
-            backdrop-filter: blur(8px);
-            display: flex;
-            gap: 16px;
-            align-items: center;
-            white-space: nowrap;
-            z-index: 999 !important;
-        }
-        .hud-item { font-size: 13px; font-weight: bold; color: #f8fafc; }
-        .money { color: #4ade80; font-size: 16px; font-weight: 900; }
-        .dark-matter { color: #c084fc; font-size: 13px; }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>聊天室 | 雨神</title>
+<link rel="stylesheet" href="menu.css">
+<style>
+:root{
+  --me-bg:#007aff;--other-bg:#f2f2f7;--danger:#ff3b30;--text-gray:#8e8e93;
+  --success:#34c759;--border:#e2e6ed;
+}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow-x:hidden}
+#nav_bar{position:relative;z-index:10}
+.hidden{display:none!important}
 
-        .skill-bar {
-            position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%);
-            display: flex; gap: 8px; pointer-events: auto;
-        }
-        .skill-btn {
-            background: rgba(15, 23, 42, 0.9); border: 1px solid #38bdf8; color: #fff;
-            padding: 8px 12px; border-radius: 8px; font-size: 11px; font-weight: bold; cursor: pointer;
-            display: flex; flex-direction: column; align-items: center; transition: all 0.2s;
-        }
-        .skill-btn:hover:not(:disabled) { background: #0284c7; }
-        .skill-btn:disabled { opacity: 0.4; border-color: #475569; cursor: not-allowed; }
+.tab-bar{display:flex;gap:4px;max-width:860px;margin:20px auto 0;padding:5px;
+  background:#e8ecf2;border-radius:12px;width:calc(100% - 32px)}
+.tab-btn{flex:1;padding:11px 8px;border:0;border-radius:9px;background:transparent;
+  color:#5b6470;font:inherit;font-size:.92rem;font-weight:600;cursor:pointer;
+  transition:background .15s,color .15s;position:relative}
+.tab-btn.active{background:#fff;color:#1d1d1f;box-shadow:0 1px 4px rgba(25,40,60,.12)}
+.tab-badge{display:none;min-width:17px;height:17px;padding:0 4px;margin-left:4px;
+  border-radius:9px;background:var(--danger);color:#fff;font-size:10px;font-weight:700;
+  line-height:17px;text-align:center;vertical-align:middle}
+.tab-badge.show{display:inline-block}
 
-        .panel { 
-            position: absolute; bottom: 15px; right: 15px; 
-            width: 340px; max-height: 82vh; overflow-y: auto;
-            background: rgba(15, 23, 42, 0.95); border: 1px solid #334155; border-radius: 12px;
-            pointer-events: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8); backdrop-filter: blur(8px);
-        }
-        .panel::-webkit-scrollbar { width: 4px; }
-        .panel::-webkit-scrollbar-thumb { background: #38bdf8; border-radius: 4px; }
+.page-wrap{max-width:860px;margin:18px auto 40px;padding:0 16px}
+.page{display:none}
+.page.active{display:block}
 
-        .tabs { display: flex; gap: 4px; margin-bottom: 4px; flex-wrap: wrap; }
-        .tab-btn { 
-            flex: 1 0 30%; background: #1e293b; color: #94a3b8; border: none; padding: 6px 2px; 
-            font-size: 10px; font-weight: bold; border-radius: 6px; cursor: pointer;
-        }
-        .tab-btn.active { background: #0284c7; color: #fff; }
+.card{margin-bottom:18px;padding:24px;border:1px solid var(--border);border-radius:16px;
+  background:#fff;box-shadow:0 8px 24px rgba(25,40,60,.06)}
+.card h2{margin:0 0 8px;font-size:1.1rem}
+.card h3{margin:18px 0 8px;font-size:.95rem}
+.profile-help,.profile-status{color:#606a78;font-size:.88rem;line-height:1.5}
+.profile-status{min-height:1.4em;margin:10px 0 0}
+.profile-status.error{color:#b42318}
+.profile-status.ok{color:var(--success)}
 
-        .btn { 
-            background: linear-gradient(135deg, #1e293b, #0f172a); color: #fff; border: 1px solid #38bdf8; 
-            padding: 8px 10px; font-weight: bold; font-size: 11px; border-radius: 8px; cursor: pointer; 
-            display: flex; justify-content: space-between; align-items: center; transition: all 0.2s;
-        }
-        .btn:hover:not(:disabled) { background: linear-gradient(135deg, #0284c7, #0369a1); border-color: #38bdf8; }
-        .btn:disabled { opacity: 0.35; border-color: #475569; cursor: not-allowed; }
-        .rebirth-btn { background: linear-gradient(135deg, #7e22ce, #581c87); border-color: #c084fc; }
+.page-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}
+.page-heading h1{margin:0;font-size:1.55rem}
 
-        .quest-box {
-            background: rgba(30, 41, 59, 0.6); border: 1px dashed #38bdf8; padding: 6px 8px;
-            border-radius: 6px; font-size: 10px; color: #e2e8f0; margin-bottom: 2px;
-        }
-        
-        #tycoon-leaderboard-button { position: absolute; top: 160px; right: 15px; z-index: 20; pointer-events: auto; padding: 9px 14px; border: 1px solid #38bdf8; border-radius: 20px; color: #fff; background: rgba(15,23,42,0.9); font-weight: bold; cursor: pointer; }
-        #tycoon-leaderboard { position: fixed; inset: 0; z-index: 2000; display: none; align-items: center; justify-content: center; padding: 16px; background: rgba(2,6,23,0.94); color: #fff; }
-        .tycoon-leaderboard-card { width: min(520px, 100%); max-height: 80vh; overflow-y: auto; padding: 20px; border: 1px solid #38bdf8; border-radius: 16px; background: #0b1020; }
-        .tycoon-leaderboard-row { display: flex; justify-content: space-between; gap: 12px; padding: 10px 4px; border-bottom: 1px solid #26334a; }
-        .mobile-shop-toggle, .mobile-panel-close { display: none; }
+.profile-avatar-row{display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+.avatar-wrap{position:relative;width:104px;height:104px;flex:0 0 auto}
+.profile-avatar{width:104px;height:104px;border:2px solid var(--border);border-radius:50%;
+  object-fit:cover;background:#fff}
+.avatar-edit-btn{position:absolute;right:-2px;bottom:-2px;width:34px;height:34px;
+  border-radius:50%;border:2px solid #fff;background:var(--me-bg);color:#fff;
+  font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center}
 
-        /* 世界地图 UI */
-        #view-toggle {
-            position: absolute; top: 160px; left: 15px; z-index: 30; pointer-events: auto;
-            padding: 10px 18px; border: 2px solid #f59e0b; border-radius: 24px;
-            background: linear-gradient(135deg, #b45309, #78350f); color: #fff;
-            font-weight: 900; font-size: 13px; cursor: pointer; box-shadow: 0 0 20px rgba(245,158,11,0.4);
-        }
-        #world-ui {
-            position: absolute; inset: 0; pointer-events: none; z-index: 20; display: none;
-        }
-        #world-ui.active { display: block; }
-        .world-hud {
-            position: absolute; top: 110px; left: 50%; transform: translateX(-50%);
-            background: rgba(15,23,42,0.92); border: 1px solid #f59e0b; border-radius: 16px;
-            padding: 8px 18px; pointer-events: auto; display: flex; gap: 16px; align-items: center;
-            backdrop-filter: blur(8px); font-size: 12px; font-weight: bold; color: #fcd34d;
-            white-space: nowrap;
-        }
-        .world-ctrl {
-            position: absolute; bottom: 15px; left: 15px; pointer-events: auto;
-            display: flex; flex-direction: column; gap: 6px;
-        }
-        .world-ctrl button {
-            width: 46px; height: 46px; border-radius: 12px; border: 1px solid #38bdf8;
-            background: rgba(15,23,42,0.92); color: #fff; font-weight: bold; font-size: 18px;
-            cursor: pointer;
-        }
-        #territory-panel {
-            position: absolute; bottom: 15px; right: 15px; width: 300px; max-height: 70vh;
-            overflow-y: auto; background: rgba(15,23,42,0.96); border: 1px solid #f59e0b;
-            border-radius: 12px; padding: 14px; pointer-events: auto; color: #fff;
-            display: none; flex-direction: column; gap: 8px;
-        }
-        #territory-panel.active { display: flex; }
-        #territory-panel h3 { margin: 0; color: #fcd34d; font-size: 15px; }
-        .terr-row { display: flex; justify-content: space-between; font-size: 12px; color: #cbd5e1; }
-        .terr-bar { height: 8px; background: #1e293b; border-radius: 4px; overflow: hidden; }
-        .terr-bar > div { height: 100%; background: linear-gradient(90deg, #ef4444, #f59e0b); transition: width 0.3s; }
+.profile-form{display:grid;gap:14px;margin-top:16px}
+.profile-form label{display:grid;gap:7px;font-size:.9rem;font-weight:600}
+.profile-form input{width:100%;padding:11px 12px;border:1px solid #cbd2dc;
+  border-radius:8px;font:inherit}
+.profile-form input:focus{border-color:#4285f4;outline:2px solid rgba(66,133,244,.18)}
+.profile-button{width:fit-content;padding:10px 16px;border:0;border-radius:8px;
+  background:#2878e3;color:#fff;font:inherit;font-weight:600;cursor:pointer}
+.profile-button:disabled{cursor:wait;opacity:.65}
+.profile-button.secondary{background:#687385}
+.profile-button.danger{background:var(--danger)}
 
-        @media (max-width: 700px), (max-height: 500px) and (pointer: coarse) {
-            .nav-content { gap: 6px; padding: 0 8px !important; }
-            .brand { flex: 0 0 auto; white-space: nowrap; }
-            .nav-links {
-                flex: 1; min-width: 0; justify-content: space-evenly; gap: 0 !important; margin-left: 4px !important;
-            }
-            .nav-item { padding: 6px 3px !important; font-size: 11px !important; white-space: nowrap; }
-            .login-btn { flex: 0 0 auto; padding: 6px 8px !important; white-space: nowrap; }
+.search-row{display:flex;gap:8px}
+.search-row input{flex:1;padding:10px 12px;border:1px solid #cbd2dc;border-radius:8px;font:inherit}
+.friend-list,.request-list,.search-results{list-style:none;margin:0;padding:0;
+  display:flex;flex-direction:column;gap:8px}
+.friend-item,.request-item{display:flex;align-items:center;gap:10px;padding:10px;
+  border-radius:12px;background:#f7f9fc;border:1px solid transparent}
+.friend-item.active{border-color:var(--me-bg);background:#eaf2ff}
+.friend-avatar{width:42px;height:42px;border-radius:50%;object-fit:cover;background:#fff;
+  flex:0 0 auto;border:1px solid var(--border)}
+.friend-name{flex:1;font-weight:600;font-size:.95rem;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.friend-unread{min-width:18px;height:18px;padding:0 5px;border-radius:9px;
+  background:var(--danger);color:#fff;font-size:11px;font-weight:700;line-height:18px;
+  text-align:center;display:none}
+.friend-unread.show{display:inline-block}
+.friend-actions{display:flex;gap:6px;flex-wrap:wrap}
+.mini-btn{padding:6px 11px;border-radius:7px;border:1px solid #ccc;background:#fff;
+  font-size:12px;font-weight:600;cursor:pointer}
+.mini-btn.primary{background:var(--me-bg);color:#fff;border-color:var(--me-bg)}
+.mini-btn.success{background:var(--success);color:#fff;border-color:var(--success)}
+.mini-btn.danger{background:#fff0f0;color:var(--danger);border-color:#ffc9c9}
 
-            .top-bar {
-                top: calc(60px + env(safe-area-inset-top)) !important; left: 8px !important;
-                width: calc(100% - 16px) !important; transform: none !important;
-                display: grid; grid-template-columns: 1fr 1fr; gap: 5px 8px;
-                padding: 7px 10px; border-radius: 12px; white-space: normal;
-            }
-            .hud-item { font-size: 11px; }
-            .money { font-size: 14px; }
-            .dark-matter { font-size: 11px; }
+/* 聊天面板 */
+.chat-panel{display:flex;flex-direction:column;background:#fff;border-radius:16px;
+  overflow:hidden;border:1px solid var(--border);
+  box-shadow:0 8px 24px rgba(25,40,60,.06);
+  height:calc(100vh - 190px);min-height:460px}
+.chat-layout{display:flex;height:100%}
+.chat-sidebar{width:210px;flex-shrink:0;border-right:1px solid #eee;overflow-y:auto;background:#fafbfd}
+.chat-sidebar-title{padding:12px 14px 6px;font-size:12px;font-weight:700;
+  color:var(--text-gray);letter-spacing:.4px}
+.chat-sidebar .friend-item{border-radius:0;border:0;background:transparent;cursor:pointer}
+.chat-sidebar .friend-item.active{background:#eaf2ff}
+.chat-main{flex:1;display:flex;flex-direction:column;min-width:0}
 
-            #tycoon-leaderboard-button { top: 132px; right: 8px; max-width: 46%; padding: 8px 10px; font-size: 11px; }
-            #view-toggle { top: 132px; left: 8px; padding: 8px 12px; font-size: 11px; }
+.chat-mobile-picker{display:none;padding:10px 12px;border-bottom:1px solid #eee;
+  background:#fff;flex-shrink:0}
+.chat-mobile-picker select{width:100%;padding:10px 12px;border:1px solid #cbd2dc;
+  border-radius:9px;font:inherit;background:#fff;color:#1d1d1f}
 
-            .skill-bar {
-                bottom: max(8px, env(safe-area-inset-bottom));
-                left: 8px; right: 8px; transform: none; gap: 5px;
-            }
-            .skill-btn { flex: 1; min-width: 0; padding: 7px 4px; font-size: 9px; }
+.chat-header{padding:13px 16px;border-bottom:1px solid #eee;display:flex;
+  justify-content:space-between;align-items:center;background:#fff;flex-shrink:0}
+.chat-header .title{font-weight:700}
+.chat-header .sub{font-size:12px;color:var(--text-gray)}
+.chat-header-actions{display:flex;gap:8px}
+.chat-box{flex:1;overflow-y:auto;padding:15px;display:flex;flex-direction:column;
+  gap:12px;background:#fbfcfe}
+.chat-empty{margin:auto;text-align:center;color:var(--text-gray);font-size:.92rem;padding:30px}
 
-            .panel {
-                display: none; left: 0; right: 0; bottom: 0; width: 100%; max-height: 52dvh;
-                padding: 10px max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
-                border-radius: 14px 14px 0 0; touch-action: pan-y; -webkit-overflow-scrolling: touch;
-            }
-            #ui.shop-open .panel { display: flex; }
-            #ui.shop-open .skill-bar { display: none; }
-            .mobile-panel-close {
-                display: block; align-self: flex-end; padding: 7px 12px; border: 1px solid #64748b;
-                border-radius: 8px; background: #1e293b; color: #fff; font-weight: bold; touch-action: manipulation;
-            }
-            .mobile-shop-toggle {
-                display: block; position: absolute; right: 10px; bottom: calc(62px + env(safe-area-inset-bottom));
-                z-index: 15; padding: 9px 13px; border: 1px solid #38bdf8; border-radius: 20px;
-                background: rgba(15, 23, 42, 0.95); color: #fff; font-weight: bold;
-                pointer-events: auto; touch-action: manipulation;
-            }
-            #ui.shop-open .mobile-shop-toggle { display: none; }
+.msg-row{display:flex;align-items:flex-end;gap:8px;width:100%}
+.msg-row.me{flex-direction:row-reverse}
+.msg-avatar{width:34px;height:34px;border-radius:50%;object-fit:cover;background:#fff;
+  flex:0 0 auto;border:1px solid var(--border)}
+.msg-body{display:flex;flex-direction:column;max-width:78%}
+.msg-row.me .msg-body{align-items:flex-end}
+.msg-row.other .msg-body{align-items:flex-start}
+.msg-info{font-size:11px;color:var(--text-gray);margin-bottom:3px;padding:0 5px}
+.bubble{padding:10px 13px;border-radius:16px;font-size:14px;word-break:break-word;
+  box-shadow:0 1px 2px rgba(0,0,0,.06);white-space:pre-wrap;position:relative}
+.me .bubble{background:var(--me-bg);color:#fff;border-bottom-right-radius:4px}
+.other .bubble{background:var(--other-bg);color:#111;border-bottom-left-radius:4px}
+.bubble.recalled{background:transparent!important;color:var(--text-gray)!important;
+  font-style:italic;box-shadow:none;padding:4px 8px}
+.bubble img.msg-img{display:block;max-width:220px;max-height:220px;border-radius:10px;
+  cursor:pointer;background:#000}
+.bubble .img-expired{font-style:italic;color:var(--text-gray);font-size:13px}
 
-            .tab-btn { min-height: 38px; font-size: 10px; }
-            .btn { min-height: 40px; font-size: 11px; touch-action: manipulation; }
-            #tycoon-leaderboard { padding: max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom)); }
-            .tycoon-leaderboard-card { max-height: 85dvh; padding: 14px; touch-action: pan-y; -webkit-overflow-scrolling: touch; }
-            .tycoon-leaderboard-row { flex-direction: column; gap: 4px; }
+.msg-read{font-size:11px;color:var(--text-gray);margin-top:3px;padding:0 5px;cursor:pointer}
+.msg-read:hover{text-decoration:underline}
+.msg-recall-btn{display:none;margin-top:3px;font-size:11px;color:var(--text-gray);
+  background:transparent;border:0;cursor:pointer;padding:2px 5px}
+.msg-row.me .msg-recall-btn{align-self:flex-end}
+.msg-row:hover .msg-recall-btn{display:inline-block}
+@media (hover:none){.msg-row .msg-recall-btn{display:inline-block;opacity:.6}}
 
-            .world-hud {
-                top: calc(60px + env(safe-area-inset-top)) !important; left: 8px !important;
-                right: 8px !important; transform: none !important; width: auto !important;
-                font-size: 10px; gap: 8px; padding: 7px 10px; white-space: normal;
-                flex-wrap: wrap; justify-content: center;
-            }
-            #territory-panel {
-                left: 8px; right: 8px; width: auto;
-                top: calc(120px + env(safe-area-inset-top));
-                bottom: auto; max-height: 38vh;
-            }
-            .world-ctrl { bottom: calc(80px + env(safe-area-inset-bottom)); }
-            .world-ctrl button { width: 40px; height: 40px; font-size: 16px; }
-        }
-    </style>
+.chat-input-area{padding:10px 12px;border-top:1px solid #eee;display:flex;gap:8px;
+  align-items:center;background:#fff}
+.chat-input-area input[type="text"]{flex:1;padding:11px 14px;border:none;background:#f2f2f7;
+  border-radius:22px;outline:none;font-size:15px}
+.icon-btn{border:none;background:#f2f2f7;color:#333;width:38px;height:38px;border-radius:50%;
+  font-size:18px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.icon-btn:disabled{opacity:.4;cursor:not-allowed}
+.chat-send-btn{border:none;background:var(--me-bg);color:#fff;font-weight:700;
+  padding:10px 16px;border-radius:20px;cursor:pointer;font-size:14px;flex-shrink:0}
+.chat-send-btn:disabled{opacity:.5;cursor:not-allowed}
+
+/* 群組 */
+.group-check-list{display:flex;flex-direction:column;gap:6px;max-height:260px;overflow-y:auto;
+  margin-top:8px}
+.group-check-item{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:9px;
+  background:#f7f9fc}
+.group-check-item input{width:18px;height:18px}
+.member-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.member-chip{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:14px;
+  background:#eef3fb;font-size:12px}
+.member-chip img{width:20px;height:20px;border-radius:50%;object-fit:cover}
+
+.group-item{display:flex;align-items:center;gap:10px;padding:10px;border-radius:12px;
+  background:#f7f9fc;cursor:pointer}
+.group-item.active{background:#eaf2ff}
+.group-item .friend-avatar{border-radius:12px}
+
+.reader-pop{position:fixed;z-index:100;background:#fff;border:1px solid var(--border);
+  border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.15);padding:10px 12px;max-height:240px;
+  overflow-y:auto;min-width:160px;font-size:13px}
+.reader-pop .r-item{display:flex;align-items:center;gap:7px;padding:4px 0}
+.reader-pop .r-item img{width:22px;height:22px;border-radius:50%;object-fit:cover}
+.reader-pop .r-title{font-weight:700;margin-bottom:6px;color:var(--text-gray);font-size:12px}
+
+@media (max-width:640px){
+  .chat-sidebar{display:none}
+  .chat-mobile-picker{display:block}
+  .chat-panel{height:calc(100vh - 210px)}
+  .tab-btn{font-size:.78rem;padding:10px 3px}
+  .page-wrap{padding:0 10px}
+  .card{padding:18px}
+  .msg-body{max-width:82%}
+}
+</style>
 </head>
 <body>
-    <link rel="stylesheet" href="menu.css">
-    <div id="nav_bar"></div>
-    <script src="menu.js"></script>
-    <canvas id="c"></canvas>
-    <div id="ui">
-        <div class="top-bar">
-            <div class="hud-item">$<span id="m" class="money">0</span></div>
-            <div class="hud-item dark-matter">🌌 暗物質: <span id="dm">0</span></div>
-            <div class="hud-item" style="color: #ef4444;">⚔️ 第 <span id="waveNum">1</span> 波 (剩餘 <span id="enemyCount">0</span>)</div>
-            <div class="hud-item" style="color:#4ade80;">🛡️ 領地 <span id="territoryCount">0</span>/<span id="territoryMax">12</span></div>
+<div id="nav_bar"></div>
+
+<p id="login-required" class="profile-help" style="text-align:center;margin:24px;" hidden>
+  請先登入帳號，再管理個人檔案與好友。</p>
+
+<div id="app-area" hidden>
+  <div class="tab-bar" role="tablist">
+    <button class="tab-btn" data-page="profile" role="tab">個人檔案</button>
+    <button class="tab-btn" data-page="friends" role="tab">好友 <span class="tab-badge" id="tab-badge-requests"></span></button>
+    <button class="tab-btn" data-page="groups" role="tab">群組</button>
+    <button class="tab-btn active" data-page="chat" role="tab">聊天室 <span class="tab-badge" id="tab-badge-unread"></span></button>
+  </div>
+
+  <div class="page-wrap">
+    <!-- ===== 個人檔案 ===== -->
+    <section class="page" id="page-profile">
+      <div class="page-heading">
+        <h1>個人檔案</h1>
+        <button id="sign-out" class="profile-button secondary" type="button">登出</button>
+      </div>
+      <section class="card">
+        <h2>個人頭像</h2>
+        <div class="profile-avatar-row">
+          <div class="avatar-wrap">
+            <img id="profile-avatar" class="profile-avatar"
+                 src="https://raingod0101.github.io/catdragon.png" alt="個人頭像">
+            <button id="avatar-edit-btn" class="avatar-edit-btn" type="button" title="更換頭像">✎</button>
+          </div>
+          <div>
+            <p class="profile-help">點擊右下角鉛筆更換頭像，儲存後會同步到帳號資料庫。</p>
+            <input id="avatar-file-input" type="file" accept="image/*" class="hidden">
+          </div>
         </div>
+        <p id="avatar-status" class="profile-status" role="status"></p>
+      </section>
+      <section class="card">
+        <h2>顯示名稱</h2>
+        <form id="name-form" class="profile-form">
+          <label>名稱
+            <input id="display-name" type="text" maxlength="40" autocomplete="nickname" required>
+          </label>
+          <button class="profile-button" type="submit">儲存名稱</button>
+        </form>
+        <p id="name-status" class="profile-status" role="status"></p>
+      </section>
+      <section class="card">
+        <h2>變更密碼</h2>
+        <form id="password-form" class="profile-form">
+          <label>目前密碼<input id="current-password" type="password" autocomplete="current-password" required></label>
+          <label>新密碼（至少 6 個字元）<input id="new-password" type="password" minlength="6" autocomplete="new-password" required></label>
+          <label>確認新密碼<input id="confirm-password" type="password" minlength="6" autocomplete="new-password" required></label>
+          <button class="profile-button" type="submit">變更密碼</button>
+        </form>
+        <p id="password-status" class="profile-status" role="status"></p>
+      </section>
+    </section>
 
-        <div class="skill-bar">
-            <button class="skill-btn" onclick="useSkill(1)">
-                <span>⚡ 超頻過載</span><span id="cd1" style="font-size:9px; color:#f59e0b;">就緒</span>
-            </button>
-            <button class="skill-btn" onclick="useSkill(2)">
-                <span>💥 軌道砲轟炸</span><span id="cd2" style="font-size:9px; color:#f59e0b;">就緒</span>
-            </button>
-            <button class="skill-btn" onclick="useSkill(3)">
-                <span>🪖 軍隊衝鋒</span><span id="cd3" style="font-size:9px; color:#f59e0b;">就緒</span>
-            </button>
+    <!-- ===== 好友 ===== -->
+    <section class="page" id="page-friends">
+      <div class="page-heading"><h1>好友</h1></div>
+      <section class="card">
+        <h2>搜尋好友</h2>
+        <p class="profile-help">輸入對方帳號（@ 前面的名稱）送出好友申請。</p>
+        <div class="search-row">
+          <input id="friend-search-input" type="text" placeholder="輸入帳號搜尋" autocomplete="off">
+          <button id="friend-search-btn" class="profile-button" type="button" style="width:auto;padding:10px 16px;">搜尋</button>
         </div>
+        <ul id="search-results" class="search-results" style="margin-top:12px;"></ul>
+      </section>
+      <section class="card">
+        <h2>好友申請</h2>
+        <ul id="request-list" class="request-list">
+          <li class="profile-help" id="request-empty">目前沒有待處理的好友申請。</li>
+        </ul>
+      </section>
+      <section class="card">
+        <h2>好友列表</h2>
+        <ul id="friend-list" class="friend-list">
+          <li class="profile-help" id="friend-empty">尚未加入任何好友。</li>
+        </ul>
+      </section>
+    </section>
 
-        <div class="panel" id="tycoon-panel">
-            <button class="mobile-panel-close" type="button" onclick="toggleTycoonShop(false)">收起商店 ▲</button>
-            <div class="quest-box">
-                🎯 任務：<span id="questText">載入中...</span> (<span id="questProg">0/0</span>)
+    <!-- ===== 群組 ===== -->
+    <section class="page" id="page-groups">
+      <div class="page-heading"><h1>群組</h1></div>
+      <section class="card">
+        <h2>建立群組</h2>
+        <form id="group-create-form" class="profile-form">
+          <label>群組名稱
+            <input id="group-name" type="text" maxlength="40" placeholder="例如：週末出遊團" required>
+          </label>
+          <label>群組頭像（可選）
+            <input id="group-avatar-input" type="file" accept="image/*">
+          </label>
+          <div>
+            <h3 style="margin-top:0;">選擇成員</h3>
+            <div id="group-member-picker" class="group-check-list">
+              <p class="profile-help">尚無好友可加入。</p>
             </div>
+          </div>
+          <button class="profile-button" type="submit">建立群組</button>
+        </form>
+        <p id="group-status" class="profile-status" role="status"></p>
+      </section>
+      <section class="card">
+        <h2>我的群組</h2>
+        <ul id="group-list" class="friend-list">
+          <li class="profile-help" id="group-empty">尚未加入任何群組。</li>
+        </ul>
+      </section>
+    </section>
 
-            <div class="tabs">
-                <button class="tab-btn active" onclick="switchTab('tab-turret')">⚔️ 武器塔</button>
-                <button class="tab-btn" onclick="switchTab('tab-prod')">🏭 工廠解鎖</button>
-                <button class="tab-btn" onclick="switchTab('tab-upg')">⚙️ 基礎升級</button>
-                <button class="tab-btn" onclick="switchTab('tab-army')">🪖 軍隊</button>
-                <button class="tab-btn" onclick="switchTab('tab-tech')">🌌 暗天賦</button>
+    <!-- ===== 聊天室 ===== -->
+    <section class="page active" id="page-chat">
+      <div class="chat-panel">
+        <div class="chat-layout">
+          <aside class="chat-sidebar">
+            <div class="chat-sidebar-title">好友對話</div>
+            <ul id="chat-sidebar-friends" style="list-style:none;margin:0;padding:0;"></ul>
+            <div class="chat-sidebar-title">群組對話</div>
+            <ul id="chat-sidebar-groups" style="list-style:none;margin:0;padding:0;"></ul>
+          </aside>
+          <div class="chat-main">
+            <div class="chat-mobile-picker">
+              <select id="chat-mobile-select">
+                <option value="">選擇好友或群組開始聊天…</option>
+              </select>
             </div>
-
-            <div id="tab-turret">
-                <button class="btn" onclick="buildTurret('gatling')">
-                    <span>🔫 機槍塔</span><span style="color:#4ade80" id="costGatling">$1,000</span>
-                </button>
-                <button class="btn" onclick="buildTurret('laser')">
-                    <span>⚡ 雷射塔</span><span style="color:#4ade80" id="costLaser">$5,000</span>
-                </button>
-                <button class="btn" onclick="buildTurret('mortar')">
-                    <span>💥 迫擊砲塔</span><span style="color:#4ade80" id="costMortar">$20,000</span>
-                </button>
-                <button class="btn" onclick="buildTurret('frost')">
-                    <span>❄️ 緩慢冰凍塔</span><span style="color:#4ade80" id="costFrost">$50,000</span>
-                </button>
-                <button class="btn" onclick="buildTurret('blackhole')">
-                    <span>🌌 暗物質黑洞塔</span><span style="color:#c084fc" id="costBlackhole">$200,000</span>
-                </button>
-                <button class="btn" style="background: linear-gradient(135deg, #b91c1c, #991b1b); border-color: #f87171; margin-top:4px;" onclick="triggerNextWave()">
-                    <span>⚠️️ 立即召喚下一波敵人</span>
-                </button>
+            <div class="chat-header">
+              <div>
+                <div class="title" id="chat-title">聊天室</div>
+                <div class="sub" id="chat-subtitle">請選擇一位好友或群組開始聊天。</div>
+              </div>
+              <div class="chat-header-actions">
+                <button id="chat-clear-friend" class="mini-btn" type="button" hidden>關閉對話</button>
+              </div>
             </div>
-
-            <div id="tab-prod" style="display:none;">
-                <button class="btn" onclick="unlockTier(2)">
-                    <span>🔓 矽晶/晶片廠</span><span style="color:#4ade80">$2,500</span>
-                </button>
-                <button class="btn" onclick="unlockTier(3)">
-                    <span>🔓 鈾能/電池中心</span><span style="color:#4ade80">$25,000</span>
-                </button>
-                <button class="btn" onclick="unlockTier(4)">
-                    <span>🔓 量子合成廠</span><span style="color:#4ade80">$200,000</span>
-                </button>
-                <button class="btn" onclick="unlockTier(5)">
-                    <span>🔓 反物質研究所</span><span style="color:#4ade80">$2,000,000</span>
-                </button>
+            <div class="chat-box" id="chat-box">
+              <div class="chat-empty" id="chat-empty">請選擇一位好友或群組開始聊天。</div>
             </div>
-
-            <div id="tab-upg" style="display:none;">
-                <button class="btn" onclick="buyBot()">
-                    <span>🤖 雇用運輸機兵</span><span style="color:#4ade80" id="bCost">$500</span>
-                </button>
-                <button class="btn" onclick="upgrade('miner')">
-                    <span>⚙️ 採礦速率 Lv.<span id="minerLv">0</span></span><span style="color:#4ade80" id="mCost">$1,000</span>
-                </button>
-                <button class="btn" onclick="upgrade('capacity')">
-                    <span>🎒 機兵容量 Lv.<span id="capLv">4</span></span><span style="color:#4ade80" id="cCost">$1,500</span>
-                </button>
-                <button class="btn" onclick="upgrade('playerDamage')">
-                    <span>⚔️ 玩家傷害 Lv.<span id="playerDamageLv">0</span>（+25%）</span><span style="color:#4ade80" id="playerDamageCost">$1,000</span>
-                </button>
-                <button class="btn" onclick="upgrade('turretDamage')">
-                    <span>🛡️ 防衛塔傷害 Lv.<span id="turretDamageLv">0</span>（+20%）</span><span style="color:#4ade80" id="turretDamageCost">$1,500</span>
-                </button>
+            <div class="chat-input-area">
+              <button id="img-upload-btn" class="icon-btn" type="button" title="上傳圖片" disabled>📷</button>
+              <input id="img-file-input" type="file" accept="image/*" class="hidden">
+              <input type="text" id="msg-input" placeholder="輸入訊息..." disabled>
+              <button class="chat-send-btn" id="chat-send-btn" type="button" disabled>傳送</button>
             </div>
-
-            <div id="tab-army" style="display:none;">
-                <div class="quest-box" style="border-color:#f59e0b; color:#fcd34d;">
-                    🪖 切換到世界地圖，用鍵盤/搖桿移動指揮官，點擊領地發起進攻！
-                </div>
-                <button class="btn" onclick="recruitSoldier()">
-                    <span>🪖 招募士兵 (現有 <span id="soldierCount">0</span>)</span><span style="color:#4ade80" id="soldierCost">$800</span>
-                </button>
-                <button class="btn" onclick="recruitTank()">
-                    <span>🚀 生產坦克 (現有 <span id="tankCount">0</span>)</span><span style="color:#4ade80" id="tankCost">$5,000</span>
-                </button>
-                <button class="btn" onclick="switchView('world')" style="background: linear-gradient(135deg, #b45309, #78350f); border-color: #fbbf24;">
-                    <span>🌍 前往世界地圖</span>
-                </button>
-                <div class="quest-box" style="margin-top:4px;">
-                    總戰力：<span id="armyPower" style="color:#fbbf24;">0</span> ｜ 已佔領：<span id="ownedTerritories">無</span>
-                </div>
-            </div>
-
-            <div id="tab-tech" style="display:none;">
-                <button class="btn rebirth-btn" onclick="buyTalent('dmg')">
-                    <span>🧬 基因傷害 +20%</span><span style="color:#c084fc" id="tDmgCost">5 DM</span>
-                </button>
-                <button class="btn rebirth-btn" onclick="buyTalent('speed')">
-                    <span>🤖 自動化機兵速度 +15%</span><span style="color:#c084fc" id="tSpdCost">5 DM</span>
-                </button>
-                <button class="btn rebirth-btn" onclick="buyTalent('army')">
-                    <span>🪖 軍隊攻擊力 +30%</span><span style="color:#c084fc" id="tArmyCost">5 DM</span>
-                </button>
-                <button class="btn rebirth-btn" style="margin-top:8px;" onclick="triggerRebirth()">
-                    <span>🌌 暗物質量子轉生</span><span style="color:#c084fc" id="rebirthGain">+0 DM</span>
-                </button>
-            </div>
+          </div>
         </div>
-        <button class="mobile-shop-toggle" type="button" aria-controls="tycoon-panel" aria-expanded="false" onclick="toggleTycoonShop()">🛠️ 建造 / 升級</button>
-    </div>
+      </div>
+    </section>
+  </div>
+</div>
 
-    <button id="view-toggle" onclick="switchView('world')">🌍 世界地圖</button>
+<script src="menu.js"></script>
+<script>
+(function(){
+  var ready = window.raingodFirebaseReady || Promise.resolve();
+  var authReady = window.raingodAuthReady || Promise.resolve(null);
 
-    <!-- 世界地圖 UI -->
-    <div id="world-ui">
-        <div class="world-hud">
-            <span>🌍 世界地圖</span>
-            <span>🪖 <span id="wSoldiers">0</span> 兵 · <span id="wTanks">0</span> 坦克</span>
-            <span>⚔️ <span id="wPower" style="color:#fbbf24;">0</span> 戰力</span>
-            <span>🛡️ <span id="wOwned">0</span>/<span id="wTotal">12</span> 領地</span>
-            <span style="font-size:10px; color:#94a3b8;">⌨️ WASD / 方向鍵 · 📱 右側搖桿</span>
-        </div>
-        <div class="world-ctrl">
-            <button onclick="zoomWorld(1.2)" title="放大">＋</button>
-            <button onclick="zoomWorld(1/1.2)" title="縮小">－</button>
-            <button onclick="centerOnCapital()" title="回到基地">🏠</button>
-            <button onclick="switchView('base')" title="返回基地" style="border-color:#4ade80;">↩</button>
-        </div>
-        <div id="territory-panel">
-            <h3 id="terrName">選擇領地</h3>
-            <div class="terr-row"><span>歸屬</span><span id="terrOwner">中立</span></div>
-            <div class="terr-row"><span>守軍</span><span id="terrGarrison">0</span></div>
-            <div class="terr-row"><span>每波收益</span><span id="terrIncome" style="color:#4ade80;">$0</span></div>
-            <div class="terr-bar"><div id="terrBar" style="width:0%;"></div></div>
-            <button class="btn" id="attackBtn" onclick="attackSelected()" style="background: linear-gradient(135deg, #b91c1c, #7f1d1d); border-color: #f87171; margin-top:6px;">
-                <span>⚔️ 發起進攻</span><span id="attackCost" style="color:#fbbf24;">需要 0 戰力</span>
-            </button>
-            <button class="btn" onclick="closeTerritoryPanel()" style="border-color:#64748b;">關閉</button>
-        </div>
-    </div>
+  var fallbackAvatar = 'https://raingod0101.github.io/catdragon.png';
+  var IMG_TTL_MS = 24 * 60 * 60 * 1000; // 圖片保留 24 小時
 
-    <button id="tycoon-leaderboard-button" onclick="openTycoonLeaderboard()">🏆 登入後查看排行榜</button>
-    <div id="tycoon-leaderboard">
-        <div class="tycoon-leaderboard-card">
-            <h2 style="color:#38bdf8; margin-top:0;">🏆 雨神大亨排行榜</h2>
-            <p id="tycoon-leaderboard-status" style="color:#aaa;">請登入帳號後查看。</p>
-            <div id="tycoon-leaderboard-list"></div>
-            <div style="display:flex; gap:8px; justify-content:center; margin-top:14px;">
-                <button class="btn" onclick="refreshTycoonLeaderboard()">重新整理</button>
-                <button class="btn" onclick="closeTycoonLeaderboard()">關閉</button>
-            </div>
-        </div>
-    </div>
+  // ===== DOM =====
+  var loginRequired = document.getElementById('login-required');
+  var appArea = document.getElementById('app-area');
+  var avatarImg = document.getElementById('profile-avatar');
+  var avatarEditBtn = document.getElementById('avatar-edit-btn');
+  var avatarFileInput = document.getElementById('avatar-file-input');
+  var nameForm = document.getElementById('name-form');
+  var displayNameInput = document.getElementById('display-name');
+  var passwordForm = document.getElementById('password-form');
+  var signOutButton = document.getElementById('sign-out');
+  var friendSearchInput = document.getElementById('friend-search-input');
+  var friendSearchBtn = document.getElementById('friend-search-btn');
+  var searchResults = document.getElementById('search-results');
+  var requestList = document.getElementById('request-list');
+  var friendList = document.getElementById('friend-list');
+  var chatSidebarFriends = document.getElementById('chat-sidebar-friends');
+  var chatSidebarGroups = document.getElementById('chat-sidebar-groups');
+  var chatMobileSelect = document.getElementById('chat-mobile-select');
+  var chatTitle = document.getElementById('chat-title');
+  var chatSubtitle = document.getElementById('chat-subtitle');
+  var chatBox = document.getElementById('chat-box');
+  var chatEmpty = document.getElementById('chat-empty');
+  var msgInput = document.getElementById('msg-input');
+  var chatSendBtn = document.getElementById('chat-send-btn');
+  var chatClearFriend = document.getElementById('chat-clear-friend');
+  var imgUploadBtn = document.getElementById('img-upload-btn');
+  var imgFileInput = document.getElementById('img-file-input');
+  var tabBadgeRequests = document.getElementById('tab-badge-requests');
+  var tabBadgeUnread = document.getElementById('tab-badge-unread');
+  var groupCreateForm = document.getElementById('group-create-form');
+  var groupNameInput = document.getElementById('group-name');
+  var groupAvatarInput = document.getElementById('group-avatar-input');
+  var groupMemberPicker = document.getElementById('group-member-picker');
+  var groupListEl = document.getElementById('group-list');
 
-    <script>
-        // ============================================================
-        // 雨神大亨 · 帝國征途 v3
-        // 原有基地玩法完整保留 + 超大地圖 + 鍵盤/搖桿移動 + 領地爭奪
-        // ============================================================
-        const cvs = document.getElementById('c'), ctx = cvs.getContext('2d');
-        const SAVE_KEY = 'raingod_tycoon_save_v3';
-        const TYCOON_LEADERBOARD_URL = 'https://game-24b43-default-rtdb.firebaseio.com/raingod_tycoon_leaderboard';
+  // ===== 狀態 =====
+  var currentUser=null,currentUid='',currentUsername='',currentAvatar=fallbackAvatar;
+  var chatListeners=[];
+  var friendUnreadListeners=[];
+  var activeChat={type:'',id:''}; // type: 'friend' | 'group'
+  var friendsCache={};
+  var groupsCache={};
+  var unreadCache={};       // key: 'f:'+uid 或 'g:'+gid
+  var requestsCount=0;
+  var chatInitialized=false;
+  var friendAvatarRefs={};
 
-        // ---- 原有核心變數 ----
-        let money = 2000, darkMatter = 0, frame = 0;
-        let bestWave = 0;
-        let minerLevel = 0, capacity = 4, techTier = 1;
-        let playerDamageLevel = 0, turretDamageLevel = 0;
-        let p = { x: 350, y: 350, r: 18, tx: 350, ty: 350, bag: [], atkRange: 220, cooldown: 0 };
-        let bots = [], items = [], floatTexts = [], particles = [], bullets = [];
-        let turrets = [], enemies = [];
-        let shakeTime = 0;
-        let talents = { dmgLv: 0, spdLv: 0, armyLv: 0 };
-        let wave = 1;
-        let waveTimer = 20 * 60;
-        let isWaveActive = false;
-        let skillCd = [0, 0, 0];
-        let isOverclocked = false, overclockTimer = 0;
-        let quest = { type: 'kill', target: 20, current: 0, reward: 1500, desc: '擊殺 20 隻異形蟲' };
-        let storageReady = false;
+  // ===== 工具 =====
+  function db(){ return window.firebase.database(); }
+  function storage(){ return window.firebase.storage(); }
+  function setStatus(id,msg,type){
+    var el=document.getElementById(id); if(!el) return;
+    el.textContent=msg; el.classList.remove('error','ok'); if(type) el.classList.add(type);
+  }
+  function setFormDisabled(form,d){
+    var els=form.querySelectorAll('button,input');
+    for(var i=0;i<els.length;i++) els[i].disabled=d;
+  }
+  function errorMessage(err){
+    if(!err) return '操作失敗，請稍後再試。';
+    if(err.code==='auth/wrong-password'||err.code==='auth/invalid-credential')
+      return '目前密碼不正確，請確認後再試。';
+    if(err.code==='auth/requires-recent-login') return '登入時間過久，請重新登入後再變更密碼。';
+    return err.message||'操作失敗，請稍後再試。';
+  }
+  function escapeHtml(s){
+    return String(s==null?'':s).replace(/[&<>"']/g,function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+  function chatIdFor(a,b){ return [a,b].sort().join('__'); }
+  function formatTime(ts){
+    if(!ts) return '';
+    var d=new Date(ts),now=new Date();
+    var t=('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
+    if(d.toDateString()===now.toDateString()) return '今天 '+t;
+    var y=new Date(now); y.setDate(now.getDate()-1);
+    if(d.toDateString()===y.toDateString()) return '昨天 '+t;
+    return (d.getMonth()+1)+'/'+d.getDate()+' '+t;
+  }
+  function friendAvatarOf(uid){
+    var f=friendsCache[uid]; return (f&&f.avatar)||fallbackAvatar;
+  }
+  function pushId(){ return db().ref().push().key; }
 
-        // ---- 世界地圖系統 ----
-        let viewMode = 'base';
-        const WORLD_W = 4800, WORLD_H = 3600;
-        let camera = { x: WORLD_W/2, y: WORLD_H/2, zoom: 0.55 };
-        let commander = { x: 800, y: 1650 }; // 基地中心
-        let keys = {};
-        let joystick = { active: false, baseX: 0, baseY: 0, knobX: 0, knobY: 0, dx: 0, dy: 0, pointerId: null };
-        let tapStart = null;
-        let selectedTerritoryId = null;
+  // ===== 分頁 =====
+  var tabBtns=document.querySelectorAll('.tab-btn');
+  for(var i=0;i<tabBtns.length;i++){
+    (function(btn){
+      btn.addEventListener('click',function(){
+        var all=document.querySelectorAll('.tab-btn');
+        for(var j=0;j<all.length;j++) all[j].classList.remove('active');
+        var pages=document.querySelectorAll('.page');
+        for(var k=0;k<pages.length;k++) pages[k].classList.remove('active');
+        btn.classList.add('active');
+        var pg=document.getElementById('page-'+btn.dataset.page);
+        if(pg) pg.classList.add('active');
+        if(btn.dataset.page==='chat') chatBox.scrollTop=chatBox.scrollHeight;
+      });
+    })(tabBtns[i]);
+  }
+  function switchTab(name){
+    var all=document.querySelectorAll('.tab-btn');
+    for(var i=0;i<all.length;i++) all[i].classList.toggle('active',all[i].dataset.page===name);
+    var pages=document.querySelectorAll('.page');
+    for(var j=0;j<pages.length;j++) pages[j].classList.toggle('active',pages[j].id==='page-'+name);
+  }
 
-        // 軍隊
-        let army = { soldiers: 0, tanks: 0 };
+  // ===== 使用者 =====
+  function fetchUserProfile(username,cb){
+    db().ref('users/'+username).once('value',function(s){
+      cb(s.exists()?s.val():null);
+    },function(err){ console.warn(err); cb(null); });
+  }
 
-        // 領地定義
-        const TERRITORY_DEFS = [
-            { id: 0, name: '雨神基地', x: 600, y: 1500, w: 400, h: 300, garrison: 0, income: 0, type: 'capital' },
-            { id: 1, name: '廢棄礦場', x: 1300, y: 900, w: 340, h: 260, garrison: 15, income: 600, type: 'resource' },
-            { id: 2, name: '晶片工業區', x: 1800, y: 1500, w: 360, h: 280, garrison: 40, income: 1500, type: 'resource' },
-            { id: 3, name: '核能電廠', x: 2300, y: 800, w: 340, h: 280, garrison: 90, income: 3200, type: 'resource' },
-            { id: 4, name: '量子實驗室', x: 2700, y: 1600, w: 380, h: 300, garrison: 160, income: 7000, type: 'resource' },
-            { id: 5, name: '反物質坑', x: 3200, y: 1000, w: 340, h: 280, garrison: 260, income: 15000, type: 'resource' },
-            { id: 6, name: '異星殖民地', x: 3600, y: 1800, w: 400, h: 320, garrison: 420, income: 32000, type: 'military' },
-            { id: 7, name: '軌道電梯', x: 4100, y: 900, w: 340, h: 280, garrison: 650, income: 60000, type: 'military' },
-            { id: 8, name: '深空要塞', x: 4200, y: 2200, w: 380, h: 320, garrison: 900, income: 120000, type: 'military' },
-            { id: 9, name: '暗物質神殿', x: 2400, y: 2600, w: 400, h: 320, garrison: 1300, income: 220000, type: 'military' },
-            { id: 10, name: '終極兵器庫', x: 3400, y: 2800, w: 380, h: 300, garrison: 1800, income: 400000, type: 'military' },
-            { id: 11, name: '星際首都', x: 4200, y: 3000, w: 420, h: 340, garrison: 2600, income: 800000, type: 'military' },
-        ];
+  // ===== 初始化 =====
+  function initProfile(user){
+    currentUser=user;
+    currentUid=user.uid;
+    currentUsername=user.email?user.email.split('@')[0]:'';
+    loginRequired.hidden=true;
+    appArea.hidden=false;
+    avatarImg.src=user.photoURL||fallbackAvatar;
+    displayNameInput.value=user.displayName||currentUsername;
 
-        let worldMap = [];
-        function initWorldMap() {
-            worldMap = TERRITORY_DEFS.map(def => ({
-                ...def,
-                owner: def.type === 'capital' ? 'player' : (def.garrison >= 200 ? 'enemy' : 'neutral'),
-                garrisonCurrent: def.garrison,
-                conqueredAt: 0,
-            }));
-        }
-        initWorldMap();
+    fetchUserProfile(currentUsername,function(p){
+      if(p&&p.profile){
+        if(p.profile.avatar){ avatarImg.src=p.profile.avatar; currentAvatar=p.profile.avatar; }
+        if(p.profile.displayName) displayNameInput.value=p.profile.displayName;
+      }
+    });
 
-        function isTouchDevice() {
-            return 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-        }
+    db().ref('users/'+currentUsername+'/profile/avatar').on('value',function(s){
+      var url=s.val(); currentAvatar=url||fallbackAvatar;
+      avatarImg.src=currentAvatar; updateMyMessageAvatars();
+    });
 
-        // ============================================================
-        // 存檔 / 讀檔
-        // ============================================================
-        function saveGame() {
-            if (!storageReady) return;
-            localStorage.setItem(SAVE_KEY, JSON.stringify({
-                money, darkMatter, minerLevel, capacity, techTier, playerDamageLevel, turretDamageLevel,
-                player: p, bots, turrets, talents, wave, bestWave, waveTimer,
-                isWaveActive, items, enemies, skillCd, isOverclocked, overclockTimer, quest,
-                army, worldMap, viewMode, commander
-            }));
-        }
+    listenFriendRequests();
+    listenFriends();
+    listenGroups();
 
-        function loadGame(data) {
-            if (!data || typeof data !== 'object' || Array.isArray(data)) return;
-            const finiteOr = (value, fallback) => Number.isFinite(Number(value)) ? Number(value) : fallback;
-            const objectArray = value => Array.isArray(value) ? value.filter(item => item && typeof item === 'object').slice(0, 1000) : [];
-            money = Math.max(0, finiteOr(data.money, money));
-            darkMatter = Math.max(0, finiteOr(data.darkMatter, darkMatter));
-            minerLevel = Math.max(0, Math.floor(finiteOr(data.minerLevel, minerLevel)));
-            capacity = Math.max(1, Math.floor(finiteOr(data.capacity, capacity)));
-            techTier = Math.min(5, Math.max(1, Math.floor(finiteOr(data.techTier, techTier))));
-            playerDamageLevel = Math.max(0, Math.floor(finiteOr(data.playerDamageLevel, playerDamageLevel)));
-            turretDamageLevel = Math.max(0, Math.floor(finiteOr(data.turretDamageLevel, turretDamageLevel)));
-            if (data.player && typeof data.player === 'object') Object.assign(p, data.player);
-            bots = objectArray(data.bots);
-            turrets = objectArray(data.turrets);
-            if (data.talents && typeof data.talents === 'object') talents = { ...talents, ...data.talents };
-            wave = Math.max(1, Math.floor(finiteOr(data.wave, wave)));
-            bestWave = Math.max(0, Math.floor(finiteOr(data.bestWave, bestWave)));
-            waveTimer = Math.max(0, Math.floor(finiteOr(data.waveTimer, waveTimer)));
-            const wasWaveActive = data.isWaveActive === true;
-            isWaveActive = false;
-            items = objectArray(data.items);
-            enemies = wasWaveActive ? [] : objectArray(data.enemies);
-            if (wasWaveActive) waveTimer = 0;
-            if (Array.isArray(data.skillCd)) {
-                for (let i = 0; i < Math.min(3, data.skillCd.length); i++) skillCd[i] = Math.max(0, finiteOr(data.skillCd[i], 0));
-            }
-            isOverclocked = data.isOverclocked === true;
-            overclockTimer = Math.max(0, Math.floor(finiteOr(data.overclockTimer, overclockTimer)));
-            if (data.quest && typeof data.quest === 'object') quest = { ...quest, ...data.quest };
-            if (data.army && typeof data.army === 'object') {
-                army.soldiers = Math.max(0, Math.floor(finiteOr(data.army.soldiers, 0)));
-                army.tanks = Math.max(0, Math.floor(finiteOr(data.army.tanks, 0)));
-            }
-            if (Array.isArray(data.worldMap)) {
-                data.worldMap.forEach(saved => {
-                    const t = worldMap.find(w => w.id === saved.id);
-                    if (t) {
-                        if (saved.owner) t.owner = saved.owner;
-                        if (Number.isFinite(Number(saved.garrisonCurrent))) t.garrisonCurrent = Math.max(0, Math.floor(Number(saved.garrisonCurrent)));
-                    }
-                });
-            }
-            if (data.commander && typeof data.commander === 'object') {
-                commander.x = Math.max(20, Math.min(WORLD_W - 20, finiteOr(data.commander.x, commander.x)));
-                commander.y = Math.max(20, Math.min(WORLD_H - 20, finiteOr(data.commander.y, commander.y)));
-            }
-            if (data.viewMode === 'world') viewMode = 'world';
-            updateWorldUIVisibility();
-        }
+    if(!chatInitialized){
+      chatInitialized=true;
+      switchTab('chat');
+      chatBox.scrollTop=chatBox.scrollHeight;
+    }
+  }
 
-        // ============================================================
-        // 排行榜（保留）
-        // ============================================================
-        async function openTycoonLeaderboard() {
-            if (!await window.raingodRequireAuth('排行榜')) return;
-            document.getElementById('tycoon-leaderboard').style.display = 'flex';
-            await refreshTycoonLeaderboard();
-        }
-        function closeTycoonLeaderboard() {
-            document.getElementById('tycoon-leaderboard').style.display = 'none';
-        }
-        async function refreshTycoonLeaderboard() {
-            const status = document.getElementById('tycoon-leaderboard-status');
-            const list = document.getElementById('tycoon-leaderboard-list');
-            if (!await window.raingodRequireAuth('排行榜')) return;
-            const uid = window.raingodCurrentUser.uid;
-            status.textContent = '排行榜載入中…';
-            try {
-                const response = await fetch(`${TYCOON_LEADERBOARD_URL}.json`);
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                if (window.raingodCurrentUser?.uid !== uid) return;
-                const rows = await response.json() || {};
-                const entries = Object.entries(rows)
-                    .filter(([, row]) => row && Number.isFinite(Number(row.wave)))
-                    .sort((a, b) => Number(b[1].wave) - Number(a[1].wave) || Number(b[1].darkMatter || 0) - Number(a[1].darkMatter || 0))
-                    .slice(0, 50);
-                list.replaceChildren();
-                entries.forEach(([entryUid, row], index) => {
-                    const item = document.createElement('div');
-                    item.className = 'tycoon-leaderboard-row';
-                    const name = document.createElement('span');
-                    name.textContent = `${index + 1}. ${row.name || '玩家'}${entryUid === uid ? '（你）' : ''}`;
-                    const value = document.createElement('strong');
-                    value.textContent = `第 ${Math.floor(Number(row.wave))} 波 · ${Math.floor(Number(row.darkMatter) || 0)} 暗物質`;
-                    item.append(name, value);
-                    list.appendChild(item);
-                });
-                status.textContent = entries.length ? `已載入 ${entries.length} 位玩家，依最高波數排序。` : '目前還沒有排行榜資料。';
-            } catch (error) {
-                console.error('載入雨神大亨排行榜失敗：', error);
-                status.textContent = '排行榜載入失敗，請稍後重試。';
-            }
-        }
-        async function uploadTycoonLeaderboardScore() {
-            const currentUser = window.raingodCurrentUser;
-            if (!currentUser) return;
-            const uid = currentUser.uid;
-            const scoreWave = Math.max(1, bestWave, wave);
-            const scoreDarkMatter = Math.floor(darkMatter);
-            const entryUrl = `${TYCOON_LEADERBOARD_URL}/${encodeURIComponent(uid)}.json`;
-            try {
-                const previousResponse = await fetch(entryUrl);
-                if (!previousResponse.ok) throw new Error(`HTTP ${previousResponse.status}`);
-                const previous = await previousResponse.json();
-                if (window.raingodCurrentUser?.uid !== uid) return;
-                if (previous && (Number(previous.wave) > scoreWave ||
-                    (Number(previous.wave) === scoreWave && Number(previous.darkMatter) >= scoreDarkMatter))) return;
-                const response = await fetch(entryUrl, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        name: currentUser.displayName || (currentUser.email ? currentUser.email.split('@')[0] : '雨神玩家'),
-                        wave: scoreWave,
-                        darkMatter: scoreDarkMatter,
-                        updatedAt: Date.now()
-                    })
-                });
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            } catch (error) {
-                console.error('上傳雨神大亨排行榜失敗：', error);
-            }
-        }
-        async function initializeTycoon() {
-            await window.raingodFirebaseReady;
-            await window.raingodAuthReady;
-            await window.raingodBindStorage('raingod-tycoon', [SAVE_KEY], { [SAVE_KEY]: null }, data => {
-                loadGame(data[SAVE_KEY]);
-                storageReady = true;
-                saveGame();
-                if (window.raingodCurrentUser) uploadTycoonLeaderboardScore();
+  // ===== 頭像 =====
+  avatarEditBtn.addEventListener('click',function(){ avatarFileInput.click(); });
+  avatarFileInput.addEventListener('change',function(){
+    var file=avatarFileInput.files&&avatarFileInput.files[0]; if(!file) return;
+    if(file.type.indexOf('image/')!==0){ setStatus('avatar-status','請選擇圖片檔案。','error'); return; }
+    if(file.size>2*1024*1024){ setStatus('avatar-status','圖片大小需小於 2MB。','error'); return; }
+    setStatus('avatar-status','正在上傳頭像…');
+    var reader=new FileReader();
+    reader.onload=function(){
+      var dataUrl=reader.result;
+      db().ref('users/'+currentUsername+'/profile/avatar').set(dataUrl,function(err){
+        if(err){ setStatus('avatar-status','頭像儲存失敗：'+errorMessage(err),'error'); return; }
+        avatarImg.src=dataUrl; currentAvatar=dataUrl;
+        setStatus('avatar-status','頭像已更新並儲存。','ok');
+        refreshFriendsUI(); updateMyMessageAvatars();
+      });
+      avatarFileInput.value='';
+    };
+    reader.readAsDataURL(file);
+  });
+
+  // ===== 名稱 =====
+  nameForm.addEventListener('submit',function(e){
+    e.preventDefault();
+    var name=displayNameInput.value.trim();
+    if(!name){ setStatus('name-status','請輸入顯示名稱。','error'); return; }
+    setFormDisabled(nameForm,true); setStatus('name-status','正在儲存…');
+    currentUser.updateProfile({displayName:name}).then(function(){
+      return db().ref('users/'+currentUsername+'/profile/displayName').set(name);
+    }).then(function(){
+      return currentUser.reload();
+    }).then(function(){
+      setStatus('name-status','顯示名稱已更新。','ok');
+    }).catch(function(err){
+      setStatus('name-status',errorMessage(err),'error');
+    }).finally(function(){ setFormDisabled(nameForm,false); });
+  });
+
+  // ===== 密碼 =====
+  passwordForm.addEventListener('submit',function(e){
+    e.preventDefault();
+    if(!currentUser||!currentUser.email) return;
+    var cur=document.getElementById('current-password').value;
+    var nw=document.getElementById('new-password').value;
+    var cf=document.getElementById('confirm-password').value;
+    if(nw.length<6){ setStatus('password-status','新密碼至少需要 6 個字元。','error'); return; }
+    if(nw!==cf){ setStatus('password-status','兩次輸入的新密碼不一致。','error'); return; }
+    setFormDisabled(passwordForm,true); setStatus('password-status','正在變更密碼…');
+    var cred=window.firebase.auth.EmailAuthProvider.credential(currentUser.email,cur);
+    currentUser.reauthenticateWithCredential(cred).then(function(){
+      return currentUser.updatePassword(nw);
+    }).then(function(){
+      passwordForm.reset(); setStatus('password-status','密碼已成功變更。','ok');
+    }).catch(function(err){
+      setStatus('password-status',errorMessage(err),'error');
+    }).finally(function(){ setFormDisabled(passwordForm,false); });
+  });
+
+  // ===== 登出 =====
+  signOutButton.addEventListener('click',function(){
+    signOutButton.disabled=true;
+    window.firebase.auth().signOut().then(function(){
+      if(typeof window.raingodClearLocalAccountData==='function') window.raingodClearLocalAccountData();
+      window.location.href='index.html';
+    }).catch(function(err){ signOutButton.disabled=false; alert('登出失敗：'+err.message); });
+  });
+
+  // ===== 好友搜尋 =====
+  friendSearchBtn.addEventListener('click',function(){
+    var kw=friendSearchInput.value.trim().toLowerCase();
+    searchResults.innerHTML='';
+    if(!kw){ searchResults.innerHTML='<li class="profile-help">請輸入帳號關鍵字。</li>'; return; }
+    if(kw===currentUsername){ searchResults.innerHTML='<li class="profile-help">不能加入自己為好友。</li>'; return; }
+    fetchUserProfile(kw,function(p){
+      if(!p){ searchResults.innerHTML='<li class="profile-help">找不到此帳號。</li>'; return; }
+      db().ref('users/'+currentUsername+'/friends/'+p.uid).once('value').then(function(fs){
+        return db().ref('users/'+kw+'/friend_requests/'+currentUsername).once('value').then(function(rs){
+          var isFriend=fs.exists(),sent=rs.exists();
+          var name=(p.profile&&p.profile.displayName)||kw;
+          var avatar=(p.profile&&p.profile.avatar)||fallbackAvatar;
+          var li=document.createElement('li'); li.className='friend-item';
+          var action=isFriend?'<span class="profile-help">已是好友</span>':
+            sent?'<span class="profile-help">已送出申請</span>':
+            '<button class="mini-btn primary" data-uid="'+escapeHtml(p.uid)+'" data-name="'+escapeHtml(name)+'" data-username="'+escapeHtml(kw)+'">加好友</button>';
+          li.innerHTML='<img class="friend-avatar" src="'+escapeHtml(avatar)+'" alt="">'+
+            '<div class="friend-name">'+escapeHtml(name)+
+            ' <small style="color:var(--text-gray);font-weight:400;">@'+escapeHtml(kw)+'</small></div>'+
+            '<div class="friend-actions">'+action+'</div>';
+          searchResults.appendChild(li);
+          var btn=li.querySelector('button[data-uid]');
+          if(btn){
+            btn.addEventListener('click',function(){
+              btn.disabled=true; btn.textContent='送出中…';
+              sendFriendRequest(kw,p.uid,name).then(function(){ btn.textContent='已送出'; })
+              .catch(function(e){ btn.disabled=false; btn.textContent='加好友';
+                alert('送出好友申請失敗：'+errorMessage(e)); });
             });
-            window.raingodOnAuthStateChanged(currentUser => {
-                const button = document.getElementById('tycoon-leaderboard-button');
-                button.textContent = currentUser ? '🏆 排行榜' : '🏆 登入後查看排行榜';
-                if (currentUser) uploadTycoonLeaderboardScore();
-                else {
-                    closeTycoonLeaderboard();
-                    document.getElementById('tycoon-leaderboard-list').replaceChildren();
-                    document.getElementById('tycoon-leaderboard-status').textContent = '請登入帳號後查看。';
-                }
-            });
-            draw();
-        }
+          }
+        });
+      }).catch(function(e){
+        console.error(e); searchResults.innerHTML='<li class="profile-help">查詢好友狀態失敗。</li>';
+      });
+    });
+  });
 
-        // ============================================================
-        // 物品 / 原有基地邏輯
-        // ============================================================
-        const ITEMS = {
-            RAW:     { name: '原礦', val: 10, color: '#ef4444' },
-            STEEL:   { name: '鋼鐵', val: 50, color: '#f59e0b' },
-            SILICON: { name: '矽晶', val: 80, color: '#0284c7' },
-            CHIP:    { name: '晶片', val: 300, color: '#3b82f6' },
-            URANIUM: { name: '鈾礦', val: 500, color: '#10b981' },
-            BATTERY: { name: '核電池', val: 2500, color: '#22c55e' },
-            CORE:    { name: '量子核心', val: 12000, color: '#a855f7' },
-            ANTIM:   { name: '反物質', val: 100000, color: '#e11d48' }
+  function sendFriendRequest(toUsername,toUid,toName){
+    return db().ref('users/'+toUsername+'/friend_requests/'+currentUsername).set({
+      fromUid:currentUid,
+      fromName:currentUser.displayName||currentUsername,
+      fromUsername:currentUsername,
+      fromAvatar:currentAvatar||fallbackAvatar,
+      ts:window.firebase.database.ServerValue.TIMESTAMP
+    });
+  }
+
+  // ===== 好友申請監聽 =====
+  function listenFriendRequests(){
+    db().ref('users/'+currentUsername+'/friend_requests').on('value',function(snap){
+      var val=snap.val()||{};
+      var entries=Object.keys(val).map(function(k){ return [k,val[k]]; });
+      requestList.innerHTML=''; requestsCount=entries.length; updateTabBadges();
+      if(!entries.length){
+        requestList.innerHTML='<li class="profile-help" id="request-empty">目前沒有待處理的好友申請。</li>';
+        return;
+      }
+      entries.forEach(function(pair){
+        var fromUsername=pair[0],req=pair[1];
+        var li=document.createElement('li'); li.className='request-item';
+        li.innerHTML='<img class="friend-avatar" src="'+escapeHtml(req.fromAvatar||fallbackAvatar)+'" alt="">'+
+          '<div class="friend-name">'+escapeHtml(req.fromName||fromUsername)+'</div>'+
+          '<div class="friend-actions">'+
+            '<button class="mini-btn success" data-accept="'+escapeHtml(fromUsername)+'" data-uid="'+escapeHtml(req.fromUid)+'" data-name="'+escapeHtml(req.fromName||fromUsername)+'" data-avatar="'+escapeHtml(req.fromAvatar||fallbackAvatar)+'">接受</button>'+
+            '<button class="mini-btn danger" data-reject="'+escapeHtml(fromUsername)+'">拒絕</button>'+
+          '</div>';
+        requestList.appendChild(li);
+      });
+      requestList.querySelectorAll('[data-accept]').forEach(function(btn){
+        btn.addEventListener('click',function(){
+          btn.disabled=true;
+          acceptFriendRequest(btn.dataset.accept,btn.dataset.uid,btn.dataset.name,btn.dataset.avatar)
+          .catch(function(e){ alert('接受好友申請失敗：'+errorMessage(e)); btn.disabled=false; });
+        });
+      });
+      requestList.querySelectorAll('[data-reject]').forEach(function(btn){
+        btn.addEventListener('click',function(){
+          btn.disabled=true;
+          rejectFriendRequest(btn.dataset.reject)
+          .catch(function(e){ alert('拒絕好友申請失敗：'+errorMessage(e)); btn.disabled=false; });
+        });
+      });
+    });
+  }
+
+  function acceptFriendRequest(fromUsername,fromUid,fromName,fromAvatar){
+    var myName=currentUser.displayName||currentUsername;
+    var myAvatar=currentAvatar||fallbackAvatar;
+    var updates={};
+    updates['users/'+currentUsername+'/friends/'+fromUid]={name:fromName,avatar:fromAvatar,username:fromUsername,since:window.firebase.database.ServerValue.TIMESTAMP};
+    updates['users/'+fromUsername+'/friends/'+currentUid]={name:myName,avatar:myAvatar,username:currentUsername,since:window.firebase.database.ServerValue.TIMESTAMP};
+    updates['users/'+currentUsername+'/friend_requests/'+fromUsername]=null;
+    return db().ref().update(updates);
+  }
+  function rejectFriendRequest(fromUsername){
+    return db().ref('users/'+currentUsername+'/friend_requests/'+fromUsername).remove();
+  }
+
+  // ===== 好友頭像監聽 =====
+  function stopFriendAvatarWatchers(){
+    Object.keys(friendAvatarRefs).forEach(function(uid){
+      var it=friendAvatarRefs[uid];
+      try{ it.ref.off('value',it.handler); }catch(e){}
+    });
+    friendAvatarRefs={};
+  }
+  function watchFriendAvatars(){
+    stopFriendAvatarWatchers();
+    Object.keys(friendsCache).forEach(function(uid){
+      var f=friendsCache[uid]; if(!f.username) return;
+      var ref=db().ref('users/'+f.username+'/profile/avatar');
+      var handler=function(snap){
+        var url=snap.val(); if(url) friendsCache[uid].avatar=url;
+        refreshFriendsUI(); updateMessageAvatars();
+      };
+      ref.on('value',handler);
+      friendAvatarRefs[uid]={ref:ref,handler:handler};
+    });
+  }
+
+  // ===== 好友列表 =====
+  function listenFriends(){
+    db().ref('users/'+currentUsername+'/friends').on('value',function(snap){
+      friendsCache=snap.val()||{};
+      refreshFriendsUI();
+      listenAllUnread();
+      watchFriendAvatars();
+    });
+  }
+
+  function refreshFriendsUI(){
+    // 好友列表頁
+    friendList.innerHTML='';
+    var entries=Object.keys(friendsCache).map(function(k){ return [k,friendsCache[k]]; });
+    if(!entries.length){
+      friendList.innerHTML='<li class="profile-help" id="friend-empty">尚未加入任何好友。</li>';
+    }else{
+      entries.forEach(function(pair){
+        var uid=pair[0],f=pair[1];
+        var li=document.createElement('li');
+        li.className='friend-item'+(activeChat.type==='friend'&&uid===activeChat.id?' active':'');
+        li.innerHTML='<img class="friend-avatar" src="'+escapeHtml(f.avatar||fallbackAvatar)+'" alt="">'+
+          '<div class="friend-name">'+escapeHtml(f.name||f.username||'好友')+'</div>'+
+          '<span class="friend-unread" data-uid="'+escapeHtml(uid)+'"></span>'+
+          '<div class="friend-actions">'+
+            '<button class="mini-btn primary" data-chat-uid="'+escapeHtml(uid)+'" data-chat-name="'+escapeHtml(f.name||f.username||'好友')+'" data-chat-avatar="'+escapeHtml(f.avatar||fallbackAvatar)+'">私訊</button>'+
+          '</div>';
+        friendList.appendChild(li);
+      });
+      friendList.querySelectorAll('[data-chat-uid]').forEach(function(btn){
+        btn.addEventListener('click',function(){
+          openPrivateChat(btn.dataset.chatUid,btn.dataset.chatName,btn.dataset.chatAvatar);
+          switchTab('chat');
+        });
+      });
+    }
+
+    // 聊天側邊欄-好友
+    chatSidebarFriends.innerHTML='';
+    if(!entries.length){
+      chatSidebarFriends.innerHTML='<li class="profile-help" style="padding:12px;">尚無好友</li>';
+    }else{
+      entries.forEach(function(pair){
+        var uid=pair[0],f=pair[1];
+        var li=document.createElement('li');
+        li.className='friend-item'+(activeChat.type==='friend'&&uid===activeChat.id?' active':'');
+        li.innerHTML='<img class="friend-avatar" src="'+escapeHtml(f.avatar||fallbackAvatar)+'" alt="">'+
+          '<div class="friend-name">'+escapeHtml(f.name||f.username||'好友')+'</div>'+
+          '<span class="friend-unread" data-uid="'+escapeHtml(uid)+'"></span>';
+        li.addEventListener('click',(function(u,ff){ return function(){
+          openPrivateChat(u,ff.name||ff.username||'好友',ff.avatar||fallbackAvatar);
+        };})(uid,f));
+        chatSidebarFriends.appendChild(li);
+      });
+    }
+
+    // 聊天側邊欄-群組
+    chatSidebarGroups.innerHTML='';
+    var gEntries=Object.keys(groupsCache).map(function(k){ return [k,groupsCache[k]]; });
+    if(!gEntries.length){
+      chatSidebarGroups.innerHTML='<li class="profile-help" style="padding:12px;">尚無群組</li>';
+    }else{
+      gEntries.forEach(function(pair){
+        var gid=pair[0],g=pair[1];
+        var li=document.createElement('li');
+        li.className='friend-item'+(activeChat.type==='group'&&gid===activeChat.id?' active':'');
+        li.innerHTML='<img class="friend-avatar" src="'+escapeHtml(g.avatar||fallbackAvatar)+'" alt="" style="border-radius:12px;">'+
+          '<div class="friend-name">'+escapeHtml(g.name||'群組')+'</div>'+
+          '<span class="friend-unread" data-gid="'+escapeHtml(gid)+'"></span>';
+        li.addEventListener('click',function(){ openGroupChat(gid); });
+        chatSidebarGroups.appendChild(li);
+      });
+    }
+
+    refreshMobileSelect(entries,gEntries);
+    updateUnreadBadges();
+    renderGroupMemberPicker();
+    renderGroupList();
+  }
+
+  function refreshMobileSelect(entries,gEntries){
+    var val=activeChat.type?activeChat.type+':'+activeChat.id:'';
+    chatMobileSelect.innerHTML='<option value="">選擇好友或群組開始聊天…</option>';
+    entries.forEach(function(pair){
+      var uid=pair[0],f=pair[1];
+      var opt=document.createElement('option');
+      opt.value='friend:'+uid;
+      opt.textContent='👤 '+(f.name||f.username||'好友')+(unreadCache['f:'+uid]?' ('+unreadCache['f:'+uid]+')':'');
+      if(val==='friend:'+uid) opt.selected=true;
+      chatMobileSelect.appendChild(opt);
+    });
+    gEntries.forEach(function(pair){
+      var gid=pair[0],g=pair[1];
+      var opt=document.createElement('option');
+      opt.value='group:'+gid;
+      opt.textContent='👥 '+(g.name||'群組')+(unreadCache['g:'+gid]?' ('+unreadCache['g:'+gid]+')':'');
+      if(val==='group:'+gid) opt.selected=true;
+      chatMobileSelect.appendChild(opt);
+    });
+  }
+
+  chatMobileSelect.addEventListener('change',function(){
+    var v=chatMobileSelect.value; if(!v) return;
+    var parts=v.split(':');
+    if(parts[0]==='friend'){
+      var f=friendsCache[parts[1]]; if(!f) return;
+      openPrivateChat(parts[1],f.name||f.username||'好友',f.avatar||fallbackAvatar);
+    }else{
+      openGroupChat(parts[1]);
+    }
+  });
+
+  // ===== 未讀 =====
+  function listenAllUnread(){
+    for(var i=0;i<friendUnreadListeners.length;i++) friendUnreadListeners[i]();
+    friendUnreadListeners=[]; unreadCache={};
+
+    Object.keys(friendsCache).forEach(function(fuid){
+      var cid=chatIdFor(currentUid,fuid);
+      var msgsRef=db().ref('private_chats/'+cid+'/msgs');
+      var readRef=db().ref('private_chats/'+cid+'/read/'+currentUid);
+      var handler=function(snap){
+        var msgs=snap.val()||{};
+        readRef.once('value').then(function(rs){
+          var lastRead=rs.val()||0,unread=0;
+          Object.keys(msgs).forEach(function(id){
+            var m=msgs[id];
+            if(m.from!==currentUid&&(m.ts||0)>lastRead) unread++;
+          });
+          unreadCache['f:'+fuid]=unread;
+          updateUnreadBadges();
+          refreshMobileSelect(Object.keys(friendsCache).map(function(k){return [k,friendsCache[k]];}),
+                              Object.keys(groupsCache).map(function(k){return [k,groupsCache[k]];}));
+        }).catch(function(){});
+      };
+      msgsRef.on('value',handler);
+      friendUnreadListeners.push((function(ref){ return function(){ ref.off('value',handler); };})(msgsRef));
+    });
+
+    Object.keys(groupsCache).forEach(function(gid){
+      var msgsRef=db().ref('groups/'+gid+'/msgs');
+      var readRef=db().ref('groups/'+gid+'/read/'+currentUid);
+      var handler=function(snap){
+        var msgs=snap.val()||{};
+        readRef.once('value').then(function(rs){
+          var lastRead=rs.val()||0,unread=0;
+          Object.keys(msgs).forEach(function(id){
+            var m=msgs[id];
+            if(m.from!==currentUid&&(m.ts||0)>lastRead) unread++;
+          });
+          unreadCache['g:'+gid]=unread;
+          updateUnreadBadges();
+          refreshMobileSelect(Object.keys(friendsCache).map(function(k){return [k,friendsCache[k]];}),
+                              Object.keys(groupsCache).map(function(k){return [k,groupsCache[k]];}));
+        }).catch(function(){});
+      };
+      msgsRef.on('value',handler);
+      friendUnreadListeners.push((function(ref){ return function(){ ref.off('value',handler); };})(msgsRef));
+    });
+  }
+
+  function updateUnreadBadges(){
+    var els=document.querySelectorAll('.friend-unread');
+    for(var i=0;i<els.length;i++){
+      var key=els[i].dataset.uid?'f:'+els[i].dataset.uid:('g:'+els[i].dataset.gid);
+      var c=unreadCache[key]||0;
+      els[i].textContent=c>99?'99+':String(c);
+      els[i].classList.toggle('show',c>0);
+    }
+    var total=0; Object.keys(unreadCache).forEach(function(k){ total+=unreadCache[k]||0; });
+    tabBadgeUnread.textContent=total>99?'99+':String(total);
+    tabBadgeUnread.classList.toggle('show',total>0);
+    updateTabBadges();
+  }
+  function updateTabBadges(){
+    tabBadgeRequests.textContent=requestsCount>99?'99+':String(requestsCount);
+    tabBadgeRequests.classList.toggle('show',requestsCount>0);
+  }
+
+  // ===== 群組 =====
+  function listenGroups(){
+    db().ref('users/'+currentUsername+'/groups').on('value',function(snap){
+      groupsCache=snap.val()||{};
+      refreshFriendsUI();
+      listenAllUnread();
+    });
+  }
+
+  function renderGroupMemberPicker(){
+    var entries=Object.keys(friendsCache).map(function(k){ return [k,friendsCache[k]]; });
+    if(!entries.length){
+      groupMemberPicker.innerHTML='<p class="profile-help">尚無好友可加入。</p>';
+      return;
+    }
+    groupMemberPicker.innerHTML='';
+    entries.forEach(function(pair){
+      var uid=pair[0],f=pair[1];
+      var lab=document.createElement('label');
+      lab.className='group-check-item';
+      lab.innerHTML='<input type="checkbox" value="'+escapeHtml(uid)+'">'+
+        '<img class="friend-avatar" style="width:28px;height:28px;" src="'+escapeHtml(f.avatar||fallbackAvatar)+'" alt="">'+
+        '<span>'+escapeHtml(f.name||f.username||'好友')+'</span>';
+      groupMemberPicker.appendChild(lab);
+    });
+  }
+
+  function renderGroupList(){
+    groupListEl.innerHTML='';
+    var entries=Object.keys(groupsCache).map(function(k){ return [k,groupsCache[k]]; });
+    if(!entries.length){
+      groupListEl.innerHTML='<li class="profile-help" id="group-empty">尚未加入任何群組。</li>';
+      return;
+    }
+    entries.forEach(function(pair){
+      var gid=pair[0],g=pair[1];
+      var memberCount=g.members?Object.keys(g.members).length:0;
+      var li=document.createElement('li');
+      li.className='friend-item'+(activeChat.type==='group'&&gid===activeChat.id?' active':'');
+      li.innerHTML='<img class="friend-avatar" style="border-radius:12px;" src="'+escapeHtml(g.avatar||fallbackAvatar)+'" alt="">'+
+        '<div class="friend-name">'+escapeHtml(g.name||'群組')+
+        ' <small style="color:var(--text-gray);font-weight:400;">'+memberCount+' 人</small></div>'+
+        '<div class="friend-actions">'+
+          '<button class="mini-btn primary" data-open-group="'+escapeHtml(gid)+'">開啟</button>'+
+        '</div>';
+      groupListEl.appendChild(li);
+    });
+    groupListEl.querySelectorAll('[data-open-group]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        openGroupChat(btn.dataset.openGroup);
+        switchTab('chat');
+      });
+    });
+  }
+
+  groupCreateForm.addEventListener('submit',function(e){
+    e.preventDefault();
+    var name=groupNameInput.value.trim();
+    if(!name){ setStatus('group-status','請輸入群組名稱。','error'); return; }
+    var checks=groupMemberPicker.querySelectorAll('input[type="checkbox"]:checked');
+    var selected=Array.prototype.map.call(checks,function(c){ return c.value; });
+    if(selected.length<1){ setStatus('group-status','請至少選擇一位好友。','error'); return; }
+    setFormDisabled(groupCreateForm,true); setStatus('group-status','正在建立群組…');
+
+    var gid=pushId();
+    var doCreate=function(avatarUrl){
+      var members={};
+      members[currentUid]=true;
+      selected.forEach(function(u){ members[u]=true; });
+      var groupData={
+        name:name,
+        avatar:avatarUrl||'',
+        owner:currentUid,
+        createdAt:window.firebase.database.ServerValue.TIMESTAMP,
+        members:members
+      };
+      var updates={};
+      updates['groups/'+gid]=groupData;
+      // 每個成員的個人索引
+      updates['users/'+currentUsername+'/groups/'+gid]={name:name,avatar:avatarUrl||'',role:'owner'};
+      selected.forEach(function(u){
+        var uname=(friendsCache[u]&&friendsCache[u].username)||'';
+        if(uname){
+          updates['users/'+uname+'/groups/'+gid]={name:name,avatar:avatarUrl||'',role:'member'};
+        }
+      });
+      return db().ref().update(updates);
+    };
+
+    var file=groupAvatarInput.files&&groupAvatarInput.files[0];
+    if(file){
+      var path='group_avatars/'+gid+'_'+Date.now();
+      storage().ref(path).put(file).then(function(snap){
+        return snap.ref.getDownloadURL();
+      }).then(function(url){
+        return doCreate(url);
+      }).then(function(){
+        groupCreateForm.reset(); renderGroupMemberPicker();
+        setStatus('group-status','群組已建立。','ok');
+      }).catch(function(err){
+        setStatus('group-status','建立失敗：'+errorMessage(err),'error');
+      }).finally(function(){ setFormDisabled(groupCreateForm,false); });
+    }else{
+      doCreate('').then(function(){
+        groupCreateForm.reset(); renderGroupMemberPicker();
+        setStatus('group-status','群組已建立。','ok');
+      }).catch(function(err){
+        setStatus('group-status','建立失敗：'+errorMessage(err),'error');
+      }).finally(function(){ setFormDisabled(groupCreateForm,false); });
+    }
+  });
+
+  // ===== 聊天核心 =====
+  function clearChatListeners(){
+    for(var i=0;i<chatListeners.length;i++) chatListeners[i]();
+    chatListeners=[];
+  }
+
+  function setChatEnabled(enabled){
+    msgInput.disabled=!enabled;
+    chatSendBtn.disabled=!enabled;
+    imgUploadBtn.disabled=!enabled;
+  }
+
+  function openPrivateChat(friendUid,friendName,friendAvatar){
+    activeChat={type:'friend',id:friendUid};
+    clearChatListeners();
+    chatTitle.textContent=friendName;
+    chatSubtitle.textContent='私訊對話';
+    chatClearFriend.hidden=false;
+    setChatEnabled(true);
+    chatEmpty.style.display='none';
+    removeAllRows();
+
+    var cid=chatIdFor(currentUid,friendUid);
+    var msgsRef=db().ref('private_chats/'+cid+'/msgs');
+    var recallsRef=db().ref('private_chats/'+cid+'/recalls');
+    var readRef=db().ref('private_chats/'+cid+'/read');
+
+    var state={msgs:{},recalls:{},read:{}};
+
+    var render=function(){ renderMessages('private',cid,state,friendUid,friendName,friendAvatar); };
+
+    var h1=function(s){ state.msgs=s.val()||{}; render(); };
+    var h2=function(s){ state.recalls=s.val()||{}; render(); };
+    var h3=function(s){ state.read=s.val()||{}; render(); };
+
+    msgsRef.on('value',h1); recallsRef.on('value',h2); readRef.on('value',h3);
+    chatListeners.push(function(){ msgsRef.off('value',h1); });
+    chatListeners.push(function(){ recallsRef.off('value',h2); });
+    chatListeners.push(function(){ readRef.off('value',h3); });
+
+    chatMobileSelect.value='friend:'+friendUid;
+    refreshFriendsUI();
+    markChatRead('private',cid);
+  }
+
+  function openGroupChat(gid){
+    var g=groupsCache[gid];
+    if(!g){ alert('群組不存在或尚未同步。'); return; }
+    activeChat={type:'group',id:gid};
+    clearChatListeners();
+    chatTitle.textContent=g.name||'群組';
+    chatSubtitle.textContent=(g.members?Object.keys(g.members).length:0)+' 位成員';
+    chatClearFriend.hidden=false;
+    setChatEnabled(true);
+    chatEmpty.style.display='none';
+    removeAllRows();
+
+    var msgsRef=db().ref('groups/'+gid+'/msgs');
+    var recallsRef=db().ref('groups/'+gid+'/recalls');
+    var readRef=db().ref('groups/'+gid+'/read');
+    var membersRef=db().ref('groups/'+gid+'/members');
+
+    var state={msgs:{},recalls:{},read:{},members:{}};
+    var render=function(){ renderMessages('group',gid,state,null,g.name,g.avatar); };
+
+    var h1=function(s){ state.msgs=s.val()||{}; render(); };
+    var h2=function(s){ state.recalls=s.val()||{}; render(); };
+    var h3=function(s){ state.read=s.val()||{}; render(); };
+    var h4=function(s){ state.members=s.val()||{}; render(); };
+
+    msgsRef.on('value',h1); recallsRef.on('value',h2); readRef.on('value',h3); membersRef.on('value',h4);
+    chatListeners.push(function(){ msgsRef.off('value',h1); });
+    chatListeners.push(function(){ recallsRef.off('value',h2); });
+    chatListeners.push(function(){ readRef.off('value',h3); });
+    chatListeners.push(function(){ membersRef.off('value',h4); });
+
+    chatMobileSelect.value='group:'+gid;
+    refreshFriendsUI();
+    markChatRead('group',gid);
+  }
+
+  function removeAllRows(){
+    var rows=chatBox.querySelectorAll('.msg-row');
+    for(var i=0;i<rows.length;i++) rows[i].remove();
+  }
+
+  function renderMessages(kind,cid,state,friendUid,friendName,friendAvatar){
+    removeAllRows();
+    var msgs=state.msgs||{},recalls=state.recalls||{},read=state.read||{};
+    var list=Object.keys(msgs).map(function(id){ return [id,msgs[id]]; });
+    list.sort(function(a,b){ return (a[1].ts||0)-(b[1].ts||0); });
+
+    if(!list.length){
+      chatEmpty.style.display='block';
+      return;
+    }
+    chatEmpty.style.display='none';
+
+    list.forEach(function(pair){
+      var id=pair[0],m=pair[1];
+      var isMe=m.from===currentUid;
+      var recalled=recalls[id];
+
+      var row=document.createElement('div');
+      row.className='msg-row '+(isMe?'me':'other');
+
+      var avatarUrl;
+      if(isMe) avatarUrl=currentAvatar||fallbackAvatar;
+      else if(kind==='group') avatarUrl=(groupsCache[cid]&&groupsCache[cid].avatar)||fallbackAvatar;
+      else avatarUrl=friendAvatarOf(friendUid)||m.fromAvatar||friendAvatar||fallbackAvatar;
+
+      var name=m.name||(isMe?(currentUser.displayName||currentUsername):(friendName||'好友'));
+
+      var avatarEl=document.createElement('img');
+      avatarEl.className='msg-avatar';
+      avatarEl.src=avatarUrl; avatarEl.alt='';
+
+      var bodyEl=document.createElement('div');
+      bodyEl.className='msg-body';
+
+      var info=document.createElement('div');
+      info.className='msg-info';
+      info.textContent=name+' • '+formatTime(m.ts);
+      bodyEl.appendChild(info);
+
+      if(recalled){
+        var r=document.createElement('div');
+        r.className='bubble recalled';
+        r.textContent=isMe?'你收回了一則訊息':(name+' 收回了一則訊息');
+        bodyEl.appendChild(r);
+      }else{
+        var bubble=document.createElement('div');
+        bubble.className='bubble';
+        if(m.type==='image'){
+          var now=Date.now();
+          var expireAt=m.expireAt||((m.ts||0)+IMG_TTL_MS);
+          if(now>expireAt){
+            var exp=document.createElement('div');
+            exp.className='img-expired';
+            exp.textContent='圖片已過期';
+            bubble.appendChild(exp);
+          }else if(m.imageUrl){
+            var img=document.createElement('img');
+            img.className='msg-img'; img.src=m.imageUrl; img.alt='圖片';
+            img.addEventListener('click',function(){ window.open(m.imageUrl,'_blank'); });
+            bubble.appendChild(img);
+          }
+          if(m.text){
+            var cap=document.createElement('div');
+            cap.style.marginTop=m.imageUrl?'6px':'0';
+            cap.textContent=m.text;
+            bubble.appendChild(cap);
+          }
+        }else{
+          bubble.textContent=m.text||'';
+        }
+        bodyEl.appendChild(bubble);
+      }
+
+      // 已讀
+      if(isMe&&!recalled){
+        if(kind==='group'){
+          var readerIds=Object.keys(read).filter(function(uid){
+            return uid!==currentUid && read[uid] && (read[uid].ts||0)>=(m.ts||0);
+          });
+          var rd=document.createElement('div');
+          rd.className='msg-read';
+          rd.textContent=readerIds.length>0?('已讀 '+readerIds.length+' 人'):'未讀';
+          rd.addEventListener('click',function(e){ showReadersPop(e,readerIds,state.members); });
+          bodyEl.appendChild(rd);
+        }else{
+          var other=friendUid;
+          var isRead=read&&read[other]&&(read[other].ts||0)>=(m.ts||0);
+          var rd2=document.createElement('div');
+          rd2.className='msg-read';
+          rd2.textContent=isRead?'已讀':'未讀';
+          bodyEl.appendChild(rd2);
+        }
+      }
+
+      // 收回按鈕
+      if(isMe&&!recalled){
+        var recallBtn=document.createElement('button');
+        recallBtn.type='button';
+        recallBtn.className='msg-recall-btn';
+        recallBtn.textContent='收回';
+        recallBtn.addEventListener('click',function(){
+          if(!confirm('確定要收回這則訊息嗎？收回後訊息內容會從資料庫刪除。')) return;
+          doRecall(kind,cid,id,m);
+        });
+        bodyEl.appendChild(recallBtn);
+      }
+
+      row.appendChild(avatarEl);
+      row.appendChild(bodyEl);
+      chatBox.appendChild(row);
+    });
+    chatBox.scrollTop=chatBox.scrollHeight;
+  }
+
+  // 收回：刪原訊息 + 寫 recalls 事件
+  function doRecall(kind,cid,msgId,m){
+    var baseRef=kind==='private'?db().ref('private_chats/'+cid):db().ref('groups/'+cid);
+    var updates={};
+    updates['msgs/'+msgId]=null;
+    updates['recalls/'+msgId]={
+      by:currentUid,
+      byName:currentUser.displayName||currentUsername,
+      ts:window.firebase.database.ServerValue.TIMESTAMP
+    };
+    // 若為圖片，順便刪 Storage 檔（若來得及）
+    if(m.imagePath){
+      storage().ref(m.imagePath).delete().catch(function(){});
+    }
+    baseRef.update(updates).catch(function(e){
+      alert('收回失敗：'+errorMessage(e));
+    });
+  }
+
+  function showReadersPop(evt,readerIds,members){
+    evt.stopPropagation();
+    var old=document.querySelector('.reader-pop');
+    if(old) old.remove();
+    var pop=document.createElement('div');
+    pop.className='reader-pop';
+    var title=document.createElement('div');
+    title.className='r-title';
+    title.textContent='已讀名單（'+readerIds.length+'）';
+    pop.appendChild(title);
+    if(!readerIds.length){
+      var e=document.createElement('div'); e.textContent='目前無人已讀'; pop.appendChild(e);
+    }else{
+      readerIds.forEach(function(uid){
+        var f=friendsCache[uid];
+        var row=document.createElement('div'); row.className='r-item';
+        var name=(f&&f.name)||uid;
+        var av=(f&&f.avatar)||fallbackAvatar;
+        row.innerHTML='<img src="'+escapeHtml(av)+'" alt=""><span>'+escapeHtml(name)+'</span>';
+        pop.appendChild(row);
+      });
+    }
+    document.body.appendChild(pop);
+    var r=evt.target.getBoundingClientRect();
+    pop.style.left=Math.min(r.left,window.innerWidth-200)+'px';
+    pop.style.top=(r.bottom+6)+'px';
+    var close=function(e2){ if(!pop.contains(e2.target)){ pop.remove(); document.removeEventListener('click',close); } };
+    setTimeout(function(){ document.addEventListener('click',close); },0);
+  }
+
+  function updateMessageAvatars(){
+    if(activeChat.type!=='friend') return;
+    var otherAvatars=chatBox.querySelectorAll('.msg-row.other .msg-avatar');
+    var url=friendAvatarOf(activeChat.id);
+    for(var i=0;i<otherAvatars.length;i++) otherAvatars[i].src=url;
+    updateMyMessageAvatars();
+  }
+  function updateMyMessageAvatars(){
+    var mine=chatBox.querySelectorAll('.msg-row.me .msg-avatar');
+    for(var i=0;i<mine.length;i++) mine[i].src=currentAvatar||fallbackAvatar;
+  }
+
+  function markChatRead(kind,cid){
+    if(!currentUid) return;
+    var ref=kind==='private'
+      ? db().ref('private_chats/'+cid+'/read/'+currentUid)
+      : db().ref('groups/'+cid+'/read/'+currentUid);
+    var val=kind==='private'?window.firebase.database.ServerValue.TIMESTAMP:{ts:window.firebase.database.ServerValue.TIMESTAMP};
+    ref.set(val).then(function(){
+      var key=kind==='private'?'f:'+activeChat.id:'g:'+activeChat.id;
+      unreadCache[key]=0;
+      updateUnreadBadges();
+    }).catch(function(e){ console.warn('標記已讀失敗',e); });
+  }
+
+  chatClearFriend.addEventListener('click',function(){
+    activeChat={type:'',id:''};
+    clearChatListeners();
+    chatTitle.textContent='聊天室';
+    chatSubtitle.textContent='請選擇一位好友或群組開始聊天。';
+    chatClearFriend.hidden=true;
+    setChatEnabled(false);
+    removeAllRows();
+    chatEmpty.style.display='block';
+    chatMobileSelect.value='';
+    refreshFriendsUI();
+  });
+
+  // ===== 傳文字 =====
+  var sending=false;
+  function sendMessage(){
+    if(sending||!activeChat.type) return;
+    var text=msgInput.value.trim();
+    if(!text){ msgInput.focus(); return; }
+    var payload={
+      from:currentUid,
+      name:currentUser.displayName||currentUsername,
+      fromAvatar:currentAvatar||fallbackAvatar,
+      text:text,
+      type:'text',
+      ts:window.firebase.database.ServerValue.TIMESTAMP
+    };
+    sending=true; msgInput.value=''; msgInput.focus(); chatSendBtn.disabled=true;
+    var ref=activeChat.type==='private'
+      ? db().ref('private_chats/'+chatIdFor(currentUid,activeChat.id)+'/msgs')
+      : db().ref('groups/'+activeChat.id+'/msgs');
+    ref.push(payload).catch(function(e){
+      if(!msgInput.value) msgInput.value=text;
+      alert('訊息傳送失敗：'+(e.code||e.message||'未知錯誤'));
+    }).finally(function(){ sending=false; chatSendBtn.disabled=false; });
+  }
+  chatSendBtn.addEventListener('click',sendMessage);
+  msgInput.addEventListener('keydown',function(e){
+    if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendMessage(); }
+  });
+
+  // ===== 傳圖片 =====
+  imgUploadBtn.addEventListener('click',function(){ imgFileInput.click(); });
+  imgFileInput.addEventListener('change',function(){
+    var file=imgFileInput.files&&imgFileInput.files[0];
+    if(!file) return;
+    if(!activeChat.type){ imgFileInput.value=''; return; }
+    if(file.type.indexOf('image/')!==0){ alert('請選擇圖片檔案。'); imgFileInput.value=''; return; }
+    if(file.size>8*1024*1024){ alert('圖片需小於 8MB。'); imgFileInput.value=''; return; }
+
+    var ext=(file.name.split('.').pop()||'jpg').toLowerCase();
+    var msgId=pushId();
+    var cidPath=activeChat.type==='private'
+      ? 'private_chats/'+chatIdFor(currentUid,activeChat.id)
+      : 'groups/'+activeChat.id;
+    var path='chat_images/'+cidPath+'/'+msgId+'.'+ext;
+
+    imgUploadBtn.disabled=true;
+    var task=storage().ref(path).put(file);
+    task.on('state_changed',null,function(err){
+      imgUploadBtn.disabled=false;
+      alert('圖片上傳失敗：'+errorMessage(err));
+    },function(){
+      task.snapshot.ref.getDownloadURL().then(function(url){
+        var ts=Date.now();
+        var payload={
+          from:currentUid,
+          name:currentUser.displayName||currentUsername,
+          fromAvatar:currentAvatar||fallbackAvatar,
+          text:'',
+          type:'image',
+          imageUrl:url,
+          imagePath:path,
+          expireAt:ts+IMG_TTL_MS,
+          ts:window.firebase.database.ServerValue.TIMESTAMP
         };
-
-        function switchTab(tabId) {
-            document.querySelectorAll('.panel > div[id^="tab-"]').forEach(d => d.style.display = 'none');
-            document.getElementById(tabId).style.display = 'block';
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            if (event) event.target.classList.add('active');
-        }
-
-        function toggleTycoonShop(open = !document.getElementById('ui').classList.contains('shop-open')) {
-            const ui = document.getElementById('ui');
-            const toggle = document.querySelector('.mobile-shop-toggle');
-            ui.classList.toggle('shop-open', open);
-            toggle.setAttribute('aria-expanded', String(open));
-        }
-
-        function getBuildings() {
-            const startX = 80, startY = 100;
-            const b = {
-                extractor: { x: startX, y: startY, w: 130, h: 85, color: '#ef4444', label: '🔴 採礦塔' },
-                smelter:   { x: startX, y: startY + 140, w: 130, h: 85, color: '#f59e0b', label: '🟠 鋼鐵廠' },
-                hub:       { x: cvs.width - 220, y: cvs.height - 180, w: 180, h: 120, color: '#38bdf8', label: '💎 總部基地' }
-            };
-            if (techTier >= 2) b.chipFab = { x: startX, y: startY + 280, w: 130, h: 85, color: '#3b82f6', label: '🔵 晶片廠' };
-            if (techTier >= 3) b.nukeFab = { x: startX, y: startY + 420, w: 130, h: 85, color: '#22c55e', label: '🟢 鈾能廠' };
-            if (techTier >= 4) b.qFab    = { x: startX, y: startY + 560, w: 130, h: 85, color: '#a855f7', label: '🟣 量子合成' };
-            if (techTier >= 5) b.antiFab = { x: startX, y: startY + 700, w: 130, h: 85, color: '#e11d48', label: '💎 反物質所' };
-            return b;
-        }
-
-        const resize = () => { cvs.width = window.innerWidth; cvs.height = window.innerHeight; };
-        window.addEventListener('resize', resize); resize();
-
-        // ---- 輸入事件 ----
-        // 鍵盤
-        window.addEventListener('keydown', e => {
-            const k = e.key.toLowerCase();
-            if (['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(k)) {
-                keys[k] = true;
-                if (viewMode === 'world') e.preventDefault();
-            }
-        });
-        window.addEventListener('keyup', e => {
-            const k = e.key.toLowerCase();
-            if (['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(k)) {
-                keys[k] = false;
-            }
-        });
-
-        // 基地模式：滑鼠 / 觸控跟隨
-        cvs.addEventListener('pointermove', e => {
-            if (viewMode === 'base' && e.pointerType === 'touch') { p.tx = e.clientX; p.ty = e.clientY; }
-        });
-        window.addEventListener('pointermove', e => {
-            if (viewMode === 'base') {
-                if (e.pointerType !== 'touch') { p.tx = e.clientX; p.ty = e.clientY; }
-            } else {
-                handleWorldPointerMove(e);
-            }
-        });
-
-        // 世界地圖：pointerdown 在 canvas 上
-        cvs.addEventListener('pointerdown', e => {
-            if (viewMode === 'base') {
-                if (e.pointerType === 'touch') { p.tx = e.clientX; p.ty = e.clientY; }
-            } else {
-                handleWorldPointerDown(e);
-            }
-        });
-
-        // 世界地圖：pointerup 在 window 上
-        window.addEventListener('pointerup', e => {
-            if (viewMode === 'world') handleWorldPointerUp(e);
-        });
-
-        function triggerShake(duration = 10) { shakeTime = duration; }
-        function spawnFloatText(x, y, text, color='#4ade80') { floatTexts.push({ x, y, text, color, alpha: 1 }); }
-        function spawnParticles(x, y, color, count=6) {
-            for(let i=0; i<count; i++) {
-                particles.push({ x, y, vx: (Math.random()-0.5)*8, vy: (Math.random()-0.5)*8, size: Math.random()*5+2, color, alpha: 1 });
-            }
-        }
-
-        // ---- 技能 ----
-        function useSkill(num) {
-            if (skillCd[num-1] > 0) return;
-            if (num === 1) {
-                isOverclocked = true; overclockTimer = 600; skillCd[0] = 1800;
-                spawnFloatText(p.x, p.y, "⚡ 系統極速超頻！", "#f59e0b");
-            } else if (num === 2) {
-                enemies.forEach(e => { e.hp -= 300 + wave * 60; spawnParticles(e.x, e.y, '#e11d48', 12); });
-                triggerShake(25); skillCd[1] = 2400;
-                spawnFloatText(cvs.width/2, cvs.height/2, "💥 軌道離子砲全螢幕打擊！", "#e11d48");
-            } else if (num === 3) {
-                const power = getArmyPower();
-                if (power > 0) {
-                    enemies.forEach(e => {
-                        e.hp -= power * 0.8;
-                        spawnParticles(e.x, e.y, '#f59e0b', 10);
-                    });
-                    triggerShake(15);
-                    skillCd[2] = 3600;
-                    spawnFloatText(p.x, p.y - 30, `🪖 軍隊衝鋒！戰力 ${Math.floor(power)}`, '#f59e0b');
-                } else {
-                    spawnFloatText(p.x, p.y - 30, "❌ 沒有軍隊！請先招募士兵", '#ef4444');
-                }
-            }
-        }
-
-        // ---- 建造 / 升級 ----
-        function buildTurret(type) {
-            const costs = { gatling: 1000, laser: 5000, mortar: 20000, frost: 50000, blackhole: 200000 };
-            let cost = costs[type] * Math.pow(1.3, turrets.filter(t=>t.type===type).length);
-            if (money >= cost) {
-                money -= cost;
-                let tx = 260 + Math.random() * 200;
-                let ty = 100 + Math.random() * (cvs.height - 220);
-                turrets.push({ x: tx, y: ty, type, cd: 0, range: type==='laser'?350:(type==='blackhole'?280:240) });
-                spawnFloatText(tx, ty, `防禦塔建造完成！`, '#38bdf8');
-            }
-        }
-        function triggerNextWave() { if (!isWaveActive) { waveTimer = 0; saveGame(); } }
-
-        function spawnWave() {
-            isWaveActive = true;
-            bestWave = Math.max(bestWave, wave);
-            saveGame();
-            uploadTycoonLeaderboardScore();
-            let count = 8 + wave * 4;
-            let isBossWave = (wave % 5 === 0);
-            for (let i = 0; i < count; i++) {
-                setTimeout(() => {
-                    let type = 'normal';
-                    let rand = Math.random();
-                    if (rand < 0.25) type = 'runner';
-                    else if (rand < 0.45) type = 'tank';
-                    else if (rand < 0.6) type = 'bomber';
-                    if (isBossWave && i === count - 1) type = 'boss';
-                    let hpMap = { normal: 50, runner: 30, tank: 180, bomber: 40, boss: 1800 + wave * 600 };
-                    let spdMap = { normal: 1.5, runner: 2.8, tank: 0.8, bomber: 2.0, boss: 0.5 };
-                    enemies.push({
-                        x: cvs.width + 40,
-                        y: 80 + Math.random() * (cvs.height - 160),
-                        type,
-                        hp: (hpMap[type] + wave * 35),
-                        maxHp: (hpMap[type] + wave * 35),
-                        speed: spdMap[type],
-                        reward: (type === 'boss' ? 3500 : 80) + wave * 30
-                    });
-                }, i * 400);
-            }
-        }
-
-        function buyBot() {
-            let cost = Math.floor(500 * Math.pow(1.3, bots.length));
-            if(money >= cost) { money -= cost; bots.push({ x: 120, y: cvs.height/2, bag: [], speed: 4.5 }); saveGame(); }
-        }
-        function upgrade(type) {
-            if (type === 'miner') {
-                let cost = Math.floor(1000 * Math.pow(1.5, minerLevel));
-                if (money >= cost) { money -= cost; minerLevel++; saveGame(); }
-            } else if (type === 'capacity') {
-                let cost = Math.floor(1500 * (capacity / 2));
-                if (money >= cost) { money -= cost; capacity += 2; saveGame(); }
-            } else if (type === 'playerDamage') {
-                let cost = Math.floor(1000 * Math.pow(1.6, playerDamageLevel));
-                if (money >= cost) { money -= cost; playerDamageLevel++; saveGame(); }
-            } else if (type === 'turretDamage') {
-                let cost = Math.floor(1500 * Math.pow(1.6, turretDamageLevel));
-                if (money >= cost) { money -= cost; turretDamageLevel++; saveGame(); }
-            }
-        }
-        function buyTalent(type) {
-            if (type === 'dmg' && darkMatter >= (talents.dmgLv + 1) * 5) {
-                darkMatter -= (talents.dmgLv + 1) * 5; talents.dmgLv++;
-            } else if (type === 'speed' && darkMatter >= (talents.spdLv + 1) * 5) {
-                darkMatter -= (talents.spdLv + 1) * 5; talents.spdLv++;
-            } else if (type === 'army' && darkMatter >= (talents.armyLv + 1) * 5) {
-                darkMatter -= (talents.armyLv + 1) * 5; talents.armyLv++;
-            }
-            saveGame();
-        }
-        function unlockTier(tier) {
-            const costs = { 2: 2500, 3: 25000, 4: 200000, 5: 2000000 };
-            if (money >= costs[tier] && techTier === tier - 1) {
-                money -= costs[tier]; techTier = tier; saveGame();
-            }
-        }
-        function triggerRebirth() {
-            let earnedDM = Math.floor(money / 100000);
-            if (earnedDM > 0 || money >= 100000) {
-                darkMatter += Math.max(1, earnedDM);
-                money = 2000; minerLevel = 0; capacity = 4; techTier = 1;
-                playerDamageLevel = 0; turretDamageLevel = 0;
-                p.bag = []; bots = []; items = []; turrets = []; enemies = []; wave = 1;
-                army.soldiers = 0; army.tanks = 0;
-                initWorldMap();
-                spawnFloatText(cvs.width/2, cvs.height/2, `🌌 暗物質量子轉生成功！`, '#c084fc');
-                triggerShake(30);
-                saveGame();
-            }
-        }
-
-        function updateQuests(type, amount = 1) {
-            if (quest.type === type) {
-                quest.current += amount;
-                if (quest.current >= quest.target) {
-                    money += quest.reward;
-                    spawnFloatText(cvs.width/2, 100, `🎉 完成任務！獲得 +$${quest.reward}`, '#f59e0b');
-                    let targets = [30, 50, 100];
-                    let t = targets[Math.floor(Math.random() * targets.length)];
-                    quest = { type: 'kill', target: t, current: 0, reward: t * 120, desc: `擊殺 ${t} 隻異形蟲` };
-                }
-            }
-        }
-
-        // ============================================================
-        // 軍隊系統
-        // ============================================================
-        function getArmyPower() {
-            return army.soldiers * 10 + army.tanks * 100;
-        }
-
-        function recruitSoldier() {
-            const cost = Math.floor(800 * Math.pow(1.2, army.soldiers));
-            if (money >= cost) {
-                money -= cost;
-                army.soldiers++;
-                spawnFloatText(p.x, p.y - 20, `🪖 招募士兵 (總計 ${army.soldiers})`, '#f59e0b');
-                saveGame();
-            }
-        }
-
-        function recruitTank() {
-            const cost = Math.floor(5000 * Math.pow(1.3, army.tanks));
-            if (money >= cost) {
-                money -= cost;
-                army.tanks++;
-                spawnFloatText(p.x, p.y - 20, `🚀 生產坦克 (總計 ${army.tanks})`, '#f59e0b');
-                saveGame();
-            }
-        }
-
-        // ============================================================
-        // 視圖切換
-        // ============================================================
-        function updateWorldUIVisibility() {
-            const worldUI = document.getElementById('world-ui');
-            const baseUI = document.getElementById('ui');
-            const viewToggle = document.getElementById('view-toggle');
-            const lbBtn = document.getElementById('tycoon-leaderboard-button');
-            if (viewMode === 'world') {
-                worldUI.classList.add('active');
-                baseUI.style.display = 'none';
-                viewToggle.style.display = 'none';
-                lbBtn.style.display = 'none';
-            } else {
-                worldUI.classList.remove('active');
-                baseUI.style.display = 'block';
-                viewToggle.style.display = 'block';
-                lbBtn.style.display = 'block';
-                closeTerritoryPanel();
-            }
-        }
-
-        function switchView(mode) {
-            viewMode = mode;
-            updateWorldUIVisibility();
-            if (mode === 'world') {
-                // 指挥官回到基地中心
-                const cap = worldMap.find(t => t.type === 'capital');
-                if (cap) { commander.x = cap.x + cap.w/2; commander.y = cap.y + cap.h/2; }
-                camera.x = commander.x;
-                camera.y = commander.y;
-                refreshWorldHUD();
-            }
-            saveGame();
-        }
-
-        function centerOnCapital() {
-            const cap = worldMap.find(t => t.type === 'capital');
-            if (cap) {
-                commander.x = cap.x + cap.w/2;
-                commander.y = cap.y + cap.h/2;
-            }
-        }
-
-        function zoomWorld(factor) {
-            camera.zoom = Math.max(0.25, Math.min(1.6, camera.zoom * factor));
-        }
-
-        // 世界座標 <-> 螢幕座標
-        function worldToScreen(wx, wy) {
-            return {
-                x: (wx - camera.x) * camera.zoom + cvs.width/2,
-                y: (wy - camera.y) * camera.zoom + cvs.height/2
-            };
-        }
-        function screenToWorld(sx, sy) {
-            return {
-                x: (sx - cvs.width/2) / camera.zoom + camera.x,
-                y: (sy - cvs.height/2) / camera.zoom + camera.y
-            };
-        }
-
-        // ---- 摇杆 ----
-        function getJoystickCenter() {
-            return { x: cvs.width - 100, y: cvs.height - 100 };
-        }
-
-        function updateKnob(cx, cy) {
-            const dx = cx - joystick.baseX;
-            const dy = cy - joystick.baseY;
-            const dist = Math.hypot(dx, dy);
-            const maxDist = 55;
-            const clamped = Math.min(dist, maxDist);
-            const angle = Math.atan2(dy, dx);
-            joystick.knobX = joystick.baseX + Math.cos(angle) * clamped;
-            joystick.knobY = joystick.baseY + Math.sin(angle) * clamped;
-            const norm = clamped / maxDist;
-            joystick.dx = Math.cos(angle) * norm;
-            joystick.dy = Math.sin(angle) * norm;
-            if (dist < 5) { joystick.dx = 0; joystick.dy = 0; }
-        }
-
-        function handleWorldPointerDown(e) {
-            // 触摸设备：检查是否在摇杆区域
-            if (e.pointerType === 'touch' && isTouchDevice()) {
-                const jc = getJoystickCenter();
-                if (Math.hypot(e.clientX - jc.x, e.clientY - jc.y) < 90) {
-                    joystick.active = true;
-                    joystick.pointerId = e.pointerId;
-                    joystick.baseX = jc.x;
-                    joystick.baseY = jc.y;
-                    updateKnob(e.clientX, e.clientY);
-                    return;
-                }
-            }
-            // 否则记录点击起点
-            tapStart = { x: e.clientX, y: e.clientY, moved: false };
-        }
-
-        function handleWorldPointerMove(e) {
-            if (joystick.active && e.pointerId === joystick.pointerId) {
-                updateKnob(e.clientX, e.clientY);
-                return;
-            }
-            if (tapStart) {
-                if (Math.hypot(e.clientX - tapStart.x, e.clientY - tapStart.y) > 12) tapStart.moved = true;
-            }
-        }
-
-        function handleWorldPointerUp(e) {
-            if (joystick.active && e.pointerId === joystick.pointerId) {
-                joystick.active = false;
-                joystick.dx = 0; joystick.dy = 0;
-                joystick.pointerId = null;
-                return;
-            }
-            if (tapStart && !tapStart.moved) {
-                const w = screenToWorld(e.clientX, e.clientY);
-                const hit = worldMap.find(t =>
-                    w.x >= t.x && w.x <= t.x + t.w && w.y >= t.y && w.y <= t.y + t.h
-                );
-                if (hit) {
-                    selectedTerritoryId = hit.id;
-                    showTerritoryPanel(hit);
-                } else {
-                    closeTerritoryPanel();
-                }
-            }
-            tapStart = null;
-        }
-
-        // ---- 領地面板 ----
-        function showTerritoryPanel(t) {
-            const panel = document.getElementById('territory-panel');
-            panel.classList.add('active');
-            document.getElementById('terrName').textContent = `📍 ${t.name}`;
-            const ownerText = t.owner === 'player' ? '🟢 已佔領' : (t.owner === 'enemy' ? '🔴 敵軍' : '⚪ 中立');
-            document.getElementById('terrOwner').textContent = ownerText;
-            document.getElementById('terrGarrison').textContent = t.garrisonCurrent + ' 守軍';
-            document.getElementById('terrIncome').textContent = '$' + t.income.toLocaleString() + ' / 波';
-            const bar = document.getElementById('terrBar');
-            const ratio = t.owner === 'player' ? 100 : Math.min(100, (t.garrisonCurrent / 500) * 100);
-            bar.style.width = ratio + '%';
-            const attackBtn = document.getElementById('attackBtn');
-            const attackCost = document.getElementById('attackCost');
-            if (t.owner === 'player') {
-                attackBtn.disabled = true;
-                attackCost.textContent = '已佔領';
-            } else if (t.type === 'capital') {
-                attackBtn.disabled = true;
-                attackCost.textContent = '無法攻擊';
-            } else {
-                attackBtn.disabled = false;
-                attackCost.textContent = `需要 ${Math.ceil(t.garrisonCurrent * 1.2)} 戰力`;
-            }
-        }
-        function closeTerritoryPanel() {
-            document.getElementById('territory-panel').classList.remove('active');
-            selectedTerritoryId = null;
-        }
-
-        // ---- 攻擊領地 ----
-        function attackSelected() {
-            if (selectedTerritoryId === null) return;
-            const t = worldMap.find(x => x.id === selectedTerritoryId);
-            if (!t || t.owner === 'player' || t.type === 'capital') return;
-            const power = getArmyPower();
-            const required = Math.ceil(t.garrisonCurrent * 1.2);
-            if (power < required) {
-                alert(`軍隊戰力不足！需要 ${required} 戰力，目前只有 ${power}。\n請先招募更多士兵或坦克。`);
-                return;
-            }
-            const ratio = required / Math.max(1, power);
-            const lossSoldiers = Math.floor(army.soldiers * ratio * 0.45);
-            const lossTanks = Math.floor(army.tanks * ratio * 0.25);
-            army.soldiers = Math.max(0, army.soldiers - lossSoldiers);
-            army.tanks = Math.max(0, army.tanks - lossTanks);
-
-            t.owner = 'player';
-            t.garrisonCurrent = 0;
-            t.conqueredAt = frame;
-
-            triggerShake(15);
-            spawnFloatText(cvs.width/2, cvs.height/2, `🎉 成功佔領 ${t.name}！`, '#fbbf24');
-            spawnFloatText(cvs.width/2, cvs.height/2 + 30, `損失 ${lossSoldiers} 兵 · ${lossTanks} 坦克`, '#ef4444');
-
-            refreshWorldHUD();
-            showTerritoryPanel(t);
-            saveGame();
-        }
-
-        function refreshWorldHUD() {
-            const owned = worldMap.filter(t => t.owner === 'player').length;
-            const total = worldMap.length;
-            document.getElementById('wSoldiers').textContent = army.soldiers;
-            document.getElementById('wTanks').textContent = army.tanks;
-            document.getElementById('wPower').textContent = getArmyPower();
-            document.getElementById('wOwned').textContent = owned;
-            document.getElementById('wTotal').textContent = total;
-
-            document.getElementById('territoryCount').textContent = owned;
-            document.getElementById('territoryMax').textContent = total;
-            document.getElementById('soldierCount').textContent = army.soldiers;
-            document.getElementById('tankCount').textContent = army.tanks;
-            document.getElementById('soldierCost').textContent = '$' + Math.floor(800 * Math.pow(1.2, army.soldiers)).toLocaleString();
-            document.getElementById('tankCost').textContent = '$' + Math.floor(5000 * Math.pow(1.3, army.tanks)).toLocaleString();
-            document.getElementById('armyPower').textContent = getArmyPower();
-            const ownedNames = worldMap.filter(t => t.owner === 'player' && t.type !== 'capital').map(t => t.name);
-            document.getElementById('ownedTerritories').textContent = ownedNames.length ? ownedNames.join('、') : '無';
-        }
-
-        // ============================================================
-        // 基地更新
-        // ============================================================
-        function updateBase() {
-            const b = getBuildings();
-            p.x += (p.tx - p.x) * 0.18; p.y += (p.ty - p.y) * 0.18;
-
-            if (!isWaveActive) {
-                waveTimer--;
-                if (waveTimer <= 0) spawnWave();
-            } else {
-                if (enemies.length === 0) {
-                    isWaveActive = false; wave++; waveTimer = 20 * 60;
-                    const territoryIncome = worldMap.filter(t => t.owner === 'player' && t.type !== 'capital')
-                        .reduce((s, t) => s + t.income, 0);
-                    const baseIncome = 1200 * wave;
-                    money += baseIncome + territoryIncome;
-                    darkMatter += 1;
-                    spawnFloatText(cvs.width/2, cvs.height/2, `🎉 第 ${wave-1} 波完成！+$${(baseIncome+territoryIncome).toLocaleString()}`, '#f59e0b');
-                    if (territoryIncome > 0) {
-                        spawnFloatText(cvs.width/2, cvs.height/2 + 26, `🛡️ 領地貢獻 +$${territoryIncome.toLocaleString()}`, '#4ade80');
-                    }
-                    saveGame();
-                    uploadTycoonLeaderboardScore();
-                }
-            }
-
-            const spawnInterval = isOverclocked ? 4 : Math.max(6, 35 - minerLevel * 4);
-            if(frame % spawnInterval === 0 && items.length < 50) {
-                items.push({ x: b.extractor.x + b.extractor.w + 15, y: b.extractor.y + b.extractor.h/2 + (Math.random()-0.5)*30, type: 'RAW' });
-            }
-
-            bots.forEach(bot => {
-                let speed = (bot.speed * (1 + talents.spdLv * 0.15)) * (isOverclocked ? 1.8 : 1);
-                let target = null;
-                if (bot.bag.length === 0) {
-                    let it = items[0];
-                    target = it ? { x: it.x, y: it.y } : { x: b.extractor.x + b.extractor.w + 15, y: b.extractor.y + b.extractor.h/2 };
-                } else {
-                    let top = bot.bag[bot.bag.length - 1];
-                    if (top.type === 'RAW') target = { x: b.smelter.x + b.smelter.w/2, y: b.smelter.y + b.smelter.h/2 };
-                    else if (top.type === 'STEEL' && b.chipFab) target = { x: b.chipFab.x + b.chipFab.w/2, y: b.chipFab.y + b.chipFab.h/2 };
-                    else if (top.type === 'CHIP' && b.nukeFab) target = { x: b.nukeFab.x + b.nukeFab.w/2, y: b.nukeFab.y + b.nukeFab.h/2 };
-                    else if (top.type === 'BATTERY' && b.qFab) target = { x: b.qFab.x + b.qFab.w/2, y: b.qFab.y + b.qFab.h/2 };
-                    else if (top.type === 'CORE' && b.antiFab) target = { x: b.antiFab.x + b.antiFab.w/2, y: b.antiFab.y + b.antiFab.h/2 };
-                    else target = { x: b.hub.x + b.hub.w/2, y: b.hub.y + b.hub.h/2 };
-                }
-                let dx = target.x - bot.x, dy = target.y - bot.y, dist = Math.hypot(dx, dy);
-                if(dist > 5) { bot.x += (dx / dist) * speed; bot.y += (dy / dist) * speed; }
-                interact(bot, b);
-            });
-
-            interact(p, b);
-
-            p.cooldown--;
-            let totalDmgMult = (1 + darkMatter * 0.1) * (1 + talents.dmgLv * 0.2);
-            if (p.cooldown <= 0 && enemies.length > 0) {
-                let target = enemies.find(e => Math.hypot(p.x - e.x, p.y - e.y) < p.atkRange);
-                if (target) {
-                    bullets.push({ x: p.x, y: p.y, tx: target.x, ty: target.y, dmg: 30 * totalDmgMult * (1 + playerDamageLevel * 0.25), speed: 15, color: '#38bdf8' });
-                    p.cooldown = isOverclocked ? 4 : 9;
-                }
-            }
-
-            turrets.forEach(t => {
-                t.cd--;
-                if (t.cd <= 0 && enemies.length > 0) {
-                    let target = enemies.find(e => Math.hypot(t.x - e.x, t.y - e.y) < t.range);
-                    if (target) {
-                        if (t.type === 'gatling') {
-                            bullets.push({ x: t.x, y: t.y, tx: target.x, ty: target.y, dmg: 18 * totalDmgMult * (1 + turretDamageLevel * 0.2), speed: 16, color: '#f59e0b' });
-                            t.cd = isOverclocked ? 3 : 8;
-                        } else if (t.type === 'laser') {
-                            bullets.push({ x: t.x, y: t.y, tx: target.x, ty: target.y, dmg: 60 * totalDmgMult * (1 + turretDamageLevel * 0.2), speed: 22, color: '#3b82f6' });
-                            t.cd = 24;
-                        } else if (t.type === 'mortar') {
-                            bullets.push({ x: t.x, y: t.y, tx: target.x, ty: target.y, dmg: 140 * totalDmgMult * (1 + turretDamageLevel * 0.2), speed: 11, color: '#a855f7', splash: 90 });
-                            t.cd = 48;
-                        } else if (t.type === 'frost') {
-                            target.speed = Math.max(0.4, target.speed * 0.5);
-                            spawnParticles(target.x, target.y, '#0284c7', 4);
-                            t.cd = 15;
-                        } else if (t.type === 'blackhole') {
-                            enemies.forEach(e => {
-                                if (Math.hypot(t.x - e.x, t.y - e.y) < t.range) {
-                                    e.hp -= 8 * totalDmgMult * (1 + turretDamageLevel * 0.2);
-                                    e.x += (t.x - e.x) * 0.05;
-                                }
-                            });
-                            spawnParticles(t.x, t.y, '#c084fc', 3);
-                            t.cd = 5;
-                        }
-                    }
-                }
-            });
-
-            for (let i = bullets.length - 1; i >= 0; i--) {
-                let bul = bullets[i];
-                let dx = bul.tx - bul.x, dy = bul.ty - bul.y, dist = Math.hypot(dx, dy);
-                if (dist < 12) {
-                    if (bul.splash) {
-                        enemies.forEach(e => {
-                            if (Math.hypot(bul.x - e.x, bul.y - e.y) < bul.splash) {
-                                e.hp -= bul.dmg; spawnParticles(e.x, e.y, bul.color, 6);
-                            }
-                        });
-                        triggerShake(10);
-                    } else {
-                        enemies.forEach(e => {
-                            if (Math.hypot(bul.x - e.x, bul.y - e.y) < 25) {
-                                e.hp -= bul.dmg; spawnParticles(e.x, e.y, bul.color, 3);
-                            }
-                        });
-                    }
-                    bullets.splice(i, 1);
-                } else {
-                    bul.x += (dx / dist) * bul.speed; bul.y += (dy / dist) * bul.speed;
-                }
-            }
-
-            for (let i = enemies.length - 1; i >= 0; i--) {
-                let e = enemies[i];
-                e.x -= e.speed;
-                if (e.hp <= 0) {
-                    money += e.reward;
-                    updateQuests('kill', 1);
-                    spawnFloatText(e.x, e.y, `+$${Math.floor(e.reward)}`, '#4ade80');
-                    spawnParticles(e.x, e.y, '#22c55e', 8);
-                    enemies.splice(i, 1);
-                    continue;
-                }
-                if (e.x < -40) e.x = cvs.width + 40;
-            }
-
-            if (shakeTime > 0) shakeTime--;
-            for(let i = floatTexts.length-1; i>=0; i--) { floatTexts[i].y -= 1; floatTexts[i].alpha -= 0.02; if(floatTexts[i].alpha<=0) floatTexts.splice(i,1); }
-            for(let i = particles.length-1; i>=0; i--) { particles[i].x += particles[i].vx; particles[i].y += particles[i].vy; particles[i].alpha -= 0.04; if(particles[i].alpha<=0) particles.splice(i,1); }
-        }
-
-        // ============================================================
-        // 世界地圖更新（键盘 + 摇杆）
-        // ============================================================
-        function updateWorld() {
-            // 移动向量
-            let mvx = 0, mvy = 0;
-            if (keys['w'] || keys['arrowup']) mvy -= 1;
-            if (keys['s'] || keys['arrowdown']) mvy += 1;
-            if (keys['a'] || keys['arrowleft']) mvx -= 1;
-            if (keys['d'] || keys['arrowright']) mvx += 1;
-            if (joystick.active) {
-                mvx += joystick.dx;
-                mvy += joystick.dy;
-            }
-            const len = Math.hypot(mvx, mvy);
-            if (len > 0.05) {
-                mvx /= len; mvy /= len;
-                const speed = 620; // 世界单位/秒
-                const dt = 1 / 60;
-                commander.x = Math.max(20, Math.min(WORLD_W - 20, commander.x + mvx * speed * dt));
-                commander.y = Math.max(20, Math.min(WORLD_H - 20, commander.y + mvy * speed * dt));
-            }
-
-            // 相机平滑跟随
-            camera.x += (commander.x - camera.x) * 0.12;
-            camera.y += (commander.y - camera.y) * 0.12;
-
-            if (shakeTime > 0) shakeTime--;
-            for(let i = floatTexts.length-1; i>=0; i--) { floatTexts[i].y -= 1; floatTexts[i].alpha -= 0.02; if(floatTexts[i].alpha<=0) floatTexts.splice(i,1); }
-            for(let i = particles.length-1; i>=0; i--) { particles[i].x += particles[i].vx; particles[i].y += particles[i].vy; particles[i].alpha -= 0.04; if(particles[i].alpha<=0) particles.splice(i,1); }
-        }
-
-        // ============================================================
-        // UI 同步
-        // ============================================================
-        function syncUI() {
-            document.getElementById('m').innerText = Math.floor(money).toLocaleString();
-            document.getElementById('dm').innerText = darkMatter;
-            document.getElementById('waveNum').innerText = wave;
-            document.getElementById('enemyCount').innerText = enemies.length;
-
-            document.getElementById('cd1').innerText = skillCd[0] > 0 ? `${Math.ceil(skillCd[0]/60)}s` : '就緒';
-            document.getElementById('cd2').innerText = skillCd[1] > 0 ? `${Math.ceil(skillCd[1]/60)}s` : '就緒';
-            document.getElementById('cd3').innerText = skillCd[2] > 0 ? `${Math.ceil(skillCd[2]/60)}s` : '就緒';
-
-            document.getElementById('questText').innerText = quest.desc;
-            document.getElementById('questProg').innerText = `${quest.current}/${quest.target}`;
-
-            document.getElementById('tDmgCost').innerText = `${(talents.dmgLv + 1) * 5} DM`;
-            document.getElementById('tSpdCost').innerText = `${(talents.spdLv + 1) * 5} DM`;
-            document.getElementById('tArmyCost').innerText = `${(talents.armyLv + 1) * 5} DM`;
-
-            const getTurretCost = (type, base) => Math.floor(base * Math.pow(1.3, turrets.filter(t=>t.type===type).length));
-            document.getElementById('costGatling').innerText = `$${getTurretCost('gatling', 1000).toLocaleString()}`;
-            document.getElementById('costLaser').innerText = `$${getTurretCost('laser', 5000).toLocaleString()}`;
-            document.getElementById('costMortar').innerText = `$${getTurretCost('mortar', 20000).toLocaleString()}`;
-            document.getElementById('costFrost').innerText = `$${getTurretCost('frost', 50000).toLocaleString()}`;
-            document.getElementById('costBlackhole').innerText = `$${getTurretCost('blackhole', 200000).toLocaleString()}`;
-
-            document.getElementById('minerLv').innerText = minerLevel;
-            document.getElementById('capLv').innerText = capacity;
-            document.getElementById('bCost').innerText = `$${Math.floor(500 * Math.pow(1.3, bots.length)).toLocaleString()}`;
-            document.getElementById('mCost').innerText = `$${Math.floor(1000 * Math.pow(1.5, minerLevel)).toLocaleString()}`;
-            document.getElementById('cCost').innerText = `$${Math.floor(1500 * (capacity / 2)).toLocaleString()}`;
-            document.getElementById('playerDamageLv').innerText = playerDamageLevel;
-            document.getElementById('playerDamageCost').innerText = `$${Math.floor(1000 * Math.pow(1.6, playerDamageLevel)).toLocaleString()}`;
-            document.getElementById('turretDamageLv').innerText = turretDamageLevel;
-            document.getElementById('turretDamageCost').innerText = `$${Math.floor(1500 * Math.pow(1.6, turretDamageLevel)).toLocaleString()}`;
-
-            document.getElementById('rebirthGain').innerText = `+${Math.floor(money / 100000)} DM`;
-
-            refreshWorldHUD();
-        }
-
-        // ============================================================
-        // 主更新
-        // ============================================================
-        function update() {
-            frame++;
-            for (let i = 0; i < skillCd.length; i++) { if (skillCd[i] > 0) skillCd[i]--; }
-            if (overclockTimer > 0) { overclockTimer--; if (overclockTimer === 0) isOverclocked = false; }
-
-            if (viewMode === 'base') {
-                updateBase();
-            } else {
-                updateWorld();
-            }
-            syncUI();
-            if (frame % 180 === 0) saveGame();
-        }
-
-        // ============================================================
-        // 基地繪製
-        // ============================================================
-        function drawBase() {
-            ctx.save();
-            ctx.clearRect(0, 0, cvs.width, cvs.height);
-            if (shakeTime > 0) ctx.translate((Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8);
-            ctx.fillStyle = '#020617'; ctx.fillRect(0, 0, cvs.width, cvs.height);
-
-            ctx.strokeStyle = 'rgba(30, 41, 59, 0.25)'; ctx.lineWidth = 1;
-            for (let x = 0; x < cvs.width; x += 50) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, cvs.height); ctx.stroke(); }
-            for (let y = 0; y < cvs.height; y += 50) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(cvs.width, y); ctx.stroke(); }
-
-            const b = getBuildings();
-
-            Object.values(b).forEach(bld => {
-                ctx.shadowColor = bld.color; ctx.shadowBlur = 10;
-                ctx.fillStyle = 'rgba(15, 23, 42, 0.9)'; ctx.strokeStyle = bld.color; ctx.lineWidth = 2.5;
-                ctx.beginPath(); ctx.roundRect(bld.x, bld.y, bld.w, bld.h, 10); ctx.fill(); ctx.stroke();
-                ctx.shadowBlur = 0;
-                ctx.fillStyle = '#f8fafc'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center';
-                ctx.fillText(bld.label, bld.x + bld.w/2, bld.y - 8);
-            });
-
-            turrets.forEach(t => {
-                let colorMap = { gatling: '#f59e0b', laser: '#3b82f6', mortar: '#a855f7', frost: '#0284c7', blackhole: '#c084fc' };
-                ctx.fillStyle = colorMap[t.type];
-                ctx.beginPath(); ctx.arc(t.x, t.y, 16, 0, Math.PI * 2); ctx.fill();
-                ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
-            });
-
-            bullets.forEach(bul => {
-                ctx.fillStyle = bul.color;
-                ctx.beginPath(); ctx.arc(bul.x, bul.y, bul.splash ? 7 : 4, 0, Math.PI * 2); ctx.fill();
-            });
-
-            enemies.forEach(e => {
-                let sizeMap = { normal: 14, runner: 10, tank: 20, bomber: 12, boss: 32 };
-                let colorMap = { normal: '#ef4444', runner: '#f59e0b', tank: '#64748b', bomber: '#22c55e', boss: '#e11d48' };
-                ctx.shadowColor = colorMap[e.type]; ctx.shadowBlur = e.type === 'boss' ? 15 : 0;
-                ctx.fillStyle = colorMap[e.type];
-                ctx.beginPath(); ctx.arc(e.x, e.y, sizeMap[e.type], 0, Math.PI * 2); ctx.fill();
-                ctx.shadowBlur = 0;
-                let barW = sizeMap[e.type] * 2.2;
-                ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(e.x - barW/2, e.y - sizeMap[e.type] - 10, barW, 4);
-                ctx.fillStyle = '#22c55e'; ctx.fillRect(e.x - barW/2, e.y - sizeMap[e.type] - 10, (e.hp / e.maxHp) * barW, 4);
-            });
-
-            items.forEach(it => {
-                ctx.fillStyle = ITEMS[it.type].color;
-                ctx.beginPath(); ctx.roundRect(it.x - 7, it.y - 7, 14, 14, 3); ctx.fill();
-            });
-
-            bots.forEach(bot => {
-                ctx.fillStyle = '#38bdf8'; ctx.beginPath(); ctx.arc(bot.x, bot.y, 12, 0, Math.PI * 2); ctx.fill();
-                drawStack(bot);
-            });
-
-            ctx.strokeStyle = 'rgba(56, 189, 248, 0.15)'; ctx.lineWidth = 1;
-            ctx.beginPath(); ctx.arc(p.x, p.y, p.atkRange, 0, Math.PI * 2); ctx.stroke();
-            ctx.fillStyle = '#38bdf8'; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
-            ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
-            drawStack(p);
-
-            particles.forEach(pt => { ctx.fillStyle = pt.color; ctx.globalAlpha = Math.max(0, pt.alpha); ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1; });
-            floatTexts.forEach(ft => { ctx.fillStyle = ft.color; ctx.globalAlpha = Math.max(0, ft.alpha); ctx.font = 'bold 15px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(ft.text, ft.x, ft.y); ctx.globalAlpha = 1; });
-
-            ctx.restore();
-        }
-
-        function drawStack(obj) {
-            obj.bag.forEach((it, i) => {
-                ctx.fillStyle = ITEMS[it.type].color;
-                ctx.beginPath(); ctx.roundRect(obj.x - 10, obj.y - 28 - (i * 8), 20, 6, 2); ctx.fill();
-            });
-        }
-
-        // ============================================================
-        // 世界地圖繪製
-        // ============================================================
-        function drawWorld() {
-            ctx.save();
-            ctx.clearRect(0, 0, cvs.width, cvs.height);
-
-            if (shakeTime > 0) ctx.translate((Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8);
-
-            // 星際背景
-            const grad = ctx.createRadialGradient(cvs.width/2, cvs.height/2, 100, cvs.width/2, cvs.height/2, Math.max(cvs.width, cvs.height));
-            grad.addColorStop(0, '#0b1020');
-            grad.addColorStop(1, '#020617');
-            ctx.fillStyle = grad;
-            ctx.fillRect(0, 0, cvs.width, cvs.height);
-
-            // 星星
-            for (let i = 0; i < 120; i++) {
-                const sx = ((i * 137.5 + frame * 0.02) % 1) * cvs.width;
-                const sy = ((i * 91.3 + frame * 0.01) % 1) * cvs.height;
-                ctx.fillStyle = `rgba(255,255,255,${0.15 + (i % 5) * 0.08})`;
-                ctx.fillRect(sx, sy, 1.5, 1.5);
-            }
-
-            // 世界邊界
-            const tl = worldToScreen(0, 0);
-            const br = worldToScreen(WORLD_W, WORLD_H);
-            ctx.strokeStyle = 'rgba(56, 189, 248, 0.25)';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y);
-
-            // 網格
-            const gridSize = 200;
-            ctx.strokeStyle = 'rgba(56, 189, 248, 0.06)';
-            ctx.lineWidth = 1;
-            for (let gx = 0; gx <= WORLD_W; gx += gridSize) {
-                const a = worldToScreen(gx, 0), b2 = worldToScreen(gx, WORLD_H);
-                ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b2.x, b2.y); ctx.stroke();
-            }
-            for (let gy = 0; gy <= WORLD_H; gy += gridSize) {
-                const a = worldToScreen(0, gy), b2 = worldToScreen(WORLD_W, gy);
-                ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b2.x, b2.y); ctx.stroke();
-            }
-
-            // 領地
-            worldMap.forEach(t => {
-                const s = worldToScreen(t.x, t.y);
-                const w = t.w * camera.zoom;
-                const h = t.h * camera.zoom;
-                if (s.x + w < -20 || s.y + h < -20 || s.x > cvs.width + 20 || s.y > cvs.height + 20) return;
-
-                const isSelected = t.id === selectedTerritoryId;
-                const ownerColor = t.owner === 'player' ? '#22c55e' :
-                                   t.owner === 'enemy' ? '#ef4444' : '#94a3b8';
-
-                ctx.shadowColor = ownerColor;
-                ctx.shadowBlur = isSelected ? 25 : 10;
-                const bgGrad = ctx.createLinearGradient(s.x, s.y, s.x + w, s.y + h);
-                if (t.type === 'capital') {
-                    bgGrad.addColorStop(0, 'rgba(56, 189, 248, 0.35)');
-                    bgGrad.addColorStop(1, 'rgba(14, 165, 233, 0.15)');
-                } else if (t.owner === 'player') {
-                    bgGrad.addColorStop(0, 'rgba(34, 197, 94, 0.28)');
-                    bgGrad.addColorStop(1, 'rgba(22, 163, 74, 0.1)');
-                } else if (t.owner === 'enemy') {
-                    bgGrad.addColorStop(0, 'rgba(239, 68, 68, 0.28)');
-                    bgGrad.addColorStop(1, 'rgba(185, 28, 28, 0.1)');
-                } else {
-                    bgGrad.addColorStop(0, 'rgba(148, 163, 184, 0.22)');
-                    bgGrad.addColorStop(1, 'rgba(71, 85, 105, 0.08)');
-                }
-                ctx.fillStyle = bgGrad;
-                ctx.beginPath();
-                ctx.roundRect(s.x, s.y, w, h, 14 * camera.zoom);
-                ctx.fill();
-
-                ctx.strokeStyle = ownerColor;
-                ctx.lineWidth = isSelected ? 4 : 2.5;
-                ctx.stroke();
-                ctx.shadowBlur = 0;
-
-                ctx.fillStyle = '#f8fafc';
-                ctx.font = `bold ${Math.max(10, 15 * camera.zoom)}px sans-serif`;
-                ctx.textAlign = 'center';
-                ctx.fillText(t.name, s.x + w/2, s.y + h/2 - 12 * camera.zoom);
-
-                ctx.font = `${Math.max(8, 11 * camera.zoom)}px sans-serif`;
-                let sub = '';
-                if (t.owner === 'player') sub = '🟢 已佔領';
-                else if (t.owner === 'enemy') sub = `🔴 敵軍 · ${t.garrisonCurrent} 守軍`;
-                else sub = `⚪ 中立 · ${t.garrisonCurrent} 守軍`;
-                ctx.fillStyle = ownerColor;
-                ctx.fillText(sub, s.x + w/2, s.y + h/2 + 12 * camera.zoom);
-
-                if (t.owner === 'player' && t.income > 0) {
-                    ctx.fillStyle = '#4ade80';
-                    ctx.font = `${Math.max(8, 10 * camera.zoom)}px sans-serif`;
-                    ctx.fillText(`+$${t.income.toLocaleString()}/波`, s.x + w/2, s.y + h/2 + 28 * camera.zoom);
-                }
-
-                if (t.type === 'capital') {
-                    ctx.fillStyle = '#fbbf24';
-                    ctx.font = `bold ${Math.max(10, 13 * camera.zoom)}px sans-serif`;
-                    ctx.fillText('🏠', s.x + w/2, s.y + 20 * camera.zoom);
-                }
-            });
-
-            // 繪製指揮官（玩家）
-            const cs = worldToScreen(commander.x, commander.y);
-            const pulse = 1 + Math.sin(frame * 0.12) * 0.15;
-            // 外光晕
-            ctx.shadowColor = '#38bdf8';
-            ctx.shadowBlur = 30;
-            ctx.fillStyle = 'rgba(56, 189, 248, 0.9)';
-            ctx.beginPath(); ctx.arc(cs.x, cs.y, 16 * pulse, 0, Math.PI * 2); ctx.fill();
-            ctx.shadowBlur = 0;
-            // 外环
-            ctx.strokeStyle = '#fbbf24';
-            ctx.lineWidth = 2.5;
-            ctx.beginPath(); ctx.arc(cs.x, cs.y, 22, 0, Math.PI * 2); ctx.stroke();
-            // 中心
-            ctx.fillStyle = '#fff';
-            ctx.beginPath(); ctx.arc(cs.x, cs.y, 8, 0, Math.PI * 2); ctx.fill();
-            // 名字
-            ctx.fillStyle = '#fbbf24';
-            ctx.font = 'bold 11px sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText('🪖 指挥官', cs.x, cs.y - 30);
-
-            // 特效
-            particles.forEach(pt => { ctx.fillStyle = pt.color; ctx.globalAlpha = Math.max(0, pt.alpha); ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1; });
-            floatTexts.forEach(ft => { ctx.fillStyle = ft.color; ctx.globalAlpha = Math.max(0, ft.alpha); ctx.font = 'bold 15px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(ft.text, ft.x, ft.y); ctx.globalAlpha = 1; });
-
-            // 小地圖
-            drawMinimap();
-
-            // 搖桿（僅觸控設備）
-            if (isTouchDevice()) drawJoystick();
-
-            ctx.restore();
-        }
-
-        function drawMinimap() {
-            const mw = 180, mh = 135;
-            const mx = cvs.width - mw - 16, my = cvs.height - mh - 16;
-            // 如果搖桿在右下角，小地圖移到右上角
-            const mmx = isTouchDevice() ? cvs.width - mw - 16 : cvs.width - mw - 16;
-            const mmy = isTouchDevice() ? 80 : cvs.height - mh - 16;
-            ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
-            ctx.strokeStyle = '#38bdf8';
-            ctx.lineWidth = 1.5;
-            ctx.beginPath(); ctx.roundRect(mmx, mmy, mw, mh, 8); ctx.fill(); ctx.stroke();
-
-            const scaleX = mw / WORLD_W, scaleY = mh / WORLD_H;
-            worldMap.forEach(t => {
-                const ownerColor = t.owner === 'player' ? '#22c55e' :
-                                   t.owner === 'enemy' ? '#ef4444' : '#94a3b8';
-                ctx.fillStyle = ownerColor;
-                ctx.fillRect(mmx + t.x * scaleX, mmy + t.y * scaleY, Math.max(3, t.w * scaleX), Math.max(3, t.h * scaleY));
-            });
-
-            // 指挥官位置
-            ctx.fillStyle = '#38bdf8';
-            ctx.beginPath(); ctx.arc(mmx + commander.x * scaleX, mmy + commander.y * scaleY, 4, 0, Math.PI*2); ctx.fill();
-
-            // 相機視口
-            const viewW = cvs.width / camera.zoom;
-            const viewH = cvs.height / camera.zoom;
-            ctx.strokeStyle = '#fbbf24';
-            ctx.lineWidth = 1.5;
-            ctx.strokeRect(
-                mmx + (camera.x - viewW/2) * scaleX,
-                mmy + (camera.y - viewH/2) * scaleY,
-                viewW * scaleX,
-                viewH * scaleY
-            );
-        }
-
-        function drawJoystick() {
-            const jc = getJoystickCenter();
-            ctx.save();
-            ctx.globalAlpha = 0.85;
-            // 底座
-            ctx.strokeStyle = 'rgba(56, 189, 248, 0.6)';
-            ctx.lineWidth = 3;
-            ctx.beginPath(); ctx.arc(jc.x, jc.y, 60, 0, Math.PI*2); ctx.stroke();
-            ctx.fillStyle = 'rgba(15, 23, 42, 0.55)';
-            ctx.beginPath(); ctx.arc(jc.x, jc.y, 60, 0, Math.PI*2); ctx.fill();
-            // 十字裝飾
-            ctx.strokeStyle = 'rgba(56, 189, 248, 0.3)';
-            ctx.lineWidth = 1;
-            ctx.beginPath(); ctx.moveTo(jc.x - 60, jc.y); ctx.lineTo(jc.x + 60, jc.y); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(jc.x, jc.y - 60); ctx.lineTo(jc.x, jc.y + 60); ctx.stroke();
-            // 摇杆頭
-            const kx = joystick.active ? joystick.knobX : jc.x;
-            const ky = joystick.active ? joystick.knobY : jc.y;
-            ctx.shadowColor = '#38bdf8';
-            ctx.shadowBlur = joystick.active ? 15 : 5;
-            ctx.fillStyle = joystick.active ? 'rgba(56, 189, 248, 0.95)' : 'rgba(56, 189, 248, 0.5)';
-            ctx.beginPath(); ctx.arc(kx, ky, 26, 0, Math.PI*2); ctx.fill();
-            ctx.shadowBlur = 0;
-            ctx.strokeStyle = '#38bdf8';
-            ctx.lineWidth = 2;
-            ctx.beginPath(); ctx.arc(kx, ky, 26, 0, Math.PI*2); ctx.stroke();
-            ctx.restore();
-        }
-
-        // ============================================================
-        // 交互 / 轉換
-        // ============================================================
-        function processConvert(obj, from, to, bld) {
-            if (obj.bag.some(i => i.type === from)) {
-                let idx = obj.bag.findIndex(i => i.type === from);
-                obj.bag[idx] = { type: to };
-                spawnParticles(bld.x + bld.w/2, bld.y + bld.h/2, ITEMS[to].color, 6);
-            }
-        }
-        function interact(obj, b) {
-            for (let i = items.length - 1; i >= 0; i--) {
-                if (Math.hypot(obj.x - items[i].x, obj.y - items[i].y) < 30 && obj.bag.length < capacity) {
-                    obj.bag.push(items.splice(i, 1)[0]);
-                }
-            }
-            if (Math.hypot(obj.x - (b.smelter.x + b.smelter.w/2), obj.y - (b.smelter.y + b.smelter.h/2)) < 50) processConvert(obj, 'RAW', 'STEEL', b.smelter);
-            if (b.chipFab && Math.hypot(obj.x - (b.chipFab.x + b.chipFab.w/2), obj.y - (b.chipFab.y + b.chipFab.h/2)) < 50) processConvert(obj, 'STEEL', 'CHIP', b.chipFab);
-            if (b.nukeFab && Math.hypot(obj.x - (b.nukeFab.x + b.nukeFab.w/2), obj.y - (b.nukeFab.y + b.nukeFab.h/2)) < 50) processConvert(obj, 'CHIP', 'BATTERY', b.nukeFab);
-            if (b.qFab && Math.hypot(obj.x - (b.qFab.x + b.qFab.w/2), obj.y - (b.qFab.y + b.qFab.h/2)) < 50) processConvert(obj, 'BATTERY', 'CORE', b.qFab);
-            if (b.antiFab && Math.hypot(obj.x - (b.antiFab.x + b.antiFab.w/2), obj.y - (b.antiFab.y + b.antiFab.h/2)) < 50) processConvert(obj, 'CORE', 'ANTIM', b.antiFab);
-            if (Math.hypot(obj.x - (b.hub.x + b.hub.w/2), obj.y - (b.hub.y + b.hub.h/2)) < 70) {
-                if (obj.bag.length > 0) {
-                    let mult = 1 + (darkMatter * 0.1);
-                    let total = obj.bag.reduce((sum, item) => sum + (ITEMS[item.type].val * mult), 0);
-                    obj.bag = []; money += total;
-                    spawnFloatText(b.hub.x, b.hub.y - 20, `+$${Math.floor(total).toLocaleString()}`, '#4ade80');
-                }
-            }
-        }
-
-        // ============================================================
-        // 主繪製迴圈
-        // ============================================================
-        function draw() {
-            if (viewMode === 'base') {
-                drawBase();
-            } else {
-                drawWorld();
-            }
-            update();
-            requestAnimationFrame(draw);
-        }
-
-        window.addEventListener('pagehide', saveGame);
-        window.addEventListener('beforeunload', saveGame);
-        initializeTycoon().catch(error => {
-            console.error('雨神大亨初始化失敗：', error);
-            document.getElementById('tycoon-leaderboard-status').textContent = '遊戲初始化失敗，請重新整理頁面。';
-        });
-    </script>
+        var ref=db().ref(cidPath+'/msgs/'+msgId);
+        return ref.set(payload);
+      }).catch(function(e){
+        alert('圖片訊息儲存失敗：'+errorMessage(e));
+      }).finally(function(){
+        imgUploadBtn.disabled=false;
+        imgFileInput.value='';
+      });
+    });
+  });
+
+  // ===== 啟動 =====
+  ready.then(function(){ return authReady; }).then(function(user){
+    if(!user){ loginRequired.hidden=false; appArea.hidden=true; return; }
+    initProfile(user);
+    window.firebase.auth().onAuthStateChanged(function(u){
+      if(u){ initProfile(u); }
+      else{
+        currentUser=null; currentUid=''; currentUsername=''; currentAvatar=fallbackAvatar;
+        appArea.hidden=true; loginRequired.hidden=false;
+        clearChatListeners();
+        for(var i=0;i<friendUnreadListeners.length;i++) friendUnreadListeners[i]();
+        friendUnreadListeners=[];
+        stopFriendAvatarWatchers();
+        friendsCache={}; groupsCache={}; unreadCache={};
+        requestList.innerHTML=''; friendList.innerHTML='';
+        chatSidebarFriends.innerHTML=''; chatSidebarGroups.innerHTML='';
+        searchResults.innerHTML='';
+        chatMobileSelect.innerHTML='<option value="">選擇好友或群組開始聊天…</option>';
+        removeAllRows(); chatEmpty.style.display='block';
+        chatClearFriend.hidden=true; setChatEnabled(false);
+        updateUnreadBadges();
+      }
+    });
+  }).catch(function(e){
+    console.error('初始化失敗',e);
+    loginRequired.hidden=false;
+    loginRequired.textContent='載入個人檔案失敗：'+errorMessage(e);
+    loginRequired.classList.add('error');
+  });
+})();
+</script>
 </body>
 </html>
