@@ -195,6 +195,12 @@
   @media (hover: hover) and (pointer: fine){ .joystick-zone{display:none} .pet-panel{bottom:20px} .btns-right{top:20px;right:20px} .btn-right{padding:8px 16px;font-size:.9rem;min-width:auto} .stat{font-size:.85rem;padding:3px 12px} .stat b{font-size:1.05rem} }
   @media (max-width:700px){ .stat{font-size:.6rem;padding:2px 5px} .stat b{font-size:.75rem} .btn-right{font-size:.6rem;padding:5px 6px;min-width:52px} .hud-bottom{font-size:.6rem} .pet-panel{bottom:140px;padding:5px 10px} .pet-panel .pname{font-size:.7rem} .pet-panel .pinc{font-size:.6rem} .pet-panel canvas{width:32px;height:32px} .index-grid{grid-template-columns:repeat(auto-fill,minmax(80px,1fr))} .trail-grid{grid-template-columns:repeat(auto-fill,minmax(110px,1fr))} }
   @media (max-width:450px){ .stat{font-size:.5rem;padding:1px 3px} .stat b{font-size:.65rem} .btn-right{font-size:.5rem;padding:4px 4px;min-width:44px} .tut-arrow-icon{font-size:2rem} .tut-arrow-text{font-size:.75rem;padding:3px 8px} .ad-url-text{font-size:1.8rem} }
+  .btns-left{position:absolute;left:6px;top:110px;display:flex;flex-direction:column;gap:5px;z-index:10;pointer-events:auto}
+  .btn-right.slow{background:linear-gradient(180deg,#b8d8f0,#80b0d0);border-color:#4a7aaa;color:#0a2a4a}
+  .btn-right.slow.on{background:linear-gradient(180deg,#ffd060,#ffa020);border-color:#cc7700;color:#4a2200;animation:slowPulse 1.2s ease-in-out infinite}
+  @keyframes slowPulse{0%,100%{box-shadow:0 3px 0 #5a4a2a,0 0 0 rgba(255,170,0,0)}50%{box-shadow:0 3px 0 #5a4a2a,0 0 16px rgba(255,170,0,0.9)}}
+  @media (hover: hover) and (pointer: fine){ .btns-left{top:80px;left:20px} }
+  @media (max-width:700px){ .btns-left{top:100px;left:4px} }
 </style>
 </head>
 <body>
@@ -216,6 +222,9 @@
         <div class="stat">🐾 <b id="uiPetCap">3/3</b></div>
         <div class="stat">✨ <b id="uiTrail">無</b></div>
       </div>
+    </div>
+    <div class="btns-left" id="btnsLeft">
+      <button class="btn-right slow" id="btnSlowMode">🐢 慢速：關</button>
     </div>
     <div class="btns-right" id="btnsRight">
       <button class="btn-right" id="btnUp">⬆️<span id="lvTxt">1</span><span id="costTxt" style="color:#aa6600">$40</span></button>
@@ -914,6 +923,36 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
     mutationCashMultiplier: 1, mutationHatchMultiplier: 1,
     _ext: {},
   };
+    // ═══════════════════════════════════════════════════════════
+  // 🐢 慢速模式（把「移動速度」還原成剛開始的速度）
+  // ═══════════════════════════════════════════════════════════
+  // 剛開始的速度：displaySpeed = 10 → displayToReal(10) = 0.6
+  // 移動速度公式：realSpeed * 2.2
+  // 慢速模式 = 強制用「初始 realSpeed 0.6」算移動速度
+  let __slowMode = false;
+  const SLOW_MODE_REAL_SPEED = 0.6;   // 剛開始的速度（displaySpeed = 10 對應的 real）
+
+  function isSlowMode() { return __slowMode; }
+
+  function setSlowMode(on) {
+    __slowMode = !!on;
+    const btn = document.getElementById('btnSlowMode');
+    if (btn) {
+      btn.textContent = __slowMode ? '🐢 慢速：開' : '🐢 慢速：關';
+      btn.classList.toggle('on', __slowMode);
+    }
+    try { localStorage.setItem('raingod_slow_mode', __slowMode ? '1' : '0'); } catch (e) {}
+    showToast(__slowMode ? '🐢 慢速模式已開啟（移動速度回到初始）' : '🐇 慢速模式已關閉（恢復原本速度）',
+      __slowMode ? '#4a7aaa' : '#3a8a3a',
+      __slowMode ? '#2a4a6a' : '#2a6a2a');
+  }
+
+  function toggleSlowMode() { setSlowMode(!__slowMode); }
+
+  // 讀取上次設定
+  try {
+    if (localStorage.getItem('raingod_slow_mode') === '1') __slowMode = true;
+  } catch (e) {}
   const keys={};
   const rnd=(a,b)=>Math.random()*(b-a)+a;
   const dist=(x1,y1,x2,y2)=>Math.hypot(x2-x1,y2-y1);
@@ -2014,7 +2053,9 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
     if(S.input.x!==0||S.input.y!==0){dx=S.input.x;dy=S.input.y}
     if(dx!==0||dy!==0){
       const len=Math.hypot(dx,dy);dx/=len;dy/=len;
-      const realSpeed=displayToReal(p.displaySpeed); let moveSpeed=realSpeed*2.2;
+      // ★ 慢速模式：強制用初始速度 0.6（即 displaySpeed=10 的實際速度）
+      const realSpeed = __slowMode ? SLOW_MODE_REAL_SPEED : displayToReal(p.displaySpeed);
+      let moveSpeed=realSpeed*2.2;
       if(p.carry){ const w=p.carry.size==='giant'?0.35:(p.carry.size==='huge'?0.55:0.75); moveSpeed*=w; }
       const oldY = p.y;
       p.x+=dx*moveSpeed*dt*60;p.y+=dy*moveSpeed*dt*60;
@@ -2484,6 +2525,13 @@ if (show32) { adBtn32x.style.display= 'flex'; adBtn32x.textContent= `🎬 32×`;
     updateTutorial();
     safeHook(HOOKS.onUIUpdate);
   }
+  const btnSlowModeEl = document.getElementById('btnSlowMode');
+  if (btnSlowModeEl) {
+    btnSlowModeEl.addEventListener('click', toggleSlowMode);
+    // 初始化顯示狀態
+    btnSlowModeEl.textContent = __slowMode ? '🐢 慢速：開' : '🐢 慢速：關';
+    btnSlowModeEl.classList.toggle('on', __slowMode);
+  }
   document.getElementById('btnUp').addEventListener('click',()=>{ const p=S.player;const cost=treadmillCost(p.tsLv); if(S.cash>=cost){S.cash-=cost;p.tsLv++;updateUI();saveGame(true)} });
   document.getElementById('btnAd').addEventListener('click',()=>showAdModal('2x')); document.getElementById('btnAd4x').addEventListener('click',()=>showAdModal('4x'));
   document.getElementById('btnAd8x').addEventListener('click',()=>showAdModal('8x')); document.getElementById('btnAd16x').addEventListener('click',()=>showAdModal('16x'));
@@ -2629,6 +2677,9 @@ if (show32) { adBtn32x.style.display= 'flex'; adBtn32x.textContent= `🎬 32×`;
     HOOKS,
     getW: () => W, getH: () => H,
     getCtx: () => ctx,
+    isSlowMode,
+    setSlowMode,
+    toggleSlowMode,
     openHatchedEgg,
     getRemotePlayers: () => S.remotePlayers,
     getMutationCashMul: () => S.mutationCashMultiplier || 1,
