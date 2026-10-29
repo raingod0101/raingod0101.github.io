@@ -352,7 +352,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
   var IMG_TTL_MS = 24 * 60 * 60 * 1000;
   var DAILY_IMAGE_LIMIT = 5;
   var ADMIN_USERNAME = 'raingod';
-  var IMG_MAX_BYTES = 150 * 1024;   // 150KB 上限（含 data URL 編碼）
+  var IMG_MAX_BYTES = 280 * 1024;   // 280KB 上限（含 data URL 編碼）
 
   // ===== DOM =====
   var loginRequired = document.getElementById('login-required');
@@ -458,6 +458,10 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     var d=new Date();
     return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
   }
+  function dateKeyFromTs(ts){
+    var d=new Date(ts);
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  }
 
   // 壓縮圖片。可多次呼叫（第一次失敗會用更小參數再壓）
   function compressImage(file,maxDim,quality){
@@ -507,6 +511,16 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
       if(cur<=0) return;
       return cur-1;
     }).catch(function(){});
+  }
+  // 依指定日期退還一張配額（收回圖片用）
+  function refundImageQuotaForDate(dateKey){
+    if(!currentUsername||!dateKey) return Promise.resolve();
+    var ref=db().ref('users/'+currentUsername+'/imageQuota/'+dateKey);
+    return ref.transaction(function(cur){
+      cur=cur||0;
+      if(cur<=0) return;
+      return cur-1;
+    }).catch(function(e){ console.warn('退還配額失敗',e); });
   }
   function updateQuotaHint(){
     if(!currentUsername||!activeChat.type){ imgQuotaHint.textContent=''; return; }
@@ -934,7 +948,6 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
   }
 
   // ===== 群組 =====
-  // 監聽群組索引，並自愈孤兒索引（groups/{gid} 已不存在時清理 users/{username}/groups/{gid}）
   function listenGroups(){
     db().ref('users/'+currentUsername+'/groups').on('value',function(snap){
       var raw=snap.val()||{};
@@ -963,7 +976,6 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
         recalcOwnedGroup();
         refreshFriendsUI();
         listenAllUnread();
-        // 靜默清理孤兒索引
         orphan.forEach(function(gid){
           console.warn('[groups] 清理孤兒索引:',gid);
           db().ref('users/'+currentUsername+'/groups/'+gid).remove().catch(function(){});
@@ -1115,7 +1127,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     }
   });
 
-  // ==== 刪除群組：分步刪除 + 本地清理 ====
+  // ==== 刪除群組（建立者限定）====
   function deleteGroup(gid){
     var g=groupsCache[gid];
     if(!g||g.role!=='owner'){ alert('只有群組建立者可以刪除群組。'); return; }
@@ -1124,25 +1136,21 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     setStatus('group-status','正在刪除群組…');
     console.log('[deleteGroup] 開始刪除',gid);
 
-    // 先讀成員名單
     db().ref('groups/'+gid+'/memberUsernames').once('value').then(function(snap){
       var map=snap.val()||{};
       var tasks=[];
-      // 1. 主節點（最重要，失敗就整組沒刪）
       tasks.push(db().ref('groups/'+gid).remove().then(function(){
         console.log('[deleteGroup] groups/'+gid+' 已刪除');
       }).catch(function(e){
         console.error('[deleteGroup] 主節點刪除失敗',e);
         throw e;
       }));
-      // 2. 自己的索引和 ownedGroup（盡量刪，失敗也繼續）
       tasks.push(db().ref('users/'+currentUsername+'/groups/'+gid).remove().catch(function(e){
         console.warn('[deleteGroup] 自己索引刪除失敗（不阻塞）',e);
       }));
       tasks.push(db().ref('users/'+currentUsername+'/ownedGroup').remove().catch(function(e){
         console.warn('[deleteGroup] ownedGroup 刪除失敗（不阻塞）',e);
       }));
-      // 3. 其他成員索引（失敗只警告）
       Object.keys(map).forEach(function(uid){
         var uname=map[uid];
         if(uname && uname!==currentUsername){
@@ -1153,7 +1161,6 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
       });
       return Promise.all(tasks);
     }).then(function(){
-      // 立即本地清理（不等監聽）
       delete groupsCache[gid];
       if(ownedGroupId===gid) ownedGroupId='';
       hasOwnedGroup = !!ownedGroupId || Object.keys(groupsCache).some(function(k){
@@ -1237,14 +1244,12 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     markChatRead('private',cid);
   }
 
-  // ==== 打開群組：先檢查 groups/{gid} 是否存在，再檢查成員 ====
   function openGroupChat(gid){
     var g=groupsCache[gid];
     if(!g){ alert('群組不存在或你不在群組中。'); return; }
 
     db().ref('groups/'+gid).once('value').then(function(groupSnap){
       if(!groupSnap.exists()){
-        // 群組已不存在 → 清理本地與索引
         console.warn('[openGroupChat] 群組不存在，清理殘留索引:',gid);
         db().ref('users/'+currentUsername+'/groups/'+gid).remove().catch(function(){});
         if(ownedGroupId===gid){
@@ -1257,7 +1262,6 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
         closeActiveChat();
         return;
       }
-      // 再檢查成員身份
       return db().ref('groups/'+gid+'/members/'+currentUid).once('value').then(function(s){
         if(!s.exists()){
           alert('你不在這個群組裡，無法查看訊息。');
@@ -1510,11 +1514,25 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     chatBox.scrollTop=chatBox.scrollHeight;
   }
 
+  // ==== 收回（含管理員刪除、圖片退配額）====
   function doRecall(kind,cid,msgId,m,isSelf){
     var confirmMsg = isSelf
       ? '確定要收回這則訊息嗎？收回後訊息內容會從資料庫刪除。'
       : '確定要以管理員權限刪除這則訊息嗎？此操作無法復原。';
     if(!confirm(confirmMsg)) return;
+
+    var shouldRefund = isSelf && m && m.type==='image';
+    var refundDateKey = '';
+    if(shouldRefund){
+      if(m.quotaKey){
+        refundDateKey = m.quotaKey;
+      }else if(m.expireAt){
+        refundDateKey = dateKeyFromTs(m.expireAt - IMG_TTL_MS);
+      }else if(m.ts){
+        refundDateKey = dateKeyFromTs(m.ts);
+      }
+    }
+
     var baseRef=kind==='private'?db().ref('private_chats/'+cid):db().ref('groups/'+cid);
     var updates={};
     updates['msgs/'+msgId]=null;
@@ -1525,7 +1543,14 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
       senderName: m.name||'',
       ts: window.firebase.database.ServerValue.TIMESTAMP
     };
-    baseRef.update(updates).catch(function(e){
+    baseRef.update(updates).then(function(){
+      if(shouldRefund && refundDateKey){
+        return refundImageQuotaForDate(refundDateKey).then(function(){
+          console.log('[圖片] 收回退還配額 date='+refundDateKey);
+          updateQuotaHint();
+        });
+      }
+    }).catch(function(e){
       alert('操作失敗：'+errorMessage(e));
     });
   }
@@ -1614,7 +1639,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendMessage(); }
   });
 
-  // ===== 傳圖片（data URL + 每日上限 + 寫入驗證）=====
+  // ===== 傳圖片（data URL + 每日上限 + 寫入驗證 + 三段式壓縮）=====
   imgUploadBtn.addEventListener('click',function(){ imgFileInput.click(); });
   imgFileInput.addEventListener('change',function(){
     var file=imgFileInput.files&&imgFileInput.files[0];
@@ -1630,15 +1655,21 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     imgUploadBtn.disabled=true;
     setUploadStatus('正在壓縮圖片…',false);
 
-    // 先壓到 600px/0.65；若仍 >150KB，進一步壓到 400px/0.55
-    compressImage(file,600,0.65).then(function(dataUrl){
+    // 三段式壓縮：1000px/0.78 → 800px/0.7 → 600px/0.62
+    compressImage(file,1000,0.78).then(function(dataUrl){
+      console.log('[圖片] 第一段 size='+(dataUrl.length/1024).toFixed(1)+'KB');
       if(dataUrl.length <= IMG_MAX_BYTES) return dataUrl;
       setUploadStatus('圖片較大，進一步壓縮…',false);
-      return compressImage(file,400,0.55).then(function(smaller){
-        if(smaller.length > IMG_MAX_BYTES){
-          throw new Error('圖片壓縮後仍過大（>150KB），請選小一點的圖。');
-        }
-        return smaller;
+      return compressImage(file,800,0.7).then(function(d2){
+        console.log('[圖片] 第二段 size='+(d2.length/1024).toFixed(1)+'KB');
+        if(d2.length <= IMG_MAX_BYTES) return d2;
+        return compressImage(file,600,0.62).then(function(d3){
+          console.log('[圖片] 第三段 size='+(d3.length/1024).toFixed(1)+'KB');
+          if(d3.length > IMG_MAX_BYTES){
+            throw new Error('圖片壓縮後仍過大（>'+(IMG_MAX_BYTES/1024|0)+'KB），請選小一點的圖。');
+          }
+          return d3;
+        });
       });
     }).then(function(dataUrl){
       return consumeImageQuota().then(function(){
@@ -1655,12 +1686,12 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
           text:'', type:'image',
           imageData:dataUrl,
           imageSize:dataUrl.length,
+          quotaKey: quotaDateKey(),
           expireAt:ts+IMG_TTL_MS,
           ts:window.firebase.database.ServerValue.TIMESTAMP
         };
         var msgRef=db().ref(basePath+'/msgs/'+msgId);
         return msgRef.set(payload).then(function(){
-          // 寫入後驗證：讀一次確認資料真的存在
           return msgRef.once('value').then(function(snap){
             if(!snap.exists()){
               throw new Error('圖片寫入後無法讀取，請檢查資料庫 rules 是否允許讀取 msgs。');
