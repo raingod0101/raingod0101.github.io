@@ -75,6 +75,7 @@
 
     // === 遊戲鎖（跨分頁 + 跨裝置） ===
     const activeGameLocks = new Map();
+    const GAME_LOCK_PREFIX = 'raingod_game_lock_';
 
     function accountDataRef(uid) {
         return firebase.database().ref(`users/${uid}/account_data`);
@@ -141,7 +142,6 @@
         window.raingodAccountDataCloudLoaded = false;
         clearTimeout(accountSaveTimer);
         window.raingodCurrentUser = null;
-        // 釋放所有遊戲鎖
         activeGameLocks.forEach(lock => { try { lock.release(); } catch (e) {} });
         activeGameLocks.clear();
         clearLocalAccountData();
@@ -281,7 +281,6 @@
             originalSetItem.call(this, key, value);
             if (this === localStorage) {
                 const keyStr = String(key);
-                // 遊戲存檔與遊戲鎖不觸發 account_data 寫入
                 if (!keyStr.startsWith('raingod_save_') && !keyStr.startsWith('raingod_game_lock_')) {
                     scheduleAccountDataSave();
                 }
@@ -316,14 +315,11 @@
         return deviceId;
     }
 
-    const TAB_ID_KEY = 'raingod_tab_id';
+    // 每個頁面實例唯一；複製分頁、window.open 都會拿到不同 ID
     let _tabId = null;
     function getTabId() {
-        if (_tabId) return _tabId;
-        try { _tabId = sessionStorage.getItem(TAB_ID_KEY); } catch (e) { _tabId = null; }
         if (!_tabId) {
             _tabId = 'tab_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
-            try { sessionStorage.setItem(TAB_ID_KEY, _tabId); } catch (e) {}
         }
         return _tabId;
     }
@@ -332,26 +328,23 @@
     }
 
     // === 遊戲鎖：同裝置用 localStorage、跨裝置用 Firebase ===
-    const GAME_LOCK_PREFIX = 'raingod_game_lock_';
-
     async function acquireGameLock(gameId, onLost) {
         const sessionId = getSessionId();
         const localKey = GAME_LOCK_PREFIX + gameId;
-        const lock = { owned: true, sessionId, gameId };
+        const lock = { owned: true, sessionId, gameId, lostHandled: false };
 
-        let lostHandled = false;
         const handleLost = () => {
-            if (lostHandled) return;
-            lostHandled = true;
+            if (lock.lostHandled) return;
+            lock.lostHandled = true;
             lock.owned = false;
             try { onLost && onLost(); } catch (e) {}
         };
 
-        // 1. 本機鎖（同裝置跨分頁）
+        // 1. 本機鎖（同裝置跨分頁）：後開者直接覆蓋
         try { localStorage.setItem(localKey, sessionId); } catch (e) {}
         const storageHandler = e => {
             if (e.key !== localKey) return;
-            if (!e.newValue) return;              // 鎖被移除（前一個 owner 關頁），不算被踢
+            if (!e.newValue) return;              // 鎖被移除，不算被踢
             if (e.newValue === sessionId) return; // 自己寫的，忽略
             handleLost();
         };
@@ -366,15 +359,12 @@
             const user = firebase.auth().currentUser;
             if (user) {
                 firebaseRef = firebase.database().ref(`game_locks/${user.uid}/${gameId}`);
-                // 後開者勝：直接覆蓋
                 await firebaseRef.set({
                     sessionId,
                     deviceId: getDeviceId(),
                     tabId: getTabId(),
                     ts: firebase.database.ServerValue.TIMESTAMP
                 });
-                firebase.database().onDisconnect(firebaseRef).remove();
-
                 firebaseHandler = snap => {
                     const val = snap.val();
                     if (!val || !val.sessionId) return;
@@ -387,24 +377,35 @@
             console.warn('建立 Firebase 遊戲鎖失敗', e);
         }
 
+        // 3. 心跳：storage 事件可能被 throttle 或漏掉，每 5 秒主動校驗
+        const heartbeat = setInterval(async () => {
+            if (lock.lostHandled) return;
+            if (localStorage.getItem(localKey) !== sessionId) { handleLost(); return; }
+            if (firebaseRef) {
+                try {
+                    const snap = await firebaseRef.once('value');
+                    const val = snap.val();
+                    if (val && val.sessionId && val.sessionId !== sessionId) handleLost();
+                } catch (e) {}
+            }
+        }, 5000);
+
         lock.release = () => {
+            clearInterval(heartbeat);
             window.removeEventListener('storage', storageHandler);
             if (localStorage.getItem(localKey) === sessionId) {
                 try { localStorage.removeItem(localKey); } catch (e) {}
             }
             if (firebaseRef) {
                 try { firebaseRef.off('value', firebaseHandler); } catch (e) {}
-                try { firebaseRef.onDisconnect().cancel(); } catch (e) {}
-                firebaseRef.once('value').then(snap => {
-                    if (snap.val()?.sessionId === sessionId) firebaseRef.remove().catch(() => {});
-                }).catch(() => {});
+                // 不做遠端 remove，避免非同步誤刪後開者的新鎖；殘留鎖會被下一個開啟者覆蓋
             }
         };
 
         return lock;
     }
 
-    // 頁面關閉前釋放鎖（Firebase 的 onDisconnect 也會處理）
+    // 頁面關閉前釋放鎖
     window.addEventListener('beforeunload', () => {
         activeGameLocks.forEach(lock => { try { lock.release(); } catch (e) {} });
         activeGameLocks.clear();
@@ -497,11 +498,18 @@
             return false;
         }
 
-        // 分頁／裝置鎖檢查：被踢的分頁拒絕儲存
+        // 主動檢查本機鎖（不只看 lock.owned）
         const lock = activeGameLocks.get(gameId);
-        if (lock && !lock.owned) {
-            console.warn('遊戲鎖已遺失，放棄儲存');
-            return false;
+        if (lock) {
+            if (localStorage.getItem(GAME_LOCK_PREFIX + gameId) !== lock.sessionId) {
+                lock.owned = false;
+                console.warn('本機鎖已被搶走，放棄儲存');
+                return false;
+            }
+            if (!lock.owned) {
+                console.warn('遊戲鎖已遺失，放棄儲存');
+                return false;
+            }
         }
 
         localStorage.setItem(`raingod_save_${gameId}`, JSON.stringify(gameData));
@@ -862,7 +870,6 @@
                 accountDataCloudLoaded = false;
                 window.raingodAccountDataCloudLoaded = false;
                 clearTimeout(accountSaveTimer);
-                // 登出：清本地（含遊戲存檔）＋釋放所有遊戲鎖
                 activeGameLocks.forEach(lock => { try { lock.release(); } catch (e) {} });
                 activeGameLocks.clear();
                 clearLocalAccountData();
