@@ -73,6 +73,25 @@
     let accountSaveTimer = null;
     window.raingodAccountDataCloudLoaded = false;
 
+    // ★★★ 新增：遊戲本機 key 白名單（這些不進入帳號資料、不被清空）★★★
+    const GAME_LOCAL_KEYS = new Set([
+        'steal_an_egg_v17',
+        'tutorial_done',
+        'my_base_idx',
+        'raingod_slow_mode',
+        'pid',
+    ]);
+
+    function isGameLocalKey(key) {
+        if (!key) return true;
+        if (key === 'raingod_device_id') return true;
+        if (key.startsWith('raingod_save_')) return true;
+        if (key.startsWith('raingod_game_lock_')) return true;
+        if (key.startsWith('raingod_save_choice_')) return true;
+        if (GAME_LOCAL_KEYS.has(key)) return true;
+        return false;
+    }
+
     // === 遊戲鎖（跨分頁 + 跨裝置） ===
     const activeGameLocks = new Map();
     const GAME_LOCK_PREFIX = 'raingod_game_lock_';
@@ -88,8 +107,6 @@
         } catch (e) { return 'navigate'; }
     }
 
-    // reload → 複用 sessionStorage（刷新不踢自己/別人）
-    // 其他（navigate / 複製分頁 / 新 tab / 首次）→ 生成新的（踢掉其他地方）
     function getSessionId() {
         if (_sessionId) return _sessionId;
         if (getNavType() === 'reload') {
@@ -105,12 +122,12 @@
         return firebase.database().ref(`users/${uid}/account_data`);
     }
 
-    // 排除裝置 ID 與遊戲存檔（遊戲存檔走 games/{gameId}）
+    // ★ 改：readAccountData 排除遊戲本機 key
     function readAccountData() {
         const data = [];
         for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
-            if (key && key !== 'raingod_device_id' && !key.startsWith('raingod_save_')) {
+            if (key && !isGameLocalKey(key)) {
                 data.push({ key, value: localStorage.getItem(key) });
             }
         }
@@ -121,13 +138,14 @@
         return JSON.stringify((Array.isArray(data) ? data : []).slice().sort((a, b) => a.key.localeCompare(b.key)));
     }
 
+    // ★ 改：只清帳號資料範圍，不動遊戲本機 key
     function clearLocalAccountData(clearSession = true) {
         const bindings = new Set(storageBindings.values());
         bindings.forEach(binding => { if (binding.pause) binding.pause(); });
         const keys = [];
         for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
-            if (key && key !== 'raingod_device_id') keys.push(key);
+            if (key && !isGameLocalKey(key)) keys.push(key);
         }
         keys.forEach(key => localStorage.removeItem(key));
         if (clearSession) {
@@ -135,22 +153,23 @@
         }
     }
 
-    // 只覆蓋非遊戲存檔（遊戲存檔由 raingodInitGame 自己處理）
+    // ★ 改：只覆蓋帳號資料範圍，不動遊戲本機 key
     function replaceLocalAccountData(data) {
         accountDataSyncing = true;
         try {
             const bindings = new Set(storageBindings.values());
             bindings.forEach(binding => { if (binding.pause) binding.pause(); });
+
             const keys = [];
             for (let i = 0; i < localStorage.length; i++) {
                 const key = localStorage.key(i);
-                if (key && key !== 'raingod_device_id' && !key.startsWith('raingod_save_')) keys.push(key);
+                if (key && !isGameLocalKey(key)) keys.push(key);
             }
             keys.forEach(key => localStorage.removeItem(key));
+
             (Array.isArray(data) ? data : []).forEach(entry => {
                 if (entry && typeof entry.key === 'string'
-                    && entry.key !== 'raingod_device_id'
-                    && !entry.key.startsWith('raingod_save_')
+                    && !isGameLocalKey(entry.key)
                     && typeof entry.value === 'string') {
                     localStorage.setItem(entry.key, entry.value);
                 }
@@ -160,13 +179,62 @@
         }
     }
 
+    // ★★★ 新增：判斷本機遊戲存檔是否為「空狀態」★★★
+    function isLocalSaveEffectivelyEmpty() {
+        // 1. 檢查偷蛋存檔
+        try {
+            const raw = localStorage.getItem('steal_an_egg_v17');
+            if (raw) {
+                const d = JSON.parse(raw);
+                if (d) {
+                    if ((d.cash || 0) > 0) return false;
+                    if ((d.displaySpeed || 0) > 10) return false;
+                    if (Array.isArray(d.discovered) && d.discovered.length > 0) return false;
+                    if (Array.isArray(d.pets) && d.pets.length > 0) return false;
+                    if (Array.isArray(d.bag) && d.bag.length > 0) return false;
+                    if (Array.isArray(d.hatchery) && d.hatchery.length > 0) return false;
+                    if (d.equippedStick) return false;
+                    if (d.equippedTrail) return false;
+                    if (d.subscriptionVerified) return false;
+                    if (d.trails && typeof d.trails === 'object') {
+                        for (const k of Object.keys(d.trails)) { if (d.trails[k]) return false; }
+                    }
+                }
+            }
+        } catch (e) {}
+
+        // 2. 檢查其他遊戲的 raingod_save_*
+        try {
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (!key || !key.startsWith('raingod_save_')) continue;
+                const raw = localStorage.getItem(key);
+                try {
+                    const d = JSON.parse(raw);
+                    if (d == null) continue;
+                    if (Array.isArray(d) && d.length > 0) return false;
+                    if (typeof d === 'object' && d !== null) {
+                        for (const k of Object.keys(d)) {
+                            const v = d[k];
+                            if (v === null || v === undefined || v === 0 || v === '' || v === false) continue;
+                            if (Array.isArray(v) && v.length === 0) continue;
+                            return false;
+                        }
+                    }
+                } catch (e) {}
+            }
+        } catch (e) {}
+
+        return true;
+    }
+
     window.raingodClearLocalAccountData = function() {
         activeAccountUid = '';
         accountDataCloudLoaded = false;
         window.raingodAccountDataCloudLoaded = false;
         clearTimeout(accountSaveTimer);
         window.raingodCurrentUser = null;
-        _sessionId = null;                    // 清 session 快取
+        _sessionId = null;
         activeGameLocks.forEach(lock => { try { lock.release(); } catch (e) {} });
         activeGameLocks.clear();
         clearLocalAccountData();
@@ -189,6 +257,7 @@
         }, 400);
     }
 
+    // ★ 改：syncAccountData 加入空狀態保護，取消時不再登出
     async function syncAccountData(user) {
         const uid = user.uid;
         const localData = readAccountData();
@@ -196,6 +265,7 @@
         if (firebase.auth().currentUser?.uid !== uid) return;
 
         if (!snapshot.exists()) {
+            if (!localData.length) return;
             accountDataCloudLoaded = false;
             window.raingodAccountDataCloudLoaded = false;
             await accountDataRef(uid).set({
@@ -211,7 +281,6 @@
         if (cloudData.some(entry => {
             if (!entry || typeof entry.key !== 'string'
                 || entry.key === 'raingod_device_id'
-                || entry.key.startsWith('raingod_save_')
                 || typeof entry.value !== 'string'
                 || cloudKeys.has(entry.key)) return true;
             cloudKeys.add(entry.key);
@@ -227,14 +296,27 @@
             return;
         }
 
+        // ★ 本機看起來是空狀態 → 自動走雲端，不詢問
+        if (isLocalSaveEffectivelyEmpty()) {
+            console.warn('[syncAccountData] 本機存檔為空狀態，自動使用雲端資料');
+            replaceLocalAccountData(cloudData);
+            return;
+        }
+
         const accountKey = user.email ? user.email.split('@')[0] : uid;
         let choice = readSaveChoice(accountKey);
         if (!choice) {
             const confirmed = window.confirm(
-                '此帳號已有雲端資料，且與本機不同。\n\n按「確定」：用雲端資料覆蓋本機全部資料。\n按「取消」：直接登出此帳號。'
+                '此帳號已有雲端資料，且與本機不同。\n\n' +
+                '按「確定」：用雲端資料覆蓋本機。\n' +
+                '按「取消」：保留本機資料並上傳到雲端。'
             );
             if (!confirmed) {
-                try { await firebase.auth().signOut(); } catch (e) {}
+                await accountDataRef(uid).set({
+                    data: localData,
+                    updated_at: firebase.database.ServerValue.TIMESTAMP
+                });
+                try { sessionStorage.setItem(saveChoiceKey(accountKey), 'local'); } catch (err) {}
                 return;
             }
             choice = 'cloud';
@@ -242,7 +324,15 @@
         }
 
         if (firebase.auth().currentUser?.uid !== uid) return;
-        replaceLocalAccountData(cloudData);
+
+        if (choice === 'cloud') {
+            replaceLocalAccountData(cloudData);
+        } else {
+            await accountDataRef(uid).set({
+                data: localData,
+                updated_at: firebase.database.ServerValue.TIMESTAMP
+            });
+        }
     }
 
     window.raingodWaitForAccountData = async function(uid) {
@@ -305,9 +395,7 @@
             originalSetItem.call(this, key, value);
             if (this === localStorage) {
                 const keyStr = String(key);
-                if (!keyStr.startsWith('raingod_save_') && !keyStr.startsWith('raingod_game_lock_')) {
-                    scheduleAccountDataSave();
-                }
+                if (!isGameLocalKey(keyStr)) scheduleAccountDataSave();
                 const binding = storageBindings.get(keyStr);
                 if (binding) binding.scheduleSave();
             }
@@ -316,9 +404,7 @@
             originalRemoveItem.call(this, key);
             if (this === localStorage) {
                 const keyStr = String(key);
-                if (!keyStr.startsWith('raingod_save_') && !keyStr.startsWith('raingod_game_lock_')) {
-                    scheduleAccountDataSave();
-                }
+                if (!isGameLocalKey(keyStr)) scheduleAccountDataSave();
                 const binding = storageBindings.get(keyStr);
                 if (binding) binding.scheduleSave();
             }
@@ -329,7 +415,6 @@
         };
     }
 
-    // --- 裝置 / 分頁 ID（僅用於日誌與 game_locks 的輔助欄位）---
     function getDeviceId() {
         let deviceId = localStorage.getItem('raingod_device_id');
         if (!deviceId) {
@@ -349,7 +434,7 @@
 
     // === 遊戲鎖：同裝置用 localStorage、跨裝置用 Firebase ===
     async function acquireGameLock(gameId, onLost) {
-        const sessionId = getSessionId();   // 每個頁面唯一
+        const sessionId = getSessionId();
         const localKey = GAME_LOCK_PREFIX + gameId;
         const lock = { owned: true, sessionId, gameId, lostHandled: false };
 
@@ -360,7 +445,6 @@
             try { onLost && onLost(); } catch (e) {}
         };
 
-        // 1. 本機鎖（同裝置跨分頁）：後開者直接覆蓋
         try { localStorage.setItem(localKey, sessionId); } catch (e) {}
         const storageHandler = e => {
             if (e.key !== localKey) return;
@@ -370,7 +454,6 @@
         };
         window.addEventListener('storage', storageHandler);
 
-        // 2. Firebase 鎖（跨裝置／跨瀏覽器，僅登入時）
         let firebaseRef = null;
         let firebaseHandler = null;
         try {
@@ -397,7 +480,6 @@
             console.warn('建立 Firebase 遊戲鎖失敗', e);
         }
 
-        // 3. 心跳：每 5 秒主動校驗
         const heartbeat = setInterval(async () => {
             if (lock.lostHandled) return;
             if (localStorage.getItem(localKey) !== sessionId) { handleLost(); return; }
@@ -418,7 +500,6 @@
             }
             if (firebaseRef) {
                 try { firebaseRef.off('value', firebaseHandler); } catch (e) {}
-                // 不做遠端 remove，避免非同步誤刪後開者的新鎖
             }
         };
 
@@ -449,6 +530,7 @@
         sessionWatchHandler = null;
     }
 
+    // ★★★ 改：先 on 再 set，被踢時保留本機存檔 ★★★
     async function claimSession(user) {
         stopSessionWatch();
         const sessionId = getSessionId();
@@ -457,14 +539,13 @@
         const handler = snap => {
             const val = snap.val();
             if (!val || !val.sessionId) return;
-            if (val.sessionId === sessionId) return;   // 自己，忽略
+            if (val.sessionId === sessionId) return;
 
-            // 別的地方（分頁／裝置）登入了 → 本頁直接登出
             stopSessionWatch();
             alert('您的帳號已在其他地方登入，本頁將自動登出。');
             const redirect = () => { window.location.href = baseUrl; };
             firebase.auth().signOut().then(() => {
-                window.raingodClearLocalAccountData();
+                // ★ 不再 clearLocalAccountData，保留本機遊戲存檔
                 redirect();
             }).catch(redirect);
         };
@@ -472,8 +553,10 @@
         sessionWatchRef = sessionRef;
         sessionWatchHandler = handler;
 
+        // ★ 先註冊監聽，避免同時登入時的空窗期
+        sessionRef.on('value', handler);
+
         try {
-            // 後登入者勝：直接覆蓋（不要用 onDisconnect().remove()，否則關頁會誤刪別人的 session）
             await sessionRef.set({
                 sessionId,
                 deviceId: getDeviceId(),
@@ -484,7 +567,6 @@
                 stopSessionWatch();
                 return;
             }
-            sessionRef.on('value', handler);
         } catch (e) {
             console.warn('多裝置偵測失敗', e);
             stopSessionWatch();
@@ -563,6 +645,7 @@
         return false;
     };
 
+    // ★★★ 改：raingodInitGame「取消」時保留本機並上傳雲端，不再登出 ★★★
     window.raingodInitGame = async function(gameId, defaultLocalData, onComplete) {
         if (!gameId) {
             console.error("raingodInitGame 錯誤：必須指定 gameId");
@@ -618,14 +701,27 @@
                     let choice = readSaveChoice(accountKey);
                     if (!choice) {
                         const confirmed = window.confirm(
-                            '此帳號已有此遊戲的雲端進度，且與本機不同。\n\n按「確定」：用雲端進度覆蓋本機存檔。\n按「取消」：直接登出此帳號。'
+                            '此帳號已有此遊戲的雲端進度，且與本機不同。\n\n' +
+                            '按「確定」：用雲端進度覆蓋本機存檔。\n' +
+                            '按「取消」：保留本機存檔並上傳到雲端。'
                         );
                         if (!confirmed) {
-                            try { await firebase.auth().signOut(); } catch (e) {}
-                            return complete(localData, { source: 'local', syncEnabled: false, loggedOut: true });
+                            // ★ 保留本機 + 上傳雲端
+                            await gameRef.set({
+                                data: localData,
+                                updated_at: firebase.database.ServerValue.TIMESTAMP
+                            });
+                            return complete(localData, { source: 'local', syncEnabled: true, uploaded: true });
                         }
                         choice = 'cloud';
                         try { sessionStorage.setItem(saveChoiceKey(accountKey), choice); } catch (e) {}
+                    }
+                    if (choice === 'local') {
+                        await gameRef.set({
+                            data: localData,
+                            updated_at: firebase.database.ServerValue.TIMESTAMP
+                        });
+                        return complete(localData, { source: 'local', syncEnabled: true, uploaded: true });
                     }
                 }
 
@@ -648,6 +744,7 @@
         }
     };
 
+    // ★★★ 改：raingodBindStorage 中 legacyCloudSave 段落不再 signOut ★★★
     window.raingodBindStorage = function(gameId, keys, defaults, onLoaded, legacyCloudSave) {
         const storageKeys = Array.from(new Set(keys));
         const readValues = () => storageKeys.reduce((values, key) => {
@@ -714,12 +811,21 @@
                                         let choice = readSaveChoice(accountKey);
                                         if (!choice) {
                                             const confirmed = window.confirm(
-                                                '找到此帳號舊版雲端進度，且與本機不同。\n\n按「確定」：用舊版雲端進度覆蓋本機。\n按「取消」：直接登出。'
+                                                '找到此帳號舊版雲端進度，且與本機不同。\n\n' +
+                                                '按「確定」：用舊版雲端進度覆蓋本機。\n' +
+                                                '按「取消」：保留本機進度並上傳到雲端。'
                                             );
                                             if (!confirmed) {
-                                                try { await firebase.auth().signOut(); } catch (e) {}
-                                                enabled = false;
-                                                if (onLoaded) onLoaded(localData, { source: 'local', syncEnabled: false, loggedOut: true });
+                                                // ★ 保留本機 + 上傳
+                                                try {
+                                                    localData[primaryKey] = localData[primaryKey];
+                                                    await accountRef.set({
+                                                        data: localData,
+                                                        updated_at: firebase.database.ServerValue.TIMESTAMP
+                                                    });
+                                                } catch (e) {}
+                                                enabled = true;
+                                                if (onLoaded) onLoaded(localData, { source: 'local', syncEnabled: true, uploaded: true });
                                                 if (initialState) { initialState = false; resolve(); }
                                                 return;
                                             }
