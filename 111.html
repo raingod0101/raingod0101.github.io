@@ -2739,17 +2739,30 @@ if (show32) { adBtn32x.style.display= 'flex'; adBtn32x.textContent= `🎬 32×`;
 }, 8000);
   loadStealEggsSave().catch(e => {
     console.error('偷蛋初始化失敗', e);
+
+    // ★ 先從本機存檔恢復（而不是用 reset() 的空資料去覆蓋）
+    try {
+        const raw = localStorage.getItem(SAVE_KEY);
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && parsed.version === 17) {
+                applyLoadedData(parsed);
+                showToast('⚠️ 雲端載入失敗，已從本機恢復進度', '#8a5a2a', '#5a3a0a');
+            }
+        }
+    } catch (e2) { console.error('本機恢復失敗', e2); }
+
     buildIndexUI(); updateUI();
     __saveEnabled = true;
     fireInitOnce();
-  });
+});
   initEggSync();
   setTimeout(() => publishGlobalEggs(), 1500);
   initMultiplayer();
   requestAnimationFrame(loop);
   setInterval(updateUI,150);
   setInterval(()=>{if(S.indexOpen)buildIndexUI()},300);
-  setInterval(()=>{ if (__saveEnabled) saveGame(true); }, 15000);
+  setInterval(()=>{ if (__saveEnabled) saveGame(true); }, 5000);
   window.addEventListener('beforeunload',()=>{ if (__saveEnabled) saveGame(true); });
   (function setupAdminVisibility(){
     const btn = document.getElementById('testTriggerBtn');
