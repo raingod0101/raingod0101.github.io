@@ -586,11 +586,13 @@
 })();
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, set, onValue, onDisconnect, serverTimestamp, remove, runTransaction }
+import { getDatabase, ref, set, onValue, onDisconnect, serverTimestamp, remove, runTransaction,
+         push, query, onChildAdded, orderByChild, startAt }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 const firebaseApp = initializeApp({ databaseURL: "https://game-24b43-default-rtdb.firebaseio.com/" }, "gameApp");
 const db = getDatabase(firebaseApp);
-window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, runTransaction };
+window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, runTransaction,
+                push, query, onChildAdded, orderByChild, startAt };
 </script>
 <script type="module">
 (function(){
@@ -742,6 +744,167 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
       set(ref(db, 'global_eggs'), payload).catch(err => console.warn('publish eggs fail', err));
     } catch (e) { console.warn('publishGlobalEggs error', e); }
   }
+    // ═══════════════════════════════════════════════════════════
+  // P2：守衛同步（lock lease）+ 蛋事件流（push/onChildAdded）+ 遠端孵蛋器
+  // ═══════════════════════════════════════════════════════════
+  const GUARD_SYNC_MS = 250;
+  const EGG_EVENT_TTL  = 15000;
+  const HATCHERY_PUSH_MS = 1500;
+  const GUARD_LOCK_MS = 3000;   // 權威鎖 3 秒，避免閃爍
+
+  // ── 守衛權威：用 lock lease，鎖住就不換人 ──
+  const __guardLock = new Map(); // biomeIdx -> { owner, until }
+
+  function amIGuardAuthority(biomeIdx) {
+    const now = Date.now();
+    const lock = __guardLock.get(biomeIdx);
+    if (lock && lock.until > now) {
+      return lock.owner === PLAYER_ID;
+    }
+    // lock 過期 → 重新選最近的
+    const b = WORLD.biomes[biomeIdx];
+    if (!b) return false;
+    const myD = Math.abs(S.player.y - b.nestsY) + Math.abs(S.player.x - WORLD_W/2);
+    let bestD = myD, bestId = PLAYER_ID;
+    for (const rp of S.remotePlayers) {
+      if (typeof rp.y !== 'number' || typeof rp.x !== 'number') continue;
+      const d = Math.abs(rp.y - b.nestsY) + Math.abs(rp.x - WORLD_W/2);
+      if (d < bestD) { bestD = d; bestId = rp.id; }
+    }
+    __guardLock.set(biomeIdx, { owner: bestId, until: now + GUARD_LOCK_MS });
+    return bestId === PLAYER_ID;
+  }
+
+  function packGuards() {
+    const out = [];
+    for (const g of S.guards) {
+      if (!amIGuardAuthority(g.biomeIdx)) continue;
+      out.push({
+        bi: g.biomeIdx,
+        x: Math.round(g.x), y: Math.round(g.y),
+        sl: g.sleeping ? 1 : 0,
+        ch: g.chasing ? 1 : 0,
+        dp: g.dashPhase ? 1 : 0,
+        al: g.alert ? 1 : 0,
+        rt: g.returning ? 1 : 0,
+        w:  Math.round((g.wakeTimer || 0) * 10) / 10,
+      });
+    }
+    return out;
+  }
+
+  let __lastGuardPush = 0;
+  function pushGuards() {
+    try {
+      const { db, ref, set } = window.__FB;
+      if (!db) return;
+      const now = Date.now();
+      if (now - __lastGuardPush < GUARD_SYNC_MS) return;
+      __lastGuardPush = now;
+      const payload = {};
+      for (const g of packGuards()) payload[g.bi] = g;
+      set(ref(db, 'guards'), payload).catch(() => {});
+    } catch (e) {}
+  }
+
+  const REMOTE_GUARDS = new Map();
+
+  function initGuardSync() {
+    try {
+      const { db, ref, onValue } = window.__FB;
+      if (!db) return;
+      onValue(ref(db, 'guards'), snap => {
+        const data = snap.val() || {};
+        const now = Date.now();
+        REMOTE_GUARDS.clear();
+        for (const bi in data) {
+          const g = data[bi];
+          if (!g) continue;
+          // 只收「不是自己權威」的
+          if (amIGuardAuthority(parseInt(bi))) continue;
+          REMOTE_GUARDS.set(parseInt(bi), g);
+        }
+      });
+    } catch (e) { console.warn('initGuardSync error', e); }
+  }
+
+  // ── 蛋事件流：push + onChildAdded + startAt ──
+  function emitEggEvent(ev) {
+    try {
+      const { db, ref, push, set, serverTimestamp } = window.__FB;
+      if (!db || !push) return;
+      ev.t = Date.now();
+      ev.ts = serverTimestamp();
+      const node = push(ref(db, 'egg_events'));
+      set(node, ev).catch(() => {});
+    } catch (e) { console.warn('emitEggEvent error', e); }
+  }
+
+  const __eggEventSeen = new Set();
+
+  function initEggEventSync() {
+    try {
+      const { db, ref, onChildAdded, query, startAt, endAt, orderByChild, remove } = window.__FB;
+      if (!db || !query) return;
+
+      // 只收最近 15 秒（用 t 排序，onChildAdded 不會重推舊的）
+      const startT = Date.now() - EGG_EVENT_TTL;
+      const q = query(ref(db, 'egg_events'), orderByChild('t'), startAt(startT));
+
+      onChildAdded(q, snap => {
+        const ev = snap.val();
+        if (!ev) return;
+        const id = snap.key;
+        if (__eggEventSeen.has(id)) return;
+        if (Date.now() - (ev.t || 0) > EGG_EVENT_TTL) return;
+        __eggEventSeen.add(id);
+        applyRemoteEggEvent(ev);
+        // 收完立刻刪，保持節點乾淨
+        remove(snap.ref).catch(() => {});
+      });
+    } catch (e) { console.warn('initEggEventSync error', e); }
+  }
+
+  function applyRemoteEggEvent(ev) {
+    if (!ev || !ev.action) return;
+    if (ev.byId === PLAYER_ID) return;
+
+    const bInfo = (bi) => WORLD.biomes[bi] || { name:'?', icon:'', petNames:[] };
+
+    if (ev.action === 'steal') {
+      const egg = S.eggs.find(e => e.eggId === ev.eggId && !e.collected);
+      if (egg) egg.collected = true;
+      if (ev.by) {
+        const b = bInfo(ev.bi);
+        showToast(`🥚 ${ev.by} 偷走了 ${b.icon} ${b.petNames[ev.petIdx]||'蛋'}`, '#8a5a2a', '#5a3a0a');
+      }
+    }
+    else if (ev.action === 'drop' || ev.action === 'return' || ev.action === 'spawn') {
+      const exists = S.eggs.find(e => e.eggId === ev.eggId && !e.collected);
+      if (exists) {
+        exists.x = ev.x; exists.y = ev.y;
+        if (ev.secret) { exists.secret = true; exists.size = 'secret'; exists.mul = ev.mul || 6; }
+        return;
+      }
+      S.eggs.push({
+        eggId: ev.eggId, x: ev.x, y: ev.y, r: ev.r || (ev.secret ? 22 : 12),
+        size: ev.secret ? 'secret' : (ev.size || 'normal'),
+        mul: ev.mul || (ev.secret ? 6 : 1),
+        petIdx: ev.petIdx, biomeIdx: ev.bi,
+        collected: false, float: Math.random()*10,
+        origX: ev.x, origY: ev.y,
+        secret: !!ev.secret,
+      });
+      if (ev.action === 'drop' && ev.by) {
+        showToast(`💥 ${ev.by} 的蛋被打掉了！`, '#8a2a2a', '#5a0a0a');
+      }
+      if (ev.action === 'spawn' && ev.secret) {
+        const b = bInfo(ev.bi);
+        showToast(`🌟 秘密蛋出現：${b.icon} ${b.petNames[ev.petIdx]||'???'}`, '#8a3a8a', '#6a1a6a');
+      }
+    }
+  }
+  // ═══════════════════════════════════════════════════════════
   function initEggSync() {
   try {
     const { db, ref, onValue } = window.__FB;
@@ -785,7 +948,13 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
   // ═══════════════════════════════════════════════════════════
 
   function saveGame(silent){
-    if (!__saveEnabled) return;
+    if (!__saveEnabled) {
+      // 如果還沒啟用，但 localStorage 已有舊存檔，就允許寫入（避免離線孵蛋失效）
+      try {
+        const existing = localStorage.getItem(SAVE_KEY);
+        if (!existing) return;  // 真的全新玩家，先不寫
+      } catch (e) { return; }
+    }
 
     // ★★ 防歸零：本機已有非空存檔，而 S 是空狀態 → 拒絕寫入
     try {
@@ -830,7 +999,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
             biomeIdx:S.biomeIdx, discovered:[...IndexData.discovered], claimed:[...IndexData.claimed], sticks:S.sticks, petCap:S.petCap, myBaseIdx:S.myBaseIdx,
             equippedStick:S.equippedStick||null, ad2Step:S.ad2Step, ad4Step:S.ad4Step, ad8Step:S.ad8Step, ad16Step:S.ad16Step, ad32Step:S.ad32Step,
             doubleSpeed:!!S.doubleSpeed, quadSpeed:!!S.quadSpeed, subscriptionVerified:!!S.subscriptionVerified, trails:S.trails, equippedTrail:S.equippedTrail,
-            lastHatchTime:Date.now(), ts:Date.now(),
+            lastOnlineTime:Date.now(), ts:Date.now(),
             lastRefreshTime: S.lastRefreshTime || 0,
             eggState: {
                 eggs: S.eggs.filter(e=>!e.collected).map(e=>({ x:e.x, y:e.y, r:e.r, size:e.size, mul:e.mul, petIdx:e.petIdx, biomeIdx:e.biomeIdx, secret:!!e.secret, origX:e.origX, origY:e.origY, eggId:e.eggId })),
@@ -892,7 +1061,10 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
       S.hatchery.push({
         id:Math.random().toString(36).slice(2),
         name:h.name,inc:h.inc,rar:h.rar,biomeIdx:h.biomeIdx,petIdx:h.petIdx,
-        size:h.size,timer:h.timer,total:h.total,finished:!!h.finished,secret:!!h.secret,
+        size:h.size,
+        timer: Number.isFinite(h.timer) ? h.timer : 0,
+        total: Number.isFinite(h.total) ? h.total : 1,
+        finished:!!h.finished,secret:!!h.secret,
         favorite:!!h.favorite,mutations:h.mutations||{},
         x:hp.x,y:hp.y
       });
@@ -1712,28 +1884,40 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
       set(mePosRef, { x: Math.round(S.player.x), y: Math.round(S.player.y), t: serverTimestamp() }).catch(() => {});
     }, 80);
     let lastInfoHash = '';
-    function pushInfo(force) {
+        function pushInfo(force) {
       const info = {
         name: S.playerName, baseIdx: S.myBaseIdx,
         displaySpeed: Math.round(S.player.displaySpeed),
         biomeIdx: S.biomeIdx,
         pets: S.pets.slice(0, 20).map(p => ({ name: p.name, biomeIdx: p.biomeIdx, petIdx: p.petIdx, size: p.size, rar: p.rar, inc: p.inc })),
+        hatchery: S.hatchery.slice(0, 12).map(h => ({
+          bi: h.biomeIdx, pi: h.petIdx, sz: h.size,
+          tm: Math.ceil(Math.max(0, h.timer)), tt: Math.ceil(h.total),
+          fi: h.finished ? 1 : 0, fv: h.favorite ? 1 : 0,
+          x: Math.round(h.x), y: Math.round(h.y),
+        })),
         online: true, lastSeen: serverTimestamp()
       };
       const hash = JSON.stringify(info);
       if (force || hash !== lastInfoHash) { lastInfoHash = hash; set(meInfoRef, info).catch(() => {}); }
     }
     pushInfo(true);
-    setInterval(() => pushInfo(false), 1000);
+    setInterval(() => pushInfo(false), HATCHERY_PUSH_MS);
     let lastStateHash = '';
     function pushState(force) {
       const st = {
-        carry: S.player.carry ? { biomeIdx: S.player.carry.biomeIdx, petIdx: S.player.carry.petIdx, size: S.player.carry.size, eggId: S.player.carry.eggId || null } : null,
+        carry: S.player.carry ? {
+          biomeIdx: S.player.carry.biomeIdx, petIdx: S.player.carry.petIdx,
+          size: S.player.carry.size, eggId: S.player.carry.eggId || null,
+          secret: !!S.player.carry.secret,
+        } : null,
         equippedStick: S.equippedStick, equippedTrail: S.equippedTrail, facing: S.player.facing || 1
       };
       const hash = JSON.stringify(st);
       if (force || hash !== lastStateHash) { lastStateHash = hash; set(meStateRef, st).catch(() => {}); }
     }
+    // ★ 暴露給外部呼叫，偷蛋/掉蛋時立刻推
+    window.__raingodPushState = () => pushState(true);
     pushState(true);
     setInterval(() => pushState(false), 500);
     onDisconnect(meInfoRef).update({ online: false });
@@ -1910,11 +2094,18 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
       if (!v || Date.now() - (v.t || 0) > 3000) return;
       if (v.fx !== undefined || v.fy !== undefined) triggerKnockback(v.fx || 400, v.fy || -400);
       // ★ 只有在非安全區（偷蛋區）才會被搶蛋；安全區內蛋不會掉
-      if (v.stealEgg && S.player.carry && S.player.y < S.safeLineY) {
+            if (v.stealEgg && S.player.carry && S.player.y < S.safeLineY) {
         const drop = S.player.carry; S.player.carry = null; S.tensionActive = false;
         const dropX = clamp(S.player.x + rnd(-40, 40), 30, WORLD_W - 30); const dropY = clamp(S.player.y + rnd(-40, 40), MIN_Y, MAX_Y);
         S.eggs.push({ ...drop, x: dropX, y: dropY, collected: false, origX: dropX, origY: dropY });
         try { const { db: _db, ref: _ref, set: _set } = window.__FB; if (drop.eggId) _set(_ref(_db, 'global_eggs/' + drop.eggId), { collected: false, bi: drop.biomeIdx, t: Date.now() }); } catch (e) {}
+        if (drop.eggId) {
+          emitEggEvent({
+            action:'drop', eggId: drop.eggId, bi: drop.biomeIdx, petIdx: drop.petIdx,
+            size: drop.size, r: drop.r, mul: drop.mul,
+            x: Math.round(dropX), y: Math.round(dropY), by: v.by || '玩家', byId: v.byId,
+          });
+        }
         showToast(`💥 ${v.by || '玩家'} 用【${v.byStickName || '棒子'}】搶走了你的蛋！\n🥚 蛋掉在地上了！`, '#8a2a2a', '#5a0a0a');
         updateUI(); saveGame(true); return;
       }
@@ -2010,8 +2201,15 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
         const b=WORLD.biomes[bi]; const pi = Math.random()<0.5?6:7;
         let nx, attempts = 0; do { nx = (Math.random() * 0.6 + 0.2) * WORLD_W; attempts++; } while (usedPositions.some(p => Math.abs(p - nx) < 80) && attempts < 10);
         usedPositions.push(nx);
-        const egg = { x:nx,y:b.nestsY+rnd(-20,20), r:22,size:'secret',mul:6,petIdx:pi,biomeIdx:bi, collected:false,float:Math.random()*10,origX:nx,origY:b.nestsY, secret:true };
-        S.eggs.push(egg); spawned.push(`🌟 ${b.petNames[pi]} 出生在 ${b.icon}${b.name}（秘密）`);
+        const eggId = 'secret_' + bi + '_' + pi + '_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+        const egg = { eggId, x:nx,y:b.nestsY+rnd(-20,20), r:22,size:'secret',mul:6,petIdx:pi,biomeIdx:bi, collected:false,float:Math.random()*10,origX:nx,origY:b.nestsY, secret:true };
+        S.eggs.push(egg);
+        emitEggEvent({
+          action:'spawn', eggId, bi, petIdx:pi, secret:true, mul:6,
+          x: Math.round(nx), y: Math.round(egg.y), r:22, size:'secret',
+          by:'系統', byId:'system',
+        });
+        spawned.push(`🌟 ${b.petNames[pi]} 出生在 ${b.icon}${b.name}（秘密）`);
       }
     }
     spawned.forEach((msg, i) => { setTimeout(() => showToast(msg, '#8a3a8a', '#6a1a6a'), i * 600); });
@@ -2035,6 +2233,11 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
       const { db: _db, ref: _ref, set: _set } = window.__FB;
       _set(_ref(_db, 'global_eggs/' + drop.eggId), { collected: false, bi: drop.biomeIdx, t: Date.now() }).catch(()=>{});
     } catch(e) {}
+    emitEggEvent({
+      action:'drop', eggId: drop.eggId, bi: drop.biomeIdx, petIdx: drop.petIdx,
+      size: drop.size, r: drop.r, mul: drop.mul,
+      x: Math.round(dropX), y: Math.round(dropY), by: S.playerName, byId: PLAYER_ID,
+    });
   }
   p.carry = null; S.tensionActive = false;
   const bPos = getBasePos(S.myBaseIdx);
@@ -2131,7 +2334,16 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
         if(!S.night && p.carry && p.carry.biomeIdx === g.biomeIdx && !g.sleeping){ g.returning=false;g.chasing=true;g.alert=true; const playerBiome = getBiomeIndex(p.y); const guardBiome = getBiomeIndex(g.y); if(guardBiome !== playerBiome){ g.dashPhase=true;g.dashTimer=1.2; } }
         if(dist(g.x, g.y, g.sleepX, g.sleepY) < 30){
           g.returning=false;g.sleeping=true;g.alert=false;g.wakeTimer=0; g.x=g.sleepX;g.y=g.sleepY;
-          for(const e of S.eggs){ if(!e.collected && e.biomeIdx === g.biomeIdx && dist(e.x, e.y, g.sleepX, g.sleepY) < 300){ e.x = e.origX; e.y = e.origY; } }
+          for(const e of S.eggs){
+            if(!e.collected && e.biomeIdx === g.biomeIdx && dist(e.x, e.y, g.sleepX, g.sleepY) < 300){
+              e.x = e.origX; e.y = e.origY;
+              if (e.eggId) emitEggEvent({
+                action:'return', eggId:e.eggId, bi:e.biomeIdx, petIdx:e.petIdx,
+                size:e.size, r:e.r, mul:e.mul,
+                x:Math.round(e.origX), y:Math.round(e.origY), by:'守衛', byId:'guard_'+g.biomeIdx,
+              });
+            }
+          }
         }
       }
       else {
@@ -2161,6 +2373,11 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
   if(gBiome === eggBiome){
     dropX = drop.origX||g.sleepX; dropY = drop.origY||g.sleepY;
     S.eggs.push({...drop, x:dropX, y:dropY, collected:false, origX:dropX, origY:dropY});
+    if (drop.eggId) emitEggEvent({
+      action:'return', eggId:drop.eggId, bi:drop.biomeIdx, petIdx:drop.petIdx,
+      size:drop.size, r:drop.r, mul:drop.mul,
+      x:Math.round(dropX), y:Math.round(dropY), by:'守衛', byId:'guard_'+g.biomeIdx,
+    });
     showToast('🥚 守衛把蛋放回原位了！','#8a3a3a','#6a1a1a');
   } else {
     dropX = p.x+rnd(-20,20); dropY = p.y+rnd(-20,20);
@@ -2280,6 +2497,7 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
     for(const e of S.eggs)if(!e.collected)drawEgg(e);
     safeHook(HOOKS.onDrawWorld, ctx, W, H);
     for(const g of S.guards)drawGuard(g);
+    drawRemoteGuards();
     drawBases();
     const currentTrail = TRAIL_DEFS.find(t => t.id === S.equippedTrail);
     if (currentTrail) drawTrailPath(ctx, S.playerPath, currentTrail, S.time);
@@ -2294,6 +2512,43 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
     if(!S.remotePlayers)return;
     for(const rp of S.remotePlayers){
       if(rp.baseIdx === undefined) continue;
+
+      // ★ 遠端孵蛋器
+      if (Array.isArray(rp.hatchery)) {
+        rp.hatchery.forEach(h => {
+          const sp = worldToScreen(h.x, h.y);
+          if (sp.y < -30 || sp.y > H+30) return;
+          ctx.save();
+          ctx.translate(sp.x, sp.y);
+          ctx.scale(S.zoom, S.zoom);
+          const rar = (WORLD.petRarity[h.bi] && WORLD.petRarity[h.bi][h.pi]) || 0;
+          const rc = WORLD.rarities[rar].c;
+          const sizeR = h.sz === 'giant' ? 22 : (h.sz === 'huge' ? 16 : (h.sz === 'secret' ? 22 : 12));
+          if (h.fi) {
+            const jump = Math.sin(S.time * 8) * 3;
+            ctx.save(); ctx.translate(0, jump - 5);
+            drawEggShape(ctx, { biomeIdx: h.bi, petIdx: h.pi, size: h.sz, rar }, sizeR, S.time, rc);
+            ctx.restore();
+            ctx.font='900 11px "Segoe UI"'; ctx.textAlign='center';
+            if (h.fv) { ctx.fillStyle='#ff80c0'; ctx.shadowBlur=8; ctx.shadowColor='#e040a0'; ctx.fillText('❤️', 0, -28); }
+            else      { ctx.fillStyle='#ffe040'; ctx.shadowBlur=8; ctx.shadowColor='#ffaa00'; ctx.fillText('✨', 0, -28); }
+            ctx.shadowBlur=0;
+          } else {
+            drawEggShape(ctx, { biomeIdx: h.bi, petIdx: h.pi, size: h.sz, rar }, sizeR, S.time, rc);
+            const prog = h.tt > 0 ? 1 - Math.max(0, h.tm) / h.tt : 0;
+            const barW=36, barH=5, barX=-barW/2, barY=24;
+            ctx.fillStyle='rgba(0,0,0,0.4)'; ctx.fillRect(barX,barY,barW,barH);
+            ctx.fillStyle= prog>=1?'#40e040':'#ffcc40'; ctx.fillRect(barX,barY,barW*prog,barH);
+            ctx.strokeStyle='rgba(255,255,255,0.6)'; ctx.lineWidth=1; ctx.strokeRect(barX,barY,barW,barH);
+            ctx.font='800 9px "Segoe UI"'; ctx.fillStyle='#fff'; ctx.textAlign='center';
+            ctx.shadowBlur=4; ctx.shadowColor='#000';
+            ctx.fillText(Math.ceil(Math.max(0,h.tm))+'s', 0, barY+barH+11);
+            ctx.shadowBlur=0;
+          }
+          ctx.restore();
+        });
+      }
+
       if(Array.isArray(rp.pets)){
         if (S.zoom < 0.55) continue;
         rp.pets.forEach((p, idx) => {
@@ -2309,7 +2564,19 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
       const sp = worldToScreen(rp.x, rp.y); if(sp.y < -50 || sp.y > H+50) return;
       ctx.save(); ctx.translate(sp.x, sp.y); ctx.scale(S.zoom, S.zoom); ctx.globalAlpha = 0.85;
       drawStickFigure(ctx, 0, 0, 15, S.time, rp.facing || 1, 0); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
-      if (rp.carry) { ctx.save(); ctx.translate(0, -30); ctx.scale(0.65, 0.65); const rr = WORLD.petRarity[rp.carry.biomeIdx][rp.carry.petIdx]; const rc = WORLD.rarities[rr].c; drawEggShape(ctx, {...rp.carry, rar: rr}, 12, S.time, rc); ctx.restore(); }
+      if (rp.carry) {
+        ctx.save(); ctx.translate(0, -30); ctx.scale(0.65, 0.65);
+        const rr = (WORLD.petRarity[rp.carry.biomeIdx] && WORLD.petRarity[rp.carry.biomeIdx][rp.carry.petIdx]) || 0;
+        const rc = WORLD.rarities[rr].c;
+        drawEggShape(ctx, {...rp.carry, rar: rr, secret: !!rp.carry.secret}, 12, S.time, rc);
+        ctx.restore();
+        // 小偷浮動文字
+        const b = WORLD.biomes[rp.carry.biomeIdx] || { petNames:[] };
+        ctx.font='800 10px "Segoe UI"'; ctx.fillStyle='#ffdd44'; ctx.textAlign='center';
+        ctx.shadowBlur=6; ctx.shadowColor='#000';
+        ctx.fillText('🥚 ' + (b.petNames[rp.carry.petIdx] || '蛋'), 0, -50);
+        ctx.shadowBlur=0;
+      }
       if (rp.equippedStick) { const def = getStickDef(rp.equippedStick); if (def) { ctx.save(); ctx.translate(12, 0); drawStickIcon(ctx, def, 14, 0); ctx.restore(); } }
       const rpTrail = TRAIL_DEFS.find(t => t.id === (rp.equippedTrail || 'trail_basic')); if (rpTrail) drawTrailOnPlayer(ctx, rp, rpTrail, S.time);
       ctx.fillStyle = '#fff'; ctx.font = 'bold 11px "Segoe UI"'; ctx.textAlign = 'center'; ctx.fillText(rp.name || '玩家', 0, -22); ctx.restore();
@@ -2337,7 +2604,15 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
   function drawEgg(e){
     const sp=worldToScreen(e.x,e.y); if(sp.y<-50||sp.y>H+50)return;
     const rar=WORLD.petRarity[e.biomeIdx][e.petIdx];const rc=WORLD.rarities[rar].c; const sc=S.zoom;
-    ctx.save(); ctx.translate(sp.x, sp.y); ctx.scale(sc, sc); drawEggShape(ctx, {...e, rar}, e.r, S.time, rc);
+    ctx.save(); ctx.translate(sp.x, sp.y); ctx.scale(sc, sc);
+    if (e.secret) {
+      const glow = ctx.createRadialGradient(0, 0, e.r*0.5, 0, 0, e.r*3);
+      glow.addColorStop(0, 'rgba(255,200,255,0.7)');
+      glow.addColorStop(1, 'rgba(255,100,255,0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath(); ctx.arc(0, 0, e.r*3, 0, 7); ctx.fill();
+    }
+    drawEggShape(ctx, {...e, rar}, e.r, S.time, rc);
     if(!S.player.carry && dist(S.player.x, S.player.y, e.x, e.y) < 120 && !S.night) { ctx.fillStyle = '#fff'; ctx.font = 'bold 14px "Segoe UI"'; ctx.textAlign = 'center'; ctx.shadowBlur = 6; ctx.shadowColor = '#000'; ctx.fillText('👋 點擊拾取', 0, -e.r * 1.8 - 10); }
     ctx.restore();
   }
@@ -2356,6 +2631,37 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
     if(g.dashPhase){ ctx.font='900 18px "Segoe UI"';ctx.fillStyle='#80d0ff'; ctx.shadowBlur=12;ctx.shadowColor='#00aaff';ctx.textAlign='center'; ctx.fillText('>>>',0,-g.r-14);ctx.shadowBlur=0; }
     if(g.returning){ ctx.font='900 16px "Segoe UI"';ctx.fillStyle='#ffdd44'; ctx.shadowBlur=10;ctx.shadowColor='#ffaa00';ctx.textAlign='center'; ctx.fillText('...',0,-g.r-14);ctx.shadowBlur=0; }
     ctx.restore();
+  }
+  function drawRemoteGuards() {
+    for (const [bi, rg] of REMOTE_GUARDS) {
+      if (amIGuardAuthority(bi)) continue;
+      const sp = worldToScreen(rg.x, rg.y);
+      if (sp.y < -80 || sp.y > H + 80) continue;
+      const size = 1 + bi * 0.12;
+      ctx.save();
+      ctx.translate(sp.x, sp.y);
+      ctx.scale(S.zoom * size, S.zoom * size);
+      if (rg.dp) { const pulse = Math.sin(S.time*15)*0.4+0.6; ctx.shadowBlur=35; ctx.shadowColor=`rgba(100,200,255,${pulse})`; }
+      else if (rg.ch && rg.al) { const pulse = Math.sin(S.time*8)*0.3+0.7; ctx.shadowBlur=30; ctx.shadowColor=`rgba(255,50,50,${pulse})`; }
+      else if (rg.rt) { ctx.shadowBlur=18; ctx.shadowColor='rgba(255,200,50,0.6)'; }
+      drawGuardAnimal(ctx, bi, 18, S.time, !!rg.al);
+      ctx.shadowBlur = 0;
+      if (rg.sl) {
+        ctx.font='bold 16px "Segoe UI"'; ctx.fillStyle='#a0c0ff'; ctx.textAlign='center';
+        const zP = Math.sin(S.time*2)*4;
+        ctx.fillText('z', -12, -24 + zP);
+      }
+      if (rg.al && !rg.sl) {
+        ctx.font='900 22px "Segoe UI"'; ctx.fillStyle='#ffcc00';
+        ctx.shadowBlur=14; ctx.shadowColor='#ff8800'; ctx.textAlign='center';
+        ctx.fillText('!', 0, -28); ctx.shadowBlur=0;
+      }
+      if (rg.dp) {
+        ctx.font='900 18px "Segoe UI"'; ctx.fillStyle='#80d0ff'; ctx.textAlign='center';
+        ctx.shadowBlur=12; ctx.shadowColor='#00aaff'; ctx.fillText('>>>', 0, -28); ctx.shadowBlur=0;
+      }
+      ctx.restore();
+    }
   }
   function drawPlayer(){
     const p=S.player;const sp=worldToScreen(p.x,p.y);const sc=S.zoom;
@@ -2467,9 +2773,14 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
         if(egg.collected) continue;
         if(dist(w.x, w.y, egg.x, egg.y) < egg.r + 40){
           if(dist(S.player.x, S.player.y, egg.x, egg.y) < 120){
-            tryCollectEggRemote(egg.eggId, S.playerName).then(ok => {
+                        tryCollectEggRemote(egg.eggId, S.playerName).then(ok => {
               if (!ok) { showToast('🥚 這顆蛋已經被別人搶走了！', '#8a2a2a', '#5a0a0a'); egg.collected = true; return; }
               egg.collected = true; S.player.carry = {...egg}; S.tensionActive = true;
+              emitEggEvent({
+                action:'steal', eggId: egg.eggId, bi: egg.biomeIdx, petIdx: egg.petIdx,
+                size: egg.size, by: S.playerName, byId: PLAYER_ID,
+              });
+              window.__raingodPushState && window.__raingodPushState();
               for(const g of S.guards){ if(g.biomeIdx===egg.biomeIdx && g.sleeping){ g.wakeTimer=0.2; } }
               updateUI();
             });
@@ -2689,19 +3000,55 @@ if (show32) { adBtn32x.style.display= 'flex'; adBtn32x.textContent= `🎬 32×`;
             try { applyLoadedData(data); } catch (e) { console.warn('應用存檔失敗', e); }
         }
 
-        // 離線孵化
-        if (data && data.lastHatchTime) {
-            const offlineSec = (Date.now() - data.lastHatchTime) / 1000;
-            if (offlineSec > 0) {
+        // 離線孵化（日夜分開算，並套用軌跡倍率）
+        const lastOnline = (data && (data.lastOnlineTime || data.lastHatchTime)) || 0;
+        if (lastOnline > 0 && Date.now() > lastOnline) {
+            const offlineMs = Date.now() - lastOnline;
+            const offlineSec = offlineMs / 1000;
+            if (offlineSec > 1) {
+                // 計算離線期間「白天秒數」與「夜晚秒數」
+                let daySec = 0, nightSec = 0;
+                let cursor = lastOnline;
+                const now = Date.now();
+                const cycleStart = Math.floor(cursor / FULL_CYCLE) * FULL_CYCLE;
+                // 從 cursor 走到 now，逐段判斷日夜
+                let t = cursor;
+                while (t < now) {
+                    const phase = t % FULL_CYCLE;
+                    const remainInCycle = FULL_CYCLE - phase;
+                    const step = Math.min(remainInCycle, now - t);
+                    if (phase < DAY_MS) {
+                        // 這步在白天
+                        const dayRemain = DAY_MS - phase;
+                        if (step <= dayRemain) { daySec += step / 1000; t += step; }
+                        else { daySec += dayRemain / 1000; t += dayRemain; }
+                    } else {
+                        // 這步在夜晚
+                        nightSec += step / 1000;
+                        t += step;
+                    }
+                }
+
+                // 計算離線期間的平均倍率
+                const trail = TRAIL_DEFS.find(tr => tr.id === S.equippedTrail);
+                const trailMul = trail ? trail.mult : 1;
+                const mutationMul = S.mutationHatchMultiplier || 1;
+
+                const dayMul = trailMul * mutationMul;
+                const nightMul = trailMul * mutationMul * 10;
+                const totalMulSec = daySec * dayMul + nightSec * nightMul;
+
                 let hatched = 0;
                 for (let i = S.hatchery.length - 1; i >= 0; i--) {
                     const h = S.hatchery[i];
                     if (!h.finished) {
-                        h.timer -= offlineSec * getHatchMultiplier();
+                        h.timer -= totalMulSec;
                         if (h.timer <= 0) { h.timer = 0; h.finished = true; hatched++; }
                     }
                 }
-                if (hatched > 0) showToast(`🌙 離線期間孵化了 ${hatched} 顆蛋！`, '#3a6a8a', '#1a3a5a');
+                if (hatched > 0) {
+                    showToast(`🌙 離線 ${Math.floor(offlineSec/60)} 分鐘，孵化了 ${hatched} 顆蛋！`, '#3a6a8a', '#1a3a5a');
+                }
             }
         }
 
@@ -2734,7 +3081,8 @@ if (show32) { adBtn32x.style.display= 'flex'; adBtn32x.textContent= `🎬 32×`;
 }
   setTimeout(() => {
     if (!__saveEnabled) {
-        console.warn('[保底] 讀檔超過 8 秒尚未完成，暫不啟用存檔，避免覆蓋真實進度');
+        console.warn('[保底] 讀檔超過 8 秒尚未完成，強制啟用存檔（避免離線孵蛋永遠不生效）');
+        __saveEnabled = true;
     }
 }, 8000);
   loadStealEggsSave().catch(e => {
@@ -2757,12 +3105,15 @@ if (show32) { adBtn32x.style.display= 'flex'; adBtn32x.textContent= `🎬 32×`;
     fireInitOnce();
 });
   initEggSync();
+  initEggEventSync();
+  initGuardSync();
   setTimeout(() => publishGlobalEggs(), 1500);
   initMultiplayer();
+  setInterval(pushGuards, GUARD_SYNC_MS);
   requestAnimationFrame(loop);
   setInterval(updateUI,150);
   setInterval(()=>{if(S.indexOpen)buildIndexUI()},300);
-  setInterval(()=>{ if (__saveEnabled) saveGame(true); }, 5000);
+  setInterval(()=>{ if (__saveEnabled) saveGame(true); }, 2000);    // 切到背景 / 關頁面時存檔（記錄離線時間）   document.addEventListener('visibilitychange', () => {     if (document.visibilityState === 'hidden' && __saveEnabled) {       saveGame(true);     }   });
   window.addEventListener('beforeunload',()=>{ if (__saveEnabled) saveGame(true); });
   (function setupAdminVisibility(){
     const btn = document.getElementById('testTriggerBtn');
