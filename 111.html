@@ -743,14 +743,23 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
     } catch (e) { console.warn('publishGlobalEggs error', e); }
   }
     // ═══════════════════════════════════════════════════════════
-  // P2：守衛同步 + 蛋事件流 + 遠端孵蛋器
+  // P2：守衛同步（lock lease）+ 蛋事件流（push/onChildAdded）+ 遠端孵蛋器
   // ═══════════════════════════════════════════════════════════
   const GUARD_SYNC_MS = 250;
   const EGG_EVENT_TTL  = 15000;
   const HATCHERY_PUSH_MS = 1500;
+  const GUARD_LOCK_MS = 3000;   // 權威鎖 3 秒，避免閃爍
 
-  // ── 守衛權威判斷：距離該 biome 中心最近的玩家負責計算 ──
+  // ── 守衛權威：用 lock lease，鎖住就不換人 ──
+  const __guardLock = new Map(); // biomeIdx -> { owner, until }
+
   function amIGuardAuthority(biomeIdx) {
+    const now = Date.now();
+    const lock = __guardLock.get(biomeIdx);
+    if (lock && lock.until > now) {
+      return lock.owner === PLAYER_ID;
+    }
+    // lock 過期 → 重新選最近的
     const b = WORLD.biomes[biomeIdx];
     if (!b) return false;
     const myD = Math.abs(S.player.y - b.nestsY) + Math.abs(S.player.x - WORLD_W/2);
@@ -760,6 +769,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
       const d = Math.abs(rp.y - b.nestsY) + Math.abs(rp.x - WORLD_W/2);
       if (d < bestD) { bestD = d; bestId = rp.id; }
     }
+    __guardLock.set(biomeIdx, { owner: bestId, until: now + GUARD_LOCK_MS });
     return bestId === PLAYER_ID;
   }
 
@@ -803,87 +813,92 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
       if (!db) return;
       onValue(ref(db, 'guards'), snap => {
         const data = snap.val() || {};
+        const now = Date.now();
         REMOTE_GUARDS.clear();
-        for (const bi in data) REMOTE_GUARDS.set(parseInt(bi), data[bi]);
+        for (const bi in data) {
+          const g = data[bi];
+          if (!g) continue;
+          // 只收「不是自己權威」的
+          if (amIGuardAuthority(parseInt(bi))) continue;
+          REMOTE_GUARDS.set(parseInt(bi), g);
+        }
       });
     } catch (e) { console.warn('initGuardSync error', e); }
   }
 
-  // ── 蛋事件流：steal / drop / return ──
+  // ── 蛋事件流：push + onChildAdded + startAt ──
   function emitEggEvent(ev) {
     try {
-      const { db, ref, set } = window.__FB;
-      if (!db) return;
-      const id = 'ev_' + ev.action + '_' + (ev.eggId || Math.random().toString(36).slice(2,8)) + '_' + Date.now() + '_' + Math.random().toString(36).slice(2,5);
+      const { db, ref, push, set, serverTimestamp } = window.__FB;
+      if (!db || !push) return;
       ev.t = Date.now();
-      set(ref(db, 'egg_events/' + id), ev).catch(() => {});
-    } catch (e) {}
+      ev.ts = serverTimestamp();
+      const node = push(ref(db, 'egg_events'));
+      set(node, ev).catch(() => {});
+    } catch (e) { console.warn('emitEggEvent error', e); }
   }
 
-  let __eggEventCache = {};
   const __eggEventSeen = new Set();
 
   function initEggEventSync() {
     try {
-      const { db, ref, onValue, remove } = window.__FB;
-      if (!db) return;
-      onValue(ref(db, 'egg_events'), snap => {
-        __eggEventCache = snap.val() || {};
-        const now = Date.now();
-        for (const id in __eggEventCache) {
-          const ev = __eggEventCache[id];
-          if (!ev || __eggEventSeen.has(id)) continue;
-          if (now - (ev.t || 0) > EGG_EVENT_TTL) continue;
-          __eggEventSeen.add(id);
-          applyRemoteEggEvent(ev);
-        }
-        if (__eggEventSeen.size > 2000) __eggEventSeen.clear();
+      const { db, ref, onChildAdded, query, startAt, endAt, orderByChild, remove } = window.__FB;
+      if (!db || !query) return;
+
+      // 只收最近 15 秒（用 t 排序，onChildAdded 不會重推舊的）
+      const startT = Date.now() - EGG_EVENT_TTL;
+      const q = query(ref(db, 'egg_events'), orderByChild('t'), startAt(startT));
+
+      onChildAdded(q, snap => {
+        const ev = snap.val();
+        if (!ev) return;
+        const id = snap.key;
+        if (__eggEventSeen.has(id)) return;
+        if (Date.now() - (ev.t || 0) > EGG_EVENT_TTL) return;
+        __eggEventSeen.add(id);
+        applyRemoteEggEvent(ev);
+        // 收完立刻刪，保持節點乾淨
+        remove(snap.ref).catch(() => {});
       });
-      setInterval(() => {
-        const now = Date.now();
-        for (const id in __eggEventCache) {
-          if (now - (__eggEventCache[id].t || 0) > EGG_EVENT_TTL) {
-            remove(ref(db, 'egg_events/' + id)).catch(() => {});
-          }
-        }
-      }, 10000);
     } catch (e) { console.warn('initEggEventSync error', e); }
   }
 
   function applyRemoteEggEvent(ev) {
     if (!ev || !ev.action) return;
-    if (ev.byId === PLAYER_ID) return; // 自己發的略過
+    if (ev.byId === PLAYER_ID) return;
+
+    const bInfo = (bi) => WORLD.biomes[bi] || { name:'?', icon:'', petNames:[] };
 
     if (ev.action === 'steal') {
       const egg = S.eggs.find(e => e.eggId === ev.eggId && !e.collected);
       if (egg) egg.collected = true;
       if (ev.by) {
-        const b = WORLD.biomes[ev.bi] || { name:'?', icon:'', petNames:[] };
+        const b = bInfo(ev.bi);
         showToast(`🥚 ${ev.by} 偷走了 ${b.icon} ${b.petNames[ev.petIdx]||'蛋'}`, '#8a5a2a', '#5a3a0a');
       }
     }
-    else if (ev.action === 'drop') {
-      if (S.eggs.some(e => e.eggId === ev.eggId && !e.collected)) return;
+    else if (ev.action === 'drop' || ev.action === 'return' || ev.action === 'spawn') {
+      const exists = S.eggs.find(e => e.eggId === ev.eggId && !e.collected);
+      if (exists) {
+        exists.x = ev.x; exists.y = ev.y;
+        if (ev.secret) { exists.secret = true; exists.size = 'secret'; exists.mul = ev.mul || 6; }
+        return;
+      }
       S.eggs.push({
-        eggId: ev.eggId, x: ev.x, y: ev.y, r: ev.r || 12,
-        size: ev.size || 'normal', mul: ev.mul || 1,
+        eggId: ev.eggId, x: ev.x, y: ev.y, r: ev.r || (ev.secret ? 22 : 12),
+        size: ev.secret ? 'secret' : (ev.size || 'normal'),
+        mul: ev.mul || (ev.secret ? 6 : 1),
         petIdx: ev.petIdx, biomeIdx: ev.bi,
         collected: false, float: Math.random()*10,
         origX: ev.x, origY: ev.y,
+        secret: !!ev.secret,
       });
-      if (ev.by) showToast(`💥 ${ev.by} 的蛋被打掉了！`, '#8a2a2a', '#5a0a0a');
-    }
-    else if (ev.action === 'return') {
-      const egg = S.eggs.find(e => e.eggId === ev.eggId && !e.collected);
-      if (egg) { egg.x = ev.x; egg.y = ev.y; }
-      else {
-        S.eggs.push({
-          eggId: ev.eggId, x: ev.x, y: ev.y, r: ev.r || 12,
-          size: ev.size || 'normal', mul: ev.mul || 1,
-          petIdx: ev.petIdx, biomeIdx: ev.bi,
-          collected: false, float: Math.random()*10,
-          origX: ev.x, origY: ev.y,
-        });
+      if (ev.action === 'drop' && ev.by) {
+        showToast(`💥 ${ev.by} 的蛋被打掉了！`, '#8a2a2a', '#5a0a0a');
+      }
+      if (ev.action === 'spawn' && ev.secret) {
+        const b = bInfo(ev.bi);
+        showToast(`🌟 秘密蛋出現：${b.icon} ${b.petNames[ev.petIdx]||'???'}`, '#8a3a8a', '#6a1a6a');
       }
     }
   }
