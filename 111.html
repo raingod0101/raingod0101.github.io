@@ -586,11 +586,13 @@
 })();
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, set, onValue, onDisconnect, serverTimestamp, remove, runTransaction }
+import { getDatabase, ref, set, onValue, onDisconnect, serverTimestamp, remove, runTransaction,
+         push, query, onChildAdded, orderByChild, startAt }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 const firebaseApp = initializeApp({ databaseURL: "https://game-24b43-default-rtdb.firebaseio.com/" }, "gameApp");
 const db = getDatabase(firebaseApp);
-window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, runTransaction };
+window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, runTransaction,
+                push, query, onChildAdded, orderByChild, startAt };
 </script>
 <script type="module">
 (function(){
@@ -2190,8 +2192,15 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
         const b=WORLD.biomes[bi]; const pi = Math.random()<0.5?6:7;
         let nx, attempts = 0; do { nx = (Math.random() * 0.6 + 0.2) * WORLD_W; attempts++; } while (usedPositions.some(p => Math.abs(p - nx) < 80) && attempts < 10);
         usedPositions.push(nx);
-        const egg = { x:nx,y:b.nestsY+rnd(-20,20), r:22,size:'secret',mul:6,petIdx:pi,biomeIdx:bi, collected:false,float:Math.random()*10,origX:nx,origY:b.nestsY, secret:true };
-        S.eggs.push(egg); spawned.push(`🌟 ${b.petNames[pi]} 出生在 ${b.icon}${b.name}（秘密）`);
+        const eggId = 'secret_' + bi + '_' + pi + '_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+        const egg = { eggId, x:nx,y:b.nestsY+rnd(-20,20), r:22,size:'secret',mul:6,petIdx:pi,biomeIdx:bi, collected:false,float:Math.random()*10,origX:nx,origY:b.nestsY, secret:true };
+        S.eggs.push(egg);
+        emitEggEvent({
+          action:'spawn', eggId, bi, petIdx:pi, secret:true, mul:6,
+          x: Math.round(nx), y: Math.round(egg.y), r:22, size:'secret',
+          by:'系統', byId:'system',
+        });
+        spawned.push(`🌟 ${b.petNames[pi]} 出生在 ${b.icon}${b.name}（秘密）`);
       }
     }
     spawned.forEach((msg, i) => { setTimeout(() => showToast(msg, '#8a3a8a', '#6a1a6a'), i * 600); });
@@ -2546,7 +2555,19 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
       const sp = worldToScreen(rp.x, rp.y); if(sp.y < -50 || sp.y > H+50) return;
       ctx.save(); ctx.translate(sp.x, sp.y); ctx.scale(S.zoom, S.zoom); ctx.globalAlpha = 0.85;
       drawStickFigure(ctx, 0, 0, 15, S.time, rp.facing || 1, 0); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
-      if (rp.carry) { ctx.save(); ctx.translate(0, -30); ctx.scale(0.65, 0.65); const rr = WORLD.petRarity[rp.carry.biomeIdx][rp.carry.petIdx]; const rc = WORLD.rarities[rr].c; drawEggShape(ctx, {...rp.carry, rar: rr}, 12, S.time, rc); ctx.restore(); }
+      if (rp.carry) {
+        ctx.save(); ctx.translate(0, -30); ctx.scale(0.65, 0.65);
+        const rr = (WORLD.petRarity[rp.carry.biomeIdx] && WORLD.petRarity[rp.carry.biomeIdx][rp.carry.petIdx]) || 0;
+        const rc = WORLD.rarities[rr].c;
+        drawEggShape(ctx, {...rp.carry, rar: rr, secret: !!rp.carry.secret}, 12, S.time, rc);
+        ctx.restore();
+        // 小偷浮動文字
+        const b = WORLD.biomes[rp.carry.biomeIdx] || { petNames:[] };
+        ctx.font='800 10px "Segoe UI"'; ctx.fillStyle='#ffdd44'; ctx.textAlign='center';
+        ctx.shadowBlur=6; ctx.shadowColor='#000';
+        ctx.fillText('🥚 ' + (b.petNames[rp.carry.petIdx] || '蛋'), 0, -50);
+        ctx.shadowBlur=0;
+      }
       if (rp.equippedStick) { const def = getStickDef(rp.equippedStick); if (def) { ctx.save(); ctx.translate(12, 0); drawStickIcon(ctx, def, 14, 0); ctx.restore(); } }
       const rpTrail = TRAIL_DEFS.find(t => t.id === (rp.equippedTrail || 'trail_basic')); if (rpTrail) drawTrailOnPlayer(ctx, rp, rpTrail, S.time);
       ctx.fillStyle = '#fff'; ctx.font = 'bold 11px "Segoe UI"'; ctx.textAlign = 'center'; ctx.fillText(rp.name || '玩家', 0, -22); ctx.restore();
@@ -2574,7 +2595,15 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
   function drawEgg(e){
     const sp=worldToScreen(e.x,e.y); if(sp.y<-50||sp.y>H+50)return;
     const rar=WORLD.petRarity[e.biomeIdx][e.petIdx];const rc=WORLD.rarities[rar].c; const sc=S.zoom;
-    ctx.save(); ctx.translate(sp.x, sp.y); ctx.scale(sc, sc); drawEggShape(ctx, {...e, rar}, e.r, S.time, rc);
+    ctx.save(); ctx.translate(sp.x, sp.y); ctx.scale(sc, sc);
+    if (e.secret) {
+      const glow = ctx.createRadialGradient(0, 0, e.r*0.5, 0, 0, e.r*3);
+      glow.addColorStop(0, 'rgba(255,200,255,0.7)');
+      glow.addColorStop(1, 'rgba(255,100,255,0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath(); ctx.arc(0, 0, e.r*3, 0, 7); ctx.fill();
+    }
+    drawEggShape(ctx, {...e, rar}, e.r, S.time, rc);
     if(!S.player.carry && dist(S.player.x, S.player.y, e.x, e.y) < 120 && !S.night) { ctx.fillStyle = '#fff'; ctx.font = 'bold 14px "Segoe UI"'; ctx.textAlign = 'center'; ctx.shadowBlur = 6; ctx.shadowColor = '#000'; ctx.fillText('👋 點擊拾取', 0, -e.r * 1.8 - 10); }
     ctx.restore();
   }
@@ -2742,6 +2771,7 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
                 action:'steal', eggId: egg.eggId, bi: egg.biomeIdx, petIdx: egg.petIdx,
                 size: egg.size, by: S.playerName, byId: PLAYER_ID,
               });
+              window.__raingodPushState && window.__raingodPushState();
               for(const g of S.guards){ if(g.biomeIdx===egg.biomeIdx && g.sleeping){ g.wakeTimer=0.2; } }
               updateUI();
             });
