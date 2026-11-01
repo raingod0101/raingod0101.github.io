@@ -948,7 +948,13 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
   // ═══════════════════════════════════════════════════════════
 
   function saveGame(silent){
-    if (!__saveEnabled) return;
+    if (!__saveEnabled) {
+      // 如果還沒啟用，但 localStorage 已有舊存檔，就允許寫入（避免離線孵蛋失效）
+      try {
+        const existing = localStorage.getItem(SAVE_KEY);
+        if (!existing) return;  // 真的全新玩家，先不寫
+      } catch (e) { return; }
+    }
 
     // ★★ 防歸零：本機已有非空存檔，而 S 是空狀態 → 拒絕寫入
     try {
@@ -993,7 +999,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
             biomeIdx:S.biomeIdx, discovered:[...IndexData.discovered], claimed:[...IndexData.claimed], sticks:S.sticks, petCap:S.petCap, myBaseIdx:S.myBaseIdx,
             equippedStick:S.equippedStick||null, ad2Step:S.ad2Step, ad4Step:S.ad4Step, ad8Step:S.ad8Step, ad16Step:S.ad16Step, ad32Step:S.ad32Step,
             doubleSpeed:!!S.doubleSpeed, quadSpeed:!!S.quadSpeed, subscriptionVerified:!!S.subscriptionVerified, trails:S.trails, equippedTrail:S.equippedTrail,
-            lastHatchTime:Date.now(), ts:Date.now(),
+            lastOnlineTime:Date.now(), ts:Date.now(),
             lastRefreshTime: S.lastRefreshTime || 0,
             eggState: {
                 eggs: S.eggs.filter(e=>!e.collected).map(e=>({ x:e.x, y:e.y, r:e.r, size:e.size, mul:e.mul, petIdx:e.petIdx, biomeIdx:e.biomeIdx, secret:!!e.secret, origX:e.origX, origY:e.origY, eggId:e.eggId })),
@@ -1055,7 +1061,10 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
       S.hatchery.push({
         id:Math.random().toString(36).slice(2),
         name:h.name,inc:h.inc,rar:h.rar,biomeIdx:h.biomeIdx,petIdx:h.petIdx,
-        size:h.size,timer:h.timer,total:h.total,finished:!!h.finished,secret:!!h.secret,
+        size:h.size,
+        timer: Number.isFinite(h.timer) ? h.timer : 0,
+        total: Number.isFinite(h.total) ? h.total : 1,
+        finished:!!h.finished,secret:!!h.secret,
         favorite:!!h.favorite,mutations:h.mutations||{},
         x:hp.x,y:hp.y
       });
@@ -2991,19 +3000,55 @@ if (show32) { adBtn32x.style.display= 'flex'; adBtn32x.textContent= `🎬 32×`;
             try { applyLoadedData(data); } catch (e) { console.warn('應用存檔失敗', e); }
         }
 
-        // 離線孵化
-        if (data && data.lastHatchTime) {
-            const offlineSec = (Date.now() - data.lastHatchTime) / 1000;
-            if (offlineSec > 0) {
+        // 離線孵化（日夜分開算，並套用軌跡倍率）
+        const lastOnline = (data && (data.lastOnlineTime || data.lastHatchTime)) || 0;
+        if (lastOnline > 0 && Date.now() > lastOnline) {
+            const offlineMs = Date.now() - lastOnline;
+            const offlineSec = offlineMs / 1000;
+            if (offlineSec > 1) {
+                // 計算離線期間「白天秒數」與「夜晚秒數」
+                let daySec = 0, nightSec = 0;
+                let cursor = lastOnline;
+                const now = Date.now();
+                const cycleStart = Math.floor(cursor / FULL_CYCLE) * FULL_CYCLE;
+                // 從 cursor 走到 now，逐段判斷日夜
+                let t = cursor;
+                while (t < now) {
+                    const phase = t % FULL_CYCLE;
+                    const remainInCycle = FULL_CYCLE - phase;
+                    const step = Math.min(remainInCycle, now - t);
+                    if (phase < DAY_MS) {
+                        // 這步在白天
+                        const dayRemain = DAY_MS - phase;
+                        if (step <= dayRemain) { daySec += step / 1000; t += step; }
+                        else { daySec += dayRemain / 1000; t += dayRemain; }
+                    } else {
+                        // 這步在夜晚
+                        nightSec += step / 1000;
+                        t += step;
+                    }
+                }
+
+                // 計算離線期間的平均倍率
+                const trail = TRAIL_DEFS.find(tr => tr.id === S.equippedTrail);
+                const trailMul = trail ? trail.mult : 1;
+                const mutationMul = S.mutationHatchMultiplier || 1;
+
+                const dayMul = trailMul * mutationMul;
+                const nightMul = trailMul * mutationMul * 10;
+                const totalMulSec = daySec * dayMul + nightSec * nightMul;
+
                 let hatched = 0;
                 for (let i = S.hatchery.length - 1; i >= 0; i--) {
                     const h = S.hatchery[i];
                     if (!h.finished) {
-                        h.timer -= offlineSec * getHatchMultiplier();
+                        h.timer -= totalMulSec;
                         if (h.timer <= 0) { h.timer = 0; h.finished = true; hatched++; }
                     }
                 }
-                if (hatched > 0) showToast(`🌙 離線期間孵化了 ${hatched} 顆蛋！`, '#3a6a8a', '#1a3a5a');
+                if (hatched > 0) {
+                    showToast(`🌙 離線 ${Math.floor(offlineSec/60)} 分鐘，孵化了 ${hatched} 顆蛋！`, '#3a6a8a', '#1a3a5a');
+                }
             }
         }
 
@@ -3036,7 +3081,8 @@ if (show32) { adBtn32x.style.display= 'flex'; adBtn32x.textContent= `🎬 32×`;
 }
   setTimeout(() => {
     if (!__saveEnabled) {
-        console.warn('[保底] 讀檔超過 8 秒尚未完成，暫不啟用存檔，避免覆蓋真實進度');
+        console.warn('[保底] 讀檔超過 8 秒尚未完成，強制啟用存檔（避免離線孵蛋永遠不生效）');
+        __saveEnabled = true;
     }
 }, 8000);
   loadStealEggsSave().catch(e => {
@@ -3067,7 +3113,7 @@ if (show32) { adBtn32x.style.display= 'flex'; adBtn32x.textContent= `🎬 32×`;
   requestAnimationFrame(loop);
   setInterval(updateUI,150);
   setInterval(()=>{if(S.indexOpen)buildIndexUI()},300);
-  setInterval(()=>{ if (__saveEnabled) saveGame(true); }, 5000);
+  setInterval(()=>{ if (__saveEnabled) saveGame(true); }, 2000);    // 切到背景 / 關頁面時存檔（記錄離線時間）   document.addEventListener('visibilitychange', () => {     if (document.visibilityState === 'hidden' && __saveEnabled) {       saveGame(true);     }   });
   window.addEventListener('beforeunload',()=>{ if (__saveEnabled) saveGame(true); });
   (function setupAdminVisibility(){
     const btn = document.getElementById('testTriggerBtn');
