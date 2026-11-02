@@ -87,13 +87,10 @@
     }
 
     // ★★★ 新增：管理員面板 —— 產生臨時密碼 ★★★
+    // ★★★ 修改：管理員面板 ★★★
     async function openAdminPanel() {
         if (!isCurrentUserAdmin()) {
             alert('只有管理員可以使用此功能。');
-            return;
-        }
-        if (!window.raingodSecretDb) {
-            alert('secret 資料庫尚未初始化，請重新整理頁面。');
             return;
         }
         const uname = prompt('請輸入要重設密碼的使用者名稱：');
@@ -101,23 +98,27 @@
         await resetUserPassword(uname.trim().toLowerCase());
     }
 
-    // ★★★ 新增：為指定使用者產生臨時密碼並寫入 secret DB ★★★
+    // ★★★ 修改：產生臨時密碼 ★★★
     async function resetUserPassword(uname) {
         if (!isCurrentUserAdmin()) { alert('只有管理員可以使用此功能。'); return; }
         if (!/^[a-zA-Z0-9]+$/.test(uname)) { alert('帳號格式不合。'); return; }
+        
         const db = window.raingodSecretDb;
         try {
-            const accSnap = await db.ref('accounts/' + uname).once('value');
+            // 檢查帳號是否存在
+            const accSnap = await db.ref('secret_accounts/' + uname).once('value');
             const acc = accSnap.val();
             if (!acc || !acc.uid) {
                 alert('查無此帳號：' + uname);
                 return;
             }
 
+            // 產生臨時密碼
             const tmpPass = Math.random().toString(36).slice(-4)
                           + Math.random().toString(36).slice(-4);
 
-            await db.ref('accounts/' + uname + '/reset').set({
+            // 寫入 reset 標記
+            await db.ref('secret_accounts/' + uname + '/reset').set({
                 tmpPass,
                 ts: firebase.database.ServerValue.TIMESTAMP,
                 by: ADMIN_USERNAME
@@ -135,17 +136,19 @@
         }
     }
 
-    // ★★★ 新增：使用者登入失敗時，嘗試套用管理員設定的臨時密碼 ★★★
+    // ★★★ 修改：檢查並套用臨時密碼 ★★★
     async function tryApplyTempPassword(username, email) {
         if (!window.raingodSecretDb) return false;
         try {
             const db = window.raingodSecretDb;
-            const resetSnap = await db.ref('accounts/' + username + '/reset').once('value');
+            // 讀取 reset 標記
+            const resetSnap = await db.ref('secret_accounts/' + username + '/reset').once('value');
             const reset = resetSnap.val();
             if (!reset || !reset.tmpPass) return false;
 
             let cred;
             try {
+                // 用臨時密碼登入
                 cred = await firebase.auth()
                     .signInWithEmailAndPassword(email, reset.tmpPass);
             } catch (e) {
@@ -153,6 +156,7 @@
                 return false;
             }
 
+            // 登入成功 → 要求設定新密碼
             const newPass = prompt(
                 '管理員已為您設定臨時密碼。\n請設定新的密碼（至少 6 位）：'
             );
@@ -167,8 +171,10 @@
             }
 
             try {
+                // 使用者更新密碼
                 await cred.user.updatePassword(newPass);
-                await db.ref('accounts/' + username + '/reset').remove();
+                // 清除 reset 標記
+                await db.ref('secret_accounts/' + username + '/reset').remove();
                 alert('密碼已更新成功！請使用新密碼登入。');
                 await firebase.auth().signOut();
             } catch (e) {
@@ -1062,7 +1068,6 @@
                 }
                 const email = `${cleanUser}@raingod.app`;
                 firebase.auth().createUserWithEmailAndPassword(email, password)
-                    // ★★★ 修改：註冊成功後寫入 secret DB 的帳號索引 ★★★
                     .then(async userCredential => {
                         deviceRef.set({
                             username: cleanUser,
@@ -1072,14 +1077,15 @@
 
                         try {
                             if (window.raingodSecretDb) {
-                                await window.raingodSecretDb.ref('accounts/' + cleanUser).set({
+                                // ★★★ 改寫入主專案的 secret_accounts ★★★
+                                await window.raingodSecretDb.ref('secret_accounts/' + cleanUser).set({
                                     uid: userCredential.user.uid,
                                     username: cleanUser,
                                     created_at: firebase.database.ServerValue.TIMESTAMP
                                 });
                             }
                         } catch (e) {
-                            console.warn('secret DB 帳號索引寫入失敗（不影響註冊）：', e);
+                            console.warn('帳號索引寫入失敗（不影響註冊）：', e);
                         }
 
                         alert("帳號註冊成功，已自動為您登入！");
@@ -1094,7 +1100,6 @@
         }
     }
 
-    // --- 初始化系統 ---
     function initSystem() {
         if (!firebase.apps.length) {
             firebase.initializeApp({
@@ -1109,19 +1114,11 @@
             });
         }
 
-        // ★★★ 新增：初始化 secret 資料庫（同專案第二個 app 實例）★★★
-        try {
-            if (!firebase.apps.find(a => a.name === 'secret')) {
-                firebase.initializeApp({
-                    databaseURL: "https://secret-e0976-default-rtdb.firebaseio.com"
-                }, "secret");
-            }
-            window.raingodSecretDb = firebase.app('secret').database();
-        } catch (e) {
-            console.error('secret 資料庫初始化失敗：', e);
-        }
+        // ★★★ 改為主專案的 database 實例 ★★★
+        window.raingodSecretDb = firebase.database();
 
         installStorageSync();
+        // ... 下面保持不變
         markFirebaseReady();
         let authReadyResolved = false;
 
