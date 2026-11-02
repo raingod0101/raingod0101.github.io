@@ -124,50 +124,56 @@
         window.raingodAdminResetPassword(uname);
     };
 
-    // ★★★ 使用者登入時自動套用臨時密碼 ★★★
     async function tryApplyTempPassword(username, email) {
         if (!window.raingodSecretDb) return false;
         try {
             const db = window.raingodSecretDb;
             const resetSnap = await db.ref('secret_accounts/' + username + '/reset').once('value');
             const reset = resetSnap.val();
-            if (!reset || !reset.tmpPass) return false;
+            
+            // ★ 檢查 1：有沒有抓到 reset 資料？
+            if (!reset || !reset.tmpPass) {
+                alert('【除錯】在 secret_accounts 找不到 ' + username + ' 的 reset 資料！');
+                return false;
+            }
+            
+            alert('【除錯】找到臨時密碼：' + reset.tmpPass + '\n準備嘗試登入...');
 
             let cred;
             try {
                 cred = await firebase.auth().signInWithEmailAndPassword(email, reset.tmpPass);
             } catch (e) {
-                console.warn('臨時密碼登入失敗：', e);
+                // ★ 檢查 2：臨時密碼登入失敗
+                alert('【除錯】用臨時密碼登入失敗！\n錯誤代碼：' + e.code + '\n錯誤訊息：' + e.message);
                 return false;
             }
 
+            // ★ 登入成功，要求設定新密碼
             const newPass = prompt('管理員已為您設定臨時密碼。\n請設定新的密碼（至少 6 位）：');
             if (!newPass || newPass.length < 6) {
-                alert('密碼太短，請重新登入再設定。');
+                alert('【除錯】密碼太短，取消設定。');
                 return true;
             }
             const confirm = prompt('請再次輸入新密碼以確認：');
             if (newPass !== confirm) {
-                alert('兩次輸入不一致，請重新登入再設定。');
+                alert('【除錯】兩次輸入不一致，取消設定。');
                 return true;
             }
 
             try {
                 await cred.user.updatePassword(newPass);
                 await db.ref('secret_accounts/' + username + '/reset').remove();
-                alert('密碼已更新成功！請使用新密碼登入。');
+                alert('✅ 密碼已更新成功！請使用新密碼登入。');
                 await firebase.auth().signOut();
             } catch (e) {
-                console.error('更新密碼失敗：', e);
-                alert('更新密碼失敗，請聯繫管理員。\n' + e.message);
+                alert('【除錯】更新密碼失敗！\n' + e.message);
             }
             return true;
         } catch (e) {
-            console.warn('檢查臨時密碼失敗：', e);
+            alert('【除錯】讀取資料庫發生例外：\n' + e.message);
             return false;
         }
     }
-
     // ★★★ 遊戲本機 key 白名單（這些不進入帳號資料、不被清空）★★★
     const GAME_LOCAL_KEYS = new Set([
         'steal_an_egg_v17',
