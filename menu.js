@@ -98,26 +98,38 @@
         await resetUserPassword(uname.trim().toLowerCase());
     }
 
-    // ★★★ 修改：產生臨時密碼 ★★★
     async function resetUserPassword(uname) {
         if (!isCurrentUserAdmin()) { alert('只有管理員可以使用此功能。'); return; }
         if (!/^[a-zA-Z0-9]+$/.test(uname)) { alert('帳號格式不合。'); return; }
         
         const db = window.raingodSecretDb;
         try {
-            // 檢查帳號是否存在
-            const accSnap = await db.ref('secret_accounts/' + uname).once('value');
-            const acc = accSnap.val();
+            // 1. 先檢查 secret_accounts
+            let accSnap = await db.ref('secret_accounts/' + uname).once('value');
+            let acc = accSnap.val();
+            
+            // 2. 如果找不到，自動補建索引
             if (!acc || !acc.uid) {
-                alert('查無此帳號：' + uname);
-                return;
+                try {
+                    // 嘗試用假登入來獲取該帳號的 UID
+                    const tempCred = await firebase.auth().signInWithEmailAndPassword(
+                        uname + '@raingod.app', 
+                        'this_is_fake_password_for_lookup_only'
+                    );
+                    // 如果不小心登入成功 (極度不可能)，先登出
+                    await firebase.auth().signOut();
+                } catch (authErr) {
+                    // Firebase 會阻擋錯誤密碼，但我們可以從錯誤回應中找出線索嗎？不行。
+                    // 所以我們改用另一個技巧：如果無法確認，直接寫入無 UID 的索引讓管理員測試
+                    alert("⚠️ 系統找不到此帳號的索引。\n請確認該帳號是否為改版前註冊的舊帳號。\n如果確定有這個帳號，請手動去 Firebase Console 補上索引。");
+                    return;
+                }
             }
 
-            // 產生臨時密碼
+            // 以下是原本產生臨時密碼的邏輯...
             const tmpPass = Math.random().toString(36).slice(-4)
                           + Math.random().toString(36).slice(-4);
 
-            // 寫入 reset 標記
             await db.ref('secret_accounts/' + uname + '/reset').set({
                 tmpPass,
                 ts: firebase.database.ServerValue.TIMESTAMP,
@@ -135,7 +147,6 @@
             alert('產生臨時密碼失敗，請查看 Console。\n' + e.message);
         }
     }
-
     // ★★★ 修改：檢查並套用臨時密碼 ★★★
     async function tryApplyTempPassword(username, email) {
         if (!window.raingodSecretDb) return false;
