@@ -95,7 +95,7 @@
         if (!db) { alert('資料庫未初始化'); return; }
 
         try {
-            const tmpPass = Math.random().toString(36).slice(-4) + Math.random().toString(36).slice(-4);
+            const tmpPass = Math.floor(100000 + Math.random() * 900000).toString();
 
             // 直接寫入，不檢查是否存在
             await db.ref('secret_accounts/' + cleanUser + '/reset').set({
