@@ -175,6 +175,8 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
 .reader-pop .r-item:last-child,.member-pop .r-item:last-child{border-bottom:none}
 .reader-pop .r-item img,.member-pop .r-item img{width:26px;height:26px;border-radius:50%;object-fit:cover}
 .reader-pop .r-title,.member-pop .r-title{font-weight:700;margin-bottom:6px;color:var(--text-gray);font-size:12px}
+
+/* ===== 頭像裁剪器 ===== */
 .crop-modal{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.6);
   display:flex;align-items:center;justify-content:center;padding:16px}
 .crop-dialog{background:#fff;border-radius:16px;padding:18px;width:min(360px,100%);
@@ -185,13 +187,13 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
 .crop-stage:active{cursor:grabbing}
 .crop-stage img{position:absolute;left:0;top:0;transform-origin:0 0;
   user-select:none;-webkit-user-drag:none;pointer-events:none;max-width:none}
-.crop-mask{position:absolute;inset:0;pointer-events:none;
-  box-shadow:0 0 0 9999px rgba(0,0,0,.45) inset;
-  border-radius:12px}
+.crop-mask{position:absolute;inset:0;pointer-events:none;border-radius:12px;
+  box-shadow:0 0 0 9999px rgba(0,0,0,.45) inset}
 .crop-mask::after{content:'';position:absolute;left:50%;top:50%;
   width:82%;height:82%;transform:translate(-50%,-50%);
   border:2px dashed rgba(255,255,255,.9);border-radius:50%}
 .crop-actions{display:flex;gap:10px;justify-content:flex-end}
+
 @media (max-width:640px){
   .chat-sidebar{display:none}
   .chat-mobile-picker{display:block}
@@ -232,7 +234,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
             <button id="avatar-edit-btn" class="avatar-edit-btn" type="button" title="更換頭像">✎</button>
           </div>
           <div>
-            <p class="profile-help">點擊右下角鉛筆更換頭像，儲存後會同步到帳號資料庫。</p>
+            <p class="profile-help">點擊右下角鉛筆更換頭像，可拖動與縮放調整後儲存。</p>
             <input id="avatar-file-input" type="file" accept="image/*" class="hidden">
           </div>
         </div>
@@ -358,6 +360,22 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
         </div>
       </div>
     </section>
+  </div>
+</div>
+
+<!-- 頭像裁剪彈窗 -->
+<div id="avatar-crop-modal" class="crop-modal hidden">
+  <div class="crop-dialog">
+    <h3>調整頭像</h3>
+    <div class="crop-stage" id="crop-stage">
+      <img id="crop-img" alt="">
+      <div class="crop-mask"></div>
+    </div>
+    <input id="crop-zoom" type="range" min="1" max="3" step="0.01" value="1">
+    <div class="crop-actions">
+      <button type="button" class="profile-button secondary" id="crop-cancel">取消</button>
+      <button type="button" class="profile-button" id="crop-confirm">確定</button>
+    </div>
   </div>
 </div>
 
@@ -608,167 +626,174 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     }
   }
 
-  // ===== 頭像 =====
-  avatarEditBtn.addEventListener('click',function(){ avatarFileInput.click(); });
-// ===== 頭像裁剪上傳 =====
-var cropModal   = document.getElementById('avatar-crop-modal');
-var cropStage   = document.getElementById('crop-stage');
-var cropImg     = document.getElementById('crop-img');
-var cropZoom    = document.getElementById('crop-zoom');
-var cropCancel  = document.getElementById('crop-cancel');
-var cropConfirm = document.getElementById('crop-confirm');
+  // ===== 頭像裁剪上傳 =====
+  var cropModal   = document.getElementById('avatar-crop-modal');
+  var cropStage   = document.getElementById('crop-stage');
+  var cropImg     = document.getElementById('crop-img');
+  var cropZoom    = document.getElementById('crop-zoom');
+  var cropCancel  = document.getElementById('crop-cancel');
+  var cropConfirm = document.getElementById('crop-confirm');
 
-var cropState = {
-  img: null,        // 原始 Image 对象
-  baseScale: 1,     // 铺满裁剪框的初始缩放
-  scale: 1,         // 当前缩放
-  x: 0, y: 0,       // 图片左上角相对裁剪框的偏移
-  stageSize: 0,
-  dragging: false,
-  startX: 0, startY: 0, originX: 0, originY: 0
-};
-
-function openCropModal(file){
-  var url = URL.createObjectURL(file);
-  var img = new Image();
-  img.onload = function(){
-    // 处理 EXIF 方向：用 createImageBitmap 可自动按 EXIF 方向解码
-    // 为兼容性，先尝试 createImageBitmap，失败则用原图
-    var proceed = function(sourceImg, w, h){
-      cropState.img = sourceImg;
-      cropState.stageSize = cropStage.clientWidth;
-      cropState.baseScale = Math.max(cropState.stageSize / w, cropState.stageSize / h);
-      cropState.scale = 1;
-      cropState.x = (cropState.stageSize - w * cropState.baseScale) / 2;
-      cropState.y = (cropState.stageSize - h * cropState.baseScale) / 2;
-      cropImg.src = sourceImg.src;
-      cropImg.style.width = w + 'px';
-      cropImg.style.height = h + 'px';
-      applyCropTransform();
-      cropZoom.value = 1;
-      cropModal.classList.remove('hidden');
-      URL.revokeObjectURL(url);
-    };
-
-    if(window.createImageBitmap){
-      fetch(url).then(function(r){ return r.blob(); })
-        .then(function(blob){
-          return createImageBitmap(blob, { imageOrientation: 'from-image' });
-        })
-        .then(function(bmp){
-          // 用 canvas 把 bitmap 转成可用的 img src
-          var c = document.createElement('canvas');
-          c.width = bmp.width; c.height = bmp.height;
-          c.getContext('2d').drawImage(bmp, 0, 0);
-          var fixed = new Image();
-          fixed.onload = function(){ proceed(fixed, bmp.width, bmp.height); };
-          fixed.src = c.toDataURL('image/jpeg', 0.95);
-        })
-        .catch(function(){ proceed(img, img.naturalWidth, img.naturalHeight); });
-    }else{
-      proceed(img, img.naturalWidth, img.naturalHeight);
-    }
+  var cropState = {
+    img: null,
+    baseScale: 1,
+    scale: 1,
+    x: 0, y: 0,
+    stageSize: 0,
+    dragging: false,
+    startX: 0, startY: 0, originX: 0, originY: 0
   };
-  img.onerror = function(){ URL.revokeObjectURL(url); setStatus('avatar-status','圖片解碼失敗。','error'); };
-  img.src = url;
-}
 
-function applyCropTransform(){
-  var s = cropState.baseScale * cropState.scale;
-  cropImg.style.transform = 'translate(' + cropState.x + 'px,' + cropState.y + 'px) scale(' + (s / (cropState.baseScale)) + ')';
-  // 注意：上面用 scale 会以 transform-origin:0 0 缩放，需配合偏移计算
-  // 更稳妥的做法：直接用 width/height 控制缩放
-  cropImg.style.width  = (cropState.img.naturalWidth  * s) + 'px';
-  cropImg.style.height = (cropState.img.naturalHeight * s) + 'px';
-  cropImg.style.transform = 'translate(' + cropState.x + 'px,' + cropState.y + 'px)';
-}
+  function openCropModal(file){
+    var url = URL.createObjectURL(file);
+    var img = new Image();
+    img.onload = function(){
+      var proceed = function(sourceImg, w, h){
+        cropState.img = sourceImg;
+        cropState.stageSize = cropStage.clientWidth;
+        cropState.baseScale = Math.max(cropState.stageSize / w, cropState.stageSize / h);
+        cropState.scale = 1;
+        cropState.x = (cropState.stageSize - w * cropState.baseScale) / 2;
+        cropState.y = (cropState.stageSize - h * cropState.baseScale) / 2;
+        cropImg.src = sourceImg.src;
+        cropImg.style.width  = w + 'px';
+        cropImg.style.height = h + 'px';
+        applyCropTransform();
+        cropZoom.value = 1;
+        cropModal.classList.remove('hidden');
+        URL.revokeObjectURL(url);
+      };
 
-// 拖动
-function onPointerDown(e){
-  cropState.dragging = true;
-  var p = e.touches ? e.touches[0] : e;
-  cropState.startX = p.clientX; cropState.startY = p.clientY;
-  cropState.originX = cropState.x; cropState.originY = cropState.y;
-  e.preventDefault();
-}
-function onPointerMove(e){
-  if(!cropState.dragging) return;
-  var p = e.touches ? e.touches[0] : e;
-  cropState.x = cropState.originX + (p.clientX - cropState.startX);
-  cropState.y = cropState.originY + (p.clientY - cropState.startY);
-  clampCrop();
-  applyCropTransform();
-  e.preventDefault();
-}
-function onPointerUp(){ cropState.dragging = false; }
+      if(window.createImageBitmap){
+        fetch(url).then(function(r){ return r.blob(); })
+          .then(function(blob){
+            return createImageBitmap(blob, { imageOrientation: 'from-image' });
+          })
+          .then(function(bmp){
+            var c = document.createElement('canvas');
+            c.width = bmp.width; c.height = bmp.height;
+            c.getContext('2d').drawImage(bmp, 0, 0);
+            var fixed = new Image();
+            fixed.onload = function(){ proceed(fixed, bmp.width, bmp.height); };
+            fixed.src = c.toDataURL('image/jpeg', 0.95);
+          })
+          .catch(function(){ proceed(img, img.naturalWidth, img.naturalHeight); });
+      }else{
+        proceed(img, img.naturalWidth, img.naturalHeight);
+      }
+    };
+    img.onerror = function(){
+      URL.revokeObjectURL(url);
+      setStatus('avatar-status','圖片解碼失敗。','error');
+    };
+    img.src = url;
+  }
 
-function clampCrop(){
-  var s = cropState.baseScale * cropState.scale;
-  var iw = cropState.img.naturalWidth * s;
-  var ih = cropState.img.naturalHeight * s;
-  var st = cropState.stageSize;
-  // 图片必须覆盖整个裁剪框
-  if(iw <= st) cropState.x = (st - iw) / 2;
-  else cropState.x = Math.min(0, Math.max(st - iw, cropState.x));
-  if(ih <= st) cropState.y = (st - ih) / 2;
-  else cropState.y = Math.min(0, Math.max(st - ih, cropState.y));
-}
+  function applyCropTransform(){
+    var s = cropState.baseScale * cropState.scale;
+    cropImg.style.width  = (cropState.img.naturalWidth  * s) + 'px';
+    cropImg.style.height = (cropState.img.naturalHeight * s) + 'px';
+    cropImg.style.transform = 'translate(' + cropState.x + 'px,' + cropState.y + 'px)';
+  }
 
-cropStage.addEventListener('mousedown', onPointerDown);
-cropStage.addEventListener('touchstart', onPointerDown, { passive:false });
-window.addEventListener('mousemove', onPointerMove);
-window.addEventListener('touchmove', onPointerMove, { passive:false });
-window.addEventListener('mouseup', onPointerUp);
-window.addEventListener('touchend', onPointerUp);
+  function clampCrop(){
+    var s = cropState.baseScale * cropState.scale;
+    var iw = cropState.img.naturalWidth  * s;
+    var ih = cropState.img.naturalHeight * s;
+    var st = cropState.stageSize;
+    if(iw <= st) cropState.x = (st - iw) / 2;
+    else cropState.x = Math.min(0, Math.max(st - iw, cropState.x));
+    if(ih <= st) cropState.y = (st - ih) / 2;
+    else cropState.y = Math.min(0, Math.max(st - ih, cropState.y));
+  }
 
-cropZoom.addEventListener('input', function(){
-  cropState.scale = parseFloat(cropZoom.value);
-  clampCrop();
-  applyCropTransform();
-});
+  function onCropPointerDown(e){
+    if(!cropState.img) return;
+    cropState.dragging = true;
+    var p = e.touches ? e.touches[0] : e;
+    cropState.startX = p.clientX; cropState.startY = p.clientY;
+    cropState.originX = cropState.x; cropState.originY = cropState.y;
+    e.preventDefault();
+  }
+  function onCropPointerMove(e){
+    if(!cropState.dragging) return;
+    var p = e.touches ? e.touches[0] : e;
+    cropState.x = cropState.originX + (p.clientX - cropState.startX);
+    cropState.y = cropState.originY + (p.clientY - cropState.startY);
+    clampCrop();
+    applyCropTransform();
+    e.preventDefault();
+  }
+  function onCropPointerUp(){ cropState.dragging = false; }
 
-cropCancel.addEventListener('click', function(){
-  cropModal.classList.add('hidden');
-});
+  cropStage.addEventListener('mousedown', onCropPointerDown);
+  cropStage.addEventListener('touchstart', onCropPointerDown, { passive:false });
+  window.addEventListener('mousemove', onCropPointerMove);
+  window.addEventListener('touchmove', onCropPointerMove, { passive:false });
+  window.addEventListener('mouseup', onCropPointerUp);
+  window.addEventListener('touchend', onCropPointerUp);
 
-cropConfirm.addEventListener('click', function(){
-  if(!cropState.img) return;
-  var size = 320;
-  var canvas = document.createElement('canvas');
-  canvas.width = size; canvas.height = size;
-  var ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#fff'; ctx.fillRect(0,0,size,size);
+  cropZoom.addEventListener('input', function(){
+    if(!cropState.img) return;
+    cropState.scale = parseFloat(cropZoom.value);
+    clampCrop();
+    applyCropTransform();
+  });
 
-  var st = cropState.stageSize;
-  var s = cropState.baseScale * cropState.scale;
-  // 将裁剪框映射到 320x320
-  var ratio = size / st;
-  var sx = (-cropState.x) / s;          // 原图坐标
-  var sy = (-cropState.y) / s;
-  var sw = st / s;
-  var sh = st / s;
-  ctx.drawImage(cropState.img, sx, sy, sw, sh, 0, 0, size, size);
-
-  var dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-  setStatus('avatar-status','正在上傳頭像…');
-  db().ref('users/'+currentUsername+'/profile/avatar').set(dataUrl, function(err){
-    if(err){ setStatus('avatar-status','頭像儲存失敗：'+errorMessage(err),'error'); return; }
-    avatarImg.src = dataUrl; currentAvatar = dataUrl;
-    setStatus('avatar-status','頭像已更新並儲存。','ok');
-    refreshFriendsUI(); updateMyMessageAvatars();
+  cropCancel.addEventListener('click', function(){
     cropModal.classList.add('hidden');
   });
-});
 
-// 替换原来的 change 事件
-avatarFileInput.addEventListener('change', function(){
-  var file = avatarFileInput.files && avatarFileInput.files[0];
-  if(!file) return;
-  if(file.type.indexOf('image/') !== 0){ setStatus('avatar-status','請選擇圖片檔案。','error'); return; }
-  if(file.size > 10*1024*1024){ setStatus('avatar-status','圖片需小於 10MB。','error'); return; }
-  openCropModal(file);
-  avatarFileInput.value = '';
-});
+  cropConfirm.addEventListener('click', function(){
+    if(!cropState.img) return;
+    var size = 320;
+    var canvas = document.createElement('canvas');
+    canvas.width = size; canvas.height = size;
+    var ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0,0,size,size);
+
+    var st = cropState.stageSize;
+    var s = cropState.baseScale * cropState.scale;
+    var sx = (-cropState.x) / s;
+    var sy = (-cropState.y) / s;
+    var sw = st / s;
+    var sh = st / s;
+    ctx.drawImage(cropState.img, sx, sy, sw, sh, 0, 0, size, size);
+
+    var dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+    setStatus('avatar-status','正在上傳頭像…');
+    db().ref('users/'+currentUsername+'/profile/avatar').set(dataUrl, function(err){
+      if(err){
+        setStatus('avatar-status','頭像儲存失敗：'+errorMessage(err),'error');
+        return;
+      }
+      avatarImg.src = dataUrl;
+      currentAvatar = dataUrl;
+      setStatus('avatar-status','頭像已更新並儲存。','ok');
+      refreshFriendsUI();
+      updateMyMessageAvatars();
+      cropModal.classList.add('hidden');
+    });
+  });
+
+  avatarEditBtn.addEventListener('click', function(){ avatarFileInput.click(); });
+
+  avatarFileInput.addEventListener('change', function(){
+    var file = avatarFileInput.files && avatarFileInput.files[0];
+    if(!file) return;
+    if(file.type.indexOf('image/') !== 0){
+      setStatus('avatar-status','請選擇圖片檔案。','error');
+      avatarFileInput.value = '';
+      return;
+    }
+    if(file.size > 10 * 1024 * 1024){
+      setStatus('avatar-status','圖片需小於 10MB。','error');
+      avatarFileInput.value = '';
+      return;
+    }
+    openCropModal(file);
+    avatarFileInput.value = '';
+  });
 
   // ===== 名稱 / 密碼 / 登出 =====
   nameForm.addEventListener('submit',function(e){
@@ -1343,7 +1368,7 @@ avatarFileInput.addEventListener('change', function(){
     var gid = activeChat.id;
     var g = groupsCache[gid];
     if(!g || g.role !== 'owner') return;
-    
+
     var newName = prompt('請輸入新的群組名稱：', g.name || '');
     if(newName === null) return;
     newName = newName.trim();
@@ -1351,7 +1376,7 @@ avatarFileInput.addEventListener('change', function(){
 
     var updates = {};
     updates['groups/'+gid+'/name'] = newName;
-    
+
     db().ref('groups/'+gid+'/memberUsernames').once('value').then(function(snap){
       var map = snap.val() || {};
       Object.keys(map).forEach(function(uid){
@@ -1369,10 +1394,10 @@ avatarFileInput.addEventListener('change', function(){
   // ==== 設定匿名 ====
   chatAliasBtn.addEventListener('click', function(){
     if(!activeChat.type) return;
-    var ref = activeChat.type==='private'
+    var ref = activeChat.type==='friend'
       ? db().ref('private_chats/'+chatIdFor(currentUid, activeChat.id)+'/aliases/'+currentUid)
       : db().ref('groups/'+activeChat.id+'/aliases/'+currentUid);
-      
+
     ref.once('value').then(function(snap){
       var cur = snap.val() || '';
       var alias = prompt('請輸入你在這個聊天室的匿名（留空則恢復預設名稱）：', cur);
@@ -1530,7 +1555,7 @@ avatarFileInput.addEventListener('change', function(){
     evt.stopPropagation();
     showMembersPop(evt,activeChat.id);
   });
-  
+
   function showMembersPop(evt,gid){
     var old=document.querySelector('.member-pop'); if(old) old.remove();
     var pop=document.createElement('div');
@@ -1553,7 +1578,7 @@ avatarFileInput.addEventListener('change', function(){
       var usernames=results[1].val()||{};
       var ownerUid=results[2].val()||'';
       var uids=Object.keys(members);
-      
+
       var renderList = function() {
         pop.innerHTML='';
         var title=document.createElement('div');
@@ -1617,7 +1642,7 @@ avatarFileInput.addEventListener('change', function(){
             var row=document.createElement('div'); row.className='r-item';
             var roleTxt=m.role?' <span style="color:var(--text-gray);font-size:11px;">'+m.role+'</span>':'';
             row.innerHTML='<img src="'+escapeHtml(m.avatar)+'" alt=""><span>'+escapeHtml(m.name)+roleTxt+'</span>';
-            
+
             if (isOwner && m.uid !== currentUid) {
               var kickBtn = document.createElement('button');
               kickBtn.className = 'mini-btn danger';
@@ -1635,7 +1660,7 @@ avatarFileInput.addEventListener('change', function(){
         }
         if(pending===0) finish();
       };
-      
+
       renderList();
 
     }).catch(function(e){
@@ -1648,7 +1673,7 @@ avatarFileInput.addEventListener('change', function(){
 
   function showAddMemberPanel(pop, gid, currentMembers, uids, callback) {
     pop.innerHTML = '<div class="r-title">選擇要加入的好友</div>';
-    var entries = Object.keys(friendsCache).map(k => [k, friendsCache[k]]).filter(pair => !currentMembers[pair[0]]);
+    var entries = Object.keys(friendsCache).map(function(k){ return [k, friendsCache[k]]; }).filter(function(pair){ return !currentMembers[pair[0]]; });
     if (!entries.length) {
       var e = document.createElement('div'); e.textContent = '沒有可加入的好友'; pop.appendChild(e);
       var backBtn = document.createElement('button');
@@ -1717,7 +1742,7 @@ avatarFileInput.addEventListener('change', function(){
       updates['groups/' + gid + '/memberUsernames/' + uid] = uname;
       updates['users/' + uname + '/groups/' + gid] = { name: g.name, avatar: g.avatar || '', role: 'member', memberCount: g.memberCount };
     }
-    
+
     return db().ref('groups/' + gid + '/members').once('value').then(function(snap) {
       var count = Object.keys(snap.val() || {}).length + 1;
       updates['groups/' + gid + '/memberCount'] = count;
@@ -1967,7 +1992,7 @@ avatarFileInput.addEventListener('change', function(){
       ts:window.firebase.database.ServerValue.TIMESTAMP
     };
     sending=true; msgInput.value=''; msgInput.focus(); chatSendBtn.disabled=true;
-    var ref=activeChat.type==='private'
+    var ref=activeChat.type==='friend'
       ? db().ref('private_chats/'+chatIdFor(currentUid,activeChat.id)+'/msgs')
       : db().ref('groups/'+activeChat.id+'/msgs');
     ref.push(payload).catch(function(e){
@@ -2012,7 +2037,7 @@ avatarFileInput.addEventListener('change', function(){
       return consumeImageQuota().then(function(){
         setUploadStatus('正在送出圖片…',false);
         var msgId=pushId();
-        var basePath=activeChat.type==='private'
+        var basePath=activeChat.type==='friend'
           ? 'private_chats/'+chatIdFor(currentUid,activeChat.id)
           : 'groups/'+activeChat.id;
         var ts=Date.now();
@@ -2084,20 +2109,5 @@ avatarFileInput.addEventListener('change', function(){
   });
 })();
 </script>
-<!-- 头像裁剪弹窗 -->
-<div id="avatar-crop-modal" class="crop-modal hidden">
-  <div class="crop-dialog">
-    <h3>調整頭像</h3>
-    <div class="crop-stage" id="crop-stage">
-      <img id="crop-img" alt="">
-      <div class="crop-mask"></div>
-    </div>
-    <input id="crop-zoom" type="range" min="1" max="3" step="0.01" value="1">
-    <div class="crop-actions">
-      <button type="button" class="profile-button secondary" id="crop-cancel">取消</button>
-      <button type="button" class="profile-button" id="crop-confirm">確定</button>
-    </div>
-  </div>
-</div>
 </body>
 </html>
