@@ -1004,23 +1004,43 @@
             if (!password) return;
             const email = `${username.trim().toLowerCase()}@raingod.app`;
             clearSaveChoice(email.split('@')[0]);
+
             firebase.auth().signInWithEmailAndPassword(email, password)
                 .then(() => alert("登入成功！"))
                 .catch(async err => {
-                    console.log('登入失敗，錯誤代碼:', err.code); // ★ 方便除錯用
+                    // 如果密碼錯誤，詢問是否要重設
+                    if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential' || err.code === 'auth/invalid-login-credentials') {
+                        const confirmReset = window.confirm("密碼錯誤！\n您是否要使用管理員提供的臨時密碼重新設定密碼？");
+                        if (confirmReset) {
+                            const tmpPass = prompt("請輸入管理員給您的臨時密碼：");
+                            if (!tmpPass) return;
 
-                    // ★★★ 不管什麼錯誤，只要登入失敗，就去檢查有沒有臨時密碼 ★★★
-                    const applied = await tryApplyTempPassword(
-                        email.split('@')[0], email
-                    );
-                    if (applied) return;
-
-                    // 如果沒有臨時密碼可用，才顯示原本的錯誤
-                    if (err.code === 'auth/user-not-found') alert("錯誤：該帳號不存在！");
-                    else if (err.code === 'auth/wrong-password') alert("錯誤：密碼不正確！");
-                    else alert("登入失敗：" + err.message);
+                            try {
+                                // 1. 先用臨時密碼登入
+                                const cred = await firebase.auth().signInWithEmailAndPassword(email, tmpPass);
+                                
+                                // 2. 登入成功，立刻要求輸入新密碼
+                                const newPass = prompt("驗證成功！請輸入您的新密碼（至少 6 位）：");
+                                if (!newPass || newPass.length < 6) {
+                                    alert("密碼太短，重設失敗。");
+                                    await firebase.auth().signOut();
+                                    return;
+                                }
+                                
+                                // 3. 更新密碼
+                                await cred.user.updatePassword(newPass);
+                                alert("✅ 密碼重設成功！請重新登入。");
+                                await firebase.auth().signOut();
+                            } catch (resetErr) {
+                                alert("❌ 重設失敗：" + resetErr.message + "\n請確認臨時密碼是否正確。");
+                            }
+                        }
+                    } else {
+                        alert("登入失敗：" + err.message);
+                    }
                 });
         } else if (choice === '2') {
+            // ... 這裡保持你原本的註冊邏輯不變 ...
             const deviceId = getDeviceId();
             const deviceRef = firebase.database().ref('registered_devices/' + deviceId);
             deviceRef.once('value').then(snapshot => {
