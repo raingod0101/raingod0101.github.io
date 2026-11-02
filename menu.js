@@ -73,6 +73,121 @@
     let accountSaveTimer = null;
     window.raingodAccountDataCloudLoaded = false;
 
+    // ★★★ 新增：管理員帳號常數 ★★★
+    const ADMIN_USERNAME = 'raingod';
+
+    // ★★★ 新增：secret 資料庫實例（會在 initSystem 內初始化）★★★
+    window.raingodSecretDb = null;
+
+    // ★★★ 新增：判斷目前登入者是否為管理員 ★★★
+    function isCurrentUserAdmin() {
+        const u = firebase.auth().currentUser;
+        if (!u || !u.email) return false;
+        return u.email.split('@')[0].toLowerCase() === ADMIN_USERNAME;
+    }
+
+    // ★★★ 新增：管理員面板 —— 產生臨時密碼 ★★★
+    async function openAdminPanel() {
+        if (!isCurrentUserAdmin()) {
+            alert('只有管理員可以使用此功能。');
+            return;
+        }
+        if (!window.raingodSecretDb) {
+            alert('secret 資料庫尚未初始化，請重新整理頁面。');
+            return;
+        }
+        const uname = prompt('請輸入要重設密碼的使用者名稱：');
+        if (!uname) return;
+        await resetUserPassword(uname.trim().toLowerCase());
+    }
+
+    // ★★★ 新增：為指定使用者產生臨時密碼並寫入 secret DB ★★★
+    async function resetUserPassword(uname) {
+        if (!isCurrentUserAdmin()) { alert('只有管理員可以使用此功能。'); return; }
+        if (!/^[a-zA-Z0-9]+$/.test(uname)) { alert('帳號格式不合。'); return; }
+        const db = window.raingodSecretDb;
+        try {
+            const accSnap = await db.ref('accounts/' + uname).once('value');
+            const acc = accSnap.val();
+            if (!acc || !acc.uid) {
+                alert('查無此帳號：' + uname);
+                return;
+            }
+
+            const tmpPass = Math.random().toString(36).slice(-4)
+                          + Math.random().toString(36).slice(-4);
+
+            await db.ref('accounts/' + uname + '/reset').set({
+                tmpPass,
+                ts: firebase.database.ServerValue.TIMESTAMP,
+                by: ADMIN_USERNAME
+            });
+
+            alert(
+                '已為「' + uname + '」產生臨時密碼：\n\n' +
+                '　　' + tmpPass + '\n\n' +
+                '請將此密碼告知使用者。\n' +
+                '使用者下次登入時會被要求立即修改密碼。'
+            );
+        } catch (e) {
+            console.error('產生臨時密碼失敗：', e);
+            alert('產生臨時密碼失敗，請查看 Console。\n' + e.message);
+        }
+    }
+
+    // ★★★ 新增：使用者登入失敗時，嘗試套用管理員設定的臨時密碼 ★★★
+    async function tryApplyTempPassword(username, email) {
+        if (!window.raingodSecretDb) return false;
+        try {
+            const db = window.raingodSecretDb;
+            const resetSnap = await db.ref('accounts/' + username + '/reset').once('value');
+            const reset = resetSnap.val();
+            if (!reset || !reset.tmpPass) return false;
+
+            let cred;
+            try {
+                cred = await firebase.auth()
+                    .signInWithEmailAndPassword(email, reset.tmpPass);
+            } catch (e) {
+                console.warn('臨時密碼登入失敗：', e);
+                return false;
+            }
+
+            const newPass = prompt(
+                '管理員已為您設定臨時密碼。\n請設定新的密碼（至少 6 位）：'
+            );
+            if (!newPass || newPass.length < 6) {
+                alert('密碼太短，請重新登入再設定。');
+                return true;
+            }
+            const confirm = prompt('請再次輸入新密碼以確認：');
+            if (newPass !== confirm) {
+                alert('兩次輸入不一致，請重新登入再設定。');
+                return true;
+            }
+
+            try {
+                await cred.user.updatePassword(newPass);
+                await db.ref('accounts/' + username + '/reset').remove();
+                alert('密碼已更新成功！請使用新密碼登入。');
+                await firebase.auth().signOut();
+            } catch (e) {
+                console.error('更新密碼失敗：', e);
+                alert('更新密碼失敗，請聯繫管理員。\n' + e.message);
+            }
+            return true;
+        } catch (e) {
+            console.warn('檢查臨時密碼失敗：', e);
+            return false;
+        }
+    }
+
+    // ★★★ 新增：把管理員函式掛到 window，方便 Console 直接呼叫 ★★★
+    window.raingodAdminResetPassword = function(uname) {
+        if (!uname) { console.warn('用法：raingodAdminResetPassword("使用者名稱")'); return; }
+        return resetUserPassword(String(uname).trim().toLowerCase());
+    };
+
     // ★★★ 新增：遊戲本機 key 白名單（這些不進入帳號資料、不被清空）★★★
     const GAME_LOCAL_KEYS = new Set([
         'steal_an_egg_v17',
@@ -122,7 +237,6 @@
         return firebase.database().ref(`users/${uid}/account_data`);
     }
 
-    // ★ 改：readAccountData 排除遊戲本機 key
     function readAccountData() {
         const data = [];
         for (let i = 0; i < localStorage.length; i++) {
@@ -138,7 +252,6 @@
         return JSON.stringify((Array.isArray(data) ? data : []).slice().sort((a, b) => a.key.localeCompare(b.key)));
     }
 
-    // ★ 改：只清帳號資料範圍，不動遊戲本機 key
     function clearLocalAccountData(clearSession = true) {
         const bindings = new Set(storageBindings.values());
         bindings.forEach(binding => { if (binding.pause) binding.pause(); });
@@ -153,7 +266,6 @@
         }
     }
 
-    // ★ 改：只覆蓋帳號資料範圍，不動遊戲本機 key
     function replaceLocalAccountData(data) {
         accountDataSyncing = true;
         try {
@@ -179,9 +291,7 @@
         }
     }
 
-    // ★★★ 新增：判斷本機遊戲存檔是否為「空狀態」★★★
     function isLocalSaveEffectivelyEmpty() {
-        // 1. 檢查偷蛋存檔
         try {
             const raw = localStorage.getItem('steal_an_egg_v17');
             if (raw) {
@@ -203,7 +313,6 @@
             }
         } catch (e) {}
 
-        // 2. 檢查其他遊戲的 raingod_save_*
         try {
             for (let i = 0; i < localStorage.length; i++) {
                 const key = localStorage.key(i);
@@ -257,7 +366,6 @@
         }, 400);
     }
 
-    // ★ 改：syncAccountData 加入空狀態保護，取消時不再登出
     async function syncAccountData(user) {
         const uid = user.uid;
         const localData = readAccountData();
@@ -296,7 +404,6 @@
             return;
         }
 
-        // ★ 本機看起來是空狀態 → 自動走雲端，不詢問
         if (isLocalSaveEffectivelyEmpty()) {
             console.warn('[syncAccountData] 本機存檔為空狀態，自動使用雲端資料');
             replaceLocalAccountData(cloudData);
@@ -530,7 +637,6 @@
         sessionWatchHandler = null;
     }
 
-    // ★★★ 改：先 on 再 set，被踢時保留本機存檔 ★★★
     async function claimSession(user) {
         stopSessionWatch();
         const sessionId = getSessionId();
@@ -545,7 +651,6 @@
             alert('您的帳號已在其他地方登入，本頁將自動登出。');
             const redirect = () => { window.location.href = baseUrl; };
             firebase.auth().signOut().then(() => {
-                // ★ 不再 clearLocalAccountData，保留本機遊戲存檔
                 redirect();
             }).catch(redirect);
         };
@@ -553,7 +658,6 @@
         sessionWatchRef = sessionRef;
         sessionWatchHandler = handler;
 
-        // ★ 先註冊監聽，避免同時登入時的空窗期
         sessionRef.on('value', handler);
 
         try {
@@ -645,7 +749,6 @@
         return false;
     };
 
-    // ★★★ 改：raingodInitGame「取消」時保留本機並上傳雲端，不再登出 ★★★
     window.raingodInitGame = async function(gameId, defaultLocalData, onComplete) {
         if (!gameId) {
             console.error("raingodInitGame 錯誤：必須指定 gameId");
@@ -706,7 +809,6 @@
                             '按「取消」：保留本機存檔並上傳到雲端。'
                         );
                         if (!confirmed) {
-                            // ★ 保留本機 + 上傳雲端
                             await gameRef.set({
                                 data: localData,
                                 updated_at: firebase.database.ServerValue.TIMESTAMP
@@ -744,7 +846,6 @@
         }
     };
 
-    // ★★★ 改：raingodBindStorage 中 legacyCloudSave 段落不再 signOut ★★★
     window.raingodBindStorage = function(gameId, keys, defaults, onLoaded, legacyCloudSave) {
         const storageKeys = Array.from(new Set(keys));
         const readValues = () => storageKeys.reduce((values, key) => {
@@ -816,7 +917,6 @@
                                                 '按「取消」：保留本機進度並上傳到雲端。'
                                             );
                                             if (!confirmed) {
-                                                // ★ 保留本機 + 上傳
                                                 try {
                                                     localData[primaryKey] = localData[primaryKey];
                                                     await accountRef.set({
@@ -920,7 +1020,16 @@
             clearSaveChoice(email.split('@')[0]);
             firebase.auth().signInWithEmailAndPassword(email, password)
                 .then(() => alert("登入成功！"))
-                .catch(err => {
+                .catch(async err => {
+                    // ★★★ 新增：登入失敗時，嘗試套用管理員設定的臨時密碼 ★★★
+                    if (err.code === 'auth/wrong-password'
+                        || err.code === 'auth/invalid-credential'
+                        || err.code === 'auth/invalid-login-credentials') {
+                        const applied = await tryApplyTempPassword(
+                            email.split('@')[0], email
+                        );
+                        if (applied) return;
+                    }
                     if (err.code === 'auth/user-not-found') alert("錯誤：該帳號不存在！");
                     else if (err.code === 'auth/wrong-password') alert("錯誤：密碼不正確！");
                     else alert("登入失敗：" + err.message);
@@ -953,12 +1062,26 @@
                 }
                 const email = `${cleanUser}@raingod.app`;
                 firebase.auth().createUserWithEmailAndPassword(email, password)
-                    .then(userCredential => {
+                    // ★★★ 修改：註冊成功後寫入 secret DB 的帳號索引 ★★★
+                    .then(async userCredential => {
                         deviceRef.set({
                             username: cleanUser,
                             uid: userCredential.user.uid,
                             created_at: firebase.database.ServerValue.TIMESTAMP
                         });
+
+                        try {
+                            if (window.raingodSecretDb) {
+                                await window.raingodSecretDb.ref('accounts/' + cleanUser).set({
+                                    uid: userCredential.user.uid,
+                                    username: cleanUser,
+                                    created_at: firebase.database.ServerValue.TIMESTAMP
+                                });
+                            }
+                        } catch (e) {
+                            console.warn('secret DB 帳號索引寫入失敗（不影響註冊）：', e);
+                        }
+
                         alert("帳號註冊成功，已自動為您登入！");
                     })
                     .catch(err => {
@@ -985,6 +1108,19 @@
                 measurementId: "G-067PR7PJVE"
             });
         }
+
+        // ★★★ 新增：初始化 secret 資料庫（同專案第二個 app 實例）★★★
+        try {
+            if (!firebase.apps.find(a => a.name === 'secret')) {
+                firebase.initializeApp({
+                    databaseURL: "https://secret-e0976-default-rtdb.firebaseio.com"
+                }, "secret");
+            }
+            window.raingodSecretDb = firebase.app('secret').database();
+        } catch (e) {
+            console.error('secret 資料庫初始化失敗：', e);
+        }
+
         installStorageSync();
         markFirebaseReady();
         let authReadyResolved = false;
@@ -1194,6 +1330,31 @@
                     }
                     listenNavCounts(username, user.uid);
                     syncData(user);
+
+                    // ★★★ 新增：管理員按鈕（只有 raingod 帳號看得到）★★★
+                    const isAdmin = username.toLowerCase() === ADMIN_USERNAME;
+                    let adminBtn = document.getElementById('raingod-admin-btn');
+                    if (isAdmin) {
+                        if (!adminBtn) {
+                            adminBtn = document.createElement('button');
+                            adminBtn.id = 'raingod-admin-btn';
+                            adminBtn.textContent = '🛠 管理';
+                            adminBtn.style.cssText = [
+                                'margin-left:8px','padding:4px 10px','border-radius:6px',
+                                'border:1px solid #ff9800','background:#fff3e0','color:#e65100',
+                                'font-size:13px','cursor:pointer','font-weight:600'
+                            ].join(';');
+                            adminBtn.onclick = openAdminPanel;
+                            if (userInfo && userInfo.parentElement) {
+                                userInfo.parentElement.insertBefore(adminBtn, userInfo);
+                            } else if (userInfo) {
+                                userInfo.insertAdjacentElement('beforebegin', adminBtn);
+                            }
+                        }
+                        adminBtn.style.display = 'inline-block';
+                    } else if (adminBtn) {
+                        adminBtn.style.display = 'none';
+                    }
                 } else {
                     if (loginBtn) {
                         loginBtn.style.setProperty('display', 'flex', 'important');
@@ -1203,6 +1364,10 @@
                     stopAvatarWatch();
                     clearNavListeners();
                     syncData(null);
+
+                    // ★★★ 新增：登出時隱藏管理員按鈕 ★★★
+                    const adminBtn = document.getElementById('raingod-admin-btn');
+                    if (adminBtn) adminBtn.style.display = 'none';
                 }
             });
         });
