@@ -1001,15 +1001,15 @@
             firebase.auth().signInWithEmailAndPassword(email, password)
                 .then(() => alert("登入成功！"))
                 .catch(async err => {
-                    // ★★★ 登入失敗時，嘗試套用管理員設定的臨時密碼 ★★★
-                    if (err.code === 'auth/wrong-password'
-                        || err.code === 'auth/invalid-credential'
-                        || err.code === 'auth/invalid-login-credentials') {
-                        const applied = await tryApplyTempPassword(
-                            email.split('@')[0], email
-                        );
-                        if (applied) return;
-                    }
+                    console.log('登入失敗，錯誤代碼:', err.code); // ★ 方便除錯用
+
+                    // ★★★ 不管什麼錯誤，只要登入失敗，就去檢查有沒有臨時密碼 ★★★
+                    const applied = await tryApplyTempPassword(
+                        email.split('@')[0], email
+                    );
+                    if (applied) return;
+
+                    // 如果沒有臨時密碼可用，才顯示原本的錯誤
                     if (err.code === 'auth/user-not-found') alert("錯誤：該帳號不存在！");
                     else if (err.code === 'auth/wrong-password') alert("錯誤：密碼不正確！");
                     else alert("登入失敗：" + err.message);
