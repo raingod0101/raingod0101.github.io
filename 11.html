@@ -649,19 +649,26 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     var img = new Image();
     img.onload = function(){
       var proceed = function(sourceImg, w, h){
-        cropState.img = sourceImg;
-        cropState.stageSize = cropStage.clientWidth;
-        cropState.baseScale = Math.max(cropState.stageSize / w, cropState.stageSize / h);
-        cropState.scale = 1;
-        cropState.x = (cropState.stageSize - w * cropState.baseScale) / 2;
-        cropState.y = (cropState.stageSize - h * cropState.baseScale) / 2;
-        cropImg.src = sourceImg.src;
-        cropImg.style.width  = w + 'px';
-        cropImg.style.height = h + 'px';
-        applyCropTransform();
-        cropZoom.value = 1;
+        // 确保模态框已经显示，再获取尺寸，否则 clientWidth 为 0
         cropModal.classList.remove('hidden');
-        URL.revokeObjectURL(url);
+        
+        setTimeout(function() {
+          cropState.img = sourceImg;
+          cropState.stageSize = cropStage.clientWidth;
+          
+          if (cropState.stageSize === 0) cropState.stageSize = 300; // 兜底
+          
+          cropState.baseScale = Math.max(cropState.stageSize / w, cropState.stageSize / h);
+          cropState.scale = 1;
+          cropState.x = (cropState.stageSize - w * cropState.baseScale) / 2;
+          cropState.y = (cropState.stageSize - h * cropState.baseScale) / 2;
+          
+          cropImg.src = sourceImg.src;
+          cropZoom.value = 1;
+          
+          applyCropTransform();
+          URL.revokeObjectURL(url);
+        }, 50); // 给 DOM 一点时间渲染出宽高
       };
 
       if(window.createImageBitmap){
@@ -689,14 +696,22 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     img.src = url;
   }
 
+  // 使用 left/top/width/height 进行布局，摒弃 transform
   function applyCropTransform(){
+    if(!cropState.img) return;
     var s = cropState.baseScale * cropState.scale;
-    cropImg.style.width  = (cropState.img.naturalWidth  * s) + 'px';
-    cropImg.style.height = (cropState.img.naturalHeight * s) + 'px';
-    cropImg.style.transform = 'translate(' + cropState.x + 'px,' + cropState.y + 'px)';
+    var displayW = cropState.img.naturalWidth * s;
+    var displayH = cropState.img.naturalHeight * s;
+    
+    cropImg.style.width  = displayW + 'px';
+    cropImg.style.height = displayH + 'px';
+    cropImg.style.left   = cropState.x + 'px';
+    cropImg.style.top    = cropState.y + 'px';
+    cropImg.style.transform = 'none'; 
   }
 
   function clampCrop(){
+    if(!cropState.img) return;
     var s = cropState.baseScale * cropState.scale;
     var iw = cropState.img.naturalWidth  * s;
     var ih = cropState.img.naturalHeight * s;
@@ -758,6 +773,13 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     var sy = (-cropState.y) / s;
     var sw = st / s;
     var sh = st / s;
+    
+    // 防止越界
+    sx = Math.max(0, sx);
+    sy = Math.max(0, sy);
+    if (sx + sw > cropState.img.naturalWidth) sw = cropState.img.naturalWidth - sx;
+    if (sy + sh > cropState.img.naturalHeight) sh = cropState.img.naturalHeight - sy;
+
     ctx.drawImage(cropState.img, sx, sy, sw, sh, 0, 0, size, size);
 
     var dataUrl = canvas.toDataURL('image/jpeg', 0.85);
