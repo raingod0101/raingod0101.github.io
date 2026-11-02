@@ -75,7 +75,7 @@
 
     // ★★★ 管理員設定 ★★★
     const ADMIN_USERNAME = 'raingod';
-    window.raingodSecretDb = null; // 將指向主專案資料庫
+    window.raingodSecretDb = null;
 
     function isCurrentUserAdmin() {
         const u = firebase.auth().currentUser;
@@ -83,7 +83,7 @@
         return u.email.split('@')[0].toLowerCase() === ADMIN_USERNAME;
     }
 
-    // ★★★ 管理員：產生臨時密碼（已移除 UID 檢查，直接寫入）★★★
+    // ★★★ 管理員：產生臨時密碼（改為 6 位數純數字）★★★
     window.raingodAdminResetPassword = async function(uname) {
         if (!isCurrentUserAdmin()) { alert('只有管理員可以使用此功能。'); return; }
         if (!uname) { console.warn('用法：raingodAdminResetPassword("使用者名稱")'); return; }
@@ -95,9 +95,9 @@
         if (!db) { alert('資料庫未初始化'); return; }
 
         try {
+            // ★★★ 修改：產生 6 位數純數字 ★★★
             const tmpPass = Math.floor(100000 + Math.random() * 900000).toString();
 
-            // 直接寫入，不檢查是否存在
             await db.ref('secret_accounts/' + cleanUser + '/reset').set({
                 tmpPass,
                 ts: firebase.database.ServerValue.TIMESTAMP,
@@ -124,56 +124,6 @@
         window.raingodAdminResetPassword(uname);
     };
 
-    async function tryApplyTempPassword(username, email) {
-        if (!window.raingodSecretDb) return false;
-        try {
-            const db = window.raingodSecretDb;
-            const resetSnap = await db.ref('secret_accounts/' + username + '/reset').once('value');
-            const reset = resetSnap.val();
-            
-            // ★ 檢查 1：有沒有抓到 reset 資料？
-            if (!reset || !reset.tmpPass) {
-                alert('【除錯】在 secret_accounts 找不到 ' + username + ' 的 reset 資料！');
-                return false;
-            }
-            
-            alert('【除錯】找到臨時密碼：' + reset.tmpPass + '\n準備嘗試登入...');
-
-            let cred;
-            try {
-                cred = await firebase.auth().signInWithEmailAndPassword(email, reset.tmpPass);
-            } catch (e) {
-                // ★ 檢查 2：臨時密碼登入失敗
-                alert('【除錯】用臨時密碼登入失敗！\n錯誤代碼：' + e.code + '\n錯誤訊息：' + e.message);
-                return false;
-            }
-
-            // ★ 登入成功，要求設定新密碼
-            const newPass = prompt('管理員已為您設定臨時密碼。\n請設定新的密碼（至少 6 位）：');
-            if (!newPass || newPass.length < 6) {
-                alert('【除錯】密碼太短，取消設定。');
-                return true;
-            }
-            const confirm = prompt('請再次輸入新密碼以確認：');
-            if (newPass !== confirm) {
-                alert('【除錯】兩次輸入不一致，取消設定。');
-                return true;
-            }
-
-            try {
-                await cred.user.updatePassword(newPass);
-                await db.ref('secret_accounts/' + username + '/reset').remove();
-                alert('✅ 密碼已更新成功！請使用新密碼登入。');
-                await firebase.auth().signOut();
-            } catch (e) {
-                alert('【除錯】更新密碼失敗！\n' + e.message);
-            }
-            return true;
-        } catch (e) {
-            alert('【除錯】讀取資料庫發生例外：\n' + e.message);
-            return false;
-        }
-    }
     // ★★★ 遊戲本機 key 白名單（這些不進入帳號資料、不被清空）★★★
     const GAME_LOCAL_KEYS = new Set([
         'steal_an_egg_v17',
@@ -1004,13 +954,13 @@
             if (!password) return;
             const email = `${username.trim().toLowerCase()}@raingod.app`;
             clearSaveChoice(email.split('@')[0]);
-
+            
             firebase.auth().signInWithEmailAndPassword(email, password)
                 .then(() => alert("登入成功！"))
                 .catch(async err => {
-                    // 如果密碼錯誤，詢問是否要重設
-                    if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential' || err.code === 'auth/invalid-login-credentials') {
-                        const confirmReset = window.confirm("密碼錯誤！\n您是否要使用管理員提供的臨時密碼重新設定密碼？");
+                    // ★★★ 登入失敗時，詢問是否使用臨時密碼重設 ★★★
+                    if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential' || err.code === 'auth/invalid-login-credentials' || err.code === 'auth/user-not-found') {
+                        const confirmReset = window.confirm("密碼錯誤或找不到帳號！\n您是否要使用管理員提供的臨時密碼重新設定密碼？");
                         if (confirmReset) {
                             const tmpPass = prompt("請輸入管理員給您的臨時密碼：");
                             if (!tmpPass) return;
@@ -1032,7 +982,7 @@
                                 alert("✅ 密碼重設成功！請重新登入。");
                                 await firebase.auth().signOut();
                             } catch (resetErr) {
-                                alert("❌ 重設失敗：" + resetErr.message + "\n請確認臨時密碼是否正確。");
+                                alert("❌ 重設失敗：" + resetErr.message + "\n請確認臨時密碼是否正確，或是否被暫時鎖定。");
                             }
                         }
                     } else {
@@ -1040,7 +990,6 @@
                     }
                 });
         } else if (choice === '2') {
-            // ... 這裡保持你原本的註冊邏輯不變 ...
             const deviceId = getDeviceId();
             const deviceRef = firebase.database().ref('registered_devices/' + deviceId);
             deviceRef.once('value').then(snapshot => {
@@ -1075,7 +1024,6 @@
                             created_at: firebase.database.ServerValue.TIMESTAMP
                         });
 
-                        // ★★★ 註冊成功後寫入 secret_accounts 索引 ★★★
                         try {
                             if (window.raingodSecretDb) {
                                 await window.raingodSecretDb.ref('secret_accounts/' + cleanUser).set({
@@ -1115,7 +1063,6 @@
             });
         }
 
-        // ★★★ 直接使用主專案資料庫 ★★★
         window.raingodSecretDb = firebase.database();
 
         installStorageSync();
