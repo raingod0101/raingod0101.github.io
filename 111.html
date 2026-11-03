@@ -390,201 +390,6 @@
   };
 </script>
 <script type="module">
-(function() {
-    const baseUrl = "https://raingod0101.github.io/";
-    const v = new Date().getTime();
-    function setFavicon() {
-        const iconUrl = `${baseUrl}catdragon.png`;
-        document.querySelectorAll("link[rel*='icon']").forEach(el => el.remove());
-        const favicon = document.createElement('link');
-        favicon.rel = 'icon'; favicon.type = 'image/png'; favicon.href = `${iconUrl}?v=${v}`;
-        (document.head || document.documentElement).appendChild(favicon);
-    }
-    if (document.head) setFavicon(); else document.addEventListener('DOMContentLoaded', setFavicon);
-    let markFirebaseReady, markAuthReady, markAccountDataReady;
-    window.raingodFirebaseReady = new Promise(resolve => { markFirebaseReady = resolve; });
-    window.raingodAuthReady = new Promise(resolve => { markAuthReady = resolve; });
-    window.raingodAccountDataReady = new Promise(resolve => { markAccountDataReady = resolve; });
-    const storageBindings = new Map();
-    let storageSyncInstalled = false;
-    let accountDataSync = Promise.resolve();
-    let accountDataSyncing = false;
-    let activeAccountUid = '';
-    let accountSaveTimer = null;
-    function accountDataRef(uid) { return firebase.database().ref(`users/${uid}/account_data`); }
-    function readAccountData() {
-        const data = [];
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && key !== 'raingod_device_id') data.push({ key, value: localStorage.getItem(key) });
-        }
-        return data.sort((a, b) => a.key.localeCompare(b.key));
-    }
-    function accountDataSignature(data) { return JSON.stringify((Array.isArray(data) ? data : []).slice().sort((a, b) => a.key.localeCompare(b.key))); }
-    function clearLocalAccountData(clearSession = true) {
-        const bindings = new Set(storageBindings.values());
-        bindings.forEach(binding => { if (binding.pause) binding.pause(); });
-        const keys = [];
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && key !== 'raingod_device_id') keys.push(key);
-        }
-        keys.forEach(key => localStorage.removeItem(key));
-        if (clearSession) { try { sessionStorage.clear(); } catch (err) {} }
-    }
-    function replaceLocalAccountData(data) {
-        accountDataSyncing = true;
-        try {
-            const bindings = new Set(storageBindings.values());
-            bindings.forEach(binding => { if (binding.pause) binding.pause(); });
-            clearLocalAccountData(false);
-            (Array.isArray(data) ? data : []).forEach(entry => {
-                if (entry && typeof entry.key === 'string' && entry.key !== 'raingod_device_id' && typeof entry.value === 'string') localStorage.setItem(entry.key, entry.value);
-            });
-        } finally { accountDataSyncing = false; }
-    }
-    window.raingodClearLocalAccountData = function() {
-        activeAccountUid = ''; clearTimeout(accountSaveTimer); window.raingodCurrentUser = null; clearLocalAccountData();
-    };
-    function scheduleAccountDataSave() {
-        if (!activeAccountUid || accountDataSyncing) return;
-        const uid = activeAccountUid;
-        clearTimeout(accountSaveTimer);
-        accountSaveTimer = setTimeout(async () => {
-            if (activeAccountUid !== uid || !firebase.auth().currentUser || firebase.auth().currentUser.uid !== uid) return;
-            try {
-                await accountDataRef(uid).set({ data: readAccountData(), updated_at: firebase.database.ServerValue.TIMESTAMP });
-            } catch (err) { console.error('帳號資料同步失敗：', err); }
-        }, 400);
-    }
-    async function syncAccountData(user) {
-        const uid = user.uid; const localData = readAccountData();
-        const snapshot = await accountDataRef(uid).once('value');
-        if (firebase.auth().currentUser?.uid !== uid) return;
-        if (!snapshot.exists()) {
-            await accountDataRef(uid).set({ data: localData, updated_at: firebase.database.ServerValue.TIMESTAMP }); return;
-        }
-        const cloudData = snapshot.val().data;
-        if (!Array.isArray(cloudData)) throw new Error('雲端帳號資料格式無效');
-        const localDiffers = accountDataSignature(localData) !== accountDataSignature(cloudData);
-        if (!localData.length || !localDiffers) { replaceLocalAccountData(cloudData); return; }
-        const accountKey = user.email ? user.email.split('@')[0] : uid;
-        let choice = readSaveChoice(accountKey);
-        if (!choice) {
-            choice = window.confirm('此帳號已有雲端資料，且與本機資料不同。是否用雲端帳號資料覆蓋本機？按「取消」會保留本機資料並同步至此帳號。此選擇在本次登入期間只詢問一次。') ? 'cloud' : 'local';
-            try { sessionStorage.setItem(saveChoiceKey(accountKey), choice); } catch (err) {}
-        }
-        if (firebase.auth().currentUser?.uid !== uid) return;
-        if (choice === 'cloud') { replaceLocalAccountData(cloudData); }
-        else { await accountDataRef(uid).set({ data: localData, updated_at: firebase.database.ServerValue.TIMESTAMP }); }
-    }
-    window.raingodWaitForAccountData = async function(uid) {
-        while (activeAccountUid === uid) {
-            const pendingSync = accountDataSync;
-            await pendingSync;
-            if (pendingSync === accountDataSync) return;
-        }
-    };
-    function saveChoiceKey(uid) { return `raingod_save_choice_${uid}`; }
-    function readSaveChoice(uid) { try { return sessionStorage.getItem(saveChoiceKey(uid)); } catch (e) { return null; } }
-    function installStorageSync() {
-        if (storageSyncInstalled || !window.Storage) return;
-        storageSyncInstalled = true;
-        const originalSetItem = Storage.prototype.setItem;
-        const originalRemoveItem = Storage.prototype.removeItem;
-        const originalClear = Storage.prototype.clear;
-        Storage.prototype.setItem = function(key, value) {
-            originalSetItem.call(this, key, value);
-            if (this === localStorage) scheduleAccountDataSave();
-            const binding = this === localStorage && storageBindings.get(String(key));
-            if (binding) binding.scheduleSave();
-        };
-        Storage.prototype.removeItem = function(key) {
-            originalRemoveItem.call(this, key);
-            if (this === localStorage) scheduleAccountDataSave();
-            const binding = this === localStorage && storageBindings.get(String(key));
-            if (binding) binding.scheduleSave();
-        };
-        Storage.prototype.clear = function() {
-            originalClear.call(this);
-            if (this === localStorage) scheduleAccountDataSave();
-        };
-    }
-    function initSystem() {
-        if (!firebase.apps.length) {
-            firebase.initializeApp({
-                apiKey: "AIzaSyB6ddhbgcV0aUgezkJVr61XMrJkcFWYzxI",
-                authDomain: "project-245615336743.firebaseapp.com",
-                databaseURL: "https://project-161757768102958224-default-rtdb.firebaseio.com",
-                projectId: "project-245615336743",
-                storageBucket: "project-245615336743.firebasestorage.app",
-                messagingSenderId: "245615336743",
-                appId: "1:245615336743:web:5f1b46b5a74668a2ac5d02",
-                measurementId: "G-067PR7PJVE"
-            });
-        }
-        installStorageSync();
-        markFirebaseReady();
-        let authReadyResolved = false;
-        let loggingOut = false;
-        firebase.auth().onAuthStateChanged(async user => {
-            if (loggingOut) return;
-            const previousUid = activeAccountUid;
-            if (previousUid && (!user || previousUid !== user.uid)) {
-                loggingOut = true;
-                activeAccountUid = '';
-                clearTimeout(accountSaveTimer);
-                window.raingodCurrentUser = null;
-                clearLocalAccountData();
-                location.reload();
-                return;
-            }
-            window.raingodCurrentUser = user;
-            if (user) {
-                activeAccountUid = user.uid;
-                accountDataSync = syncAccountData(user).catch(err => console.error('載入帳號資料失敗：', err));
-                await accountDataSync;
-            }
-            if (!authReadyResolved) { authReadyResolved = true; markAuthReady(user); markAccountDataReady(); }
-        });
-    }
-    initSystem();
-    (function setupLoginReload() {
-      const KEY = 'raingod_login_reload_done';
-      let firstCallback = true; let lastUser = null;
-      firebase.auth().onAuthStateChanged(user => {
-        if (firstCallback) { firstCallback = false; lastUser = user; if (user) sessionStorage.setItem(KEY, '1'); return; }
-        if (!lastUser && user && sessionStorage.getItem(KEY) !== '1') { sessionStorage.setItem(KEY, '1'); location.reload(); return; }
-        lastUser = user;
-      });
-    })();
-    window.addEventListener('DOMContentLoaded', () => {
-        const nameDisplay = document.getElementById('myNameDisplay');
-        if(nameDisplay) nameDisplay.addEventListener('click', () => {
-            const choice = prompt("請選擇功能：\n1. 登入\n2. 註冊新帳號\n(請輸入數字 1 或 2)");
-            if (choice === '1') {
-                const u = prompt("請輸入您的帳號："); if (!u) return;
-                const p = prompt("請輸入您的密碼："); if (!p) return;
-                firebase.auth().signInWithEmailAndPassword(`${u.trim().toLowerCase()}@raingod.app`, p).then(() => alert("登入成功！")).catch(err => alert("登入失敗：" + err.message));
-            } else if (choice === '2') {
-                let dev = localStorage.getItem('raingod_device_id');
-                if (!dev) { dev = 'dev_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now(); localStorage.setItem('raingod_device_id', dev); }
-                firebase.database().ref('registered_devices/' + dev).once('value').then(snap => {
-                    if (snap.exists()) { alert("【註冊限制】這台裝置已經建立過帳號！"); return; }
-                    const u = prompt("請建立新帳號（只能包含英文字母或數字）："); if (!u) return;
-                    const c = u.trim().toLowerCase();
-                    if (!/^[a-zA-Z0-9]+$/.test(c)) { alert("帳號格式不合！"); return; }
-                    const p = prompt("請設定您的密碼（至少 6 位數）："); if (!p || p.length < 6) { alert("密碼長度不足！"); return; }
-                    firebase.auth().createUserWithEmailAndPassword(`${c}@raingod.app`, p).then(cred => {
-                        firebase.database().ref('registered_devices/' + dev).set({ username: c, uid: cred.user.uid, created_at: firebase.database.ServerValue.TIMESTAMP });
-                        alert("帳號註冊成功，已自動登入！");
-                    }).catch(err => alert("註冊失敗：" + err.message));
-                });
-            }
-        });
-    });
-})();
-
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, onValue, onDisconnect, serverTimestamp, remove, runTransaction,
          push, query, onChildAdded, orderByChild, startAt }
@@ -687,16 +492,11 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
   ];
   const IndexData={discovered:new Set(),claimed:new Set()};
   const SAVE_KEY='steal_an_egg_v17';
-
-  // ═══════════════════════════════════════════════════════════
-  // P0：存檔防護旗標
-  // ═══════════════════════════════════════════════════════════
+  const SAVE_KEY_GENERIC='raingod_save_steal_an_egg_v17';
   let __saveEnabled = false;
   let __loadingPromise = null;
+  let __pendingCloudSave = null;
 
-  // ═══════════════════════════════════════════════════════════
-  // P1：全域蛋池同步（global_eggs）
-  // ═══════════════════════════════════════════════════════════
   const EGG_REFRESH_MS = 5 * 60 * 1000;
   function hashStr(str) {
     let h = 2166136261 >>> 0;
@@ -728,7 +528,8 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
         eggId: key, x: fixedXs[i], y: b.nestsY + offsetY,
         r, size, mul, petIdx, biomeIdx: bi,
         collected: false, float: seededRandom(seed + 303) * 10,
-        origX: fixedXs[i], origY: b.nestsY
+        origX: fixedXs[i], origY: b.nestsY,
+        localDropTs: Date.now()
       });
     }
   }
@@ -739,29 +540,28 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
       const payload = {};
       for (const e of S.eggs) {
         if (!e.eggId) continue;
-        payload[e.eggId] = { collected: false, bi: e.biomeIdx, t: Date.now() };
+        payload[e.eggId] = {
+          collected: !!e.collected,
+          bi: e.biomeIdx, petIdx: e.petIdx, size: e.size, r: e.r, mul: e.mul,
+          x: Math.round(e.x), y: Math.round(e.y),
+          secret: !!e.secret,
+          t: Date.now()
+        };
       }
       set(ref(db, 'global_eggs'), payload).catch(err => console.warn('publish eggs fail', err));
     } catch (e) { console.warn('publishGlobalEggs error', e); }
   }
-    // ═══════════════════════════════════════════════════════════
-  // P2：守衛同步（lock lease）+ 蛋事件流（push/onChildAdded）+ 遠端孵蛋器
-  // ═══════════════════════════════════════════════════════════
+
   const GUARD_SYNC_MS = 250;
   const EGG_EVENT_TTL  = 15000;
   const HATCHERY_PUSH_MS = 1500;
-  const GUARD_LOCK_MS = 3000;   // 權威鎖 3 秒，避免閃爍
-
-  // ── 守衛權威：用 lock lease，鎖住就不換人 ──
-  const __guardLock = new Map(); // biomeIdx -> { owner, until }
+  const GUARD_LOCK_MS = 3000;
+  const __guardLock = new Map();
 
   function amIGuardAuthority(biomeIdx) {
     const now = Date.now();
     const lock = __guardLock.get(biomeIdx);
-    if (lock && lock.until > now) {
-      return lock.owner === PLAYER_ID;
-    }
-    // lock 過期 → 重新選最近的
+    if (lock && lock.until > now) return lock.owner === PLAYER_ID;
     const b = WORLD.biomes[biomeIdx];
     if (!b) return false;
     const myD = Math.abs(S.player.y - b.nestsY) + Math.abs(S.player.x - WORLD_W/2);
@@ -782,12 +582,9 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
       out.push({
         bi: g.biomeIdx,
         x: Math.round(g.x), y: Math.round(g.y),
-        sl: g.sleeping ? 1 : 0,
-        ch: g.chasing ? 1 : 0,
-        dp: g.dashPhase ? 1 : 0,
-        al: g.alert ? 1 : 0,
-        rt: g.returning ? 1 : 0,
-        w:  Math.round((g.wakeTimer || 0) * 10) / 10,
+        sl: g.sleeping ? 1 : 0, ch: g.chasing ? 1 : 0, dp: g.dashPhase ? 1 : 0,
+        al: g.alert ? 1 : 0, rt: g.returning ? 1 : 0,
+        w: Math.round((g.wakeTimer || 0) * 10) / 10,
       });
     }
     return out;
@@ -815,20 +612,23 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
       if (!db) return;
       onValue(ref(db, 'guards'), snap => {
         const data = snap.val() || {};
-        const now = Date.now();
-        REMOTE_GUARDS.clear();
         for (const bi in data) {
           const g = data[bi];
           if (!g) continue;
-          // 只收「不是自己權威」的
           if (amIGuardAuthority(parseInt(bi))) continue;
-          REMOTE_GUARDS.set(parseInt(bi), g);
+          let cur = REMOTE_GUARDS.get(parseInt(bi));
+          if (!cur) {
+            cur = { x: g.x, y: g.y, targetX: g.x, targetY: g.y };
+            REMOTE_GUARDS.set(parseInt(bi), cur);
+          }
+          cur.targetX = g.x; cur.targetY = g.y;
+          cur.sl = g.sl; cur.ch = g.ch; cur.dp = g.dp;
+          cur.al = g.al; cur.rt = g.rt; cur.w = g.w;
         }
       });
     } catch (e) { console.warn('initGuardSync error', e); }
   }
 
-  // ── 蛋事件流：push + onChildAdded + startAt ──
   function emitEggEvent(ev) {
     try {
       const { db, ref, push, set, serverTimestamp } = window.__FB;
@@ -844,13 +644,10 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
 
   function initEggEventSync() {
     try {
-      const { db, ref, onChildAdded, query, startAt, endAt, orderByChild, remove } = window.__FB;
+      const { db, ref, onChildAdded, query, startAt, orderByChild, remove } = window.__FB;
       if (!db || !query) return;
-
-      // 只收最近 15 秒（用 t 排序，onChildAdded 不會重推舊的）
       const startT = Date.now() - EGG_EVENT_TTL;
       const q = query(ref(db, 'egg_events'), orderByChild('t'), startAt(startT));
-
       onChildAdded(q, snap => {
         const ev = snap.val();
         if (!ev) return;
@@ -859,7 +656,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
         if (Date.now() - (ev.t || 0) > EGG_EVENT_TTL) return;
         __eggEventSeen.add(id);
         applyRemoteEggEvent(ev);
-        // 收完立刻刪，保持節點乾淨
         remove(snap.ref).catch(() => {});
       });
     } catch (e) { console.warn('initEggEventSync error', e); }
@@ -868,60 +664,80 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
   function applyRemoteEggEvent(ev) {
     if (!ev || !ev.action) return;
     if (ev.byId === PLAYER_ID) return;
-
     const bInfo = (bi) => WORLD.biomes[bi] || { name:'?', icon:'', petNames:[] };
 
     if (ev.action === 'steal') {
       const egg = S.eggs.find(e => e.eggId === ev.eggId && !e.collected);
       if (egg) egg.collected = true;
+      const rp = S.remotePlayers.find(p => p.id === ev.byId);
+      if (rp) rp.carry = { biomeIdx: ev.bi, petIdx: ev.petIdx, size: ev.size, secret: !!ev.secret, eggId: ev.eggId, r: 12, mul: 1 };
+      try {
+        const { db, ref, set } = window.__FB;
+        set(ref(db, 'global_eggs/' + ev.eggId), {
+          collected: true, bi: ev.bi, t: Date.now(),
+          petIdx: ev.petIdx, size: ev.size, x: 0, y: 0
+        }).catch(() => {});
+      } catch (e) {}
       if (ev.by) {
         const b = bInfo(ev.bi);
         showToast(`🥚 ${ev.by} 偷走了 ${b.icon} ${b.petNames[ev.petIdx]||'蛋'}`, '#8a5a2a', '#5a3a0a');
       }
     }
     else if (ev.action === 'drop' || ev.action === 'return' || ev.action === 'spawn') {
-      const exists = S.eggs.find(e => e.eggId === ev.eggId && !e.collected);
-      if (exists) {
-        exists.x = ev.x; exists.y = ev.y;
-        if (ev.secret) { exists.secret = true; exists.size = 'secret'; exists.mul = ev.mul || 6; }
-        return;
+      let egg = S.eggs.find(e => e.eggId === ev.eggId);
+      if (egg) {
+        egg.x = ev.x; egg.y = ev.y; egg.collected = false;
+        if (ev.secret) { egg.secret = true; egg.size = 'secret'; egg.mul = ev.mul || 6; }
+      } else {
+        S.eggs.push({
+          eggId: ev.eggId, x: ev.x, y: ev.y, r: ev.r || (ev.secret ? 22 : 12),
+          size: ev.secret ? 'secret' : (ev.size || 'normal'),
+          mul: ev.mul || (ev.secret ? 6 : 1),
+          petIdx: ev.petIdx, biomeIdx: ev.bi,
+          collected: false, float: Math.random()*10,
+          origX: ev.x, origY: ev.y, secret: !!ev.secret,
+        });
       }
-      S.eggs.push({
-        eggId: ev.eggId, x: ev.x, y: ev.y, r: ev.r || (ev.secret ? 22 : 12),
-        size: ev.secret ? 'secret' : (ev.size || 'normal'),
-        mul: ev.mul || (ev.secret ? 6 : 1),
-        petIdx: ev.petIdx, biomeIdx: ev.bi,
-        collected: false, float: Math.random()*10,
-        origX: ev.x, origY: ev.y,
-        secret: !!ev.secret,
-      });
-      if (ev.action === 'drop' && ev.by) {
-        showToast(`💥 ${ev.by} 的蛋被打掉了！`, '#8a2a2a', '#5a0a0a');
-      }
+      const rp = S.remotePlayers.find(p => p.id === ev.byId);
+      if (rp) rp.carry = null;
+      try {
+        const { db, ref, set } = window.__FB;
+        set(ref(db, 'global_eggs/' + ev.eggId), {
+          collected: false, bi: ev.bi, t: Date.now(),
+          x: Math.round(ev.x), y: Math.round(ev.y),
+          petIdx: ev.petIdx, size: ev.size || 'normal',
+          r: ev.r || 12, mul: ev.mul || 1
+        }).catch(() => {});
+      } catch (e) {}
+      if (ev.action === 'drop' && ev.by) showToast(`💥 ${ev.by} 的蛋被打掉了！`, '#8a2a2a', '#5a0a0a');
       if (ev.action === 'spawn' && ev.secret) {
         const b = bInfo(ev.bi);
         showToast(`🌟 秘密蛋出現：${b.icon} ${b.petNames[ev.petIdx]||'???'}`, '#8a3a8a', '#6a1a6a');
       }
     }
   }
-  // ═══════════════════════════════════════════════════════════
+
   function initEggSync() {
-  try {
-    const { db, ref, onValue } = window.__FB;
-    if (!db) return;
-    onValue(ref(db, 'global_eggs'), snap => {
-      const data = snap.val() || {};
-      const now = Date.now();
-      for (const egg of S.eggs) {
-        if (!egg.eggId || egg.collected) continue;
-        // ★ 剛掉落的蛋，3 秒內不信遠端狀態，避免 Firebase 延遲推送把剛掉地上的蛋標記掉
-        if (egg.localDropTs && now - egg.localDropTs < 3000) continue;
-        const remote = data[egg.eggId];
-        if (remote && remote.collected) egg.collected = true;
-      }
-    });
-  } catch (e) { console.warn('initEggSync error', e); }
-}
+    try {
+      const { db, ref, onValue } = window.__FB;
+      if (!db) return;
+      onValue(ref(db, 'global_eggs'), snap => {
+        const data = snap.val() || {};
+        const now = Date.now();
+        for (const egg of S.eggs) {
+          if (!egg.eggId) continue;
+          if (egg.localDropTs && now - egg.localDropTs < 3000) continue;
+          const remote = data[egg.eggId];
+          if (!remote) continue;
+          if (remote.collected) egg.collected = true;
+          else if (typeof remote.x === 'number' && typeof remote.y === 'number') {
+            egg.x = remote.x; egg.y = remote.y; egg.collected = false;
+          }
+        }
+      });
+    } catch (e) { console.warn('initEggSync error', e); }
+  }
+
   function tryCollectEggRemote(eggId, byName) {
     return new Promise(resolve => {
       try {
@@ -945,89 +761,116 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
       set(ref(db, 'global_eggs'), null).catch(() => {});
     } catch (e) {}
   }
-  // ═══════════════════════════════════════════════════════════
 
   function saveGame(silent){
     if (!__saveEnabled) {
-      // 如果還沒啟用，但 localStorage 已有舊存檔，就允許寫入（避免離線孵蛋失效）
       try {
         const existing = localStorage.getItem(SAVE_KEY);
-        if (!existing) return;  // 真的全新玩家，先不寫
+        if (!existing) return;
       } catch (e) { return; }
     }
-
-    // ★★ 防歸零：本機已有非空存檔，而 S 是空狀態 → 拒絕寫入
     try {
-        const existingRaw = localStorage.getItem(SAVE_KEY);
-        if (existingRaw) {
-            const old = JSON.parse(existingRaw);
-            const oldHasData = old && (
-                (old.cash || 0) > 0
-                || (old.displaySpeed || 0) > 10
-                || (Array.isArray(old.discovered) && old.discovered.length > 0)
-                || (Array.isArray(old.pets) && old.pets.length > 0)
-                || (Array.isArray(old.bag) && old.bag.length > 0)
-                || (Array.isArray(old.hatchery) && old.hatchery.length > 0)
-                || old.equippedStick || old.equippedTrail || old.subscriptionVerified
-            );
-            const newHasData = (
-                S.cash > 0
-                || S.player.displaySpeed > 10
-                || IndexData.discovered.size > 0
-                || S.pets.length > 0
-                || S.bag.length > 0
-                || S.hatchery.length > 0
-                || S.equippedStick || S.equippedTrail || S.subscriptionVerified
-            );
-            if (oldHasData && !newHasData) {
-                console.warn('[saveGame] 本機已有進度但 S 為空，跳過避免歸零');
-                return;
-            }
+      const existingRaw = localStorage.getItem(SAVE_KEY);
+      if (existingRaw) {
+        const old = JSON.parse(existingRaw);
+        const oldHasData = old && (
+          (old.cash || 0) > 0 || (old.displaySpeed || 0) > 10
+          || (Array.isArray(old.discovered) && old.discovered.length > 0)
+          || (Array.isArray(old.pets) && old.pets.length > 0)
+          || (Array.isArray(old.bag) && old.bag.length > 0)
+          || (Array.isArray(old.hatchery) && old.hatchery.length > 0)
+          || old.equippedStick || old.equippedTrail || old.subscriptionVerified
+          || (old.sticks && Object.keys(old.sticks).length > 0)
+          || (old.trails && Object.keys(old.trails).length > 0)
+          || (old.eggState && Array.isArray(old.eggState.eggs) && old.eggState.eggs.length > 0)
+        );
+        const newHasData = (
+          S.cash > 0 || S.player.displaySpeed > 10
+          || IndexData.discovered.size > 0
+          || S.pets.length > 0 || S.bag.length > 0 || S.hatchery.length > 0
+          || S.equippedStick || S.equippedTrail || S.subscriptionVerified
+          || Object.keys(S.sticks || {}).length > 0
+          || Object.keys(S.trails || {}).length > 0
+          || (S.eggs && S.eggs.length > 0)
+        );
+        if (oldHasData && !newHasData) {
+          console.warn('[saveGame] 本機已有進度但 S 為空，跳過避免歸零');
+          return;
         }
+      }
     } catch (e) {}
 
-    try{
-        const data={
-            version:17, displaySpeed:S.player.displaySpeed, tsLv:S.player.tsLv, px:S.player.x,py:S.player.y, cash:S.cash, playerName:S.playerName,
-            pets:S.pets.map(p=>({name:p.name,inc:p.inc,rar:p.rar,biomeIdx:p.biomeIdx,petIdx:p.petIdx,slot:p.slot,size:p.size,state:p.state,mutations:p.mutations||{}})),
-            bag:S.bag.map(p=>({name:p.name,inc:p.inc,rar:p.rar,biomeIdx:p.biomeIdx,petIdx:p.petIdx,size:p.size,mutations:p.mutations||{}})),
-            hatchery:S.hatchery.map(h=>({
-                name:h.name,inc:h.inc,rar:h.rar,biomeIdx:h.biomeIdx,petIdx:h.petIdx,
-                size:h.size,timer:h.timer,total:h.total,finished:h.finished,secret:!!h.secret,
-                favorite:!!h.favorite,mutations:h.mutations||{}
-            })),
-            biomeIdx:S.biomeIdx, discovered:[...IndexData.discovered], claimed:[...IndexData.claimed], sticks:S.sticks, petCap:S.petCap, myBaseIdx:S.myBaseIdx,
-            equippedStick:S.equippedStick||null, ad2Step:S.ad2Step, ad4Step:S.ad4Step, ad8Step:S.ad8Step, ad16Step:S.ad16Step, ad32Step:S.ad32Step,
-            doubleSpeed:!!S.doubleSpeed, quadSpeed:!!S.quadSpeed, subscriptionVerified:!!S.subscriptionVerified, trails:S.trails, equippedTrail:S.equippedTrail,
-            lastOnlineTime:Date.now(), ts:Date.now(),
-            lastRefreshTime: S.lastRefreshTime || 0,
-            eggState: {
-                eggs: S.eggs.filter(e=>!e.collected).map(e=>({ x:e.x, y:e.y, r:e.r, size:e.size, mul:e.mul, petIdx:e.petIdx, biomeIdx:e.biomeIdx, secret:!!e.secret, origX:e.origX, origY:e.origY, eggId:e.eggId })),
-                slot: S.lastRefreshTime,
-            },
-        };
-        for (let i = 0; i < HOOKS.onSave.length; i++) {
-            try { const extra = HOOKS.onSave[i](); if (extra && typeof extra === 'object') Object.assign(data, extra); } catch(err) { console.error('onSave error', err); }
+    try {
+      const data = {
+        version: 17, displaySpeed: S.player.displaySpeed, tsLv: S.player.tsLv,
+        px: S.player.x, py: S.player.y, cash: S.cash, playerName: S.playerName,
+        pets: S.pets.map(p => ({ name:p.name, inc:p.inc, rar:p.rar, biomeIdx:p.biomeIdx, petIdx:p.petIdx, slot:p.slot, size:p.size, state:p.state, mutations:p.mutations||{} })),
+        bag: S.bag.map(p => ({ name:p.name, inc:p.inc, rar:p.rar, biomeIdx:p.biomeIdx, petIdx:p.petIdx, size:p.size, mutations:p.mutations||{} })),
+        hatchery: S.hatchery.map(h => ({
+          name:h.name, inc:h.inc, rar:h.rar, biomeIdx:h.biomeIdx, petIdx:h.petIdx,
+          size:h.size, timer:h.timer, total:h.total, finished:h.finished, secret:!!h.secret,
+          favorite:!!h.favorite, mutations:h.mutations||{}
+        })),
+        biomeIdx: S.biomeIdx,
+        discovered: [...IndexData.discovered], claimed: [...IndexData.claimed],
+        sticks: S.sticks, petCap: S.petCap, myBaseIdx: S.myBaseIdx,
+        equippedStick: S.equippedStick || null,
+        ad2Step: S.ad2Step, ad4Step: S.ad4Step, ad8Step: S.ad8Step, ad16Step: S.ad16Step, ad32Step: S.ad32Step,
+        doubleSpeed: !!S.doubleSpeed, quadSpeed: !!S.quadSpeed,
+        subscriptionVerified: !!S.subscriptionVerified,
+        trails: S.trails, equippedTrail: S.equippedTrail,
+        lastOnlineTime: Date.now(), ts: Date.now(),
+        lastRefreshTime: S.lastRefreshTime || 0,
+        eggState: {
+          eggs: S.eggs.filter(e => !e.collected).map(e => ({
+            x:e.x, y:e.y, r:e.r, size:e.size, mul:e.mul,
+            petIdx:e.petIdx, biomeIdx:e.biomeIdx, secret:!!e.secret,
+            origX:e.origX, origY:e.origY, eggId:e.eggId
+          })),
+          slot: S.lastRefreshTime,
+        },
+      };
+      for (let i = 0; i < HOOKS.onSave.length; i++) {
+        try { const extra = HOOKS.onSave[i](); if (extra && typeof extra === 'object') Object.assign(data, extra); } catch(err) { console.error('onSave error', err); }
+      }
+      const raw = JSON.stringify(data);
+      localStorage.setItem(SAVE_KEY, raw);
+      try { localStorage.setItem(SAVE_KEY_GENERIC, raw); } catch (e) {}
+
+      try {
+        if (window.firebase && firebase.apps && firebase.apps.length) {
+          const user = firebase.auth().currentUser;
+          if (user) {
+            firebase.database().ref(`users/${user.uid}/games/steal_an_egg_v17`).set({
+              data: data, updated_at: firebase.database.ServerValue.TIMESTAMP
+            }).catch(err => {
+              console.error('雲端存檔失敗（本機已存，稍後重試）：', err);
+              __pendingCloudSave = data;
+            });
+          }
         }
-        const raw = JSON.stringify(data);
-        localStorage.setItem(SAVE_KEY, raw);
+      } catch (e) { console.warn('雲端同步失敗', e); }
 
-        // ★★ 雲同步改寫到遊戲專屬路徑 games/steal_an_egg_v17，不再跟 menu.js 的 account_data 打架
-        try {
-            if (window.firebase && firebase.apps && firebase.apps.length) {
-                const user = firebase.auth().currentUser;
-                if (user) {
-                    firebase.database().ref(`users/${user.uid}/games/steal_an_egg_v17`).set({
-                        data: data,
-                        updated_at: firebase.database.ServerValue.TIMESTAMP
-                    }).catch(err => console.error('雲端存檔失敗：', err));
-                }
-            }
-        } catch (e) { console.warn('雲端同步失敗', e); }
+      if (!silent) showToast('💾 存檔成功！', '#3a8a3a', '#2a6a2a');
+    } catch (e) {
+      console.error(e);
+      if (!silent) showToast('❌ 存檔失敗', '#8a2a2a', '#aa4444');
+    }
+  }
 
-        if(!silent)showToast('💾 存檔成功！','#3a8a3a','#2a6a2a');
-    }catch(e){console.error(e);if(!silent)showToast('❌ 存檔失敗','#8a2a2a','#aa4444')}
-}
+  setInterval(async () => {
+    if (!__pendingCloudSave) return;
+    try {
+      if (!window.firebase || !firebase.apps.length) return;
+      const user = firebase.auth().currentUser;
+      if (!user) return;
+      await firebase.database().ref(`users/${user.uid}/games/steal_an_egg_v17`).set({
+        data: __pendingCloudSave, updated_at: firebase.database.ServerValue.TIMESTAMP
+      });
+      console.log('[雲端重試] 成功');
+      __pendingCloudSave = null;
+    } catch (e) {}
+  }, 15000);
 
   function applyLoadedData(d){
     if(!d || d.version!==17) return false;
@@ -1081,9 +924,13 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
     if(Array.isArray(d.discovered))d.discovered.forEach(k=>IndexData.discovered.add(k));
     if(Array.isArray(d.claimed))d.claimed.forEach(k=>IndexData.claimed.add(k));
     S.sticks=d.sticks||{}; S.cps=S.pets.reduce((s,pt)=>s+pt.inc,0);
+    S.pets.forEach(p => discoverPet(p.biomeIdx, p.petIdx));
+    S.bag.forEach(p => discoverPet(p.biomeIdx, p.petIdx));
+    S.hatchery.forEach(h => discoverPet(h.biomeIdx, h.petIdx));
     for (let i = 0; i < HOOKS.onLoad.length; i++) {
       try { HOOKS.onLoad[i](d); } catch(err) { console.error('onLoad error', err); }
     }
+    checkStickUnlock();
     return true;
   }
 
@@ -1120,17 +967,9 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
     mutationCashMultiplier: 1, mutationHatchMultiplier: 1,
     _ext: {},
   };
-    // ═══════════════════════════════════════════════════════════
-  // 🐢 慢速模式（把「移動速度」還原成剛開始的速度）
-  // ═══════════════════════════════════════════════════════════
-  // 剛開始的速度：displaySpeed = 10 → displayToReal(10) = 0.6
-  // 移動速度公式：realSpeed * 2.2
-  // 慢速模式 = 強制用「初始 realSpeed 0.6」算移動速度
   let __slowMode = false;
-  const SLOW_MODE_REAL_SPEED = 0.6;   // 剛開始的速度（displaySpeed = 10 對應的 real）
-
+  const SLOW_MODE_REAL_SPEED = 0.6;
   function isSlowMode() { return __slowMode; }
-
   function setSlowMode(on) {
     __slowMode = !!on;
     const btn = document.getElementById('btnSlowMode');
@@ -1140,16 +979,10 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
     }
     try { localStorage.setItem('raingod_slow_mode', __slowMode ? '1' : '0'); } catch (e) {}
     showToast(__slowMode ? '🐢 慢速模式已開啟（移動速度回到初始）' : '🐇 慢速模式已關閉（恢復原本速度）',
-      __slowMode ? '#4a7aaa' : '#3a8a3a',
-      __slowMode ? '#2a4a6a' : '#2a6a2a');
+      __slowMode ? '#4a7aaa' : '#3a8a3a', __slowMode ? '#2a4a6a' : '#2a6a2a');
   }
-
   function toggleSlowMode() { setSlowMode(!__slowMode); }
-
-  // 讀取上次設定
-  try {
-    if (localStorage.getItem('raingod_slow_mode') === '1') __slowMode = true;
-  } catch (e) {}
+  try { if (localStorage.getItem('raingod_slow_mode') === '1') __slowMode = true; } catch (e) {}
   const keys={};
   const rnd=(a,b)=>Math.random()*(b-a)+a;
   const dist=(x1,y1,x2,y2)=>Math.hypot(x2-x1,y2-y1);
@@ -1173,14 +1006,14 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
   function getOwnedSticks() { const owned = STICK_DEFS.filter(s => S.sticks[s.id]); if (S.sticks['god_stick']) owned.push(GOD_STICK); return owned; }
   function getEquippedStick() { const owned = getOwnedSticks(); if (owned.length === 0) return null; if (S.equippedStick) { const found = owned.find(s => s.id === S.equippedStick); if (found) return found; } return null; }
 
-  // === 4A 结束，下面接 4B ===
-    function equipStick(id) {
+  function equipStick(id) {
     const owned = getOwnedSticks();
     if (!owned.find(s => s.id === id)) { showToast('❌ 你還沒解鎖這根棒子', '#8a2a2a', '#5a0a0a'); return; }
     if (S.equippedStick === id) { S.equippedStick = null; showToast(`👊 已卸下棒子（空手）`, '#5a5a5a', '#3a3a3a'); }
     else { S.equippedStick = id; const def = getStickDef(id); showToast(`🏏 已裝備【${def.name}】`, '#3a8a3a', '#2a6a2a'); }
     saveGame(true); updateUI(); buildStickUI();
   }
+
   function drawStickIcon(g, def, s, swingPhase) {
     g.save(); g.rotate(-Math.PI / 4 + swingPhase * Math.PI * 1.6);
     const bi = def.biomeIdx; const isGod = def.id === 'god_stick'; const isLate = bi >= 6; const isMid = bi >= 3 && bi < 6; const isEarly = bi >= 0 && bi < 3;
@@ -1201,6 +1034,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
       g.fillStyle = '#fff'; for (let i = 0; i < 4; i++) { const a = performance.now() / 400 + i * Math.PI / 2; g.beginPath(); g.arc(Math.cos(a) * s * 0.5, Math.sin(a) * s * 0.5 - s * 0.1, s * 0.08, 0, 7); g.fill(); } g.shadowBlur = 0;
     } g.restore();
   }
+
   function buildStickUI() {
     const grid = document.getElementById('stickGrid'); if (!grid) return; grid.innerHTML = '';
     const owned = getOwnedSticks(); const equipped = getEquippedStick();
@@ -1226,6 +1060,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
       card.appendChild(btn); grid.appendChild(card);
     });
   }
+
   function drawTrailPreview(g, def, s, time) {
     const type = def.type; const cols = def.colors; const isSimple = def.id === 'trail_basic' || def.id === 'trail_fire';
     g.save();
@@ -1247,134 +1082,68 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
       else if (type === 'origin') { g.save(); g.translate(x, y); g.rotate(time * 3 + i); g.fillStyle = cols[i % cols.length]; g.globalAlpha = alpha; g.beginPath(); g.arc(0, 0, s * 0.14 * (1 - t * 0.4), 0, 7); g.fill(); g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.globalAlpha = alpha * 0.9; g.beginPath(); g.arc(0, 0, s * 0.22 * (1 - t * 0.4), 0, 7); g.stroke(); g.restore(); }
     } g.globalAlpha = 1; g.restore();
   }
-function drawTrailOnPlayer(g, player, trailDef, time) {
+
+  function drawTrailOnPlayer(g, player, trailDef, time) {
     if (!trailDef) return;
-    const type = trailDef.type;
-    const cols = trailDef.colors;
-    const t = time;
+    const type = trailDef.type; const cols = trailDef.colors; const t = time;
     const isSimple = trailDef.id === 'trail_basic' || trailDef.id === 'trail_fire';
     g.save();
-
-    // ── 【強特效專屬】精緻的雙層底座光環 ──
     if (!isSimple) {
-      const ringR = 26 + Math.sin(t * 3) * 5; 
+      const ringR = 26 + Math.sin(t * 3) * 5;
       const ringGrad = g.createRadialGradient(0, 10, ringR * 0.1, 0, 10, ringR * 2.2);
-      ringGrad.addColorStop(0, hexA(cols[0], 0.85)); 
-      ringGrad.addColorStop(0.5, hexA(cols[Math.min(1, cols.length - 1)], 0.5)); 
+      ringGrad.addColorStop(0, hexA(cols[0], 0.85));
+      ringGrad.addColorStop(0.5, hexA(cols[Math.min(1, cols.length - 1)], 0.5));
       ringGrad.addColorStop(1, hexA(cols[0], 0));
-      
-      g.fillStyle = ringGrad; 
-      g.beginPath(); 
-      g.ellipse(0, 10, ringR * 2.2, ringR * 0.8, 0, 0, 7); 
-      g.fill();
-
-      // 外發光環
-      g.strokeStyle = hexA(cols[0], 0.95); 
-      g.lineWidth = 3.5; 
-      g.shadowBlur = 18; 
-      g.shadowColor = cols[0]; 
-      g.beginPath(); 
-      g.ellipse(0, 10, ringR * 1.6, ringR * 0.65, 0, 0, 7); 
-      g.stroke(); 
-      g.shadowBlur = 0;
+      g.fillStyle = ringGrad; g.beginPath(); g.ellipse(0, 10, ringR * 2.2, ringR * 0.8, 0, 0, 7); g.fill();
+      g.strokeStyle = hexA(cols[0], 0.95); g.lineWidth = 3.5; g.shadowBlur = 18; g.shadowColor = cols[0];
+      g.beginPath(); g.ellipse(0, 10, ringR * 1.6, ringR * 0.65, 0, 0, 7); g.stroke(); g.shadowBlur = 0;
     }
-
-    // ── 粒子數量調整：弱的更少（省效能），強的更多（更綿密） ──
     const N = isSimple ? 5 : 28;
-    
     for (let i = 0; i < N; i++) {
-      const phase = i / N; 
-      const angle = t * 2.2 + i * (Math.PI * 2 / N); 
+      const phase = i / N; const angle = t * 2.2 + i * (Math.PI * 2 / N);
       const radius = 20 + Math.sin(t * 3 + i * 0.7) * 8 + phase * 6;
-      const x = Math.cos(angle) * radius; 
-      const y = Math.sin(angle) * radius * 0.65 - 10 + Math.sin(t * 4 + i * 1.3) * 6;
-      const alpha = isSimple ? 0.6 : (0.55 + 0.45 * Math.sin(t * 5 + i * 1.7)); 
-      const sz = (isSimple ? 4 : 5) + Math.sin(t * 4 + i * 1.5) * 2.5 + phase * 2; 
+      const x = Math.cos(angle) * radius; const y = Math.sin(angle) * radius * 0.65 - 10 + Math.sin(t * 4 + i * 1.3) * 6;
+      const alpha = isSimple ? 0.6 : (0.55 + 0.45 * Math.sin(t * 5 + i * 1.7));
+      const sz = (isSimple ? 4 : 5) + Math.sin(t * 4 + i * 1.5) * 2.5 + phase * 2;
       const col = cols[i % cols.length];
-
-      g.globalAlpha = alpha; 
-      // 弱特效完全不開 shadowBlur；強特效開啟強烈霓虹光
-      g.shadowBlur = isSimple ? 0 : 16; 
-      g.shadowColor = col;
-
-      // ── 弱特效：全部簡化成乾淨俐落的小圓點，不跑複雜形狀 ──
-      if (isSimple) {
-        g.fillStyle = col;
-        g.beginPath();
-        g.arc(x, y, sz * 0.7, 0, 7);
-        g.fill();
-        continue; // 直接跳過後面複雜的特效判斷
-      }
-
-      // ── 強特效：保留並強化原本豐富的圖形變化 ──
-      if (type === 'glow') { 
-        g.fillStyle = col; g.beginPath(); g.arc(x, y, sz * 0.6, 0, 7); g.fill(); 
-      }
-      else if (type === 'fire') { 
-        g.fillStyle = col; g.beginPath(); g.arc(x, y - phase * 8, sz * 0.8, 0, 7); g.fill(); 
-      }
+      g.globalAlpha = alpha; g.shadowBlur = isSimple ? 0 : 16; g.shadowColor = col;
+      if (isSimple) { g.fillStyle = col; g.beginPath(); g.arc(x, y, sz * 0.7, 0, 7); g.fill(); continue; }
+      if (type === 'glow') { g.fillStyle = col; g.beginPath(); g.arc(x, y, sz * 0.6, 0, 7); g.fill(); }
+      else if (type === 'fire') { g.fillStyle = col; g.beginPath(); g.arc(x, y - phase * 8, sz * 0.8, 0, 7); g.fill(); }
       else if (type === 'star' || type === 'galaxy') {
         g.fillStyle = col; g.save(); g.translate(x, y); g.rotate(t * 2 + i);
-        g.beginPath(); 
-        for (let k = 0; k < 5; k++) { 
-          const ang = k * Math.PI * 2 / 5 - Math.PI / 2; 
-          const sx = Math.cos(ang) * sz, sy = Math.sin(ang) * sz; 
-          if (k === 0) g.moveTo(sx, sy); else g.lineTo(sx, sy); 
-          g.lineTo(Math.cos(ang + Math.PI / 5) * sz * 0.4, Math.sin(ang + Math.PI / 5) * sz * 0.4); 
-        }
+        g.beginPath(); for (let k = 0; k < 5; k++) { const ang = k * Math.PI * 2 / 5 - Math.PI / 2; const sx = Math.cos(ang) * sz, sy = Math.sin(ang) * sz; if (k === 0) g.moveTo(sx, sy); else g.lineTo(sx, sy); g.lineTo(Math.cos(ang + Math.PI / 5) * sz * 0.4, Math.sin(ang + Math.PI / 5) * sz * 0.4); }
         g.closePath(); g.fill(); g.restore();
       }
-      else if (type === 'rainbow') { 
-        g.strokeStyle = col; g.lineWidth = sz * 0.7; g.beginPath(); g.arc(0, 0, radius, angle - 0.35, angle + 0.35); g.stroke(); 
-      }
-      else if (type === 'petal') { 
-        g.fillStyle = col; g.save(); g.translate(x, y); g.rotate(angle + t); g.beginPath(); g.ellipse(0, 0, sz * 1.2, sz * 0.6, 0, 0, 7); g.fill(); g.restore(); 
-      }
-      else if (type === 'ice') { 
-        g.strokeStyle = col; g.lineWidth = sz * 0.4; g.save(); g.translate(x, y); g.rotate(angle + t * 0.5); g.beginPath(); g.moveTo(-sz, 0); g.lineTo(sz, 0); g.moveTo(0, -sz); g.lineTo(0, sz); g.stroke(); g.restore(); 
-      }
-      else if (type === 'void') { 
-        g.fillStyle = col; g.beginPath(); g.arc(x, y, sz * 1.1, 0, 7); g.fill(); 
-        g.strokeStyle = '#ff00aa'; g.lineWidth = 2; g.globalAlpha = alpha * 0.75; g.beginPath(); g.arc(x, y, sz * 1.8, 0, 7); g.stroke(); 
-      }
-      else if (type === 'gold') { 
-        g.fillStyle = col; g.save(); g.translate(x, y); g.rotate(angle); g.fillRect(-sz, -sz, sz * 2, sz * 2); g.restore(); 
-      }
-      else if (type === 'origin') { 
-        g.fillStyle = col; g.save(); g.translate(x, y); g.rotate(t * 3 + i); g.beginPath(); g.arc(0, 0, sz * 0.75, 0, 7); g.fill(); 
-        g.strokeStyle = '#fff'; g.lineWidth = 2; g.globalAlpha = alpha * 0.95; g.beginPath(); g.arc(0, 0, sz * 1.5, 0, 7); g.stroke(); g.restore(); 
-      }
+      else if (type === 'rainbow') { g.strokeStyle = col; g.lineWidth = sz * 0.7; g.beginPath(); g.arc(0, 0, radius, angle - 0.35, angle + 0.35); g.stroke(); }
+      else if (type === 'petal') { g.fillStyle = col; g.save(); g.translate(x, y); g.rotate(angle + t); g.beginPath(); g.ellipse(0, 0, sz * 1.2, sz * 0.6, 0, 0, 7); g.fill(); g.restore(); }
+      else if (type === 'ice') { g.strokeStyle = col; g.lineWidth = sz * 0.4; g.save(); g.translate(x, y); g.rotate(angle + t * 0.5); g.beginPath(); g.moveTo(-sz, 0); g.lineTo(sz, 0); g.moveTo(0, -sz); g.lineTo(0, sz); g.stroke(); g.restore(); }
+      else if (type === 'void') { g.fillStyle = col; g.beginPath(); g.arc(x, y, sz * 1.1, 0, 7); g.fill(); g.strokeStyle = '#ff00aa'; g.lineWidth = 2; g.globalAlpha = alpha * 0.75; g.beginPath(); g.arc(x, y, sz * 1.8, 0, 7); g.stroke(); }
+      else if (type === 'gold') { g.fillStyle = col; g.save(); g.translate(x, y); g.rotate(angle); g.fillRect(-sz, -sz, sz * 2, sz * 2); g.restore(); }
+      else if (type === 'origin') { g.fillStyle = col; g.save(); g.translate(x, y); g.rotate(t * 3 + i); g.beginPath(); g.arc(0, 0, sz * 0.75, 0, 7); g.fill(); g.strokeStyle = '#fff'; g.lineWidth = 2; g.globalAlpha = alpha * 0.95; g.beginPath(); g.arc(0, 0, sz * 1.5, 0, 7); g.stroke(); g.restore(); }
     }
-
-    // ── 【強特效專屬】額外增加 10 顆飄散向上的精緻浮游微粒 ──
     if (!isSimple) {
       for (let i = 0; i < 10; i++) {
-        const lifeT = ((t * 1.2 + i * 0.28) % 1); 
-        const yy = -22 - lifeT * 40; 
-        const xx = Math.sin(t * 4 + i * 2) * 12; 
-        const alpha = (1 - lifeT) * 0.85; 
-        const sz = 5 * (1 - lifeT * 0.4);
-        
-        g.globalAlpha = alpha; 
-        g.fillStyle = cols[i % cols.length]; 
-        g.shadowBlur = 12; 
-        g.shadowColor = cols[i % cols.length]; 
-        g.beginPath(); 
-        g.arc(xx, yy, sz, 0, 7); 
-        g.fill();
+        const lifeT = ((t * 1.2 + i * 0.28) % 1);
+        const yy = -22 - lifeT * 40; const xx = Math.sin(t * 4 + i * 2) * 12;
+        const alpha = (1 - lifeT) * 0.85; const sz = 5 * (1 - lifeT * 0.4);
+        g.globalAlpha = alpha; g.fillStyle = cols[i % cols.length];
+        g.shadowBlur = 12; g.shadowColor = cols[i % cols.length];
+        g.beginPath(); g.arc(xx, yy, sz, 0, 7); g.fill();
       }
     }
+    g.globalAlpha = 1; g.shadowBlur = 0; g.restore();
+  }
 
-    g.globalAlpha = 1; 
-    g.shadowBlur = 0; 
-    g.restore();
-}
   function drawTrailPath(ctx, path, trailDef, time) {
-    if (!trailDef || !path || path.length === 0) return; const type = trailDef.type; const cols = trailDef.colors; const isSimple = trailDef.id === 'trail_basic' || trailDef.id === 'trail_fire';
+    if (!trailDef || !path || path.length === 0) return;
+    const type = trailDef.type; const cols = trailDef.colors; const isSimple = trailDef.id === 'trail_basic' || trailDef.id === 'trail_fire';
     for (let i = 0; i < path.length; i++) {
-      const pt = path[i]; const progress = i / path.length; const sp = worldToScreen(pt.x, pt.y); const alpha = Math.pow(progress, 1.5) * 0.85; const sz = progress * 14 + 4;
+      const pt = path[i]; const progress = i / path.length; const sp = worldToScreen(pt.x, pt.y);
+      const alpha = Math.pow(progress, 1.5) * 0.85; const sz = progress * 14 + 4;
       ctx.save(); ctx.translate(sp.x, sp.y); ctx.scale(S.zoom, S.zoom); ctx.globalAlpha = alpha;
-      const col = cols[Math.floor(progress * (cols.length - 0.01))]; ctx.fillStyle = col; ctx.shadowBlur = isSimple ? 0 : 15; ctx.shadowColor = col;
+      const col = cols[Math.floor(progress * (cols.length - 0.01))]; ctx.fillStyle = col;
+      ctx.shadowBlur = isSimple ? 0 : 15; ctx.shadowColor = col;
       if (type === 'glow') { ctx.beginPath(); ctx.arc(0, 0, sz * 0.5, 0, 7); ctx.fill(); }
       else if (type === 'fire') { ctx.beginPath(); ctx.arc(0, 0, sz * 0.7, 0, 7); ctx.fill(); }
       else if (type === 'ice') { ctx.strokeStyle = col; ctx.lineWidth = sz * 0.4; ctx.save(); ctx.rotate(time * 2 + i * 0.5); ctx.beginPath(); ctx.moveTo(-sz, 0); ctx.lineTo(sz, 0); ctx.moveTo(0, -sz); ctx.lineTo(0, sz); ctx.moveTo(-sz*0.6, -sz*0.6); ctx.lineTo(sz*0.6, sz*0.6); ctx.stroke(); ctx.restore(); }
@@ -1389,6 +1158,7 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
       ctx.restore();
     }
   }
+
   function buildTrailUI() {
     const grid = document.getElementById('trailGrid'); if (!grid) return; grid.innerHTML = '';
     TRAIL_DEFS.forEach(def => {
@@ -1410,6 +1180,7 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
       grid.appendChild(card);
     });
   }
+
   function isAdmin() {
     try { const u = firebase.auth().currentUser; if (!u || !u.email) return false; return u.email.split('@')[0].toLowerCase().trim() === 'raingod'; } catch (e) { return false; }
   }
@@ -1497,9 +1268,22 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
     WORLD.biomes.forEach((b, bi) => { for (let pi = 0; pi < 8; pi++) IndexData.discovered.add(bi + '_' + pi); });
     buildIndexUI(); checkStickUnlock(); updateUI(); saveGame(true); showToast('📖 已解鎖全圖鑑！', '#3a8a3a', '#2a6a2a');
   });
+
   function updateTutorial(){
     if(!S.tutorialActive) return;
-    if(S.cash > 0 || S.pets.length > 0 || S.bag.length > 0){ finishTutorial(); return; }
+    if (S.cash >= 40 && S.player.tsLv === 1) {
+      const btnUp = document.getElementById('btnUp');
+      const arrowDiv = document.getElementById('tutArrow');
+      if (!btnUp || !arrowDiv) return;
+      const rect = btnUp.getBoundingClientRect();
+      arrowDiv.style.display = 'flex';
+      arrowDiv.style.left = (rect.left + rect.width / 2) + 'px';
+      arrowDiv.style.top = (rect.top - 70) + 'px';
+      document.getElementById('tutArrowIcon').style.transform = 'rotate(180deg)';
+      document.getElementById('tutArrowText').textContent = '⬆️ 升級跑步機！';
+      return;
+    }
+    if (S.player.tsLv > 1 || S.pets.length > 0 || S.hatchery.length > 0) { finishTutorial(); return; }
     const p = S.player; let target = null, text = '';
     if(p.carry){ target = {x: p.x, y: S.safeLineY + 200}; text = '🏃 跑回安全線！'; }
     else if(S.hatchery.length > 0 && S.hatchery.some(h => h.finished)){ const h = S.hatchery.find(h => h.finished); target = {x: h.x, y: h.y}; text = '🥚 點擊打開蛋！'; }
@@ -1521,9 +1305,11 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
     localStorage.setItem('tutorial_done', '1'); document.getElementById('tutArrow').style.display = 'none';
     showToast('🎉 教學完成！開始你的偷蛋之旅吧！', '#3a8a3a', '#2a6a2a');
   }
+
   let adInterval = null;
   function normalizeUrl(s){ return s.trim().toLowerCase().replace(/^https?:\/\//,'').replace(/^www\./,'').replace(/\/+$/,''); }
-    function showAdModal(type){
+
+  function showAdModal(type){
     if(S.adPlaying) return;
     let step, mult, multLabel;
     if (type === '2x')  { step = S.ad2Step;  mult = 2;  multLabel = '2×'; }
@@ -1548,7 +1334,6 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
     const urlText    = document.getElementById('adUrlText');
     const urlHint    = document.getElementById('adUrlHint');
 
-    // ── 重置所有狀態 ──
     if(adInterval){ clearInterval(adInterval); adInterval = null; }
     urlDisplay.style.display = '';
     urlDisplay.classList.remove('hidden-url');
@@ -1565,7 +1350,6 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
     const reward = '跑步機速度';
     title.textContent = `🎬 領取 ${multLabel} 跑步機速度獎勵`;
 
-    // ── 領取獎勵（統一入口）──
     const grantReward = () => {
       if (type === '2x')       { if (S.ad2Step  < AD_STEPS_TOTAL) S.ad2Step++;  if (S.ad2Step  >= AD_STEPS_TOTAL) S.doubleSpeed = true; }
       else if (type === '4x')  { if (S.ad4Step  < AD_STEPS_TOTAL) S.ad4Step++;  if (S.ad4Step  >= AD_STEPS_TOTAL) S.quadSpeed   = true; }
@@ -1579,16 +1363,13 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
     modal.classList.add('open');
 
     if (type === '2x') {
-      // ═══ X2：需要登入 + 按領取 ═══
       sub.textContent = '登入後即可領取 2× 跑步機速度獎勵';
       urlDisplay.style.display = 'none';
       cdEl.style.display = 'none';
       inputWrap.style.display = 'flex';
       input.style.display = 'none';
-
       let isLoggedIn = false;
       try { isLoggedIn = !!(firebase.auth().currentUser); } catch(e) {}
-
       if (!isLoggedIn) {
         errEl.style.color = '#aa0000';
         errEl.innerHTML = '❌ 請先登入後才能領取此獎勵<br><span style="font-size:.72rem; color:#8a2020;">請點擊畫面底部「👤 玩家」進行登入，登入後再回來領取</span>';
@@ -1604,9 +1385,7 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
         claimBtn.style.opacity = '1';
         claimBtn.onclick = () => grantReward();
       }
-
     } else if (type === '4x') {
-      // ═══ X4：維持原本流程（5 秒倒數 → 隱藏網址 → 輸入）═══
       sub.textContent = '觀看廣告並記住網址，看完後輸入即可領取';
       urlText.textContent = AD_URL;
       urlHint.textContent = '📺 看完廣告後請輸入上方黃色網址';
@@ -1614,9 +1393,8 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
       let cd = 5;
       adInterval = setInterval(() => {
         cd--;
-        if(cd > 0){
-          cdEl.textContent = cd;
-        } else {
+        if(cd > 0){ cdEl.textContent = cd; }
+        else {
           clearInterval(adInterval); adInterval = null;
           cdEl.textContent = '✓';
           urlDisplay.classList.add('hidden-url');
@@ -1631,24 +1409,19 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
         if(normalized !== AD_URL){ errEl.textContent = '❌ 網址不正確，請仔細回想剛剛的黃色大字'; return; }
         grantReward();
       };
-
     } else {
-      // ═══ X8 / X16 / X32：feedback 連結，點過才能領 ═══
       sub.textContent = '點擊連結提供意見回饋後，按領取即可獲得獎勵';
       cdEl.style.display = 'none';
       inputWrap.style.display = 'flex';
       input.style.display = 'none';
-
       urlText.innerHTML = '<a href="./feedback.html" target="_blank" rel="noopener" style="color:#4a2200; text-decoration:none; font-family:\'Segoe UI\',system-ui,sans-serif; font-size:1.3rem; line-height:1.4; display:inline-block; padding:4px 6px;">📝 你可以在這裡提供意見回饋！</a>';
       urlHint.textContent = '👆 點擊上方文字前往回饋頁面';
-
       let visited = false;
       claimBtn.textContent = '🔒 請先點擊上方連結';
       claimBtn.disabled = true;
       claimBtn.style.opacity = '0.5';
       errEl.style.color = '#8a5a00';
       errEl.textContent = '⚠️ 點擊上方連結後才能領取獎勵';
-
       setTimeout(() => {
         const link = urlText.querySelector('a');
         if (link) {
@@ -1662,18 +1435,14 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
           });
         }
       }, 0);
-
       claimBtn.onclick = () => {
-        if (!visited) {
-          errEl.style.color = '#aa0000';
-          errEl.textContent = '⚠️ 請先點擊上方連結前往回饋頁面';
-          return;
-        }
+        if (!visited) { errEl.style.color = '#aa0000'; errEl.textContent = '⚠️ 請先點擊上方連結前往回饋頁面'; return; }
         grantReward();
       };
     }
   }
   function closeAdModal(){ if(!S.adPlaying) return; S.adPlaying = false; if(adInterval){ clearInterval(adInterval); adInterval = null; } document.getElementById('adModal').classList.remove('open'); showToast('❌ 已取消觀看廣告', '#8a2a2a', '#5a0a0a'); }
+
   let __tessWorker = null, __tessLoading = false;
   async function getTessWorker() {
     if (__tessWorker) return __tessWorker;
@@ -1734,6 +1503,7 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
     } catch (err) { console.error('訂閱驗證錯誤', err); status.style.color = '#aa0000'; status.textContent = '❌ 驗證過程發生錯誤：' + (err && err.message ? err.message : '請重試'); }
     finally { btn.disabled = false; }
   });
+
   const BIOME_PALETTES=[
     {body:'#7ac85a',belly:'#c8f0a0',eye:'#2a4a1a',accent:'#e8b820',dark:'#4a8a2a',light:'#b0f080'},{body:'#e87a4a',belly:'#ffb080',eye:'#5a1a0a',accent:'#ff3a20',dark:'#a83a1a',light:'#ffa070'},{body:'#5a9ad8',belly:'#a0d0ff',eye:'#0a2a5a',accent:'#20c0ff',dark:'#2a5a9a',light:'#80c0ff'},{body:'#c8b86a',belly:'#e8dca0',eye:'#4a3a0a',accent:'#ff9a20',dark:'#8a7a2a',light:'#e8d880'},{body:'#a0d8f0',belly:'#e0f4ff',eye:'#1a4a6a',accent:'#80e0ff',dark:'#5a8ab0',light:'#e0f8ff'},{body:'#a07ae8',belly:'#d0b0ff',eye:'#3a1a6a',accent:'#c040ff',dark:'#6a3aaa',light:'#c0a0ff'},{body:'#f0a0d0',belly:'#ffd0e8',eye:'#6a2a4a',accent:'#ff60b0',dark:'#c86a9a',light:'#ffc0e0'},{body:'#c0c0d0',belly:'#e8e8f0',eye:'#3a3a4a',accent:'#ffe040',dark:'#8a8a9a',light:'#e0e0f0'},{body:'#f0d080',belly:'#fff0c0',eye:'#6a4a00',accent:'#ffe040',dark:'#aa8820',light:'#ffe8b0'},{body:'#3a3a5a',belly:'#6a6a8a',eye:'#1a1a3a',accent:'#8040ff',dark:'#1a1a3a',light:'#5a5a7a'},{body:'#7a3a9a',belly:'#b070d0',eye:'#3a0a4a',accent:'#c040ff',dark:'#4a1a6a',light:'#a060c0'},{body:'#7a5aa0',belly:'#b090d0',eye:'#2a0a4a',accent:'#d040ff',dark:'#4a2a70',light:'#a080d0'}
   ];
@@ -1764,6 +1534,7 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
     g.strokeStyle = '#000';
     g.beginPath(); g.moveTo(0, -r); g.lineTo(0, r); g.stroke();
   }
+
   function buildIndexUI(){
     const tabs=document.getElementById('indexTabs');tabs.innerHTML='';
     WORLD.biomes.forEach((b,i)=>{ const tab=document.createElement('div'); tab.className='index-tab'+(i===S.indexTab?' active':''); tab.textContent=b.icon+' '+b.name; tab.onclick=()=>{S.indexTab=i;buildIndexUI()}; tabs.appendChild(tab); });
@@ -1809,16 +1580,25 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
   function stripToBagPet(pet){ return { id: pet.id || Math.random().toString(36).slice(2), name: pet.name, inc: pet.inc, rar: pet.rar, biomeIdx: pet.biomeIdx, petIdx: pet.petIdx, size: pet.size || 'normal', mutations: pet.mutations || {} }; }
   function equipFromBag(idx) {
     if (S.pets.length >= S.petCap) { showToast('⚠️ 農場已滿，請先升級上限或賣掉現有寵物。', '#8a2a2a', '#5a0a0a'); return; }
-    const pet = S.bag[idx]; if (!pet) return; const usedSlots = new Set(S.pets.map(p => p.slot)); let slot = -1;
+    const pet = S.bag[idx]; if (!pet) return;
+    const usedSlots = new Set(S.pets.map(p => p.slot));
+    let slot = -1;
     for (let j = 0; j < FARM_OFFSETS.length; j++) { if (!usedSlots.has(j)) { slot = j; break; } }
     if (slot === -1) { showToast('⚠️ 沒有空位', '#8a2a2a', '#5a0a0a'); return; }
-    const basePos = getBasePos(S.myBaseIdx); const mx = basePos.x + rnd(-35, 35); const my = basePos.y + rnd(-40, 365); S.bag.splice(idx, 1);
+    const basePos = getBasePos(S.myBaseIdx);
+    const mx = basePos.x + rnd(-35, 35); const my = basePos.y + rnd(-40, 365);
+    S.bag.splice(idx, 1);
     S.pets.push({ id: Math.random().toString(36).slice(2), name: pet.name, inc: pet.inc, rar: pet.rar, biomeIdx: pet.biomeIdx, petIdx: pet.petIdx, size: pet.size, x: mx, y: my, wanderTargetX: mx, wanderTargetY: my, wanderTimer: 0, selected: false, slot, state: 'farm', mutations: pet.mutations || {} });
-    S.cps = S.pets.reduce((s, pt) => s + pt.inc, 0); showToast(`✅ ${pet.name} 已上陣`, '#3a8a3a', '#2a6a2a'); buildBagUI(); updateUI(); saveGame(true);
+    S.cps = S.pets.reduce((s, pt) => s + pt.inc, 0);
+    discoverPet(pet.biomeIdx, pet.petIdx);
+    showToast(`✅ ${pet.name} 已上陣`, '#3a8a3a', '#2a6a2a');
+    buildBagUI(); updateUI(); saveGame(true);
   }
   function sellFromBag(idx) {
-    const pet = S.bag[idx]; if (!pet) return; const mul = SIZE_MUL[pet.size] || 1; const price = pet.inc * 15 * mul; S.cash += price; S.bag.splice(idx, 1);
-    showToast(`💸 已出售 ${pet.name} 獲得 $${fmt(price)}`, '#8a3a3a', '#6a1a1a'); buildBagUI(); updateUI(); saveGame(true);
+    const pet = S.bag[idx]; if (!pet) return;
+    const mul = SIZE_MUL[pet.size] || 1; const price = pet.inc * 15 * mul; S.cash += price; S.bag.splice(idx, 1);
+    showToast(`💸 已出售 ${pet.name} 獲得 $${fmt(price)}`, '#8a3a3a', '#6a1a1a');
+    buildBagUI(); updateUI(); saveGame(true);
   }
   function checkStickUnlock(){
     WORLD.biomes.forEach((b,bi)=>{
@@ -1868,8 +1648,7 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
     S.cps=S.pets.reduce((s,pt)=>s+pt.inc,0); showToast(`💸 已出售 ${pet.name} 獲得 $${fmt(price)}`,'#8a3a3a','#6a1a1a');
     closePetPanel();saveGame(true);updateUI();
   }
-  // === 4B-1 结束，下面接 4B-2 ===
-    const REMOTE_PLAYERS = new Map();
+   const REMOTE_PLAYERS = new Map();
   function initMultiplayer(){
     const { db, ref, set, onValue, onDisconnect, serverTimestamp, remove } = window.__FB;
     if(!db){ console.warn('Firebase 未初始化'); return; }
@@ -1884,7 +1663,7 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
       set(mePosRef, { x: Math.round(S.player.x), y: Math.round(S.player.y), t: serverTimestamp() }).catch(() => {});
     }, 80);
     let lastInfoHash = '';
-        function pushInfo(force) {
+    function pushInfo(force) {
       const info = {
         name: S.playerName, baseIdx: S.myBaseIdx,
         displaySpeed: Math.round(S.player.displaySpeed),
@@ -1916,7 +1695,6 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
       const hash = JSON.stringify(st);
       if (force || hash !== lastStateHash) { lastStateHash = hash; set(meStateRef, st).catch(() => {}); }
     }
-    // ★ 暴露給外部呼叫，偷蛋/掉蛋時立刻推
     window.__raingodPushState = () => pushState(true);
     pushState(true);
     setInterval(() => pushState(false), 500);
@@ -1992,113 +1770,65 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
         });
       }
     }, 30000);
-        // ── 接收 admin 指令（含 discoverPet 修復）──
     const { remove: _adminRemove } = window.__FB;
     onValue(ref(db, 'admin/' + PLAYER_ID), snap => {
       const v = snap.val();
       if (!v) return;
-
-      // 過期指令直接清掉
       if (Date.now() - (v.t || 0) >= 5000) {
         _adminRemove(ref(db, 'admin/' + PLAYER_ID)).catch(() => {});
         return;
       }
-
       if (v.setCash !== undefined) S.cash = v.setCash;
       if (v.setSpeed !== undefined) S.player.displaySpeed = v.setSpeed;
       if (v.setSpeedLv !== undefined) S.player.tsLv = v.setSpeedLv;
-
-      // ── 放背包 ──
       if (v.addPetBag) {
         const { bi, pi } = v.addPetBag;
         const b = WORLD.biomes[bi];
-        S.bag.push({
-          id: Math.random().toString(36).slice(2),
-          name: b.petNames[pi],
-          inc: WORLD.petIncome[bi][pi],
-          rar: WORLD.petRarity[bi][pi],
-          biomeIdx: bi,
-          petIdx: pi,
-          size: 'normal',
-          mutations: {}
-        });
-        discoverPet(bi, pi);   // ★ 修復：解鎖圖鑑 + 觸發棒子檢查 + 彈 toast
+        S.bag.push({ id: Math.random().toString(36).slice(2), name: b.petNames[pi], inc: WORLD.petIncome[bi][pi], rar: WORLD.petRarity[bi][pi], biomeIdx: bi, petIdx: pi, size: 'normal', mutations: {} });
+        discoverPet(bi, pi);
         buildBagUI();
       }
-
-      // ── 放農場 ──
       if (v.addPetFarm) {
         const { bi, pi } = v.addPetFarm;
         const b = WORLD.biomes[bi];
         const usedSlots = new Set(S.pets.map(p => p.slot));
         let slot = -1;
-        for (let j = 0; j < FARM_OFFSETS.length; j++) {
-          if (!usedSlots.has(j)) { slot = j; break; }
-        }
-
+        for (let j = 0; j < FARM_OFFSETS.length; j++) { if (!usedSlots.has(j)) { slot = j; break; } }
         if (slot !== -1) {
           const basePos = getBasePos(S.myBaseIdx);
-          S.pets.push({
-            id: Math.random().toString(36).slice(2),
-            name: b.petNames[pi],
-            inc: WORLD.petIncome[bi][pi],
-            rar: WORLD.petRarity[bi][pi],
-            biomeIdx: bi,
-            petIdx: pi,
-            size: 'normal',
-            x: basePos.x + rnd(-35, 35),
-            y: basePos.y + rnd(-40, 365),
-            wanderTargetX: basePos.x,
-            wanderTargetY: basePos.y,
-            wanderTimer: 0,
-            selected: false,
-            slot,
-            state: 'farm',
-            mutations: {}
-          });
+          S.pets.push({ id: Math.random().toString(36).slice(2), name: b.petNames[pi], inc: WORLD.petIncome[bi][pi], rar: WORLD.petRarity[bi][pi], biomeIdx: bi, petIdx: pi, size: 'normal', x: basePos.x + rnd(-35, 35), y: basePos.y + rnd(-40, 365), wanderTargetX: basePos.x, wanderTargetY: basePos.y, wanderTimer: 0, selected: false, slot, state: 'farm', mutations: {} });
           S.cps = S.pets.reduce((s, pt) => s + pt.inc, 0);
         } else {
-          // 農場滿了 → 進背包（但一樣要解鎖圖鑑）
-          S.bag.push({
-            id: Math.random().toString(36).slice(2),
-            name: b.petNames[pi],
-            inc: WORLD.petIncome[bi][pi],
-            rar: WORLD.petRarity[bi][pi],
-            biomeIdx: bi,
-            petIdx: pi,
-            size: 'normal',
-            mutations: {}
-          });
+          S.bag.push({ id: Math.random().toString(36).slice(2), name: b.petNames[pi], inc: WORLD.petIncome[bi][pi], rar: WORLD.petRarity[bi][pi], biomeIdx: bi, petIdx: pi, size: 'normal', mutations: {} });
           showToast('🐾 農場已滿，寵物已改放背包', '#8a5a2a', '#5a3a0a');
         }
-        discoverPet(bi, pi);   // ★ 修復：不論進農場還是背包都解鎖
+        discoverPet(bi, pi);
       }
-
-      if (v.giveStick) {
-        S.sticks['god_stick'] = true;
-        STICK_DEFS.forEach(s => S.sticks[s.id] = true);
-      }
-      if (v.giveTrail) {
-        S.trails[v.giveTrail] = true;
-        S.equippedTrail = v.giveTrail;
-      }
-
+      if (v.giveStick) { S.sticks['god_stick'] = true; STICK_DEFS.forEach(s => S.sticks[s.id] = true); }
+      if (v.giveTrail) { S.trails[v.giveTrail] = true; S.equippedTrail = v.giveTrail; }
       updateUI();
       saveGame(true);
-
-      // ★ 指令處理完立刻清掉，避免 5 秒內重整/重連重複觸發
       _adminRemove(ref(db, 'admin/' + PLAYER_ID)).catch(() => {});
     });
-        onValue(ref(db, 'hits/' + PLAYER_ID), snap => {
+    onValue(ref(db, 'hits/' + PLAYER_ID), snap => {
       const v = snap.val();
       if (!v || Date.now() - (v.t || 0) > 3000) return;
       if (v.fx !== undefined || v.fy !== undefined) triggerKnockback(v.fx || 400, v.fy || -400);
-      // ★ 只有在非安全區（偷蛋區）才會被搶蛋；安全區內蛋不會掉
-            if (v.stealEgg && S.player.carry && S.player.y < S.safeLineY) {
+      if (v.stealEgg && S.player.carry && S.player.y < S.safeLineY) {
         const drop = S.player.carry; S.player.carry = null; S.tensionActive = false;
-        const dropX = clamp(S.player.x + rnd(-40, 40), 30, WORLD_W - 30); const dropY = clamp(S.player.y + rnd(-40, 40), MIN_Y, MAX_Y);
-        S.eggs.push({ ...drop, x: dropX, y: dropY, collected: false, origX: dropX, origY: dropY });
-        try { const { db: _db, ref: _ref, set: _set } = window.__FB; if (drop.eggId) _set(_ref(_db, 'global_eggs/' + drop.eggId), { collected: false, bi: drop.biomeIdx, t: Date.now() }); } catch (e) {}
+        const dropX = clamp(S.player.x + rnd(-40, 40), 30, WORLD_W - 30);
+        const dropY = clamp(S.player.y + rnd(-40, 40), MIN_Y, MAX_Y);
+        S.eggs.push({ ...drop, x: dropX, y: dropY, collected: false, origX: dropX, origY: dropY, localDropTs: Date.now() });
+        try {
+          const { db: _db, ref: _ref, set: _set } = window.__FB;
+          if (drop.eggId) {
+            _set(_ref(_db, 'global_eggs/' + drop.eggId), {
+              collected: false, bi: drop.biomeIdx, t: Date.now(),
+              x: Math.round(dropX), y: Math.round(dropY),
+              petIdx: drop.petIdx, size: drop.size, r: drop.r, mul: drop.mul
+            }).catch(() => {});
+          }
+        } catch (e) {}
         if (drop.eggId) {
           emitEggEvent({
             action:'drop', eggId: drop.eggId, bi: drop.biomeIdx, petIdx: drop.petIdx,
@@ -2106,14 +1836,14 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
             x: Math.round(dropX), y: Math.round(dropY), by: v.by || '玩家', byId: v.byId,
           });
         }
+        window.__raingodPushState && window.__raingodPushState();
         showToast(`💥 ${v.by || '玩家'} 用【${v.byStickName || '棒子'}】搶走了你的蛋！\n🥚 蛋掉在地上了！`, '#8a2a2a', '#5a0a0a');
         updateUI(); saveGame(true); return;
       }
       if (v.fx !== undefined || v.fy !== undefined) showToast(`💥 你被 ${v.by || '玩家'} 打飛了！`, '#8a2a2a', '#5a0a0a');
     });
   }
-    function updateRemoteInterp(dt){
-    // 提高收斂速度，讓遠端玩家更平滑地追上目標位置
+  function updateRemoteInterp(dt){
     const k = 1 - Math.pow(0.00001, dt);
     for (const entry of REMOTE_PLAYERS.values()) {
       entry.cur.x += (entry.target.x - entry.cur.x) * k;
@@ -2138,7 +1868,7 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
     }
     if(!target){ showToast(stick ? '附近沒有可攻擊的玩家，揮空了！' : '空手揮了一下，沒有目標', '#5a5a5a', '#3a3a3a'); return; }
     const dx=target.x-p.x, dy=target.y-p.y; const len=Math.hypot(dx,dy)||1; const { db, ref, set } = window.__FB;
-        set(ref(db, 'hits/' + target.id), { by: S.playerName, byId: PLAYER_ID, byStick: stick ? stick.id : 'bare', byStickName: stick ? stick.name : '空手', fx: (dx/len)*power, fy: (dy/len)*power, stealEgg: !!target.carry, t: Date.now() });
+    set(ref(db, 'hits/' + target.id), { by: S.playerName, byId: PLAYER_ID, byStick: stick ? stick.id : 'bare', byStickName: stick ? stick.name : '空手', fx: (dx/len)*power, fy: (dy/len)*power, stealEgg: !!target.carry, t: Date.now() });
     if (target.carry && stick) showToast(`🥚 搶到 ${target.name||'玩家'} 的蛋！`, '#ffaa20', '#cc7700');
     else if (stick) showToast(`💥 打中了 ${target.name||'玩家'}！`, '#ff8a20', '#aa5a00');
     else showToast(`👊 空手打了 ${target.name||'玩家'} 一下（無傷害）`, '#8a8a6a', '#5a5a3a');
@@ -2202,7 +1932,7 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
         let nx, attempts = 0; do { nx = (Math.random() * 0.6 + 0.2) * WORLD_W; attempts++; } while (usedPositions.some(p => Math.abs(p - nx) < 80) && attempts < 10);
         usedPositions.push(nx);
         const eggId = 'secret_' + bi + '_' + pi + '_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
-        const egg = { eggId, x:nx,y:b.nestsY+rnd(-20,20), r:22,size:'secret',mul:6,petIdx:pi,biomeIdx:bi, collected:false,float:Math.random()*10,origX:nx,origY:b.nestsY, secret:true };
+        const egg = { eggId, x:nx,y:b.nestsY+rnd(-20,20), r:22,size:'secret',mul:6,petIdx:pi,biomeIdx:bi, collected:false,float:Math.random()*10,origX:nx,origY:b.nestsY, secret:true, localDropTs: Date.now() };
         S.eggs.push(egg);
         emitEggEvent({
           action:'spawn', eggId, bi, petIdx:pi, secret:true, mul:6,
@@ -2214,9 +1944,17 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
     }
     spawned.forEach((msg, i) => { setTimeout(() => showToast(msg, '#8a3a8a', '#6a1a6a'), i * 600); });
   }
+
   function update(dt){
     const p=S.player; S.time+=dt;
     updateRemoteInterp(dt);
+    // ★ 遠端守衛插值
+    const guardK = 1 - Math.pow(0.0001, dt);
+    for (const [bi, rg] of REMOTE_GUARDS) {
+      if (rg.targetX === undefined) continue;
+      rg.x += (rg.targetX - rg.x) * guardK;
+      rg.y += (rg.targetY - rg.y) * guardK;
+    }
     const cyclePos = Date.now() % FULL_CYCLE;
     const isNightNow = cyclePos >= DAY_MS;
     if (isNightNow !== S.night) {
@@ -2224,27 +1962,32 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
       if (S.night) {
         showToast('🌙 夜晚來臨！蛋孵化速度 ×10，但無法偷蛋（屏障）', '#3a3a6a', '#1a1a3a');
         if (p.carry) {
-  const drop = p.carry;
-  const dropX = clamp(p.x + rnd(-20, 20), 30, WORLD_W - 30); const dropY = clamp(p.y + rnd(-20, 20), MIN_Y, MAX_Y);
-  S.eggs.push({ ...drop, x: dropX, y: dropY, collected: false, origX: dropX, origY: dropY });
-  // ★ 關鍵修復：把 Firebase 的蛋標記回「未被拿」
-  if (drop.eggId) {
-    try {
-      const { db: _db, ref: _ref, set: _set } = window.__FB;
-      _set(_ref(_db, 'global_eggs/' + drop.eggId), { collected: false, bi: drop.biomeIdx, t: Date.now() }).catch(()=>{});
-    } catch(e) {}
-    emitEggEvent({
-      action:'drop', eggId: drop.eggId, bi: drop.biomeIdx, petIdx: drop.petIdx,
-      size: drop.size, r: drop.r, mul: drop.mul,
-      x: Math.round(dropX), y: Math.round(dropY), by: S.playerName, byId: PLAYER_ID,
-    });
-  }
-  p.carry = null; S.tensionActive = false;
-  const bPos = getBasePos(S.myBaseIdx);
-  p.x = bPos.x; p.y = 2850; p.vx = 0; p.vy = 0; p.stun = 0; p.knockbackTimer = 0;
-  S.camera.x = p.x; S.camera.y = p.y - 100;
-  showToast('🌙 夜晚屏障啟動！\n🥚 手中的蛋已掉落，你被傳回安全區！', '#8a2a2a', '#5a0a0a');
-} else if (p.y < S.safeLineY) {
+          const drop = p.carry;
+          const dropX = clamp(p.x + rnd(-20, 20), 30, WORLD_W - 30);
+          const dropY = clamp(p.y + rnd(-20, 20), MIN_Y, MAX_Y);
+          S.eggs.push({ ...drop, x: dropX, y: dropY, collected: false, origX: dropX, origY: dropY, localDropTs: Date.now() });
+          if (drop.eggId) {
+            try {
+              const { db: _db, ref: _ref, set: _set } = window.__FB;
+              _set(_ref(_db, 'global_eggs/' + drop.eggId), {
+                collected: false, bi: drop.biomeIdx, t: Date.now(),
+                x: Math.round(dropX), y: Math.round(dropY),
+                petIdx: drop.petIdx, size: drop.size, r: drop.r, mul: drop.mul
+              }).catch(()=>{});
+            } catch(e) {}
+            emitEggEvent({
+              action:'drop', eggId: drop.eggId, bi: drop.biomeIdx, petIdx: drop.petIdx,
+              size: drop.size, r: drop.r, mul: drop.mul,
+              x: Math.round(dropX), y: Math.round(dropY), by: S.playerName, byId: PLAYER_ID,
+            });
+          }
+          p.carry = null; S.tensionActive = false;
+          window.__raingodPushState && window.__raingodPushState();
+          const bPos = getBasePos(S.myBaseIdx);
+          p.x = bPos.x; p.y = 2850; p.vx = 0; p.vy = 0; p.stun = 0; p.knockbackTimer = 0;
+          S.camera.x = p.x; S.camera.y = p.y - 100;
+          showToast('🌙 夜晚屏障啟動！\n🥚 手中的蛋已掉落，你被傳回安全區！', '#8a2a2a', '#5a0a0a');
+        } else if (p.y < S.safeLineY) {
           const bPos = getBasePos(S.myBaseIdx);
           p.x = bPos.x; p.y = 2850; p.vx = 0; p.vy = 0; p.stun = 0; p.knockbackTimer = 0;
           S.camera.x = p.x; S.camera.y = p.y - 100;
@@ -2281,7 +2024,6 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
     if(S.input.x!==0||S.input.y!==0){dx=S.input.x;dy=S.input.y}
     if(dx!==0||dy!==0){
       const len=Math.hypot(dx,dy);dx/=len;dy/=len;
-      // ★ 慢速模式：強制用初始速度 0.6（即 displaySpeed=10 的實際速度）
       const realSpeed = __slowMode ? SLOW_MODE_REAL_SPEED : displayToReal(p.displaySpeed);
       let moveSpeed=realSpeed*2.2;
       if(p.carry){ const w=p.carry.size==='giant'?0.35:(p.carry.size==='huge'?0.55:0.75); moveSpeed*=w; }
@@ -2334,16 +2076,21 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
         if(!S.night && p.carry && p.carry.biomeIdx === g.biomeIdx && !g.sleeping){ g.returning=false;g.chasing=true;g.alert=true; const playerBiome = getBiomeIndex(p.y); const guardBiome = getBiomeIndex(g.y); if(guardBiome !== playerBiome){ g.dashPhase=true;g.dashTimer=1.2; } }
         if(dist(g.x, g.y, g.sleepX, g.sleepY) < 30){
           g.returning=false;g.sleeping=true;g.alert=false;g.wakeTimer=0; g.x=g.sleepX;g.y=g.sleepY;
+          let eggsReturned = false;
           for(const e of S.eggs){
             if(!e.collected && e.biomeIdx === g.biomeIdx && dist(e.x, e.y, g.sleepX, g.sleepY) < 300){
               e.x = e.origX; e.y = e.origY;
-              if (e.eggId) emitEggEvent({
-                action:'return', eggId:e.eggId, bi:e.biomeIdx, petIdx:e.petIdx,
-                size:e.size, r:e.r, mul:e.mul,
-                x:Math.round(e.origX), y:Math.round(e.origY), by:'守衛', byId:'guard_'+g.biomeIdx,
-              });
+              if (e.eggId) {
+                emitEggEvent({
+                  action:'return', eggId:e.eggId, bi:e.biomeIdx, petIdx:e.petIdx,
+                  size:e.size, r:e.r, mul:e.mul,
+                  x:Math.round(e.origX), y:Math.round(e.origY), by:'守衛', byId:'guard_'+g.biomeIdx,
+                });
+                eggsReturned = true;
+              }
             }
           }
+          if (eggsReturned) publishGlobalEggs();
         }
       }
       else {
@@ -2358,6 +2105,7 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
       const hatchTime = getHatchTimeForEgg(egg); const hp = getHatchPod(S.myBaseIdx, S.hatchery.length);
       S.hatchery.push({ id:Math.random().toString(36).slice(2), name:b.petNames[egg.petIdx],inc,rar,biomeIdx:egg.biomeIdx,petIdx:egg.petIdx, size:egg.size,secret:!!egg.secret, timer:hatchTime,total:hatchTime,finished:false, favorite:false,mutations:{}, x:hp.x,y:hp.y });
       p.carry=null;S.tensionActive=false;
+      window.__raingodPushState && window.__raingodPushState();
       const sf=document.createElement('div');sf.className='success-flash'; document.body.appendChild(sf);setTimeout(()=>sf.remove(),900);
       showToast(`✅ 成功偷到蛋！放入孵化器 (${fmt(hatchTime)}秒)`, '#3a8a3a', '#2a6a2a');
       for(const g of S.guards){ if(g.chasing || g.dashPhase){ g.chasing=false;g.dashPhase=false;g.returning=true;g.alert=false; } }
@@ -2368,30 +2116,35 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
         if(g.stun>0||g.sleeping||g.wakeTimer>0||g.returning)continue;
         if(dist(p.x,p.y,g.x,g.y)<p.r+g.r+6&&p.stun<=0&&p.knockbackTimer<=0){
           if(p.carry){
-  const drop=p.carry; const gBiome=getBiomeIndex(g.y); const eggBiome=drop.biomeIdx;
-  let dropX, dropY;
-  if(gBiome === eggBiome){
-    dropX = drop.origX||g.sleepX; dropY = drop.origY||g.sleepY;
-    S.eggs.push({...drop, x:dropX, y:dropY, collected:false, origX:dropX, origY:dropY});
-    if (drop.eggId) emitEggEvent({
-      action:'return', eggId:drop.eggId, bi:drop.biomeIdx, petIdx:drop.petIdx,
-      size:drop.size, r:drop.r, mul:drop.mul,
-      x:Math.round(dropX), y:Math.round(dropY), by:'守衛', byId:'guard_'+g.biomeIdx,
-    });
-    showToast('🥚 守衛把蛋放回原位了！','#8a3a3a','#6a1a1a');
-  } else {
-    dropX = p.x+rnd(-20,20); dropY = p.y+rnd(-20,20);
-    S.eggs.push({...drop, x:dropX, y:dropY, collected:false, origX:drop.origX||p.x, origY:drop.origY||p.y});
-  }
-  // ★ 關鍵修復：把 Firebase 的蛋標記回「未被拿」
-  if (drop.eggId) {
-    try {
-      const { db: _db, ref: _ref, set: _set } = window.__FB;
-      _set(_ref(_db, 'global_eggs/' + drop.eggId), { collected: false, bi: drop.biomeIdx, t: Date.now() }).catch(()=>{});
-    } catch(e) {}
-  }
-  p.carry=null;S.tensionActive=false;updateUI();
-}
+            const drop=p.carry; const gBiome=getBiomeIndex(g.y); const eggBiome=drop.biomeIdx;
+            let dropX, dropY;
+            if(gBiome === eggBiome){
+              dropX = drop.origX||g.sleepX; dropY = drop.origY||g.sleepY;
+              S.eggs.push({...drop, x:dropX, y:dropY, collected:false, origX:dropX, origY:dropY, localDropTs: Date.now()});
+              if (drop.eggId) emitEggEvent({
+                action:'return', eggId:drop.eggId, bi:drop.biomeIdx, petIdx:drop.petIdx,
+                size:drop.size, r:drop.r, mul:drop.mul,
+                x:Math.round(dropX), y:Math.round(dropY), by:'守衛', byId:'guard_'+g.biomeIdx,
+              });
+              showToast('🥚 守衛把蛋放回原位了！','#8a3a3a','#6a1a1a');
+            } else {
+              dropX = p.x+rnd(-20,20); dropY = p.y+rnd(-20,20);
+              S.eggs.push({...drop, x:dropX, y:dropY, collected:false, origX:drop.origX||p.x, origY:drop.origY||p.y, localDropTs: Date.now()});
+            }
+            if (drop.eggId) {
+              try {
+                const { db: _db, ref: _ref, set: _set } = window.__FB;
+                _set(_ref(_db, 'global_eggs/' + drop.eggId), {
+                  collected: false, bi: drop.biomeIdx, t: Date.now(),
+                  x: Math.round(dropX), y: Math.round(dropY),
+                  petIdx: drop.petIdx, size: drop.size, r: drop.r, mul: drop.mul
+                }).catch(()=>{});
+              } catch(e) {}
+            }
+            p.carry=null;S.tensionActive=false;
+            window.__raingodPushState && window.__raingodPushState();
+            updateUI();
+          }
           const kbx=p.x-g.x,kby=p.y-g.y; const kblen=Math.hypot(kbx,kby)||1; const baseForce = 800 + displayToReal(p.displaySpeed)*20; const biomeBonus = g.biomeIdx * 800;
           triggerKnockback((kbx/kblen)*(baseForce+biomeBonus),(kby/kblen)*(baseForce+biomeBonus));
           g.stun=1.5;g.alert=false;g.sleeping=true;g.wakeTimer=0; g.chasing=false;g.dashPhase=false;g.returning=true; g.x = g.sleepX; g.y = g.sleepY;
@@ -2418,8 +2171,7 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
     safeHook(HOOKS.onUpdate, dt);
     updateUI();
   }
-  // === 4B-2 结束，下面接 4B-3 ===
-    function getBiomeIndex(y){ for(let i=0;i<WORLD.biomes.length;i++){ if(y >= WORLD.biomes[i].yMin && y <= WORLD.biomes[i].yMax) return i; } return 0; }
+  function getBiomeIndex(y){ for(let i=0;i<WORLD.biomes.length;i++){ if(y >= WORLD.biomes[i].yMin && y <= WORLD.biomes[i].yMax) return i; } return 0; }
   function drawBackground(){
     ctx.clearRect(0,0,W,H); ctx.fillStyle='#8ac86a';ctx.fillRect(0,0,W,H);
     for(let bi=WORLD.biomes.length-1;bi>=0;bi--){
@@ -2512,8 +2264,6 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
     if(!S.remotePlayers)return;
     for(const rp of S.remotePlayers){
       if(rp.baseIdx === undefined) continue;
-
-      // ★ 遠端孵蛋器
       if (Array.isArray(rp.hatchery)) {
         rp.hatchery.forEach(h => {
           const sp = worldToScreen(h.x, h.y);
@@ -2548,7 +2298,6 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
           ctx.restore();
         });
       }
-
       if(Array.isArray(rp.pets)){
         if (S.zoom < 0.55) continue;
         rp.pets.forEach((p, idx) => {
@@ -2570,7 +2319,6 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
         const rc = WORLD.rarities[rr].c;
         drawEggShape(ctx, {...rp.carry, rar: rr, secret: !!rp.carry.secret}, 12, S.time, rc);
         ctx.restore();
-        // 小偷浮動文字
         const b = WORLD.biomes[rp.carry.biomeIdx] || { petNames:[] };
         ctx.font='800 10px "Segoe UI"'; ctx.fillStyle='#ffdd44'; ctx.textAlign='center';
         ctx.shadowBlur=6; ctx.shadowColor='#000';
@@ -2646,20 +2394,9 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
       else if (rg.rt) { ctx.shadowBlur=18; ctx.shadowColor='rgba(255,200,50,0.6)'; }
       drawGuardAnimal(ctx, bi, 18, S.time, !!rg.al);
       ctx.shadowBlur = 0;
-      if (rg.sl) {
-        ctx.font='bold 16px "Segoe UI"'; ctx.fillStyle='#a0c0ff'; ctx.textAlign='center';
-        const zP = Math.sin(S.time*2)*4;
-        ctx.fillText('z', -12, -24 + zP);
-      }
-      if (rg.al && !rg.sl) {
-        ctx.font='900 22px "Segoe UI"'; ctx.fillStyle='#ffcc00';
-        ctx.shadowBlur=14; ctx.shadowColor='#ff8800'; ctx.textAlign='center';
-        ctx.fillText('!', 0, -28); ctx.shadowBlur=0;
-      }
-      if (rg.dp) {
-        ctx.font='900 18px "Segoe UI"'; ctx.fillStyle='#80d0ff'; ctx.textAlign='center';
-        ctx.shadowBlur=12; ctx.shadowColor='#00aaff'; ctx.fillText('>>>', 0, -28); ctx.shadowBlur=0;
-      }
+      if (rg.sl) { ctx.font='bold 16px "Segoe UI"'; ctx.fillStyle='#a0c0ff'; ctx.textAlign='center'; const zP = Math.sin(S.time*2)*4; ctx.fillText('z', -12, -24 + zP); }
+      if (rg.al && !rg.sl) { ctx.font='900 22px "Segoe UI"'; ctx.fillStyle='#ffcc00'; ctx.shadowBlur=14; ctx.shadowColor='#ff8800'; ctx.textAlign='center'; ctx.fillText('!', 0, -28); ctx.shadowBlur=0; }
+      if (rg.dp) { ctx.font='900 18px "Segoe UI"'; ctx.fillStyle='#80d0ff'; ctx.textAlign='center'; ctx.shadowBlur=12; ctx.shadowColor='#00aaff'; ctx.fillText('>>>', 0, -28); ctx.shadowBlur=0; }
       ctx.restore();
     }
   }
@@ -2773,13 +2510,21 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
         if(egg.collected) continue;
         if(dist(w.x, w.y, egg.x, egg.y) < egg.r + 40){
           if(dist(S.player.x, S.player.y, egg.x, egg.y) < 120){
-                        tryCollectEggRemote(egg.eggId, S.playerName).then(ok => {
+            tryCollectEggRemote(egg.eggId, S.playerName).then(ok => {
               if (!ok) { showToast('🥚 這顆蛋已經被別人搶走了！', '#8a2a2a', '#5a0a0a'); egg.collected = true; return; }
               egg.collected = true; S.player.carry = {...egg}; S.tensionActive = true;
               emitEggEvent({
                 action:'steal', eggId: egg.eggId, bi: egg.biomeIdx, petIdx: egg.petIdx,
-                size: egg.size, by: S.playerName, byId: PLAYER_ID,
+                size: egg.size, secret: !!egg.secret,
+                by: S.playerName, byId: PLAYER_ID,
               });
+              try {
+                const { db: _db, ref: _ref, set: _set } = window.__FB;
+                _set(_ref(_db, 'global_eggs/' + egg.eggId), {
+                  collected: true, bi: egg.biomeIdx, t: Date.now(),
+                  petIdx: egg.petIdx, size: egg.size, x: 0, y: 0
+                }).catch(() => {});
+              } catch (e) {}
               window.__raingodPushState && window.__raingodPushState();
               for(const g of S.guards){ if(g.biomeIdx===egg.biomeIdx && g.sleeping){ g.wakeTimer=0.2; } }
               updateUI();
@@ -2823,10 +2568,10 @@ function drawTrailOnPlayer(g, player, trailDef, time) {
     const show2 = (p.displaySpeed >= AD_SPEED_2X) && (S.ad2Step < AD_STEPS_TOTAL); const show4 = (p.displaySpeed >= AD_SPEED_4X) && (S.ad4Step < AD_STEPS_TOTAL);
     const show8 = (p.displaySpeed >= AD_SPEED_8X) && (S.ad8Step < AD_STEPS_TOTAL); const show16 = (p.displaySpeed >= AD_SPEED_16X) && (S.ad16Step < AD_STEPS_TOTAL); const show32 = (p.displaySpeed >= AD_SPEED_32X) && (S.ad32Step < AD_STEPS_TOTAL);
     if (show2) { adBtn.style.display = 'flex'; adBtn.textContent = `🎬 2×`; } else { adBtn.style.display = 'none'; }
-if (show4) { adBtn4x.style.display = 'flex'; adBtn4x.textContent = `🎬 4×`; } else { adBtn4x.style.display = 'none'; }
-if (show8) { adBtn8x.style.display = 'flex'; adBtn8x.textContent = `🎬 8×`; } else { adBtn8x.style.display = 'none'; }
-if (show16) { adBtn16x.style.display= 'flex'; adBtn16x.textContent= `🎬 16×`; } else { adBtn16x.style.display= 'none'; }
-if (show32) { adBtn32x.style.display= 'flex'; adBtn32x.textContent= `🎬 32×`; } else { adBtn32x.style.display= 'none'; }
+    if (show4) { adBtn4x.style.display = 'flex'; adBtn4x.textContent = `🎬 4×`; } else { adBtn4x.style.display = 'none'; }
+    if (show8) { adBtn8x.style.display = 'flex'; adBtn8x.textContent = `🎬 8×`; } else { adBtn8x.style.display = 'none'; }
+    if (show16) { adBtn16x.style.display= 'flex'; adBtn16x.textContent= `🎬 16×`; } else { adBtn16x.style.display= 'none'; }
+    if (show32) { adBtn32x.style.display= 'flex'; adBtn32x.textContent= `🎬 32×`; } else { adBtn32x.style.display= 'none'; }
     const subBtn = document.getElementById('btnSubscribe');
     if (!S.subscriptionVerified) { subBtn.style.display = 'flex'; subBtn.textContent = '🔔 訂閱 ×2'; } else { subBtn.style.display = 'none'; }
     const cyclePos = Date.now() % FULL_CYCLE;
@@ -2864,7 +2609,6 @@ if (show32) { adBtn32x.style.display= 'flex'; adBtn32x.textContent= `🎬 32×`;
   const btnSlowModeEl = document.getElementById('btnSlowMode');
   if (btnSlowModeEl) {
     btnSlowModeEl.addEventListener('click', toggleSlowMode);
-    // 初始化顯示狀態
     btnSlowModeEl.textContent = __slowMode ? '🐢 慢速：開' : '🐢 慢速：關';
     btnSlowModeEl.classList.toggle('on', __slowMode);
   }
@@ -2890,6 +2634,7 @@ if (show32) { adBtn32x.style.display= 'flex'; adBtn32x.textContent= `🎬 32×`;
       const mx = myBase.x + rnd(-35, 35); const my = myBase.y + rnd(-40, 365);
       pet.x = mx; pet.y = my; pet.wanderTargetX = mx; pet.wanderTargetY = my; pet.wanderTimer = 0;
       newFarm.push(pet);
+      discoverPet(pet.biomeIdx, pet.petIdx);
     }
     S.pets = newFarm; S.bag  = newBag; S.cps  = S.pets.reduce((s,pt)=>s+pt.inc,0);
     showToast(`✨ 已將收益最高的 ${S.pets.length} 隻寵物放入農場（其餘 ${newBag.length} 隻進背包）`, '#3a6a8a', '#1a3a5a');
@@ -2932,178 +2677,174 @@ if (show32) { adBtn32x.style.display= 'flex'; adBtn32x.textContent= `🎬 32×`;
   async function loadStealEggsSave() {
     if (__loadingPromise) return __loadingPromise;
     __loadingPromise = (async () => {
-        await Promise.race([ window.raingodFirebaseReady, new Promise(r => setTimeout(r, 5000)) ]);
-
-        const user = await new Promise(resolve => {
-            if (firebase.auth().currentUser) return resolve(firebase.auth().currentUser);
-            let done = false;
-            const unsub = firebase.auth().onAuthStateChanged(u => { if (done) return; done = true; unsub(); resolve(u); });
-            setTimeout(() => {
-                if (done) return;
-                done = true;
-                try { unsub(); } catch (e) {}
-                resolve(firebase.auth().currentUser || null);
-            }, 2500);
-        });
-
-        let cloudData = null, localData = null;
-
-        if (user) {
-            // ★ 優先讀「遊戲專屬」路徑
-            try {
-                const gameSnap = await firebase.database().ref(`users/${user.uid}/games/steal_an_egg_v17`).once('value');
-                const gameVal = gameSnap.val();
-                if (gameVal && gameVal.data && gameVal.data.version === 17) {
-                    cloudData = gameVal.data;
-                }
-            } catch (e) { console.warn('讀取遊戲專屬存檔失敗', e); }
-
-            // ★ 回退 + 遷移：舊的 account_data 裡若還有偷蛋存檔，讀出來並遷移到新路徑
-            if (!cloudData) {
-                try {
-                    const snap = await firebase.database().ref(`users/${user.uid}/account_data`).once('value');
-                    const cloud = snap.val();
-                    if (cloud && Array.isArray(cloud.data)) {
-                        const entry = cloud.data.find(e => e.key === SAVE_KEY);
-                        if (entry && entry.value) {
-                            const parsed = JSON.parse(entry.value);
-                            if (parsed && parsed.version === 17) {
-                                cloudData = parsed;
-                                // 遷移到新路徑
-                                await firebase.database().ref(`users/${user.uid}/games/steal_an_egg_v17`).set({
-                                    data: parsed,
-                                    updated_at: firebase.database.ServerValue.TIMESTAMP
-                                }).catch(() => {});
-                            }
-                        }
-                    }
-                } catch (e) { console.warn('遷移舊存檔失敗', e); }
-            }
-        }
-
+      await Promise.race([window.raingodFirebaseReady, new Promise(r => setTimeout(r, 5000))]);
+      const user = await new Promise(resolve => {
+        if (firebase.auth().currentUser) return resolve(firebase.auth().currentUser);
+        let done = false;
+        const unsub = firebase.auth().onAuthStateChanged(u => { if (done) return; done = true; unsub(); resolve(u); });
+        setTimeout(() => {
+          if (done) return;
+          done = true;
+          try { unsub(); } catch (e) {}
+          resolve(firebase.auth().currentUser || null);
+        }, 2500);
+      });
+      let cloudData = null, localData = null;
+      if (user) {
         try {
-            const raw = localStorage.getItem(SAVE_KEY);
-            if (raw) {
-                const parsed = JSON.parse(raw);
-                if (parsed && parsed.version === 17) localData = parsed;
+          const gameSnap = await firebase.database().ref(`users/${user.uid}/games/steal_an_egg_v17`).once('value');
+          const gameVal = gameSnap.val();
+          if (gameVal && gameVal.data && gameVal.data.version === 17) cloudData = gameVal.data;
+        } catch (e) { console.warn('讀取遊戲專屬存檔失敗', e); }
+        if (!cloudData) {
+          try {
+            const snap = await firebase.database().ref(`users/${user.uid}/account_data`).once('value');
+            const cloud = snap.val();
+            if (cloud && Array.isArray(cloud.data)) {
+              const entry = cloud.data.find(e => e.key === SAVE_KEY);
+              if (entry && entry.value) {
+                const parsed = JSON.parse(entry.value);
+                if (parsed && parsed.version === 17) {
+                  cloudData = parsed;
+                  await firebase.database().ref(`users/${user.uid}/games/steal_an_egg_v17`).set({
+                    data: parsed, updated_at: firebase.database.ServerValue.TIMESTAMP
+                  }).catch(() => {});
+                }
+              }
             }
-        } catch (e) { console.warn('解析本機存檔失敗', e); }
-
-        let data = null;
-        if (localData && cloudData) {
-            data = ((localData.ts || 0) >= (cloudData.ts || 0)) ? localData : cloudData;
-        } else {
-            data = localData || cloudData;
+          } catch (e) { console.warn('遷移舊存檔失敗', e); }
         }
-
-        if (data) {
-            try { applyLoadedData(data); } catch (e) { console.warn('應用存檔失敗', e); }
-        }
-
-        // 離線孵化（日夜分開算，並套用軌跡倍率）
-        const lastOnline = (data && (data.lastOnlineTime || data.lastHatchTime)) || 0;
-        if (lastOnline > 0 && Date.now() > lastOnline) {
-            const offlineMs = Date.now() - lastOnline;
-            const offlineSec = offlineMs / 1000;
-            if (offlineSec > 1) {
-                // 計算離線期間「白天秒數」與「夜晚秒數」
-                let daySec = 0, nightSec = 0;
-                let cursor = lastOnline;
-                const now = Date.now();
-                const cycleStart = Math.floor(cursor / FULL_CYCLE) * FULL_CYCLE;
-                // 從 cursor 走到 now，逐段判斷日夜
-                let t = cursor;
-                while (t < now) {
-                    const phase = t % FULL_CYCLE;
-                    const remainInCycle = FULL_CYCLE - phase;
-                    const step = Math.min(remainInCycle, now - t);
-                    if (phase < DAY_MS) {
-                        // 這步在白天
-                        const dayRemain = DAY_MS - phase;
-                        if (step <= dayRemain) { daySec += step / 1000; t += step; }
-                        else { daySec += dayRemain / 1000; t += dayRemain; }
-                    } else {
-                        // 這步在夜晚
-                        nightSec += step / 1000;
-                        t += step;
-                    }
-                }
-
-                // 計算離線期間的平均倍率
-                const trail = TRAIL_DEFS.find(tr => tr.id === S.equippedTrail);
-                const trailMul = trail ? trail.mult : 1;
-                const mutationMul = S.mutationHatchMultiplier || 1;
-
-                const dayMul = trailMul * mutationMul;
-                const nightMul = trailMul * mutationMul * 10;
-                const totalMulSec = daySec * dayMul + nightSec * nightMul;
-
-                let hatched = 0;
-                for (let i = S.hatchery.length - 1; i >= 0; i--) {
-                    const h = S.hatchery[i];
-                    if (!h.finished) {
-                        h.timer -= totalMulSec;
-                        if (h.timer <= 0) { h.timer = 0; h.finished = true; hatched++; }
-                    }
-                }
-                if (hatched > 0) {
-                    showToast(`🌙 離線 ${Math.floor(offlineSec/60)} 分鐘，孵化了 ${hatched} 顆蛋！`, '#3a6a8a', '#1a3a5a');
-                }
-            }
-        }
-
-        if (user && user.email) { S.playerName = user.email.split('@')[0]; }
-        else if (data && data.playerName) { S.playerName = data.playerName; }
-        else { S.playerName = '訪客' + PLAYER_ID.slice(-3); }
-
-        const isTutorialDone = localStorage.getItem('tutorial_done') === '1';
-        if (S.cash > 0 || isTutorialDone) {
-            S.tutorialActive = false;
-            if (!isTutorialDone) localStorage.setItem('tutorial_done', '1');
-        } else if (!isTutorialDone) {
-            S.tutorialActive = true;
-            setTimeout(() => showToast('👋 歡迎！跟著黃色箭頭完成教學吧！', '#3a6a8a', '#1a3a5a'), 800);
-        }
-
-        S.cps = S.pets.reduce((s, pt) => s + pt.inc, 0);
-        S.camera.x = S.player.x;
-        S.camera.y = S.player.y - 100;
-
-        buildIndexUI(); updateUI(); checkStickUnlock();
-
-        if (data && user) showToast('☁️ 已載入雲端存檔', '#3a6a8a', '#1a3a5a');
-        else if (data)    showToast('💾 已載入本機存檔', '#3a6a8a', '#1a3a5a');
-
-        __saveEnabled = true;
-        fireInitOnce();
-    })();
-    return __loadingPromise;
-}
-  setTimeout(() => {
-    if (!__saveEnabled) {
-        console.warn('[保底] 讀檔超過 8 秒尚未完成，強制啟用存檔（避免離線孵蛋永遠不生效）');
-        __saveEnabled = true;
-    }
-}, 8000);
-  loadStealEggsSave().catch(e => {
-    console.error('偷蛋初始化失敗', e);
-
-    // ★ 先從本機存檔恢復（而不是用 reset() 的空資料去覆蓋）
-    try {
+      }
+      try {
         const raw = localStorage.getItem(SAVE_KEY);
         if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && parsed.version === 17) localData = parsed;
+        }
+      } catch (e) { console.warn('解析本機存檔失敗', e); }
+      let data = null;
+      if (localData && cloudData) {
+        data = ((localData.ts || 0) >= (cloudData.ts || 0)) ? localData : cloudData;
+      } else {
+        data = localData || cloudData;
+      }
+      if (!data) {
+        const hasLocalRaw = !!localStorage.getItem(SAVE_KEY);
+        const hasCloudRaw = !!cloudData;
+        if (hasLocalRaw || hasCloudRaw) {
+          console.warn('[loadStealEggsSave] 有原始資料但解析失敗，保留本機不重置');
+          try {
+            const raw = localStorage.getItem(SAVE_KEY);
             const parsed = JSON.parse(raw);
             if (parsed && parsed.version === 17) {
-                applyLoadedData(parsed);
-                showToast('⚠️ 雲端載入失敗，已從本機恢復進度', '#8a5a2a', '#5a3a0a');
+              applyLoadedData(parsed);
+              data = parsed;
             }
+          } catch (e2) {}
+          if (!data) {
+            showToast('⚠️ 存檔解析失敗，請勿關閉頁面，稍後會自動重試', '#8a5a2a', '#5a3a0a');
+            __saveEnabled = false;
+            return;
+          }
         }
+      }
+      if (data) {
+        try { applyLoadedData(data); } catch (e) { console.warn('應用存檔失敗', e); }
+      }
+      const lastOnline = (data && (data.lastOnlineTime || data.lastHatchTime)) || 0;
+      if (lastOnline > 0 && Date.now() > lastOnline) {
+        const offlineMs = Date.now() - lastOnline;
+        const offlineSec = offlineMs / 1000;
+        if (offlineSec > 1) {
+          let daySec = 0, nightSec = 0;
+          let t = lastOnline;
+          const now = Date.now();
+          while (t < now) {
+            const phase = t % FULL_CYCLE;
+            const remainInCycle = FULL_CYCLE - phase;
+            const step = Math.min(remainInCycle, now - t);
+            if (phase < DAY_MS) {
+              const dayRemain = DAY_MS - phase;
+              if (step <= dayRemain) { daySec += step / 1000; t += step; }
+              else { daySec += dayRemain / 1000; t += dayRemain; }
+            } else {
+              nightSec += step / 1000;
+              t += step;
+            }
+          }
+          const trail = TRAIL_DEFS.find(tr => tr.id === S.equippedTrail);
+          const trailMul = trail ? trail.mult : 1;
+          const mutationMul = S.mutationHatchMultiplier || 1;
+          const dayMul = trailMul * mutationMul;
+          const nightMul = trailMul * mutationMul * 10;
+          const totalMulSec = daySec * dayMul + nightSec * nightMul;
+          let hatched = 0;
+          for (let i = S.hatchery.length - 1; i >= 0; i--) {
+            const h = S.hatchery[i];
+            if (!h.finished) {
+              h.timer -= totalMulSec;
+              if (h.timer <= 0) { h.timer = 0; h.finished = true; hatched++; }
+            }
+          }
+          if (hatched > 0) {
+            showToast(`🌙 離線 ${Math.floor(offlineSec/60)} 分鐘，孵化了 ${hatched} 顆蛋！`, '#3a6a8a', '#1a3a5a');
+          }
+        }
+      }
+      if (user && user.email) { S.playerName = user.email.split('@')[0]; }
+      else if (data && data.playerName) { S.playerName = data.playerName; }
+      else { S.playerName = '訪客' + PLAYER_ID.slice(-3); }
+      const isTutorialDone = localStorage.getItem('tutorial_done') === '1';
+      if (S.cash > 0 || isTutorialDone) {
+        S.tutorialActive = false;
+        if (!isTutorialDone) localStorage.setItem('tutorial_done', '1');
+      } else if (!isTutorialDone) {
+        S.tutorialActive = true;
+        setTimeout(() => showToast('👋 歡迎！跟著黃色箭頭完成教學吧！', '#3a6a8a', '#1a3a5a'), 800);
+      }
+      S.cps = S.pets.reduce((s, pt) => s + pt.inc, 0);
+      S.camera.x = S.player.x;
+      S.camera.y = S.player.y - 100;
+      buildIndexUI(); updateUI(); checkStickUnlock();
+      if (data && user) showToast('☁️ 已載入雲端存檔', '#3a6a8a', '#1a3a5a');
+      else if (data) showToast('💾 已載入本機存檔', '#3a6a8a', '#1a3a5a');
+      __saveEnabled = true;
+      fireInitOnce();
+    })();
+    return __loadingPromise;
+  }
+  setTimeout(() => {
+    if (!__saveEnabled) {
+      try {
+        const raw = localStorage.getItem(SAVE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && parsed.version === 17) {
+            console.warn('[保底] 讀檔超時，使用本機存檔並啟用存檔');
+            applyLoadedData(parsed);
+            __saveEnabled = true;
+            buildIndexUI(); updateUI();
+          }
+        }
+      } catch (e) {}
+    }
+  }, 8000);
+  loadStealEggsSave().catch(e => {
+    console.error('偷蛋初始化失敗', e);
+    try {
+      const raw = localStorage.getItem(SAVE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.version === 17) {
+          applyLoadedData(parsed);
+          showToast('⚠️ 雲端載入失敗，已從本機恢復進度', '#8a5a2a', '#5a3a0a');
+        }
+      }
     } catch (e2) { console.error('本機恢復失敗', e2); }
-
     buildIndexUI(); updateUI();
     __saveEnabled = true;
     fireInitOnce();
-});
+  });
   initEggSync();
   initEggEventSync();
   initGuardSync();
@@ -3113,7 +2854,10 @@ if (show32) { adBtn32x.style.display= 'flex'; adBtn32x.textContent= `🎬 32×`;
   requestAnimationFrame(loop);
   setInterval(updateUI,150);
   setInterval(()=>{if(S.indexOpen)buildIndexUI()},300);
-  setInterval(()=>{ if (__saveEnabled) saveGame(true); }, 2000);    // 切到背景 / 關頁面時存檔（記錄離線時間）   document.addEventListener('visibilitychange', () => {     if (document.visibilityState === 'hidden' && __saveEnabled) {       saveGame(true);     }   });
+  setInterval(()=>{ if (__saveEnabled) saveGame(true); }, 2000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden' && __saveEnabled) saveGame(true);
+  });
   window.addEventListener('beforeunload',()=>{ if (__saveEnabled) saveGame(true); });
   (function setupAdminVisibility(){
     const btn = document.getElementById('testTriggerBtn');
@@ -3150,12 +2894,11 @@ if (show32) { adBtn32x.style.display= 'flex'; adBtn32x.textContent= `🎬 32×`;
   window.raingodGameReadyFlag = true;
 })();
 </script>
-
 <!-- ★ 造型外掛 -->
 <script type="module" src="characters.js"></script>
 <!-- ★ 萬聖節活動 -->
 <script type="module" src="halloween.js"></script>
- <!-- 音效系統 -->
+<!-- 音效系統 -->
 <script src="sound.js"></script>
 </body>
 </html>
