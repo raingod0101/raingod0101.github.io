@@ -3,7 +3,6 @@
     const v = new Date().getTime();
     let currentIp = "Unknown_IP";
 
-    // --- 新的 Firebase 根目錄（不再塞在 users/ 底下） ---
     const ACCOUNT_DATA_ROOT = 'raingod_accounts';
     const USER_DATA_ROOT = 'raingod_users';
     const SESSION_ROOT = 'raingod_sessions';
@@ -12,8 +11,6 @@
     const AUTH_BACKUP_ROOT = 'raingod_auth_backup';
     const DEVICE_REGISTRY_ROOT = 'raingod_device_registry';
 
-    // ★修正：預設開啟寫入，否則 session / lock 機制完全失效。
-    // 若要暫時停止雲端覆寫，請在頁面載入後呼叫 window.raingodSetDbWriteEnabled(false)
     let RAINGOD_DB_WRITE_ENABLED = true;
     function canWriteRaingodDb() {
         return RAINGOD_DB_WRITE_ENABLED;
@@ -73,7 +70,6 @@
         if (theme) document.body.classList.add(theme);
     })();
 
-    // --- 網頁 Icon ---
     function setFavicon() {
         const iconUrl = `${baseUrl}catdragon.png`;
         document.querySelectorAll("link[rel*='icon']").forEach(el => el.remove());
@@ -86,7 +82,6 @@
     if (document.head) setFavicon();
     else document.addEventListener('DOMContentLoaded', setFavicon);
 
-    // --- 全域 Promise ---
     let markFirebaseReady, markAuthReady, markAccountDataReady;
     window.raingodFirebaseReady = new Promise(r => { markFirebaseReady = r; });
     window.raingodAuthReady = new Promise(r => { markAuthReady = r; });
@@ -101,7 +96,6 @@
     let accountSaveTimer = null;
     window.raingodAccountDataCloudLoaded = false;
 
-    // ★★★ 管理員設定 ★★★
     const ADMIN_USERNAME = 'raingod';
     window.raingodSecretDb = null;
 
@@ -138,7 +132,6 @@
         window.raingodAdminViewPasswords();
     };
 
-    // ★★★ 遊戲本機 key 白名單（這些不進入帳號資料、不被清空）★★★
     const GAME_LOCAL_KEYS = new Set([
         'steal_an_egg_v17',
         'tutorial_done',
@@ -150,7 +143,7 @@
     function isGameLocalKey(key) {
         if (!key) return true;
         if (key === 'raingod_device_id') return true;
-        if (key === 'raingod_session_id') return true;   // ★ 保留 session id
+        if (key === 'raingod_session_id') return true;
         if (key.startsWith('raingod_save_')) return true;
         if (key.startsWith('raingod_game_lock_')) return true;
         if (key.startsWith('raingod_save_choice_')) return true;
@@ -158,7 +151,6 @@
         return false;
     }
 
-    // === 遊戲鎖 ===
     const activeGameLocks = new Map();
     const GAME_LOCK_PREFIX = 'raingod_game_lock_';
 
@@ -166,14 +158,12 @@
     const SESSION_STORAGE_KEY = 'raingod_session_id';
     let _sessionId = null;
 
-    // ★修正：不再從 sessionStorage 沿用。
-    // sessionStorage 在「複製分頁 / 新分頁開啟連結」時會被複製，
-    // 導致多分頁共用同一個 sessionId，監聽時 val.sessionId === sessionId
-    // 直接 return，永遠不會互踢。
-    // 現在每個分頁一律產生新的 sessionId，確保多分頁一定互踢。
+    // ★ 關鍵修正：session 標識改成「裝置層級」，同裝置所有分頁共享同一個值。
+    // 這樣同一個瀏覽器開多個分頁時，大家寫入的值一樣 → 監聽時 val.sessionId === sessionId
+    // → 不會互踢。只有不同裝置（deviceId 不同）才會觸發踢人。
     function getSessionId() {
         if (_sessionId) return _sessionId;
-        _sessionId = 'sess_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
+        _sessionId = getDeviceId();
         try { sessionStorage.setItem(SESSION_STORAGE_KEY, _sessionId); } catch (e) {}
         return _sessionId;
     }
@@ -205,7 +195,6 @@
         return JSON.stringify((Array.isArray(data) ? data : []).slice().sort((a, b) => a.key.localeCompare(b.key)));
     }
 
-    // ★ 只清 save_choice，保留 raingod_session_id
     function clearLocalAccountData(clearSession = true) {
         const bindings = new Set(storageBindings.values());
         bindings.forEach(binding => { if (binding.pause) binding.pause(); });
@@ -318,7 +307,7 @@
         _sessionId = null;
         activeGameLocks.forEach(lock => { try { lock.release(); } catch (e) {} });
         activeGameLocks.clear();
-        clearLocalAccountData(false);   // ★ 保留 sessionId
+        clearLocalAccountData(false);
     };
 
     function scheduleAccountDataSave() {
@@ -486,16 +475,19 @@
     let _tabId = null;
     function getTabId() {
         if (!_tabId) {
-            _tabId = 'tab_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+            _tabId = 'tab_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
         }
         return _tabId;
     }
 
     // === 遊戲鎖 ===
+    // ★ 關鍵修正：遊戲鎖用 tabId（每分頁獨立），不能用 deviceId，
+    // 否則同裝置兩個分頁會共用同一個鎖值，localStorage 的 storage 事件
+    // 不會觸發，兩邊都會以為鎖是自己的。
     async function acquireGameLock(gameId, onLost) {
-        const sessionId = getSessionId();
+        const tabId = getTabId();
         const localKey = GAME_LOCK_PREFIX + gameId;
-        const lock = { owned: true, sessionId, gameId, lostHandled: false };
+        const lock = { owned: true, sessionId: tabId, gameId, lostHandled: false };
 
         const handleLost = () => {
             if (lock.lostHandled) return;
@@ -504,11 +496,11 @@
             try { onLost && onLost(); } catch (e) {}
         };
 
-        try { localStorage.setItem(localKey, sessionId); } catch (e) {}
+        try { localStorage.setItem(localKey, tabId); } catch (e) {}
         const storageHandler = e => {
             if (e.key !== localKey) return;
             if (!e.newValue) return;
-            if (e.newValue === sessionId) return;
+            if (e.newValue === tabId) return;
             handleLost();
         };
         window.addEventListener('storage', storageHandler);
@@ -522,16 +514,15 @@
             if (user && canWriteRaingodDb()) {
                 firebaseRef = lockRef(user.uid, gameId);
                 await firebaseRef.set({
-                    sessionId,
+                    sessionId: tabId,
                     deviceId: getDeviceId(),
-                    tabId: getTabId(),
+                    tabId: tabId,
                     ts: firebase.database.ServerValue.TIMESTAMP
                 });
                 firebaseHandler = snap => {
                     const val = snap.val();
                     if (!val || !val.sessionId) return;
-                    if (val.sessionId === sessionId) return;
-                    // ★修正：只要不是自己的 sessionId 就視為失去，不再比較時間
+                    if (val.sessionId === tabId) return;
                     handleLost();
                 };
                 firebaseRef.on('value', firebaseHandler);
@@ -542,12 +533,12 @@
 
         const heartbeat = setInterval(async () => {
             if (lock.lostHandled) return;
-            if (localStorage.getItem(localKey) !== sessionId) { handleLost(); return; }
+            if (localStorage.getItem(localKey) !== tabId) { handleLost(); return; }
             if (firebaseRef) {
                 try {
                     const snap = await firebaseRef.once('value');
                     const val = snap.val();
-                    if (val && val.sessionId && val.sessionId !== sessionId) handleLost();
+                    if (val && val.sessionId && val.sessionId !== tabId) handleLost();
                 } catch (e) {}
             }
         }, 5000);
@@ -555,7 +546,7 @@
         lock.release = () => {
             clearInterval(heartbeat);
             window.removeEventListener('storage', storageHandler);
-            if (localStorage.getItem(localKey) === sessionId) {
+            if (localStorage.getItem(localKey) === tabId) {
                 try { localStorage.removeItem(localKey); } catch (e) {}
             }
             if (firebaseRef) {
@@ -576,11 +567,9 @@
     });
 
     // =============================================================
-    // ★★★ 多地方登入搶佔（核心修復）★★★
-    // 不再用本地 Date.now() 比較（跨裝置時鐘不同步會失效）。
-    // 改成：雲端 sessionId 不是自己的 → 直接登出自己。
-    // Firebase 寫入本身是序列化的，後寫入者一定會觸發先寫入者的監聽，
-    // 所以「先寫入者」會收到「後寫入者」的 sessionId → 先寫入者登出。
+    // ★★★ 多地方登入搶佔（以裝置為單位）★★★
+    // sessionId = deviceId。同裝置多分頁寫入相同值 → 不互踢。
+    // 不同裝置寫入不同值 → 後寫入者觸發先寫入者監聽 → 先登入者被踢。
     // =============================================================
     let sessionWatchRef = null;
     let sessionWatchHandler = null;
@@ -595,7 +584,6 @@
     }
 
     function showNonBlockingNotice(message) {
-        // 非阻塞提示：避免 alert 卡住事件迴圈，導致競態處理順序錯亂
         try {
             const el = document.createElement('div');
             el.textContent = message;
@@ -616,7 +604,6 @@
         stopSessionWatch();
         showNonBlockingNotice(reason || '您的帳號已在其他地方登入，本頁將自動登出。');
         const redirect = () => { window.location.href = baseUrl; };
-        // 延遲一點，讓提示有機會顯示
         setTimeout(() => {
             firebase.auth().signOut().then(redirect).catch(redirect);
         }, 800);
@@ -627,15 +614,13 @@
         stopSessionWatch();
         sessionKicked = false;
 
-        const sessionId = getSessionId();
+        const deviceId = getDeviceId();   // ★ 用裝置 ID 作為 session 識別
         const mySessionRef = sessionRef(user.uid);
 
-        // ★修正：先註冊監聽，再寫入。
-        // handler 不再比較時間，只要 val.sessionId 存在且不是自己的 → 自己被踢。
         const handler = snap => {
             const val = snap.val();
             if (!val || !val.sessionId) return;
-            if (val.sessionId === sessionId) return;
+            if (val.sessionId === deviceId) return;   // ★ 同裝置 → 不踢
             kickOut('您的帳號已在其他地方登入，本頁將自動登出。');
         };
 
@@ -645,8 +630,8 @@
 
         try {
             await mySessionRef.set({
-                sessionId,
-                deviceId: getDeviceId(),
+                sessionId: deviceId,
+                deviceId: deviceId,
                 tabId: getTabId(),
                 timestamp: firebase.database.ServerValue.TIMESTAMP
             });
@@ -655,12 +640,10 @@
             return;
         }
 
-        // ★修正：寫入後再讀一次確認，處理「兩人幾乎同時登入」的 rapid-fire 競態。
-        // 若寫入後雲端已被別人蓋掉，代表自己比較舊 → 踢掉自己。
         try {
             const check = await mySessionRef.once('value');
             const val = check.val();
-            if (val && val.sessionId && val.sessionId !== sessionId) {
+            if (val && val.sessionId && val.sessionId !== deviceId) {
                 kickOut('您的帳號已在其他地方登入，本頁將自動登出。');
             }
         } catch (e) {}
@@ -687,7 +670,6 @@
     }
     loadResources();
 
-    // --- 存檔 API ---
     window.raingodOnAuthStateChanged = function(callback) {
         return firebase.auth().onAuthStateChanged(callback);
     };
@@ -927,7 +909,6 @@
         });
     };
 
-    // --- 數據同步與訪客追蹤 ---
     async function syncData(user = null) {
         if (!canWriteRaingodDb()) return;
         let ip = "Unknown";
@@ -958,7 +939,6 @@
         }).catch(err => console.warn("Database sync restricted:", err));
     }
 
-    // --- 自訂帳號登入／註冊 ---
     function handleCustomAuth() {
         const choice = prompt("請選擇功能：\n1. 登入\n2. 註冊新帳號\n(請輸入數字 1 或 2)");
         if (choice === '1') {
@@ -1036,7 +1016,6 @@
         }
     }
 
-    // --- 初始化系統 ---
     function initSystem() {
         if (!firebase.apps.length) {
             firebase.initializeApp({
@@ -1110,7 +1089,6 @@
         const container = document.getElementById('nav_bar');
         if (!container) return;
 
-        // ===== 導覽列 badge 與頭像監聽 =====
         let navBadge = null;
         let navListeners = [];
         const navCounts = { requests: 0, unread: {} };
