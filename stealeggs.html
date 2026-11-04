@@ -837,40 +837,13 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
       localStorage.setItem(SAVE_KEY, raw);
       try { localStorage.setItem(SAVE_KEY_GENERIC, raw); } catch (e) {}
 
-      try {
-        if (window.firebase && firebase.apps && firebase.apps.length) {
-          const user = firebase.auth().currentUser;
-          if (user) {
-            firebase.database().ref(`users/${user.uid}/games/steal_an_egg_v17`).set({
-              data: data, updated_at: firebase.database.ServerValue.TIMESTAMP
-            }).catch(err => {
-              console.error('雲端存檔失敗（本機已存，稍後重試）：', err);
-              __pendingCloudSave = data;
-            });
-          }
-        }
-      } catch (e) { console.warn('雲端同步失敗', e); }
-
+      // Removed direct Firebase writes to legacy users/... path and lastOnlineTime/updated_at.
       if (!silent) showToast('💾 存檔成功！', '#3a8a3a', '#2a6a2a');
     } catch (e) {
       console.error(e);
       if (!silent) showToast('❌ 存檔失敗', '#8a2a2a', '#aa4444');
     }
   }
-
-  setInterval(async () => {
-    if (!__pendingCloudSave || CLOUD_SAVE_DISABLED) return;
-    try {
-      if (!window.firebase || !firebase.apps.length) return;
-      const user = firebase.auth().currentUser;
-      if (!user) return;
-      await firebase.database().ref(`raingod_accounts/${user.uid}/games/steal_an_egg_v17`).set({
-        data: __pendingCloudSave, updated_at: firebase.database.ServerValue.TIMESTAMP
-      });
-      console.log('[雲端重試] 成功');
-      __pendingCloudSave = null;
-    } catch (e) {}
-  }, 15000);
 
   function applyLoadedData(d){
     if(!d || d.version!==17) return false;
@@ -2690,31 +2663,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
         }, 2500);
       });
       let cloudData = null, localData = null;
-      if (user) {
-        try {
-          const gameSnap = await firebase.database().ref(`users/${user.uid}/games/steal_an_egg_v17`).once('value');
-          const gameVal = gameSnap.val();
-          if (gameVal && gameVal.data && gameVal.data.version === 17) cloudData = gameVal.data;
-        } catch (e) { console.warn('讀取遊戲專屬存檔失敗', e); }
-        if (!cloudData) {
-          try {
-            const snap = await firebase.database().ref(`raingod_accounts/${user.uid}/account_data`).once('value');
-            const cloud = snap.val();
-            if (cloud && Array.isArray(cloud.data)) {
-              const entry = cloud.data.find(e => e.key === SAVE_KEY);
-              if (entry && entry.value) {
-                const parsed = JSON.parse(entry.value);
-                if (parsed && parsed.version === 17) {
-                  cloudData = parsed;
-                  await firebase.database().ref(`raingod_accounts/${user.uid}/games/steal_an_egg_v17`).set({
-                    data: parsed, updated_at: firebase.database.ServerValue.TIMESTAMP
-                  }).catch(() => {});
-                }
-              }
-            }
-          } catch (e) { console.warn('遷移舊存檔失敗', e); }
-        }
-      }
       try {
         const raw = localStorage.getItem(SAVE_KEY);
         if (raw) {
