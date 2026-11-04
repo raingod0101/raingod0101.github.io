@@ -9,6 +9,8 @@
     const SESSION_ROOT = 'raingod_sessions';
     const LOCK_ROOT = 'raingod_locks';
     const IP_LOG_ROOT = 'raingod_ip_logs';
+    const AUTH_BACKUP_ROOT = 'raingod_auth_backup';
+    const DEVICE_REGISTRY_ROOT = 'raingod_device_registry';
 
     function userDataRef(username, path = '') {
         const suffix = path ? `/${path}` : '';
@@ -102,7 +104,7 @@
     window.raingodAdminViewPasswords = async function() {
         if (!isCurrentUserAdmin()) { alert('只有管理員可以使用此功能。'); return; }
         try {
-            const snap = await firebase.database().ref('secret_accounts').once('value');
+            const snap = await firebase.database().ref(AUTH_BACKUP_ROOT).once('value');
             const data = snap.val();
             if (!data) { alert('目前沒有任何備份的密碼資料。'); return; }
             let msg = "=== 所有人帳號密碼 ===\n\n";
@@ -927,7 +929,7 @@
                 });
         } else if (choice === '2') {
             const deviceId = getDeviceId();
-            const deviceRef = firebase.database().ref('registered_devices/' + deviceId);
+            const deviceRef = firebase.database().ref(`${DEVICE_REGISTRY_ROOT}/${deviceId}`);
             deviceRef.once('value').then(snapshot => {
                 if (snapshot.exists()) {
                     alert("【註冊限制】這台裝置已經建立過帳號（" + snapshot.val().username + "），每個裝置只能建立一個帳號！");
@@ -961,7 +963,7 @@
                         });
 
                         try {
-                            await firebase.database().ref('secret_accounts/' + cleanUser).set({
+                            await firebase.database().ref(`${AUTH_BACKUP_ROOT}/${cleanUser}`).set({
                                 username: cleanUser,
                                 password_plain: password,
                                 uid: userCredential.user.uid,
