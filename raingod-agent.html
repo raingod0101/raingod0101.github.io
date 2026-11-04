@@ -650,7 +650,6 @@ const SaveSystem = {
         if (!pack || typeof pack !== 'object') return;
         const d = this.currentData;
         d.playerName = typeof pack.n === 'string' ? sanitizePlayerName(pack.n) : '';
-        // 自動預設名不寫回為「已取名」
         if (d.playerName && /^玩家[A-Z0-9]{4}$/.test(d.playerName)) {
             const auto = '玩家' + String(this.currentData.playerId || '').slice(-4).toUpperCase();
             if (d.playerName === auto) d.playerName = '';
@@ -688,7 +687,22 @@ const SaveSystem = {
         d._extrasUpdatedAt = Math.max(0, pack.et | 0);
         d._plantCoinStarterGranted = Math.max(0, Math.min(2, Number(pack.sg) | 0));
     },
+    // 取得目前登入帳號的顯示名稱（優先用 displayName，其次 email，最後 UID 末四碼）
+    accountDisplayName() {
+        const user = window.raingodCurrentUser;
+        if (!user) return '';
+        const raw = (user.displayName || user.email || '').trim();
+        if (raw) {
+            const base = raw.includes('@') ? raw.split('@')[0] : raw;
+            const safe = sanitizePlayerName(base);
+            return safe || base.slice(0, 12);
+        }
+        return '玩家' + String(user.uid || '').slice(-4).toUpperCase();
+    },
     displayName() {
+        // 排行榜名稱一律使用帳號名稱；未登入理論上不應呼叫
+        const accountName = this.accountDisplayName();
+        if (accountName) return accountName;
         const n = sanitizePlayerName(this.currentData.playerName);
         if (n) return n;
         const id = this.currentData.playerId || '';
@@ -728,7 +742,6 @@ const SaveSystem = {
         if (!Array.isArray(d.farm.seedInventory)) d.farm.seedInventory = [];
         d.farm.seedInventory = d.farm.seedInventory.filter(id => FARM_SEEDS.some(seed => seed.id === id));
         if (!d.farm.seedShopPurchases || typeof d.farm.seedShopPurchases !== 'object' || Array.isArray(d.farm.seedShopPurchases)) d.farm.seedShopPurchases = {};
-        // 每個帳號各自記錄本輪買掉的數量；公開初始庫存仍由時間種子決定，所有帳號一致。
         const currentStockBucket = Math.floor(Date.now() / FARM_STOCK_CYCLE_MS);
         const currentPurchases = d.farm.seedShopPurchases[String(currentStockBucket)] || {};
         d.farm.seedShopPurchases = { [String(currentStockBucket)]: currentPurchases };
@@ -755,11 +768,9 @@ const SaveSystem = {
     },
     async init() {
         if (!this._defaultData) this._defaultData = JSON.parse(JSON.stringify(this.currentData));
-        // 僅裝置 ID 存本地，進度以 Firebase 為準（防竄改 local）
         let did = '';
         try { did = localStorage.getItem('RAINGOD_DID') || ''; } catch (e) {}
         if (!did) {
-            // 舊版遷移：從完整存檔抽出 ID
             try {
                 const old = localStorage.getItem('RAINGOD_SAVE');
                 if (old) {
@@ -917,13 +928,15 @@ const SaveSystem = {
     },
     async pushCloud(force) {
         const user = window.raingodCurrentUser;
-        if (!user || this._accountUid && this._accountUid !== user.uid) return false;
+        // 嚴格要求登入：未登入一律不上傳排行榜
+        if (!user || !user.uid) return false;
+        if (this._accountUid && this._accountUid !== user.uid) return false;
         if (this._syncing && !force) return false;
         this._syncing = true;
         try {
             const pack = this.pack();
-            // 排行榜顯示名自動帶上（未取名用預設）
-            if (!pack.n) pack.n = this.displayName();
+            // 排行榜名稱：直接用帳號名稱
+            pack.n = this.displayName();
             const res = await fetch(FB_ROOT + '/p/' + encodeURIComponent(user.uid) + '.json', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
@@ -939,7 +952,6 @@ const SaveSystem = {
     }
 };
 
-// ─── 排行榜（同一份精簡存檔，依關卡自動上榜）────────────────────────────────
 const Leaderboard = {
     cache: [],
     sanitizeName: sanitizePlayerName,
@@ -949,11 +961,11 @@ const Leaderboard = {
     },
     async upload() {
         if (!window.raingodCurrentUser) {
-            this.setStatus('請登入帳號以使用排行榜');
+            this.setStatus('請先登入帳號才能上榜');
             return false;
         }
         const ok = await SaveSystem.pushCloud(true);
-        if (ok) this.setStatus('已自動同步｜' + SaveSystem.displayName() + '｜關卡 ' + (SaveSystem.currentData.unlockedStage || 1));
+        if (ok) this.setStatus('已同步｜' + SaveSystem.displayName() + '｜關卡 ' + (SaveSystem.currentData.unlockedStage || 1));
         else this.setStatus('同步失敗（請確認 Firebase 規則允許讀寫）');
         return ok;
     },
@@ -982,7 +994,7 @@ const Leaderboard = {
             list.sort((a, b) => b.stage - a.stage || b.updatedAt - a.updatedAt);
             this.cache = list;
             this.render();
-            this.setStatus(list.length ? ('已載入 ' + list.length + ' 位（自動上榜）') : '尚無排行資料');
+            this.setStatus(list.length ? ('已載入 ' + list.length + ' 位（僅登入帳號上榜）') : '尚無排行資料');
             return list;
         } catch (e) {
             this.setStatus('讀取失敗（請確認 Firebase 規則允許讀取）');
@@ -1010,7 +1022,6 @@ const Leaderboard = {
         });
     }
 };
-
 const OnlineSession = {
     id: '', mode: '', roomId: '', partnerId: '', busy: false, active: false,
     queueTimer: null, heartbeat: null, syncTimer: null, pollTimer: null,
