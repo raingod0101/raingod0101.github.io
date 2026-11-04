@@ -197,6 +197,17 @@
         }
     }
 
+    function clearAllSaveChoices() {
+        try {
+            for (let i = sessionStorage.length - 1; i >= 0; i--) {
+                const k = sessionStorage.key(i);
+                if (k && k.startsWith('raingod_save_choice_')) {
+                    sessionStorage.removeItem(k);
+                }
+            }
+        } catch (err) { console.error('清除儲存選擇失敗：', err); }
+    }
+
     function replaceLocalAccountData(data) {
         accountDataSyncing = true;
         try {
@@ -341,36 +352,9 @@
             return;
         }
 
-        const accountKey = user.email ? user.email.split('@')[0] : uid;
-        let choice = readSaveChoice(accountKey);
-        if (!choice) {
-            const confirmed = window.confirm(
-                '此帳號已有雲端資料，且與本機不同。\n\n' +
-                '按「確定」：用雲端資料覆蓋本機。\n' +
-                '按「取消」：保留本機資料並上傳到雲端。'
-            );
-            if (!confirmed) {
-                await accountDataRef(uid).set({
-                    data: localData,
-                    updated_at: firebase.database.ServerValue.TIMESTAMP
-                });
-                try { sessionStorage.setItem(saveChoiceKey(accountKey), 'local'); } catch (err) {}
-                return;
-            }
-            choice = 'cloud';
-            try { sessionStorage.setItem(saveChoiceKey(accountKey), choice); } catch (err) {}
-        }
-
-        if (firebase.auth().currentUser?.uid !== uid) return;
-
-        if (choice === 'cloud') {
-            replaceLocalAccountData(cloudData);
-        } else {
-            await accountDataRef(uid).set({
-                data: localData,
-                updated_at: firebase.database.ServerValue.TIMESTAMP
-            });
-        }
+        // ★ 所有已存在儲存的帳號，預設直接用雲端覆蓋本地，只有第一次玩才允許建立
+        try { sessionStorage.setItem(saveChoiceKey(user.email ? user.email.split('@')[0] : uid), 'cloud'); } catch (err) {}
+        replaceLocalAccountData(cloudData);
     }
 
     window.raingodWaitForAccountData = async function(uid) {
@@ -392,7 +376,10 @@
 
     function saveChoiceKey(uid) { return `raingod_save_choice_${uid}`; }
     function readSaveChoice(uid) {
-        try { return sessionStorage.getItem(saveChoiceKey(uid)); } catch (e) { return null; }
+        try {
+            const value = sessionStorage.getItem(saveChoiceKey(uid));
+            return value || 'cloud';
+        } catch (e) { return 'cloud'; }
     }
     function clearSaveChoice(uid) {
         try { sessionStorage.removeItem(saveChoiceKey(uid)); } catch (e) {}
@@ -736,31 +723,7 @@
                     && comparableSaveData(gameId, localData) !== comparableSaveData(gameId, cloudData);
 
                 if (localDiffers) {
-                    const accountKey = user.email ? user.email.split('@')[0] : user.uid;
-                    let choice = readSaveChoice(accountKey);
-                    if (!choice) {
-                        const confirmed = window.confirm(
-                            '此帳號已有此遊戲的雲端進度，且與本機不同。\n\n' +
-                            '按「確定」：用雲端進度覆蓋本機存檔。\n' +
-                            '按「取消」：保留本機存檔並上傳到雲端。'
-                        );
-                        if (!confirmed) {
-                            await gameRef.set({
-                                data: localData,
-                                updated_at: firebase.database.ServerValue.TIMESTAMP
-                            });
-                            return complete(localData, { source: 'local', syncEnabled: true, uploaded: true });
-                        }
-                        choice = 'cloud';
-                        try { sessionStorage.setItem(saveChoiceKey(accountKey), choice); } catch (e) {}
-                    }
-                    if (choice === 'local') {
-                        await gameRef.set({
-                            data: localData,
-                            updated_at: firebase.database.ServerValue.TIMESTAMP
-                        });
-                        return complete(localData, { source: 'local', syncEnabled: true, uploaded: true });
-                    }
+                    try { sessionStorage.setItem(saveChoiceKey(user.email ? user.email.split('@')[0] : user.uid), 'cloud'); } catch (e) {}
                 }
 
                 localStorage.setItem(`raingod_save_${gameId}`, JSON.stringify(cloudData));
@@ -845,30 +808,8 @@
                                     let useLegacyCloud = true;
                                     if (differs) {
                                         const accountKey = user.email.split('@')[0];
-                                        let choice = readSaveChoice(accountKey);
-                                        if (!choice) {
-                                            const confirmed = window.confirm(
-                                                '找到此帳號舊版雲端進度，且與本機不同。\n\n' +
-                                                '按「確定」：用舊版雲端進度覆蓋本機。\n' +
-                                                '按「取消」：保留本機進度並上傳到雲端。'
-                                            );
-                                            if (!confirmed) {
-                                                try {
-                                                    localData[primaryKey] = localData[primaryKey];
-                                                    await accountRef.set({
-                                                        data: localData,
-                                                        updated_at: firebase.database.ServerValue.TIMESTAMP
-                                                    });
-                                                } catch (e) {}
-                                                enabled = true;
-                                                if (onLoaded) onLoaded(localData, { source: 'local', syncEnabled: true, uploaded: true });
-                                                if (initialState) { initialState = false; resolve(); }
-                                                return;
-                                            }
-                                            choice = 'cloud';
-                                            try { sessionStorage.setItem(saveChoiceKey(accountKey), choice); } catch (e) {}
-                                        }
-                                        useLegacyCloud = choice === 'cloud';
+                                        try { sessionStorage.setItem(saveChoiceKey(accountKey), 'cloud'); } catch (e) {}
+                                        useLegacyCloud = true;
                                     }
                                     if (useLegacyCloud) {
                                         localData[primaryKey] = legacyData;
