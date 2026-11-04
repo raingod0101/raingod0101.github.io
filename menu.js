@@ -3,6 +3,22 @@
     const v = new Date().getTime();
     let currentIp = "Unknown_IP";
 
+    // --- 新的 Firebase 根目錄（不再塞在 users/ 底下） ---
+    const ACCOUNT_DATA_ROOT = 'raingod_accounts';
+    const USER_DATA_ROOT = 'raingod_users';
+    const SESSION_ROOT = 'raingod_sessions';
+    const LOCK_ROOT = 'raingod_locks';
+    const IP_LOG_ROOT = 'raingod_ip_logs';
+
+    function userDataRef(username, path = '') {
+        const suffix = path ? `/${path}` : '';
+        return firebase.database().ref(`${USER_DATA_ROOT}/${username}${suffix}`);
+    }
+
+    function userGameSaveRef(uid, gameId) {
+        return firebase.database().ref(`${ACCOUNT_DATA_ROOT}/${uid}/games/${gameId}`);
+    }
+
     // --- 節慶主題自動切換 ---
     (function applyFestivalTheme() {
         const testTheme = null;
@@ -157,7 +173,15 @@
     }
 
     function accountDataRef(uid) {
-        return firebase.database().ref(`users/${uid}/account_data`);
+        return firebase.database().ref(`${ACCOUNT_DATA_ROOT}/${uid}/account_data`);
+    }
+
+    function sessionRef(uid) {
+        return firebase.database().ref(`${SESSION_ROOT}/${uid}`);
+    }
+
+    function lockRef(uid, gameId) {
+        return firebase.database().ref(`${LOCK_ROOT}/${uid}/${gameId}`);
     }
 
     function readAccountData() {
@@ -486,7 +510,7 @@
             await window.raingodAuthReady;
             const user = firebase.auth().currentUser;
             if (user) {
-                firebaseRef = firebase.database().ref(`game_locks/${user.uid}/${gameId}`);
+                firebaseRef = lockRef(user.uid, gameId);
                 await firebaseRef.set({
                     sessionId,
                     deviceId: getDeviceId(),
@@ -561,7 +585,7 @@
         stopSessionWatch();
         const sessionId = getSessionId();
         const myTimestamp = Date.now();
-        const sessionRef = firebase.database().ref(`users_sessions/${user.uid}`);
+        const mySessionRef = sessionRef(user.uid);
 
         // 先註冊監聽（能收到推播）
         const handler = snap => {
@@ -582,13 +606,13 @@
             firebase.auth().signOut().then(redirect).catch(redirect);
         };
 
-        sessionWatchRef = sessionRef;
+        sessionWatchRef = mySessionRef;
         sessionWatchHandler = handler;
-        sessionRef.on('value', handler);
+        mySessionRef.on('value', handler);
 
         // 再寫入自己的 sessionId（帶 timestamp）
         try {
-            await sessionRef.set({
+            await mySessionRef.set({
                 sessionId,
                 deviceId: getDeviceId(),
                 tabId: getTabId(),
@@ -651,9 +675,8 @@
         await window.raingodAuthReady;
         const user = firebase.auth().currentUser;
         if (user && user.email) {
-            const username = user.email.split('@')[0];
             try {
-                const gameRef = firebase.database().ref(`users/${username}/games/${gameId}`);
+                const gameRef = userGameSaveRef(user.uid, gameId);
                 const snap = await gameRef.once('value');
                 const cloudData = snap.val();
                 if (cloudData && cloudData.updated_at && cloudData.updated_at > Date.now() - 5000) {
@@ -707,8 +730,7 @@
             return complete(finalData, { source: 'local', syncEnabled: false });
         }
 
-        const username = user.email.split('@')[0];
-        const gameRef = firebase.database().ref(`users/${username}/games/${gameId}`);
+        const gameRef = userGameSaveRef(user.uid, gameId);
 
         try {
             const snapshot = await gameRef.once('value');
@@ -796,10 +818,10 @@
                         const genericKey = `raingod_save_${gameId}`;
                         if (legacyCloudSave && user.email) {
                             const username = user.email.split('@')[0];
-                            const accountRef = firebase.database().ref(`users/${username}/games/${gameId}`);
+                            const accountRef = userGameSaveRef(user.uid, gameId);
                             const accountSnapshot = await accountRef.once('value');
                             if (!accountSnapshot.exists()) {
-                                const legacySnapshot = await firebase.database().ref(`users/${user.uid}/${legacyCloudSave.path}`).once('value');
+                                const legacySnapshot = await firebase.database().ref(`${ACCOUNT_DATA_ROOT}/${user.uid}/${legacyCloudSave.path}`).once('value');
                                 if (legacySnapshot.exists()) {
                                     const legacyData = legacySnapshot.val();
                                     const primaryKey = legacyCloudSave.key;
@@ -870,7 +892,7 @@
 
         const safeIp = ip.replace(/[\.\$\#\[\]\/]/g, '_');
         const now = Date.now();
-        const path = user ? `users_ip_logs/${safeIp}` : `guests/${safeIp}`;
+        const path = user ? `${IP_LOG_ROOT}/${safeIp}` : `guests/${safeIp}`;
         const ref = firebase.database().ref(path);
         ref.once('value', (snapshot) => {
             const oldData = snapshot.val() || {};
@@ -1068,7 +1090,7 @@
             clearNavListeners();
             navCurrentUsername = username;
 
-            const reqRef = firebase.database().ref(`users/${username}/friend_requests`);
+            const reqRef = userDataRef(username, 'friend_requests');
             const reqHandler = snap => {
                 const val = snap.val() || {};
                 navCounts.requests = Object.keys(val).length;
@@ -1078,7 +1100,7 @@
             navListeners.push(() => reqRef.off('value', reqHandler));
 
             navCounts.unread = {};
-            const friendsRef = firebase.database().ref(`users/${username}/friends`);
+            const friendsRef = userDataRef(username, 'friends');
             const friendsHandler = snap => {
                 const friends = snap.val() || {};
                 navListeners.filter(x => x.__isUnread).forEach(fn => { try { fn(); } catch (e) {} });
@@ -1125,7 +1147,7 @@
         function watchProfileAvatar(username, userAvatarEl) {
             stopAvatarWatch();
             if (!userAvatarEl) return;
-            avatarProfileRef = firebase.database().ref(`users/${username}/profile/avatar`);
+            avatarProfileRef = userDataRef(username, 'profile/avatar');
             avatarProfileHandler = snap => {
                 const url = snap.val();
                 if (url) userAvatarEl.src = url;
