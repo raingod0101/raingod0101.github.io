@@ -19,6 +19,18 @@
         RAINGOD_DB_WRITE_ENABLED = !!enabled;
     };
 
+    // ★ 主頁是否也參與「同帳號互踢」。
+    // 預設 false：主頁可以多開（同瀏覽器多分頁 / 不同裝置都可共存）。
+    // 只有進入非主頁（遊戲頁）時才 claim session，這時同帳號只會留一個。
+    const KICK_ON_HOME = false;
+
+    function isHomePage() {
+        try {
+            const p = window.location.pathname;
+            return p === '/' || p === '' || p === '/index.html';
+        } catch (e) { return false; }
+    }
+
     function userDataRef(username, path = '') {
         const suffix = path ? `/${path}` : '';
         return firebase.database().ref(`${USER_DATA_ROOT}/${username}${suffix}`);
@@ -158,11 +170,13 @@
     const SESSION_STORAGE_KEY = 'raingod_session_id';
     let _sessionId = null;
 
-    // session 以「裝置」為單位：同裝置所有分頁共用同一個 deviceId，因此不互踢。
-    // 只有不同裝置（deviceId 不同）才會觸發踢人。
+    // ★ 關鍵修正：session 識別改用 tabId（每分頁獨立）。
+    // - 同瀏覽器不同分頁 → tabId 不同 → 會互踢（這是你要的）
+    // - 不同裝置 → tabId 也不同 → 會互踢
+    // - 主頁不 claim → 主頁多開共存（見 claimSession 的 isHomePage 判斷）
     function getSessionId() {
         if (_sessionId) return _sessionId;
-        _sessionId = getDeviceId();
+        _sessionId = getTabId();
         try { sessionStorage.setItem(SESSION_STORAGE_KEY, _sessionId); } catch (e) {}
         return _sessionId;
     }
@@ -563,13 +577,7 @@
     });
 
     // =============================================================
-    // ★★★ 多地方登入搶佔（以裝置為單位）★★★
-    //
-    // ★ 關鍵修正：先 set 再 on。
-    // 原因：Firebase on('value') 註冊時會「立即觸發一次」目前雲端的值。
-    // 若先 on 後 set，第一次觸發時自己還沒寫入，會收到雲端舊值（可能是
-    // 上次沒清掉或別台裝置的 sessionId），導致「自己踢自己」。
-    // 改成先 set 後 on，on 立即收到的一定是自己的值，不會誤踢。
+    // ★★★ 多地方登入搶佔（每分頁獨立 tabId + 主頁豁免）★★★
     // =============================================================
     let sessionWatchRef = null;
     let sessionWatchHandler = null;
@@ -581,13 +589,6 @@
         }
         sessionWatchRef = null;
         sessionWatchHandler = null;
-    }
-
-    function isHomePage() {
-        try {
-            const p = window.location.pathname;
-            return p === '/' || p === '' || p === '/index.html';
-        } catch (e) { return false; }
     }
 
     function showNonBlockingNotice(message) {
@@ -612,7 +613,7 @@
         showNonBlockingNotice(reason || '您的帳號已在其他地方登入，本頁將自動登出。');
 
         const redirect = () => {
-            // ★ 如果已經在首頁，不需要再跳一次（避免首頁重複載入又觸發一輪）
+            // 被踢後回到主頁（主頁不參與 claim，不會再次被踢）
             if (isHomePage()) return;
             window.location.href = baseUrl;
         };
@@ -623,17 +624,21 @@
 
     async function claimSession(user) {
         if (!canWriteRaingodDb()) return;
+
+        // ★ 主頁不參與互踢（除非你手動把 KICK_ON_HOME 設為 true）
+        if (isHomePage() && !KICK_ON_HOME) return;
+
         stopSessionWatch();
         sessionKicked = false;
 
-        const deviceId = getDeviceId();
+        const sessionId = getSessionId();   // = tabId（每分頁獨立）
         const mySessionRef = sessionRef(user.uid);
 
-        // ★ 先寫入（拿到自己的位置）
+        // ★ 先 set：拿到自己的位置
         try {
             await mySessionRef.set({
-                sessionId: deviceId,
-                deviceId: deviceId,
+                sessionId,
+                deviceId: getDeviceId(),
                 tabId: getTabId(),
                 timestamp: firebase.database.ServerValue.TIMESTAMP
             });
@@ -642,14 +647,13 @@
             return;
         }
 
-        // 寫入期間如果 auth 已被換掉，直接放棄
         if (firebase.auth().currentUser?.uid !== user.uid) return;
 
-        // ★ 寫入後再註冊監聽：立即觸發一定收到自己的值，不會誤踢
+        // ★ 再 on：立即觸發一定收到自己的值，不會誤踢
         const handler = snap => {
             const val = snap.val();
             if (!val || !val.sessionId) return;
-            if (val.sessionId === deviceId) return;
+            if (val.sessionId === sessionId) return;
             kickOut('您的帳號已在其他地方登入，本頁將自動登出。');
         };
 
@@ -657,11 +661,11 @@
         sessionWatchHandler = handler;
         mySessionRef.on('value', handler);
 
-        // ★ 再補一次檢查，處理「set 完成到 on 建立之間」的空窗被別人覆蓋
+        // ★ 補一次檢查：set 到 on 之間被別人覆蓋的情況
         try {
             const check = await mySessionRef.once('value');
             const val = check.val();
-            if (val && val.sessionId && val.sessionId !== deviceId) {
+            if (val && val.sessionId && val.sessionId !== sessionId) {
                 kickOut('您的帳號已在其他地方登入，本頁將自動登出。');
             }
         } catch (e) {}
