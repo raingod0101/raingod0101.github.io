@@ -12,9 +12,9 @@
     const AUTH_BACKUP_ROOT = 'raingod_auth_backup';
     const DEVICE_REGISTRY_ROOT = 'raingod_device_registry';
 
-    // ★ 全域 Firebase 寫入開關：關閉後，這個頁面不會再自動重建 session / lock / ip / device / account 資料
-    // 如果你要暫時停止所有雲端覆寫，直接保持 false 即可。
-    let RAINGOD_DB_WRITE_ENABLED = false;
+    // ★修正：預設開啟寫入，否則 session / lock 機制完全失效。
+    // 若要暫時停止雲端覆寫，請在頁面載入後呼叫 window.raingodSetDbWriteEnabled(false)
+    let RAINGOD_DB_WRITE_ENABLED = true;
     function canWriteRaingodDb() {
         return RAINGOD_DB_WRITE_ENABLED;
     }
@@ -166,20 +166,14 @@
     const SESSION_STORAGE_KEY = 'raingod_session_id';
     let _sessionId = null;
 
-    function getNavType() {
-        try {
-            const nav = performance.getEntriesByType('navigation')[0];
-            return nav ? nav.type : 'navigate';
-        } catch (e) { return 'navigate'; }
-    }
-
+    // ★修正：不再從 sessionStorage 沿用。
+    // sessionStorage 在「複製分頁 / 新分頁開啟連結」時會被複製，
+    // 導致多分頁共用同一個 sessionId，監聽時 val.sessionId === sessionId
+    // 直接 return，永遠不會互踢。
+    // 現在每個分頁一律產生新的 sessionId，確保多分頁一定互踢。
     function getSessionId() {
         if (_sessionId) return _sessionId;
-        if (getNavType() === 'reload') {
-            const existing = sessionStorage.getItem(SESSION_STORAGE_KEY);
-            if (existing) { _sessionId = existing; return _sessionId; }
-        }
-        _sessionId = 'sess_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+        _sessionId = 'sess_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
         try { sessionStorage.setItem(SESSION_STORAGE_KEY, _sessionId); } catch (e) {}
         return _sessionId;
     }
@@ -537,6 +531,7 @@
                     const val = snap.val();
                     if (!val || !val.sessionId) return;
                     if (val.sessionId === sessionId) return;
+                    // ★修正：只要不是自己的 sessionId 就視為失去，不再比較時間
                     handleLost();
                 };
                 firebaseRef.on('value', firebaseHandler);
@@ -581,44 +576,67 @@
     });
 
     // =============================================================
-    // ★★★ 多地方登入搶佔（核心修復：用 timestamp 判斷誰是後登入者）★★★
+    // ★★★ 多地方登入搶佔（核心修復）★★★
+    // 不再用本地 Date.now() 比較（跨裝置時鐘不同步會失效）。
+    // 改成：雲端 sessionId 不是自己的 → 直接登出自己。
+    // Firebase 寫入本身是序列化的，後寫入者一定會觸發先寫入者的監聽，
+    // 所以「先寫入者」會收到「後寫入者」的 sessionId → 先寫入者登出。
     // =============================================================
     let sessionWatchRef = null;
     let sessionWatchHandler = null;
+    let sessionKicked = false;
 
     function stopSessionWatch() {
         if (sessionWatchRef && sessionWatchHandler) {
             try { sessionWatchRef.off('value', sessionWatchHandler); } catch (e) {}
         }
-        if (sessionWatchRef) {
-            try { sessionWatchRef.onDisconnect().cancel(); } catch (e) {}
-        }
         sessionWatchRef = null;
         sessionWatchHandler = null;
+    }
+
+    function showNonBlockingNotice(message) {
+        // 非阻塞提示：避免 alert 卡住事件迴圈，導致競態處理順序錯亂
+        try {
+            const el = document.createElement('div');
+            el.textContent = message;
+            el.style.cssText = [
+                'position:fixed','top:20px','left:50%','transform:translateX(-50%)',
+                'background:#333','color:#fff','padding:12px 20px','border-radius:8px',
+                'font-size:14px','z-index:999999','box-shadow:0 4px 12px rgba(0,0,0,.3)',
+                'max-width:90vw','text-align:center'
+            ].join(';');
+            (document.body || document.documentElement).appendChild(el);
+            setTimeout(() => { try { el.remove(); } catch (e) {} }, 3000);
+        } catch (e) {}
+    }
+
+    function kickOut(reason) {
+        if (sessionKicked) return;
+        sessionKicked = true;
+        stopSessionWatch();
+        showNonBlockingNotice(reason || '您的帳號已在其他地方登入，本頁將自動登出。');
+        const redirect = () => { window.location.href = baseUrl; };
+        // 延遲一點，讓提示有機會顯示
+        setTimeout(() => {
+            firebase.auth().signOut().then(redirect).catch(redirect);
+        }, 800);
     }
 
     async function claimSession(user) {
         if (!canWriteRaingodDb()) return;
         stopSessionWatch();
+        sessionKicked = false;
+
         const sessionId = getSessionId();
-        const myTimestamp = Date.now();
         const mySessionRef = sessionRef(user.uid);
 
-        // 先註冊監聽（能收到推播）
+        // ★修正：先註冊監聽，再寫入。
+        // handler 不再比較時間，只要 val.sessionId 存在且不是自己的 → 自己被踢。
         const handler = snap => {
             const val = snap.val();
             if (!val || !val.sessionId) return;
             if (val.sessionId === sessionId) return;
-
-            const theirTs = typeof val.timestamp === 'number' ? val.timestamp : 0;
-            if (theirTs <= myTimestamp) {
-                return;
-            }
-
-            stopSessionWatch();
-            alert('您的帳號已在其他地方登入，本頁將自動登出。');
-            const redirect = () => { window.location.href = baseUrl; };
-            firebase.auth().signOut().then(redirect).catch(redirect);
+            kickOut('您的帳號已在其他地方登入，本頁將自動登出。');
         };
 
         sessionWatchRef = mySessionRef;
@@ -630,11 +648,22 @@
                 sessionId,
                 deviceId: getDeviceId(),
                 tabId: getTabId(),
-                timestamp: myTimestamp
+                timestamp: firebase.database.ServerValue.TIMESTAMP
             });
         } catch (e) {
             console.warn('多裝置偵測寫入失敗（可能是 Firebase 規則限制）：', e);
+            return;
         }
+
+        // ★修正：寫入後再讀一次確認，處理「兩人幾乎同時登入」的 rapid-fire 競態。
+        // 若寫入後雲端已被別人蓋掉，代表自己比較舊 → 踢掉自己。
+        try {
+            const check = await mySessionRef.once('value');
+            const val = check.val();
+            if (val && val.sessionId && val.sessionId !== sessionId) {
+                kickOut('您的帳號已在其他地方登入，本頁將自動登出。');
+            }
+        } catch (e) {}
     }
 
     // --- 自動加載資源 ---
