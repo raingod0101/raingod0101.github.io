@@ -158,9 +158,8 @@
     const SESSION_STORAGE_KEY = 'raingod_session_id';
     let _sessionId = null;
 
-    // ★ 關鍵修正：session 標識改成「裝置層級」，同裝置所有分頁共享同一個值。
-    // 這樣同一個瀏覽器開多個分頁時，大家寫入的值一樣 → 監聽時 val.sessionId === sessionId
-    // → 不會互踢。只有不同裝置（deviceId 不同）才會觸發踢人。
+    // session 以「裝置」為單位：同裝置所有分頁共用同一個 deviceId，因此不互踢。
+    // 只有不同裝置（deviceId 不同）才會觸發踢人。
     function getSessionId() {
         if (_sessionId) return _sessionId;
         _sessionId = getDeviceId();
@@ -480,10 +479,7 @@
         return _tabId;
     }
 
-    // === 遊戲鎖 ===
-    // ★ 關鍵修正：遊戲鎖用 tabId（每分頁獨立），不能用 deviceId，
-    // 否則同裝置兩個分頁會共用同一個鎖值，localStorage 的 storage 事件
-    // 不會觸發，兩邊都會以為鎖是自己的。
+    // === 遊戲鎖（用 tabId，每分頁獨立）===
     async function acquireGameLock(gameId, onLost) {
         const tabId = getTabId();
         const localKey = GAME_LOCK_PREFIX + gameId;
@@ -568,8 +564,12 @@
 
     // =============================================================
     // ★★★ 多地方登入搶佔（以裝置為單位）★★★
-    // sessionId = deviceId。同裝置多分頁寫入相同值 → 不互踢。
-    // 不同裝置寫入不同值 → 後寫入者觸發先寫入者監聽 → 先登入者被踢。
+    //
+    // ★ 關鍵修正：先 set 再 on。
+    // 原因：Firebase on('value') 註冊時會「立即觸發一次」目前雲端的值。
+    // 若先 on 後 set，第一次觸發時自己還沒寫入，會收到雲端舊值（可能是
+    // 上次沒清掉或別台裝置的 sessionId），導致「自己踢自己」。
+    // 改成先 set 後 on，on 立即收到的一定是自己的值，不會誤踢。
     // =============================================================
     let sessionWatchRef = null;
     let sessionWatchHandler = null;
@@ -581,6 +581,13 @@
         }
         sessionWatchRef = null;
         sessionWatchHandler = null;
+    }
+
+    function isHomePage() {
+        try {
+            const p = window.location.pathname;
+            return p === '/' || p === '' || p === '/index.html';
+        } catch (e) { return false; }
     }
 
     function showNonBlockingNotice(message) {
@@ -603,7 +610,12 @@
         sessionKicked = true;
         stopSessionWatch();
         showNonBlockingNotice(reason || '您的帳號已在其他地方登入，本頁將自動登出。');
-        const redirect = () => { window.location.href = baseUrl; };
+
+        const redirect = () => {
+            // ★ 如果已經在首頁，不需要再跳一次（避免首頁重複載入又觸發一輪）
+            if (isHomePage()) return;
+            window.location.href = baseUrl;
+        };
         setTimeout(() => {
             firebase.auth().signOut().then(redirect).catch(redirect);
         }, 800);
@@ -614,20 +626,10 @@
         stopSessionWatch();
         sessionKicked = false;
 
-        const deviceId = getDeviceId();   // ★ 用裝置 ID 作為 session 識別
+        const deviceId = getDeviceId();
         const mySessionRef = sessionRef(user.uid);
 
-        const handler = snap => {
-            const val = snap.val();
-            if (!val || !val.sessionId) return;
-            if (val.sessionId === deviceId) return;   // ★ 同裝置 → 不踢
-            kickOut('您的帳號已在其他地方登入，本頁將自動登出。');
-        };
-
-        sessionWatchRef = mySessionRef;
-        sessionWatchHandler = handler;
-        mySessionRef.on('value', handler);
-
+        // ★ 先寫入（拿到自己的位置）
         try {
             await mySessionRef.set({
                 sessionId: deviceId,
@@ -640,6 +642,22 @@
             return;
         }
 
+        // 寫入期間如果 auth 已被換掉，直接放棄
+        if (firebase.auth().currentUser?.uid !== user.uid) return;
+
+        // ★ 寫入後再註冊監聽：立即觸發一定收到自己的值，不會誤踢
+        const handler = snap => {
+            const val = snap.val();
+            if (!val || !val.sessionId) return;
+            if (val.sessionId === deviceId) return;
+            kickOut('您的帳號已在其他地方登入，本頁將自動登出。');
+        };
+
+        sessionWatchRef = mySessionRef;
+        sessionWatchHandler = handler;
+        mySessionRef.on('value', handler);
+
+        // ★ 再補一次檢查，處理「set 完成到 on 建立之間」的空窗被別人覆蓋
         try {
             const check = await mySessionRef.once('value');
             const val = check.val();
