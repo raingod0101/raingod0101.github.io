@@ -1161,24 +1161,49 @@
 
         let avatarProfileRef = null;
         let avatarProfileHandler = null;
+        let avatarProfileFallbackRef = null;
+        let avatarProfileFallbackHandler = null;
         function stopAvatarWatch() {
             if (avatarProfileRef && avatarProfileHandler) {
                 try { avatarProfileRef.off('value', avatarProfileHandler); } catch (e) {}
             }
+            if (avatarProfileFallbackRef && avatarProfileFallbackHandler) {
+                try { avatarProfileFallbackRef.off('value', avatarProfileFallbackHandler); } catch (e) {}
+            }
             avatarProfileRef = null;
             avatarProfileHandler = null;
+            avatarProfileFallbackRef = null;
+            avatarProfileFallbackHandler = null;
         }
         function watchProfileAvatar(username, userAvatarEl) {
             stopAvatarWatch();
             if (!userAvatarEl) return;
+
+            const fallbackUrl = () => {
+                const u = firebase.auth().currentUser;
+                userAvatarEl.src = (u && u.photoURL) || `${baseUrl}catdragon.png`;
+            };
+
+            const applyAvatar = snap => {
+                const url = snap && snap.val && snap.val();
+                if (url) {
+                    userAvatarEl.src = url;
+                } else {
+                    fallbackUrl();
+                }
+            };
+
             avatarProfileRef = userDataRef(username, 'profile/avatar');
             avatarProfileHandler = snap => {
-                const url = snap.val();
-                if (url) userAvatarEl.src = url;
-                else {
-                    const u = firebase.auth().currentUser;
-                    userAvatarEl.src = (u && u.photoURL) || `${baseUrl}catdragon.png`;
+                const url = snap && snap.val && snap.val();
+                if (url) {
+                    userAvatarEl.src = url;
+                    return;
                 }
+                if (avatarProfileFallbackRef) return;
+                avatarProfileFallbackRef = firebase.database().ref(`users/${username}/profile/avatar`);
+                avatarProfileFallbackHandler = applyAvatar;
+                avatarProfileFallbackRef.on('value', avatarProfileFallbackHandler);
             };
             avatarProfileRef.on('value', avatarProfileHandler);
         }
