@@ -985,16 +985,21 @@ const Leaderboard = {
             if (data && typeof data === 'object') {
                 Object.keys(data).forEach(id => {
                     const row = data[id];
+                    // 過濾：必須是物件、有有效關卡、有真正的同步時間戳
                     if (!row || typeof row !== 'object') return;
+                    const stage = Math.max(1, parseInt(row.u, 10) || 0);
+                    const updatedAt = Number(row.t) || 0;
+                    // 沒有關卡資料或從未同步（updatedAt 為 0）→ 視為沒有雲端資料，略過
+                    if (!stage || updatedAt <= 0) return;
+                    // 名稱：優先存檔中的帳號名稱，否則用 UID 末四碼
                     const name = sanitizePlayerName(row.n) || ('玩家' + id.slice(-4).toUpperCase());
-                    const stage = Math.max(1, parseInt(row.u, 10) || 1);
-                    list.push({ id, name, stage, updatedAt: row.t || 0 });
+                    list.push({ id, name, stage, updatedAt });
                 });
             }
             list.sort((a, b) => b.stage - a.stage || b.updatedAt - a.updatedAt);
             this.cache = list;
             this.render();
-            this.setStatus(list.length ? ('已載入 ' + list.length + ' 位（僅登入帳號上榜）') : '尚無排行資料');
+            this.setStatus(list.length ? ('已載入 ' + list.length + ' 位（僅顯示有雲端存檔的玩家）') : '尚無排行資料');
             return list;
         } catch (e) {
             this.setStatus('讀取失敗（請確認 Firebase 規則允許讀取）');
