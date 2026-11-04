@@ -12,6 +12,16 @@
     const AUTH_BACKUP_ROOT = 'raingod_auth_backup';
     const DEVICE_REGISTRY_ROOT = 'raingod_device_registry';
 
+    // ★ 全域 Firebase 寫入開關：關閉後，這個頁面不會再自動重建 session / lock / ip / device / account 資料
+    // 如果你要暫時停止所有雲端覆寫，直接保持 false 即可。
+    let RAINGOD_DB_WRITE_ENABLED = false;
+    function canWriteRaingodDb() {
+        return RAINGOD_DB_WRITE_ENABLED;
+    }
+    window.raingodSetDbWriteEnabled = function(enabled) {
+        RAINGOD_DB_WRITE_ENABLED = !!enabled;
+    };
+
     function userDataRef(username, path = '') {
         const suffix = path ? `/${path}` : '';
         return firebase.database().ref(`${USER_DATA_ROOT}/${username}${suffix}`);
@@ -318,7 +328,7 @@
     };
 
     function scheduleAccountDataSave() {
-        if (!activeAccountUid || accountDataSyncing) return;
+        if (!activeAccountUid || accountDataSyncing || !canWriteRaingodDb()) return;
         const uid = activeAccountUid;
         clearTimeout(accountSaveTimer);
         accountSaveTimer = setTimeout(async () => {
@@ -335,6 +345,11 @@
     }
 
     async function syncAccountData(user) {
+        if (!canWriteRaingodDb()) {
+            accountDataCloudLoaded = false;
+            window.raingodAccountDataCloudLoaded = false;
+            return;
+        }
         const uid = user.uid;
         const localData = readAccountData();
         const snapshot = await accountDataRef(uid).once('value');
@@ -378,7 +393,6 @@
             return;
         }
 
-        // ★ 所有已存在儲存的帳號，預設直接用雲端覆蓋本地，只有第一次玩才允許建立
         try { sessionStorage.setItem(saveChoiceKey(user.email ? user.email.split('@')[0] : uid), 'cloud'); } catch (err) {}
         replaceLocalAccountData(cloudData);
     }
@@ -511,7 +525,7 @@
             await window.raingodFirebaseReady;
             await window.raingodAuthReady;
             const user = firebase.auth().currentUser;
-            if (user) {
+            if (user && canWriteRaingodDb()) {
                 firebaseRef = lockRef(user.uid, gameId);
                 await firebaseRef.set({
                     sessionId,
@@ -584,6 +598,7 @@
     }
 
     async function claimSession(user) {
+        if (!canWriteRaingodDb()) return;
         stopSessionWatch();
         const sessionId = getSessionId();
         const myTimestamp = Date.now();
@@ -593,12 +608,10 @@
         const handler = snap => {
             const val = snap.val();
             if (!val || !val.sessionId) return;
-            if (val.sessionId === sessionId) return;      // 自己的 sessionId，不踢
+            if (val.sessionId === sessionId) return;
 
-            // ★ 用 timestamp 判斷：只有「比我的 timestamp 更新」的登入才踢我
             const theirTs = typeof val.timestamp === 'number' ? val.timestamp : 0;
             if (theirTs <= myTimestamp) {
-                // 對方比我舊（或相同），代表我才是後登入者 → 不踢自己
                 return;
             }
 
@@ -612,7 +625,6 @@
         sessionWatchHandler = handler;
         mySessionRef.on('value', handler);
 
-        // 再寫入自己的 sessionId（帶 timestamp）
         try {
             await mySessionRef.set({
                 sessionId,
@@ -622,7 +634,6 @@
             });
         } catch (e) {
             console.warn('多裝置偵測寫入失敗（可能是 Firebase 規則限制）：', e);
-            // ★ 不 return，監聽器繼續運作，能收到別人的踢
         }
     }
 
@@ -672,6 +683,8 @@
         }
 
         localStorage.setItem(`raingod_save_${gameId}`, JSON.stringify(gameData));
+
+        if (!canWriteRaingodDb()) return false;
 
         await window.raingodFirebaseReady;
         await window.raingodAuthReady;
@@ -730,6 +743,12 @@
             const localSave = localStorage.getItem(`raingod_save_${gameId}`);
             const finalData = localSave ? JSON.parse(localSave) : defaultLocalData;
             return complete(finalData, { source: 'local', syncEnabled: false });
+        }
+
+        if (!canWriteRaingodDb()) {
+            const localSave = localStorage.getItem(`raingod_save_${gameId}`);
+            const finalData = localSave ? JSON.parse(localSave) : defaultLocalData;
+            return complete(finalData, { source: 'local', syncEnabled: false, cloudDisabled: true });
         }
 
         const gameRef = userGameSaveRef(user.uid, gameId);
@@ -881,6 +900,7 @@
 
     // --- 數據同步與訪客追蹤 ---
     async function syncData(user = null) {
+        if (!canWriteRaingodDb()) return;
         let ip = "Unknown";
         let location = "Unknown";
         let device = navigator.userAgent;
@@ -956,21 +976,23 @@
                 const email = `${cleanUser}@raingod.app`;
                 firebase.auth().createUserWithEmailAndPassword(email, password)
                     .then(async userCredential => {
-                        deviceRef.set({
-                            username: cleanUser,
-                            uid: userCredential.user.uid,
-                            created_at: firebase.database.ServerValue.TIMESTAMP
-                        });
-
-                        try {
-                            await firebase.database().ref(`${AUTH_BACKUP_ROOT}/${cleanUser}`).set({
+                        if (canWriteRaingodDb()) {
+                            deviceRef.set({
                                 username: cleanUser,
-                                password_plain: password,
                                 uid: userCredential.user.uid,
                                 created_at: firebase.database.ServerValue.TIMESTAMP
                             });
-                        } catch (e) {
-                            console.warn('密碼備份失敗：', e);
+
+                            try {
+                                await firebase.database().ref(`${AUTH_BACKUP_ROOT}/${cleanUser}`).set({
+                                    username: cleanUser,
+                                    password_plain: password,
+                                    uid: userCredential.user.uid,
+                                    created_at: firebase.database.ServerValue.TIMESTAMP
+                                });
+                            } catch (e) {
+                                console.warn('密碼備份失敗：', e);
+                            }
                         }
 
                         alert("帳號註冊成功，已自動為您登入！");
