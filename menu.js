@@ -1141,6 +1141,11 @@
                     userAvatarEl.src = url;
                     return;
                 }
+                const u = firebase.auth().currentUser;
+                if (u && u.photoURL) {
+                    userAvatarEl.src = u.photoURL;
+                    return;
+                }
                 if (avatarProfileFallbackRef) return;
                 avatarProfileFallbackRef = firebase.database().ref(`users/${username}/profile/avatar`);
                 avatarProfileFallbackHandler = applyAvatar;
