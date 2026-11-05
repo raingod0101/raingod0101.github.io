@@ -577,23 +577,9 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
       });
     }
   }
+  // --- 多人同步：已停用 ---
   function publishGlobalEggs() {
-    try {
-      const { db, ref, set } = window.__FB;
-      if (!db) return;
-      const payload = {};
-      for (const e of S.eggs) {
-        if (!e.eggId) continue;
-        payload[e.eggId] = {
-          collected: !!e.collected,
-          bi: e.biomeIdx, petIdx: e.petIdx, size: e.size, r: e.r, mul: e.mul,
-          x: Math.round(e.x), y: Math.round(e.y),
-          secret: !!e.secret,
-          t: Date.now()
-        };
-      }
-      set(ref(db, 'global_eggs'), payload).catch(err => console.warn('publish eggs fail', err));
-    } catch (e) { console.warn('publishGlobalEggs error', e); }
+    return; // 多人同步已停用
   }
 
   const GUARD_SYNC_MS = 250;
@@ -636,174 +622,40 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
 
   let __lastGuardPush = 0;
   function pushGuards() {
-    try {
-      const { db, ref, set } = window.__FB;
-      if (!db) return;
-      const now = Date.now();
-      if (now - __lastGuardPush < GUARD_SYNC_MS) return;
-      __lastGuardPush = now;
-      const payload = {};
-      for (const g of packGuards()) payload[g.bi] = g;
-      set(ref(db, 'guards'), payload).catch(() => {});
-    } catch (e) {}
+    return; // 多人同步已停用
   }
 
   const REMOTE_GUARDS = new Map();
 
   function initGuardSync() {
-    try {
-      const { db, ref, onValue } = window.__FB;
-      if (!db) return;
-      onValue(ref(db, 'guards'), snap => {
-        const data = snap.val() || {};
-        for (const bi in data) {
-          const g = data[bi];
-          if (!g) continue;
-          if (amIGuardAuthority(parseInt(bi))) continue;
-          let cur = REMOTE_GUARDS.get(parseInt(bi));
-          if (!cur) {
-            cur = { x: g.x, y: g.y, targetX: g.x, targetY: g.y };
-            REMOTE_GUARDS.set(parseInt(bi), cur);
-          }
-          cur.targetX = g.x; cur.targetY = g.y;
-          cur.sl = g.sl; cur.ch = g.ch; cur.dp = g.dp;
-          cur.al = g.al; cur.rt = g.rt; cur.w = g.w;
-        }
-      });
-    } catch (e) { console.warn('initGuardSync error', e); }
+    return; // 多人同步已停用
   }
 
   function emitEggEvent(ev) {
-    try {
-      const { db, ref, push, set, serverTimestamp } = window.__FB;
-      if (!db || !push) return;
-      ev.t = Date.now();
-      ev.ts = serverTimestamp();
-      const node = push(ref(db, 'egg_events'));
-      set(node, ev).catch(() => {});
-    } catch (e) { console.warn('emitEggEvent error', e); }
+    // 多人同步已停用，不寫入 egg_events
+    return;
   }
 
   const __eggEventSeen = new Set();
 
   function initEggEventSync() {
-    try {
-      const { db, ref, onChildAdded, query, startAt, orderByChild, remove } = window.__FB;
-      if (!db || !query) return;
-      const startT = Date.now() - EGG_EVENT_TTL;
-      const q = query(ref(db, 'egg_events'), orderByChild('t'), startAt(startT));
-      onChildAdded(q, snap => {
-        const ev = snap.val();
-        if (!ev) return;
-        const id = snap.key;
-        if (__eggEventSeen.has(id)) return;
-        if (Date.now() - (ev.t || 0) > EGG_EVENT_TTL) return;
-        __eggEventSeen.add(id);
-        applyRemoteEggEvent(ev);
-        remove(snap.ref).catch(() => {});
-      });
-    } catch (e) { console.warn('initEggEventSync error', e); }
+    return; // 多人同步已停用
   }
 
   function applyRemoteEggEvent(ev) {
-    if (!ev || !ev.action) return;
-    if (ev.byId === PLAYER_ID) return;
-    const bInfo = (bi) => WORLD.biomes[bi] || { name:'?', icon:'', petNames:[] };
-
-    if (ev.action === 'steal') {
-      const egg = S.eggs.find(e => e.eggId === ev.eggId && !e.collected);
-      if (egg) egg.collected = true;
-      const rp = S.remotePlayers.find(p => p.id === ev.byId);
-      if (rp) rp.carry = { biomeIdx: ev.bi, petIdx: ev.petIdx, size: ev.size, secret: !!ev.secret, eggId: ev.eggId, r: 12, mul: 1 };
-      try {
-        const { db, ref, set } = window.__FB;
-        set(ref(db, 'global_eggs/' + ev.eggId), {
-          collected: true, bi: ev.bi, t: Date.now(),
-          petIdx: ev.petIdx, size: ev.size, x: 0, y: 0
-        }).catch(() => {});
-      } catch (e) {}
-      if (ev.by) {
-        const b = bInfo(ev.bi);
-        showToast(`🥚 ${ev.by} 偷走了 ${b.icon} ${b.petNames[ev.petIdx]||'蛋'}`, '#8a5a2a', '#5a3a0a');
-      }
-    }
-    else if (ev.action === 'drop' || ev.action === 'return' || ev.action === 'spawn') {
-      let egg = S.eggs.find(e => e.eggId === ev.eggId);
-      if (egg) {
-        egg.x = ev.x; egg.y = ev.y; egg.collected = false;
-        if (ev.secret) { egg.secret = true; egg.size = 'secret'; egg.mul = ev.mul || 6; }
-      } else {
-        S.eggs.push({
-          eggId: ev.eggId, x: ev.x, y: ev.y, r: ev.r || (ev.secret ? 22 : 12),
-          size: ev.secret ? 'secret' : (ev.size || 'normal'),
-          mul: ev.mul || (ev.secret ? 6 : 1),
-          petIdx: ev.petIdx, biomeIdx: ev.bi,
-          collected: false, float: Math.random()*10,
-          origX: ev.x, origY: ev.y, secret: !!ev.secret,
-        });
-      }
-      const rp = S.remotePlayers.find(p => p.id === ev.byId);
-      if (rp) rp.carry = null;
-      try {
-        const { db, ref, set } = window.__FB;
-        set(ref(db, 'global_eggs/' + ev.eggId), {
-          collected: false, bi: ev.bi, t: Date.now(),
-          x: Math.round(ev.x), y: Math.round(ev.y),
-          petIdx: ev.petIdx, size: ev.size || 'normal',
-          r: ev.r || 12, mul: ev.mul || 1
-        }).catch(() => {});
-      } catch (e) {}
-      if (ev.action === 'drop' && ev.by) showToast(`💥 ${ev.by} 的蛋被打掉了！`, '#8a2a2a', '#5a0a0a');
-      if (ev.action === 'spawn' && ev.secret) {
-        const b = bInfo(ev.bi);
-        showToast(`🌟 秘密蛋出現：${b.icon} ${b.petNames[ev.petIdx]||'???'}`, '#8a3a8a', '#6a1a6a');
-      }
-    }
+    return; // 多人同步已停用
   }
 
   function initEggSync() {
-    try {
-      const { db, ref, onValue } = window.__FB;
-      if (!db) return;
-      onValue(ref(db, 'global_eggs'), snap => {
-        const data = snap.val() || {};
-        const now = Date.now();
-        for (const egg of S.eggs) {
-          if (!egg.eggId) continue;
-          if (egg.localDropTs && now - egg.localDropTs < 3000) continue;
-          const remote = data[egg.eggId];
-          if (!remote) continue;
-          if (remote.collected) egg.collected = true;
-          else if (typeof remote.x === 'number' && typeof remote.y === 'number') {
-            egg.x = remote.x; egg.y = remote.y; egg.collected = false;
-          }
-        }
-      });
-    } catch (e) { console.warn('initEggSync error', e); }
+    return; // 多人同步已停用
   }
 
   function tryCollectEggRemote(eggId, byName) {
-    return new Promise(resolve => {
-      try {
-        const { db, ref, runTransaction } = window.__FB;
-        if (!db || !runTransaction) { resolve(true); return; }
-        runTransaction(ref(db, 'global_eggs/' + eggId), cur => {
-          if (cur && cur.collected) return;
-          return { collected: true, by: byName, t: Date.now() };
-        }).then(result => {
-          const val = result && result.snapshot ? result.snapshot.val() : null;
-          if (result && result.committed && val && val.by === byName) resolve(true);
-          else resolve(false);
-        }).catch(err => { console.warn('tryCollectEggRemote err', err); resolve(true); });
-      } catch (e) { resolve(true); }
-    });
+    // 單人模式：直接允許拾取，不需要遠端交易
+    return Promise.resolve(true);
   }
   function clearGlobalEggs() {
-    try {
-      const { db, ref, set } = window.__FB;
-      if (!db) return;
-      set(ref(db, 'global_eggs'), null).catch(() => {});
-    } catch (e) {}
+    return; // 多人同步已停用
   }
 
   function saveGame(silent){
@@ -880,8 +732,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
       const raw = JSON.stringify(data);
       localStorage.setItem(SAVE_KEY, raw);
       try { localStorage.setItem(SAVE_KEY_GENERIC, raw); } catch (e) {}
-
-      // Removed direct Firebase writes to legacy users/... path and lastOnlineTime/updated_at.
       if (!silent) showToast('💾 存檔成功！', '#3a8a3a', '#2a6a2a');
     } catch (e) {
       console.error(e);
@@ -1228,21 +1078,18 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
     const val = parseFloat(document.getElementById('testCashInput').value); if (isNaN(val) || val < 0) return;
     const target = getSelectedTarget();
     if (target.type === 'self') { S.cash = val; showToast('💰 自己的金錢已設定為 ' + fmt(val), '#3a8a3a', '#2a6a2a'); }
-    else if (target.data) { const { db, ref, set } = window.__FB; set(ref(db, 'admin/' + target.data.id), { setCash: val, t: Date.now() }); showToast(`💰 已發送指令：設定 ${target.data.name} 金錢為 ${fmt(val)}`, '#3a8a3a', '#2a6a2a'); }
     updateUI(); saveGame(true);
   });
   document.getElementById('btnSetSpeed').addEventListener('click', () => {
     const val = parseFloat(document.getElementById('testSpeedInput').value); if (isNaN(val) || val < 10) return;
     const target = getSelectedTarget();
     if (target.type === 'self') { S.player.displaySpeed = val; showToast('⚡ 自己的速度已設定為 ' + fmt(val), '#3a8a3a', '#2a6a2a'); }
-    else if (target.data) { const { db, ref, set } = window.__FB; set(ref(db, 'admin/' + target.data.id), { setSpeed: val, t: Date.now() }); showToast(`⚡ 已發送指令：設定 ${target.data.name} 速度為 ${fmt(val)}`, '#3a8a3a', '#2a6a2a'); }
     updateUI(); saveGame(true);
   });
   document.getElementById('btnSetSpeedLv').addEventListener('click', () => {
     const val = parseInt(document.getElementById('testSpeedLvInput').value); if (isNaN(val) || val < 1) return;
     const target = getSelectedTarget();
     if (target.type === 'self') { S.player.tsLv = val; showToast('⚡ 自己的跑步機等級已設定為 ' + val, '#3a8a3a', '#2a6a2a'); }
-    else if (target.data) { const { db, ref, set } = window.__FB; set(ref(db, 'admin/' + target.data.id), { setSpeedLv: val, t: Date.now() }); showToast(`⚡ 已發送指令：設定 ${target.data.name} 跑步機等級為 ${val}`, '#3a8a3a', '#2a6a2a'); }
     updateUI(); saveGame(true);
   });
   document.getElementById('btnAddPetBag').addEventListener('click', () => {
@@ -1253,7 +1100,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
       S.bag.push({ id: Math.random().toString(36).slice(2), name: b.petNames[pi], inc, rar, biomeIdx: bi, petIdx: pi, size: 'normal', mutations: {} });
       discoverPet(bi, pi); buildBagUI(); updateUI(); saveGame(true);
       showToast(`🎒 已獲得 ${b.petNames[pi]}（放背包）`, '#3a8a3a', '#2a6a2a');
-    } else if (target.data) { const { db, ref, set } = window.__FB; set(ref(db, 'admin/' + target.data.id), { addPetBag: { bi, pi }, t: Date.now() }); }
+    }
   });
   document.getElementById('btnAddPetFarm').addEventListener('click', () => {
     const target = getSelectedTarget(); const val = document.getElementById('testPetSelect').value; if (!val) return;
@@ -1269,17 +1116,15 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
         S.cps = S.pets.reduce((s, pt) => s + pt.inc, 0); discoverPet(bi, pi); updateUI(); saveGame(true);
         showToast(`✅ 已獲得 ${b.petNames[pi]}（放農場）`, '#3a8a3a', '#2a6a2a');
       }
-    } else if (target.data) { const { db, ref, set } = window.__FB; set(ref(db, 'admin/' + target.data.id), { addPetFarm: { bi, pi }, t: Date.now() }); }
+    }
   });
   document.getElementById('btnGiveTrail').addEventListener('click', () => {
     const target = getSelectedTarget(); const val = document.getElementById('testTrailSelect').value; if (!val) return;
     if (target.type === 'self') { S.trails[val] = true; S.equippedTrail = val; updateUI(); saveGame(true); buildTrailUI(); showToast(`✨ 已解鎖並裝備軌跡`, '#3a8a6a', '#1a5a3a'); }
-    else if (target.data) { const { db, ref, set } = window.__FB; set(ref(db, 'admin/' + target.data.id), { giveTrail: val, t: Date.now() }); }
   });
   document.getElementById('btnGiveStick').addEventListener('click', () => {
     const target = getSelectedTarget();
     if (target.type === 'self') { S.sticks['god_stick'] = true; STICK_DEFS.forEach(s => S.sticks[s.id] = true); updateUI(); saveGame(true); buildStickUI(); showToast('🏏 你已獲得所有棒子！', '#3a8a3a', '#2a6a2a'); }
-    else if (target.data) { const { db, ref, set } = window.__FB; set(ref(db, 'admin/' + target.data.id), { giveStick: true, t: Date.now() }); }
   });
   document.getElementById('btnUnlockAll').addEventListener('click', () => {
     WORLD.biomes.forEach((b, bi) => { for (let pi = 0; pi < 8; pi++) IndexData.discovered.add(bi + '_' + pi); });
@@ -1667,206 +1512,10 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
   }
    const REMOTE_PLAYERS = new Map();
   function initMultiplayer(){
-    const { db, ref, set, onValue, onDisconnect, serverTimestamp, remove } = window.__FB;
-    if(!db){ console.warn('Firebase 未初始化'); return; }
-    const mePosRef   = ref(db, 'players/' + PLAYER_ID + '/pos');
-    const meInfoRef  = ref(db, 'players/' + PLAYER_ID + '/info');
-    const meStateRef = ref(db, 'players/' + PLAYER_ID + '/state');
-    const meRootRef  = ref(db, 'players/' + PLAYER_ID);
-    let serverOffset = 0;
-    onValue(ref(db, '.info/serverTimeOffset'), snap => { serverOffset = snap.val() || 0; });
-    setInterval(() => {
-      if (!S.player) return;
-      set(mePosRef, { x: Math.round(S.player.x), y: Math.round(S.player.y), t: serverTimestamp() }).catch(() => {});
-    }, 80);
-    let lastInfoHash = '';
-    function pushInfo(force) {
-      const info = {
-        name: S.playerName, baseIdx: S.myBaseIdx,
-        displaySpeed: Math.round(S.player.displaySpeed),
-        biomeIdx: S.biomeIdx,
-        pets: S.pets.slice(0, 20).map(p => ({ name: p.name, biomeIdx: p.biomeIdx, petIdx: p.petIdx, size: p.size, rar: p.rar, inc: p.inc })),
-        hatchery: S.hatchery.slice(0, 12).map(h => ({
-          bi: h.biomeIdx, pi: h.petIdx, sz: h.size,
-          tm: Math.ceil(Math.max(0, h.timer)), tt: Math.ceil(h.total),
-          fi: h.finished ? 1 : 0, fv: h.favorite ? 1 : 0,
-          x: Math.round(h.x), y: Math.round(h.y),
-        })),
-        online: true, lastSeen: serverTimestamp()
-      };
-      const hash = JSON.stringify(info);
-      if (force || hash !== lastInfoHash) { lastInfoHash = hash; set(meInfoRef, info).catch(() => {}); }
-    }
-    pushInfo(true);
-    setInterval(() => pushInfo(false), HATCHERY_PUSH_MS);
-    let lastStateHash = '';
-    function pushState(force) {
-      const st = {
-        carry: S.player.carry ? {
-          biomeIdx: S.player.carry.biomeIdx, petIdx: S.player.carry.petIdx,
-          size: S.player.carry.size, eggId: S.player.carry.eggId || null,
-          secret: !!S.player.carry.secret,
-        } : null,
-        equippedStick: S.equippedStick, equippedTrail: S.equippedTrail, facing: S.player.facing || 1
-      };
-      const hash = JSON.stringify(st);
-      if (force || hash !== lastStateHash) { lastStateHash = hash; set(meStateRef, st).catch(() => {}); }
-    }
-    window.__raingodPushState = () => pushState(true);
-    pushState(true);
-    setInterval(() => pushState(false), 500);
-    onDisconnect(meInfoRef).update({ online: false });
-    onDisconnect(mePosRef).remove();
-    const HEARTBEAT_TIMEOUT = 90 * 1000;
-    let rawPlayersCache = {};
-    onValue(ref(db, 'players'), snap => {
-      const data = snap.val() || {};
-      rawPlayersCache = data;
-      const now = Date.now() + serverOffset;
-      const seenIds = new Set();
-      for (const [id, p] of Object.entries(data)) {
-        if (id === PLAYER_ID) continue;
-        if (!p || !p.info) continue;
-        if (!p.info.online) continue;
-        if (typeof p.info.lastSeen === 'number' && now - p.info.lastSeen > HEARTBEAT_TIMEOUT) continue;
-        seenIds.add(id);
-        let entry = REMOTE_PLAYERS.get(id);
-        if (!entry) {
-          entry = { id, cur: { x: p.pos ? p.pos.x : 0, y: p.pos ? p.pos.y : 0 }, target: { x: p.pos ? p.pos.x : 0, y: p.pos ? p.pos.y : 0 }, data: { ...p.info, ...(p.state || {}), x: 0, y: 0 } };
-          REMOTE_PLAYERS.set(id, entry);
-        } else {
-          Object.assign(entry.data, p.info);
-          if (p.state) Object.assign(entry.data, p.state);
-          if (p.pos && typeof p.pos.x === 'number') { entry.target.x = p.pos.x; entry.target.y = p.pos.y; }
-        }
-      }
-      for (const id of Array.from(REMOTE_PLAYERS.keys())) { if (!seenIds.has(id)) REMOTE_PLAYERS.delete(id); }
-      S.remotePlayers = Array.from(REMOTE_PLAYERS.values()).map(e => ({ ...e.data, id: e.id }));
-      let conflict = false;
-      S.remotePlayers.forEach(rp => { if (rp.baseIdx === S.myBaseIdx) conflict = true; });
-      if (conflict && !window.__resolvingBaseConflict) {
-        window.__resolvingBaseConflict = true;
-        setTimeout(() => {
-          window.__resolvingBaseConflict = false;
-          let stillConflict = false;
-          S.remotePlayers.forEach(rp => { if (rp.baseIdx === S.myBaseIdx) stillConflict = true; });
-          if (!stillConflict) return;
-          let used = new Set(S.remotePlayers.map(r => r.baseIdx));
-          let available = [];
-          for (let i = 0; i < 5; i++) { if (!used.has(i)) available.push(i); }
-          if (available.length > 0) {
-            const newBase = available[Math.floor(Math.random() * available.length)];
-            S.myBaseIdx = newBase; localStorage.setItem('my_base_idx', S.myBaseIdx);
-            S.player.x = getBasePos(S.myBaseIdx).x;
-            showToast('🔄 基地發生衝突，已自動更換至空基地', '#3a8a3a', '#2a6a2a');
-            pushInfo(true);
-          }
-        }, 1000 + Math.random() * 2000);
-      }
-      const oc = document.getElementById('onlineCount'); if (oc) oc.textContent = '👥 ' + (S.remotePlayers.length + 1);
-      const testPanel = document.getElementById('testPanel');
-      if (testPanel && testPanel.classList.contains('open')) {
-        const targetSel = document.getElementById('testTargetSelect'); const currentVal = targetSel.value;
-        targetSel.innerHTML = '<option value="self">自己</option>';
-        S.remotePlayers.forEach(rp => { const opt = document.createElement('option'); opt.value = rp.id; opt.textContent = rp.name || '玩家'; targetSel.appendChild(opt); });
-        targetSel.value = currentVal;
-      }
-    });
-    setInterval(() => {
-      const now = Date.now() + serverOffset;
-      for (const [id, p] of Object.entries(rawPlayersCache)) {
-        if (id === PLAYER_ID) continue;
-        if (!p || !p.info || typeof p.info.lastSeen !== 'number') continue;
-        if (now - p.info.lastSeen <= HEARTBEAT_TIMEOUT) continue;
-        const playerRef = ref(db, 'players/' + id);
-        playerRef.once('value').then(s => {
-          const cur = s.val();
-          if (!cur) return;
-          const curNow = Date.now() + serverOffset;
-          if (!cur.info || (typeof cur.info.lastSeen === 'number' && curNow - cur.info.lastSeen > HEARTBEAT_TIMEOUT)) { remove(playerRef); }
-        });
-      }
-    }, 30000);
-    const { remove: _adminRemove } = window.__FB;
-    onValue(ref(db, 'admin/' + PLAYER_ID), snap => {
-      const v = snap.val();
-      if (!v) return;
-      if (Date.now() - (v.t || 0) >= 5000) {
-        _adminRemove(ref(db, 'admin/' + PLAYER_ID)).catch(() => {});
-        return;
-      }
-      if (v.setCash !== undefined) S.cash = v.setCash;
-      if (v.setSpeed !== undefined) S.player.displaySpeed = v.setSpeed;
-      if (v.setSpeedLv !== undefined) S.player.tsLv = v.setSpeedLv;
-      if (v.addPetBag) {
-        const { bi, pi } = v.addPetBag;
-        const b = WORLD.biomes[bi];
-        S.bag.push({ id: Math.random().toString(36).slice(2), name: b.petNames[pi], inc: WORLD.petIncome[bi][pi], rar: WORLD.petRarity[bi][pi], biomeIdx: bi, petIdx: pi, size: 'normal', mutations: {} });
-        discoverPet(bi, pi);
-        buildBagUI();
-      }
-      if (v.addPetFarm) {
-        const { bi, pi } = v.addPetFarm;
-        const b = WORLD.biomes[bi];
-        const usedSlots = new Set(S.pets.map(p => p.slot));
-        let slot = -1;
-        for (let j = 0; j < FARM_OFFSETS.length; j++) { if (!usedSlots.has(j)) { slot = j; break; } }
-        if (slot !== -1) {
-          const basePos = getBasePos(S.myBaseIdx);
-          S.pets.push({ id: Math.random().toString(36).slice(2), name: b.petNames[pi], inc: WORLD.petIncome[bi][pi], rar: WORLD.petRarity[bi][pi], biomeIdx: bi, petIdx: pi, size: 'normal', x: basePos.x + rnd(-35, 35), y: basePos.y + rnd(-40, 365), wanderTargetX: basePos.x, wanderTargetY: basePos.y, wanderTimer: 0, selected: false, slot, state: 'farm', mutations: {} });
-          S.cps = S.pets.reduce((s, pt) => s + pt.inc, 0);
-        } else {
-          S.bag.push({ id: Math.random().toString(36).slice(2), name: b.petNames[pi], inc: WORLD.petIncome[bi][pi], rar: WORLD.petRarity[bi][pi], biomeIdx: bi, petIdx: pi, size: 'normal', mutations: {} });
-          showToast('🐾 農場已滿，寵物已改放背包', '#8a5a2a', '#5a3a0a');
-        }
-        discoverPet(bi, pi);
-      }
-      if (v.giveStick) { S.sticks['god_stick'] = true; STICK_DEFS.forEach(s => S.sticks[s.id] = true); }
-      if (v.giveTrail) { S.trails[v.giveTrail] = true; S.equippedTrail = v.giveTrail; }
-      updateUI();
-      saveGame(true);
-      _adminRemove(ref(db, 'admin/' + PLAYER_ID)).catch(() => {});
-    });
-    onValue(ref(db, 'hits/' + PLAYER_ID), snap => {
-      const v = snap.val();
-      if (!v || Date.now() - (v.t || 0) > 3000) return;
-      if (v.fx !== undefined || v.fy !== undefined) triggerKnockback(v.fx || 400, v.fy || -400);
-      if (v.stealEgg && S.player.carry && S.player.y < S.safeLineY) {
-        const drop = S.player.carry; S.player.carry = null; S.tensionActive = false;
-        const dropX = clamp(S.player.x + rnd(-40, 40), 30, WORLD_W - 30);
-        const dropY = clamp(S.player.y + rnd(-40, 40), MIN_Y, MAX_Y);
-        S.eggs.push({ ...drop, x: dropX, y: dropY, collected: false, origX: dropX, origY: dropY, localDropTs: Date.now() });
-        try {
-          const { db: _db, ref: _ref, set: _set } = window.__FB;
-          if (drop.eggId) {
-            _set(_ref(_db, 'global_eggs/' + drop.eggId), {
-              collected: false, bi: drop.biomeIdx, t: Date.now(),
-              x: Math.round(dropX), y: Math.round(dropY),
-              petIdx: drop.petIdx, size: drop.size, r: drop.r, mul: drop.mul
-            }).catch(() => {});
-          }
-        } catch (e) {}
-        if (drop.eggId) {
-          emitEggEvent({
-            action:'drop', eggId: drop.eggId, bi: drop.biomeIdx, petIdx: drop.petIdx,
-            size: drop.size, r: drop.r, mul: drop.mul,
-            x: Math.round(dropX), y: Math.round(dropY), by: v.by || '玩家', byId: v.byId,
-          });
-        }
-        window.__raingodPushState && window.__raingodPushState();
-        showToast(`💥 ${v.by || '玩家'} 用【${v.byStickName || '棒子'}】搶走了你的蛋！\n🥚 蛋掉在地上了！`, '#8a2a2a', '#5a0a0a');
-        updateUI(); saveGame(true); return;
-      }
-      if (v.fx !== undefined || v.fy !== undefined) showToast(`💥 你被 ${v.by || '玩家'} 打飛了！`, '#8a2a2a', '#5a0a0a');
-    });
+    return; // 多人同步已停用
   }
   function updateRemoteInterp(dt){
-    const k = 1 - Math.pow(0.00001, dt);
-    for (const entry of REMOTE_PLAYERS.values()) {
-      entry.cur.x += (entry.target.x - entry.cur.x) * k;
-      entry.cur.y += (entry.target.y - entry.cur.y) * k;
-      if (entry.data) { entry.data.x = entry.cur.x; entry.data.y = entry.cur.y; }
-    }
+    // 單人模式：無遠端玩家插值
   }
   function attackNearest(){
     const p = S.player;
@@ -1876,19 +1525,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
     if (S.stickCooldown > 0) { showToast(`⏳ 棒子冷卻中… ${S.stickCooldown.toFixed(1)}s`, '#5a5a5a', '#3a3a3a'); return; }
     const cooldown = stick ? stick.cooldown : 1.0; const power = stick ? stick.power : 60;
     S.stickCooldown = cooldown; S.stickSwingAnim = 0.25; S.camShake = 0.4;
-    if(!S.remotePlayers || S.remotePlayers.length===0){ showToast(stick ? '附近沒有其他玩家，揮空了！' : '空手揮了一下，沒有目標', '#5a5a5a', '#3a3a3a'); return; }
-    let target=null, bestScore=-Infinity; const RANGE = stick ? 260 : 120;
-    for(const rp of S.remotePlayers){
-      if (rp.y >= S.safeLineY) continue; const d=dist(p.x,p.y,rp.x,rp.y); if (d > RANGE) continue;
-      const carryBonus = rp.carry ? 1000 : 0; const score = carryBonus - d;
-      if (score > bestScore) { bestScore = score; target = rp; }
-    }
-    if(!target){ showToast(stick ? '附近沒有可攻擊的玩家，揮空了！' : '空手揮了一下，沒有目標', '#5a5a5a', '#3a3a3a'); return; }
-    const dx=target.x-p.x, dy=target.y-p.y; const len=Math.hypot(dx,dy)||1; const { db, ref, set } = window.__FB;
-    set(ref(db, 'hits/' + target.id), { by: S.playerName, byId: PLAYER_ID, byStick: stick ? stick.id : 'bare', byStickName: stick ? stick.name : '空手', fx: (dx/len)*power, fy: (dy/len)*power, stealEgg: !!target.carry, t: Date.now() });
-    if (target.carry && stick) showToast(`🥚 搶到 ${target.name||'玩家'} 的蛋！`, '#ffaa20', '#cc7700');
-    else if (stick) showToast(`💥 打中了 ${target.name||'玩家'}！`, '#ff8a20', '#aa5a00');
-    else showToast(`👊 空手打了 ${target.name||'玩家'} 一下（無傷害）`, '#8a8a6a', '#5a5a3a');
+    showToast(stick ? '附近沒有其他玩家，揮空了！' : '空手揮了一下，沒有目標', '#5a5a5a', '#3a3a3a');
   }
   function reset(){
     S.player={x:getBasePos(S.myBaseIdx).x,y:2900,r:15,displaySpeed:10,carry:null,stun:0,tsLv:1,knockbackTimer:0,vx:0,vy:0,training:false,trainTickTimer:0, facing:1, walkPhase:0};
@@ -1907,8 +1544,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
     S.eggs = [];
     const refreshSlot = Math.floor(Date.now() / EGG_REFRESH_MS);
     for (let bi = 0; bi < WORLD.biomes.length; bi++) spawnEggsForBiome(bi, refreshSlot);
-    clearGlobalEggs();
-    setTimeout(() => publishGlobalEggs(), 300);
   }
   function spawnGuardsForBiome(bi){
     const b=WORLD.biomes[bi]; const gx=WORLD_W/2; const sleepX=gx, sleepY=b.nestsY-60;
@@ -1927,7 +1562,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
     if(currentSlot > S.lastRefreshTime){
       S.lastRefreshTime = currentSlot; S.eggRefreshTimer = 0;
       respawnAllEggs();
-      publishGlobalEggs();
       const p=S.player;
       if(p.carry || p.y < S.safeLineY){
         if(p.carry){ showToast('⏰ 刷新時間到！你的蛋被丟掉了！','#8a3a3a','#6a1a1a'); p.carry=null; }
@@ -1951,11 +1585,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
         const eggId = 'secret_' + bi + '_' + pi + '_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
         const egg = { eggId, x:nx,y:b.nestsY+rnd(-20,20), r:22,size:'secret',mul:6,petIdx:pi,biomeIdx:bi, collected:false,float:Math.random()*10,origX:nx,origY:b.nestsY, secret:true, localDropTs: Date.now() };
         S.eggs.push(egg);
-        emitEggEvent({
-          action:'spawn', eggId, bi, petIdx:pi, secret:true, mul:6,
-          x: Math.round(nx), y: Math.round(egg.y), r:22, size:'secret',
-          by:'系統', byId:'system',
-        });
         spawned.push(`🌟 ${b.petNames[pi]} 出生在 ${b.icon}${b.name}（秘密）`);
       }
     }
@@ -1964,14 +1593,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
 
   function update(dt){
     const p=S.player; S.time+=dt;
-    updateRemoteInterp(dt);
-    // ★ 遠端守衛插值
-    const guardK = 1 - Math.pow(0.0001, dt);
-    for (const [bi, rg] of REMOTE_GUARDS) {
-      if (rg.targetX === undefined) continue;
-      rg.x += (rg.targetX - rg.x) * guardK;
-      rg.y += (rg.targetY - rg.y) * guardK;
-    }
     const cyclePos = Date.now() % FULL_CYCLE;
     const isNightNow = cyclePos >= DAY_MS;
     if (isNightNow !== S.night) {
@@ -1983,23 +1604,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
           const dropX = clamp(p.x + rnd(-20, 20), 30, WORLD_W - 30);
           const dropY = clamp(p.y + rnd(-20, 20), MIN_Y, MAX_Y);
           S.eggs.push({ ...drop, x: dropX, y: dropY, collected: false, origX: dropX, origY: dropY, localDropTs: Date.now() });
-          if (drop.eggId) {
-            try {
-              const { db: _db, ref: _ref, set: _set } = window.__FB;
-              _set(_ref(_db, 'global_eggs/' + drop.eggId), {
-                collected: false, bi: drop.biomeIdx, t: Date.now(),
-                x: Math.round(dropX), y: Math.round(dropY),
-                petIdx: drop.petIdx, size: drop.size, r: drop.r, mul: drop.mul
-              }).catch(()=>{});
-            } catch(e) {}
-            emitEggEvent({
-              action:'drop', eggId: drop.eggId, bi: drop.biomeIdx, petIdx: drop.petIdx,
-              size: drop.size, r: drop.r, mul: drop.mul,
-              x: Math.round(dropX), y: Math.round(dropY), by: S.playerName, byId: PLAYER_ID,
-            });
-          }
           p.carry = null; S.tensionActive = false;
-          window.__raingodPushState && window.__raingodPushState();
           const bPos = getBasePos(S.myBaseIdx);
           p.x = bPos.x; p.y = 2850; p.vx = 0; p.vy = 0; p.stun = 0; p.knockbackTimer = 0;
           S.camera.x = p.x; S.camera.y = p.y - 100;
@@ -2097,17 +1702,9 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
           for(const e of S.eggs){
             if(!e.collected && e.biomeIdx === g.biomeIdx && dist(e.x, e.y, g.sleepX, g.sleepY) < 300){
               e.x = e.origX; e.y = e.origY;
-              if (e.eggId) {
-                emitEggEvent({
-                  action:'return', eggId:e.eggId, bi:e.biomeIdx, petIdx:e.petIdx,
-                  size:e.size, r:e.r, mul:e.mul,
-                  x:Math.round(e.origX), y:Math.round(e.origY), by:'守衛', byId:'guard_'+g.biomeIdx,
-                });
-                eggsReturned = true;
-              }
+              if (e.eggId) eggsReturned = true;
             }
           }
-          if (eggsReturned) publishGlobalEggs();
         }
       }
       else {
@@ -2122,7 +1719,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
       const hatchTime = getHatchTimeForEgg(egg); const hp = getHatchPod(S.myBaseIdx, S.hatchery.length);
       S.hatchery.push({ id:Math.random().toString(36).slice(2), name:b.petNames[egg.petIdx],inc,rar,biomeIdx:egg.biomeIdx,petIdx:egg.petIdx, size:egg.size,secret:!!egg.secret, timer:hatchTime,total:hatchTime,finished:false, favorite:false,mutations:{}, x:hp.x,y:hp.y });
       p.carry=null;S.tensionActive=false;
-      window.__raingodPushState && window.__raingodPushState();
       const sf=document.createElement('div');sf.className='success-flash'; document.body.appendChild(sf);setTimeout(()=>sf.remove(),900);
       showToast(`✅ 成功偷到蛋！放入孵化器 (${fmt(hatchTime)}秒)`, '#3a8a3a', '#2a6a2a');
       for(const g of S.guards){ if(g.chasing || g.dashPhase){ g.chasing=false;g.dashPhase=false;g.returning=true;g.alert=false; } }
@@ -2138,28 +1734,12 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
             if(gBiome === eggBiome){
               dropX = drop.origX||g.sleepX; dropY = drop.origY||g.sleepY;
               S.eggs.push({...drop, x:dropX, y:dropY, collected:false, origX:dropX, origY:dropY, localDropTs: Date.now()});
-              if (drop.eggId) emitEggEvent({
-                action:'return', eggId:drop.eggId, bi:drop.biomeIdx, petIdx:drop.petIdx,
-                size:drop.size, r:drop.r, mul:drop.mul,
-                x:Math.round(dropX), y:Math.round(dropY), by:'守衛', byId:'guard_'+g.biomeIdx,
-              });
               showToast('🥚 守衛把蛋放回原位了！','#8a3a3a','#6a1a1a');
             } else {
               dropX = p.x+rnd(-20,20); dropY = p.y+rnd(-20,20);
               S.eggs.push({...drop, x:dropX, y:dropY, collected:false, origX:drop.origX||p.x, origY:drop.origY||p.y, localDropTs: Date.now()});
             }
-            if (drop.eggId) {
-              try {
-                const { db: _db, ref: _ref, set: _set } = window.__FB;
-                _set(_ref(_db, 'global_eggs/' + drop.eggId), {
-                  collected: false, bi: drop.biomeIdx, t: Date.now(),
-                  x: Math.round(dropX), y: Math.round(dropY),
-                  petIdx: drop.petIdx, size: drop.size, r: drop.r, mul: drop.mul
-                }).catch(()=>{});
-              } catch(e) {}
-            }
             p.carry=null;S.tensionActive=false;
-            window.__raingodPushState && window.__raingodPushState();
             updateUI();
           }
           const kbx=p.x-g.x,kby=p.y-g.y; const kblen=Math.hypot(kbx,kby)||1; const baseForce = 800 + displayToReal(p.displaySpeed)*20; const biomeBonus = g.biomeIdx * 800;
@@ -2266,86 +1846,15 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
     for(const e of S.eggs)if(!e.collected)drawEgg(e);
     safeHook(HOOKS.onDrawWorld, ctx, W, H);
     for(const g of S.guards)drawGuard(g);
-    drawRemoteGuards();
     drawBases();
     const currentTrail = TRAIL_DEFS.find(t => t.id === S.equippedTrail);
     if (currentTrail) drawTrailPath(ctx, S.playerPath, currentTrail, S.time);
-    drawPlayer(); drawRemotePlayers();
+    drawPlayer();
     for(const pt of S.pets)if(pt.state !== 'follow')drawFarmPet(pt); for(const pt of S.pets)if(pt.state === 'follow')drawFarmPet(pt);
     for(const h of S.hatchery)drawHatchery(h);
     drawTutorialArrowLineOnCanvas();
     if(S.tensionActive && S.player.carry){ if(!document.querySelector('.tension-vignette')){ const tv=document.createElement('div');tv.className='tension-vignette'; document.body.appendChild(tv); } }
     else { const tv=document.querySelector('.tension-vignette'); if(tv)tv.remove(); }
-  }
-  function drawRemotePlayers(){
-    if(!S.remotePlayers)return;
-    for(const rp of S.remotePlayers){
-      if(rp.baseIdx === undefined) continue;
-      if (Array.isArray(rp.hatchery)) {
-        rp.hatchery.forEach(h => {
-          const sp = worldToScreen(h.x, h.y);
-          if (sp.y < -30 || sp.y > H+30) return;
-          ctx.save();
-          ctx.translate(sp.x, sp.y);
-          ctx.scale(S.zoom, S.zoom);
-          const rar = (WORLD.petRarity[h.bi] && WORLD.petRarity[h.bi][h.pi]) || 0;
-          const rc = WORLD.rarities[rar].c;
-          const sizeR = h.sz === 'giant' ? 22 : (h.sz === 'huge' ? 16 : (h.sz === 'secret' ? 22 : 12));
-          if (h.fi) {
-            const jump = Math.sin(S.time * 8) * 3;
-            ctx.save(); ctx.translate(0, jump - 5);
-            drawEggShape(ctx, { biomeIdx: h.bi, petIdx: h.pi, size: h.sz, rar }, sizeR, S.time, rc);
-            ctx.restore();
-            ctx.font='900 11px "Segoe UI"'; ctx.textAlign='center';
-            if (h.fv) { ctx.fillStyle='#ff80c0'; ctx.shadowBlur=8; ctx.shadowColor='#e040a0'; ctx.fillText('❤️', 0, -28); }
-            else      { ctx.fillStyle='#ffe040'; ctx.shadowBlur=8; ctx.shadowColor='#ffaa00'; ctx.fillText('✨', 0, -28); }
-            ctx.shadowBlur=0;
-          } else {
-            drawEggShape(ctx, { biomeIdx: h.bi, petIdx: h.pi, size: h.sz, rar }, sizeR, S.time, rc);
-            const prog = h.tt > 0 ? 1 - Math.max(0, h.tm) / h.tt : 0;
-            const barW=36, barH=5, barX=-barW/2, barY=24;
-            ctx.fillStyle='rgba(0,0,0,0.4)'; ctx.fillRect(barX,barY,barW,barH);
-            ctx.fillStyle= prog>=1?'#40e040':'#ffcc40'; ctx.fillRect(barX,barY,barW*prog,barH);
-            ctx.strokeStyle='rgba(255,255,255,0.6)'; ctx.lineWidth=1; ctx.strokeRect(barX,barY,barW,barH);
-            ctx.font='800 9px "Segoe UI"'; ctx.fillStyle='#fff'; ctx.textAlign='center';
-            ctx.shadowBlur=4; ctx.shadowColor='#000';
-            ctx.fillText(Math.ceil(Math.max(0,h.tm))+'s', 0, barY+barH+11);
-            ctx.shadowBlur=0;
-          }
-          ctx.restore();
-        });
-      }
-      if(Array.isArray(rp.pets)){
-        if (S.zoom < 0.55) continue;
-        rp.pets.forEach((p, idx) => {
-          if (idx >= 20) return; const pod = getFarmPod(rp.baseIdx, idx); const sp = worldToScreen(pod.x, pod.y);
-          if(sp.y < -30 || sp.y > H+30 || sp.x < -30 || sp.x > W+30) return;
-          ctx.save(); ctx.translate(sp.x, sp.y); ctx.scale(S.zoom, S.zoom); ctx.globalAlpha = 0.5; ctx.shadowBlur = 0;
-          const pal = BIOME_PALETTES[p.biomeIdx] || BIOME_PALETTES[0]; const shape = PET_SHAPES[p.biomeIdx] ? PET_SHAPES[p.biomeIdx][p.petIdx] : 'crystal';
-          const sizeMul = p.size === 'giant' ? 1.5 : (p.size === 'huge' ? 1.25 : (p.size === 'secret' ? 1.6 : 1));
-          drawPetShape(ctx, shape, pal, 22*sizeMul, S.time, WORLD.rarities[p.rar].c); ctx.restore();
-          if(S.zoom > 0.75){ ctx.font='800 10px "Segoe UI"'; ctx.textAlign='center'; ctx.fillStyle='rgba(255,255,255,0.7)'; ctx.shadowBlur=0; ctx.fillText(p.name || '???', sp.x, sp.y + 30*S.zoom); }
-        });
-      }
-      const sp = worldToScreen(rp.x, rp.y); if(sp.y < -50 || sp.y > H+50) return;
-      ctx.save(); ctx.translate(sp.x, sp.y); ctx.scale(S.zoom, S.zoom); ctx.globalAlpha = 0.85;
-      drawStickFigure(ctx, 0, 0, 15, S.time, rp.facing || 1, 0); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
-      if (rp.carry) {
-        ctx.save(); ctx.translate(0, -30); ctx.scale(0.65, 0.65);
-        const rr = (WORLD.petRarity[rp.carry.biomeIdx] && WORLD.petRarity[rp.carry.biomeIdx][rp.carry.petIdx]) || 0;
-        const rc = WORLD.rarities[rr].c;
-        drawEggShape(ctx, {...rp.carry, rar: rr, secret: !!rp.carry.secret}, 12, S.time, rc);
-        ctx.restore();
-        const b = WORLD.biomes[rp.carry.biomeIdx] || { petNames:[] };
-        ctx.font='800 10px "Segoe UI"'; ctx.fillStyle='#ffdd44'; ctx.textAlign='center';
-        ctx.shadowBlur=6; ctx.shadowColor='#000';
-        ctx.fillText('🥚 ' + (b.petNames[rp.carry.petIdx] || '蛋'), 0, -50);
-        ctx.shadowBlur=0;
-      }
-      if (rp.equippedStick) { const def = getStickDef(rp.equippedStick); if (def) { ctx.save(); ctx.translate(12, 0); drawStickIcon(ctx, def, 14, 0); ctx.restore(); } }
-      const rpTrail = TRAIL_DEFS.find(t => t.id === (rp.equippedTrail || 'trail_basic')); if (rpTrail) drawTrailOnPlayer(ctx, rp, rpTrail, S.time);
-      ctx.fillStyle = '#fff'; ctx.font = 'bold 11px "Segoe UI"'; ctx.textAlign = 'center'; ctx.fillText(rp.name || '玩家', 0, -22); ctx.restore();
-    }
   }
   function drawBases(){
     for (let i = 0; i < BASE_XS.length; i++) {
@@ -2396,26 +1905,6 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
     if(g.dashPhase){ ctx.font='900 18px "Segoe UI"';ctx.fillStyle='#80d0ff'; ctx.shadowBlur=12;ctx.shadowColor='#00aaff';ctx.textAlign='center'; ctx.fillText('>>>',0,-g.r-14);ctx.shadowBlur=0; }
     if(g.returning){ ctx.font='900 16px "Segoe UI"';ctx.fillStyle='#ffdd44'; ctx.shadowBlur=10;ctx.shadowColor='#ffaa00';ctx.textAlign='center'; ctx.fillText('...',0,-g.r-14);ctx.shadowBlur=0; }
     ctx.restore();
-  }
-  function drawRemoteGuards() {
-    for (const [bi, rg] of REMOTE_GUARDS) {
-      if (amIGuardAuthority(bi)) continue;
-      const sp = worldToScreen(rg.x, rg.y);
-      if (sp.y < -80 || sp.y > H + 80) continue;
-      const size = 1 + bi * 0.12;
-      ctx.save();
-      ctx.translate(sp.x, sp.y);
-      ctx.scale(S.zoom * size, S.zoom * size);
-      if (rg.dp) { const pulse = Math.sin(S.time*15)*0.4+0.6; ctx.shadowBlur=35; ctx.shadowColor=`rgba(100,200,255,${pulse})`; }
-      else if (rg.ch && rg.al) { const pulse = Math.sin(S.time*8)*0.3+0.7; ctx.shadowBlur=30; ctx.shadowColor=`rgba(255,50,50,${pulse})`; }
-      else if (rg.rt) { ctx.shadowBlur=18; ctx.shadowColor='rgba(255,200,50,0.6)'; }
-      drawGuardAnimal(ctx, bi, 18, S.time, !!rg.al);
-      ctx.shadowBlur = 0;
-      if (rg.sl) { ctx.font='bold 16px "Segoe UI"'; ctx.fillStyle='#a0c0ff'; ctx.textAlign='center'; const zP = Math.sin(S.time*2)*4; ctx.fillText('z', -12, -24 + zP); }
-      if (rg.al && !rg.sl) { ctx.font='900 22px "Segoe UI"'; ctx.fillStyle='#ffcc00'; ctx.shadowBlur=14; ctx.shadowColor='#ff8800'; ctx.textAlign='center'; ctx.fillText('!', 0, -28); ctx.shadowBlur=0; }
-      if (rg.dp) { ctx.font='900 18px "Segoe UI"'; ctx.fillStyle='#80d0ff'; ctx.textAlign='center'; ctx.shadowBlur=12; ctx.shadowColor='#00aaff'; ctx.fillText('>>>', 0, -28); ctx.shadowBlur=0; }
-      ctx.restore();
-    }
   }
   function drawPlayer(){
     const p=S.player;const sp=worldToScreen(p.x,p.y);const sc=S.zoom;
@@ -2513,39 +2002,14 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
     for (let i = 0; i < HOOKS.onClick.length; i++) {
       try { if (HOOKS.onClick[i](w.x, w.y, e)) return; } catch(err) { console.error(err); }
     }
-    if(S.remotePlayers){
-      for(const rp of S.remotePlayers){
-        if(dist(w.x, w.y, rp.x, rp.y) < 25){
-          const pi = document.getElementById('playerInfoPanel'); pi.classList.add('open');
-          document.getElementById('piTitle').textContent = `👤 ${rp.name || '玩家'}`; document.getElementById('piCash').textContent = '$' + fmt(rp.cash || 0); document.getElementById('piSpeed').textContent = fmt(rp.displaySpeed || 10);
-          const petsDiv = document.getElementById('piPets'); if(rp.pets && rp.pets.length > 0){ petsDiv.innerHTML = rp.pets.map(p => `• ${p.name} ($${fmt(p.inc)}/s)`).join('<br>'); } else { petsDiv.textContent = '無'; } return;
-        }
-      }
-    }
     if(!S.player.carry && !S.night){
       for(const egg of S.eggs){
         if(egg.collected) continue;
         if(dist(w.x, w.y, egg.x, egg.y) < egg.r + 40){
           if(dist(S.player.x, S.player.y, egg.x, egg.y) < 120){
-            tryCollectEggRemote(egg.eggId, S.playerName).then(ok => {
-              if (!ok) { showToast('🥚 這顆蛋已經被別人搶走了！', '#8a2a2a', '#5a0a0a'); egg.collected = true; return; }
-              egg.collected = true; S.player.carry = {...egg}; S.tensionActive = true;
-              emitEggEvent({
-                action:'steal', eggId: egg.eggId, bi: egg.biomeIdx, petIdx: egg.petIdx,
-                size: egg.size, secret: !!egg.secret,
-                by: S.playerName, byId: PLAYER_ID,
-              });
-              try {
-                const { db: _db, ref: _ref, set: _set } = window.__FB;
-                _set(_ref(_db, 'global_eggs/' + egg.eggId), {
-                  collected: true, bi: egg.biomeIdx, t: Date.now(),
-                  petIdx: egg.petIdx, size: egg.size, x: 0, y: 0
-                }).catch(() => {});
-              } catch (e) {}
-              window.__raingodPushState && window.__raingodPushState();
-              for(const g of S.guards){ if(g.biomeIdx===egg.biomeIdx && g.sleeping){ g.wakeTimer=0.2; } }
-              updateUI();
-            });
+            egg.collected = true; S.player.carry = {...egg}; S.tensionActive = true;
+            for(const g of S.guards){ if(g.biomeIdx===egg.biomeIdx && g.sleeping){ g.wakeTimer=0.2; } }
+            updateUI();
             return;
           } else { showToast('⚠️ 離蛋太遠，請站近一點再點擊', '#8a2a2a', '#5a0a0a'); return; }
         }
@@ -2714,6 +2178,9 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
           if (parsed && parsed.version === 17) localData = parsed;
         }
       } catch (e) { console.warn('解析本機存檔失敗', e); }
+      if (user) {
+        cloudData = await loadStealEggCloud(user.uid);
+      }
       let data = null;
       if (localData && cloudData) {
         data = ((localData.ts || 0) >= (cloudData.ts || 0)) ? localData : cloudData;
@@ -2837,12 +2304,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
     __saveEnabled = true;
     fireInitOnce();
   });
-  initEggSync();
-  initEggEventSync();
-  initGuardSync();
-  setTimeout(() => publishGlobalEggs(), 1500);
-  initMultiplayer();
-  setInterval(pushGuards, GUARD_SYNC_MS);
+  // 多人同步初始化已全部停用
   requestAnimationFrame(loop);
   setInterval(updateUI,150);
   setInterval(()=>{if(S.indexOpen)buildIndexUI()},300);
