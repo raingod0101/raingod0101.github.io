@@ -497,6 +497,50 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
   let __loadingPromise = null;
   let __pendingCloudSave = null;
 
+  function getStealEggCloudRef(uid) {
+    try {
+      if (!uid || !firebase || !firebase.database) return null;
+      return firebase.database().ref(`raingod_accounts/${uid}/games/steal_egg_v17`);
+    } catch (e) {
+      console.warn('[steal-eggs] 建立雲端存檔參照失敗', e);
+      return null;
+    }
+  }
+
+  async function loadStealEggCloud(uid) {
+    if (!uid) return null;
+    try {
+      const ref = getStealEggCloudRef(uid);
+      if (!ref) return null;
+      const snap = await ref.once('value');
+      if (!snap.exists()) return null;
+      const val = snap.val();
+      const data = val && val.data !== undefined ? val.data : val;
+      if (!data || data.version !== 17) return null;
+      return data;
+    } catch (e) {
+      console.warn('[steal-eggs] 雲端存檔讀取失敗', e);
+      return null;
+    }
+  }
+
+  async function persistStealEggCloud(uid, data) {
+    if (!uid) return false;
+    try {
+      const ref = getStealEggCloudRef(uid);
+      if (!ref) return false;
+      await ref.set({
+        data,
+        updated_at: firebase.database.ServerValue.TIMESTAMP,
+        ts: Date.now()
+      });
+      return true;
+    } catch (e) {
+      console.warn('[steal-eggs] 雲端存檔寫入失敗', e);
+      return false;
+    }
+  }
+
   const EGG_REFRESH_MS = 5 * 60 * 1000;
   function hashStr(str) {
     let h = 2166136261 >>> 0;
