@@ -24,6 +24,56 @@
         return firebase.database().ref(`${USER_DATA_ROOT}/${username}${suffix}`);
     }
 
+    function accountDataRef(uid, path = '') {
+        const suffix = path ? `/${path}` : '';
+        return firebase.database().ref(`${ACCOUNT_DATA_ROOT}/${uid}/account_data${suffix}`);
+    }
+
+    function sessionRef(uid) {
+        return firebase.database().ref(`${SESSION_ROOT}/${uid}`);
+    }
+
+    function lockRef(uid, gameId) {
+        return firebase.database().ref(`${LOCK_ROOT}/${uid}/${gameId}`);
+    }
+
+    function migrateLegacyAccountStorage(uid) {
+        if (!uid || !window.localStorage) return;
+        try {
+            const legacyKeys = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (!key) continue;
+                if (key === 'raingod_device_id' || key === 'raingod_session_id') continue;
+                if (key.startsWith(ACCOUNT_STORAGE_PREFIX) && key.includes(ACCOUNT_STORAGE_DELIM)) continue;
+                const normalized = normalizeStorageKey(key);
+                if (!normalized) continue;
+                if (normalized.startsWith('raingod_save_choice_')) continue;
+                if (normalized.startsWith('raingod_game_lock_')) continue;
+                if (normalized.startsWith('raingod_save_')) {
+                    legacyKeys.push(key);
+                    continue;
+                }
+                if (normalized === 'steal_an_egg_v17' || normalized === 'my_base_idx' || normalized === 'tutorial_done'
+                    || normalized === 'raingod_slow_mode' || normalized === 'pid') {
+                    legacyKeys.push(key);
+                }
+            }
+
+            legacyKeys.forEach(key => {
+                const value = localStorage.getItem(key);
+                if (value === null) return;
+                const newKey = getAccountScopedKey(key, uid);
+                if (localStorage.getItem(newKey) === null) {
+                    localStorage.setItem(newKey, value);
+                }
+                localStorage.removeItem(key);
+            });
+        } catch (e) {
+            console.warn('帳號本機資料遷移失敗：', e);
+        }
+    }
+
     function userGameSaveRef(uid, gameId) {
         return firebase.database().ref(`${ACCOUNT_DATA_ROOT}/${uid}/games/${gameId}`);
     }
@@ -250,97 +300,21 @@
         }
     }
 
-    function clearAllSaveChoices() {
+    function clearCloudSession(uid) {
+        if (!uid || !firebase || !firebase.database) return;
         try {
-            for (let i = sessionStorage.length - 1; i >= 0; i--) {
-                const k = sessionStorage.key(i);
-                if (k && k.startsWith('raingod_save_choice_')) {
-                    sessionStorage.removeItem(k);
-                }
-            }
-        } catch (err) { console.error('清除儲存選擇失敗：', err); }
-    }
-
-    function replaceLocalAccountData(data) {
-        accountDataSyncing = true;
-        try {
-            const bindings = new Set(storageBindings.values());
-            bindings.forEach(binding => { if (binding.pause) binding.pause(); });
-
-            const currentKeys = getAccountStorageKeys(activeAccountUid);
-            currentKeys.forEach(key => localStorage.removeItem(key));
-
-            (Array.isArray(data) ? data : []).forEach(entry => {
-                if (!entry || typeof entry.key !== 'string') return;
-                const normalizedKey = normalizeStorageKey(entry.key);
-                if (!normalizedKey || normalizedKey === 'raingod_device_id' || normalizedKey === 'raingod_session_id') return;
-                if (typeof entry.value !== 'string') return;
-                localStorage.setItem(getAccountScopedKey(normalizedKey, activeAccountUid), entry.value);
-            });
-        } finally {
-            accountDataSyncing = false;
-        }
-    }
-
-    function isLocalSaveEffectivelyEmpty() {
-        try {
-            const raw = readLocalAccountSafeValue('steal_an_egg_v17', activeAccountUid);
-            if (raw) {
-                const d = JSON.parse(raw);
-                if (d) {
-                    if ((d.cash || 0) > 0) return false;
-                    if ((d.displaySpeed || 0) > 10) return false;
-                    if (Array.isArray(d.discovered) && d.discovered.length > 0) return false;
-                    if (Array.isArray(d.pets) && d.pets.length > 0) return false;
-                    if (Array.isArray(d.bag) && d.bag.length > 0) return false;
-                    if (Array.isArray(d.hatchery) && d.hatchery.length > 0) return false;
-                    if (d.equippedStick) return false;
-                    if (d.equippedTrail) return false;
-                    if (d.subscriptionVerified) return false;
-                    if (d.trails && typeof d.trails === 'object') {
-                        for (const k of Object.keys(d.trails)) { if (d.trails[k]) return false; }
-                    }
-                }
-            }
+            firebase.database().ref(`${SESSION_ROOT}/${uid}`).remove().catch(() => {});
         } catch (e) {}
-
-        try {
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                if (!key || !key.startsWith(ACCOUNT_STORAGE_PREFIX) || !key.includes(ACCOUNT_STORAGE_DELIM)) continue;
-                const normalizedKey = normalizeStorageKey(key);
-                if (!normalizedKey.startsWith('raingod_save_')) continue;
-                const raw = localStorage.getItem(key);
-                try {
-                    const d = JSON.parse(raw);
-                    if (d == null) continue;
-                    if (Array.isArray(d) && d.length > 0) return false;
-                    if (typeof d === 'object' && d !== null) {
-                        for (const k of Object.keys(d)) {
-                            const v = d[k];
-                            if (v === null || v === undefined || v === 0 || v === '' || v === false) continue;
-                            if (Array.isArray(v) && v.length === 0) continue;
-                            return false;
-                        }
-                    }
-                } catch (e) {}
-            }
-        } catch (e) {}
-
-        return true;
     }
 
-    window.raingodClearLocalAccountData = function() {
-        activeAccountUid = '';
-        accountDataCloudLoaded = false;
-        window.raingodAccountDataCloudLoaded = false;
-        clearTimeout(accountSaveTimer);
-        window.raingodCurrentUser = null;
-        _sessionId = null;
-        activeGameLocks.forEach(lock => { try { lock.release(); } catch (e) {} });
-        activeGameLocks.clear();
-        clearLocalAccountData(false);
-    };
+    function logoutCurrentAccount() {
+        const user = firebase.auth().currentUser;
+        const uid = user && user.uid;
+        stopSessionWatch();
+        if (uid) clearCloudSession(uid);
+        FirebaseAuthService.signOut?.().catch(() => {});
+        firebase.auth().signOut().catch(() => {});
+    }
 
     function scheduleAccountDataSave() {
         if (!activeAccountUid || accountDataSyncing || !canWriteRaingodDb()) return;
@@ -629,22 +603,27 @@
     }
 
     window.addEventListener('beforeunload', () => {
+        const uid = firebase.auth().currentUser?.uid || activeAccountUid;
+        if (uid) releaseSession(uid);
         activeGameLocks.forEach(lock => { try { lock.release(); } catch (e) {} });
         activeGameLocks.clear();
     });
     window.addEventListener('pagehide', () => {
+        const uid = firebase.auth().currentUser?.uid || activeAccountUid;
+        if (uid) releaseSession(uid);
         activeGameLocks.forEach(lock => { try { lock.release(); } catch (e) {} });
         activeGameLocks.clear();
     });
 
     // =============================================================
-    // ★★★ 多地方登入搶佔（以裝置為單位）★★★
-    // sessionId = deviceId。同裝置多分頁寫入相同值 → 不互踢。
-    // 不同裝置寫入不同值 → 後寫入者觸發先寫入者監聽 → 先登入者被踢。
+    // ★★★ 多地方登入搶佔（以帳號為單位，tab 為唯一 session）★★★
+    // 任何同一個 uid 只保留一個 active session；同一個 tab 會自我覆蓋，
+    // 其他 tab/device 會收到 kickOut 並被強制登出。
     // =============================================================
     let sessionWatchRef = null;
     let sessionWatchHandler = null;
     let sessionKicked = false;
+    let currentSessionToken = null;
 
     function stopSessionWatch() {
         if (sessionWatchRef && sessionWatchHandler) {
@@ -673,6 +652,10 @@
         if (sessionKicked) return;
         sessionKicked = true;
         stopSessionWatch();
+        const currentUid = firebase.auth().currentUser?.uid || activeAccountUid;
+        if (currentUid) {
+            try { sessionRef(currentUid).remove().catch(() => {}); } catch (e) {}
+        }
         showNonBlockingNotice(reason || '您的帳號已在其他地方登入，本頁將自動登出。');
         const redirect = () => { window.location.href = baseUrl; };
         setTimeout(() => {
@@ -680,17 +663,28 @@
         }, 800);
     }
 
+    function releaseSession(uid = firebase.auth().currentUser?.uid || activeAccountUid) {
+        if (!uid) return;
+        try {
+            stopSessionWatch();
+            currentSessionToken = null;
+            sessionRef(uid).remove().catch(() => {});
+        } catch (e) {}
+    }
+
     async function claimSession(user) {
-        if (!canWriteRaingodDb()) return;
+        if (!canWriteRaingodDb() || !user || !user.uid) return;
         stopSessionWatch();
         sessionKicked = false;
 
         const sessionId = getTabId();
+        currentSessionToken = sessionId;
         const mySessionRef = sessionRef(user.uid);
 
         const handler = snap => {
             const val = snap.val();
             if (!val || !val.sessionId) return;
+            if (val.uid !== user.uid) return;
             if (val.sessionId === sessionId) return;
             kickOut('您的帳號已在其他地方登入，本頁將自動登出。');
         };
@@ -701,10 +695,12 @@
 
         try {
             await mySessionRef.set({
+                uid: user.uid,
                 sessionId,
                 deviceId: getDeviceId(),
                 tabId: sessionId,
-                timestamp: firebase.database.ServerValue.TIMESTAMP
+                timestamp: firebase.database.ServerValue.TIMESTAMP,
+                updated_at: firebase.database.ServerValue.TIMESTAMP
             });
         } catch (e) {
             console.warn('多裝置偵測寫入失敗（可能是 Firebase 規則限制）：', e);
@@ -714,7 +710,7 @@
         try {
             const check = await mySessionRef.once('value');
             const val = check.val();
-            if (val && val.sessionId && val.sessionId !== sessionId) {
+            if (val && val.uid === user.uid && val.sessionId && val.sessionId !== sessionId) {
                 kickOut('您的帳號已在其他地方登入，本頁將自動登出。');
             }
         } catch (e) {}
