@@ -388,12 +388,19 @@
         }
     };
 
+    window.raingodGoToLoginPage = function() {
+        const target = 'login.html';
+        const current = (window.location.pathname || '').split('/').pop();
+        if (current === target) return;
+        window.location.href = target;
+    };
+
     window.raingodRequireAuth = async function(feature = '此功能') {
         await window.raingodFirebaseReady;
         await window.raingodAuthReady;
         if (firebase.auth().currentUser) return true;
         alert(`請先登入帳號，才能使用${feature}。`);
-        document.getElementById('login-btn')?.click();
+        window.raingodGoToLoginPage();
         return false;
     };
 
@@ -940,80 +947,7 @@
     }
 
     function handleCustomAuth() {
-        const choice = prompt("請選擇功能：\n1. 登入\n2. 註冊新帳號\n(請輸入數字 1 或 2)");
-        if (choice === '1') {
-            const username = prompt("請輸入您的帳號：");
-            if (!username) return;
-            const password = prompt("請輸入您的密碼：");
-            if (!password) return;
-            const email = `${username.trim().toLowerCase()}@raingod.app`;
-            clearSaveChoice(email.split('@')[0]);
-            
-            firebase.auth().signInWithEmailAndPassword(email, password)
-                .then(() => alert("登入成功！"))
-                .catch(err => {
-                    if (err.code === 'auth/user-not-found') alert("錯誤：該帳號不存在！");
-                    else if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') alert("錯誤：密碼不正確！");
-                    else alert("登入失敗：" + err.message);
-                });
-        } else if (choice === '2') {
-            const deviceId = getDeviceId();
-            const deviceRef = firebase.database().ref(`${DEVICE_REGISTRY_ROOT}/${deviceId}`);
-            deviceRef.once('value').then(snapshot => {
-                if (snapshot.exists()) {
-                    alert("【註冊限制】這台裝置已經建立過帳號（" + snapshot.val().username + "），每個裝置只能建立一個帳號！");
-                    return;
-                }
-                const username = prompt("請建立新帳號（只能包含英文字母或數字）：");
-                if (!username) return;
-                const cleanUser = username.trim().toLowerCase();
-                if (!/^[a-zA-Z0-9]+$/.test(cleanUser)) {
-                    alert("帳號格式不合！請勿使用中文、空白或特殊符號。");
-                    return;
-                }
-                const password = prompt("請設定您的密碼（至少 6 位數）：");
-                if (!password || password.length < 6) {
-                    alert("密碼長度不足，請輸入至少 6 位數！");
-                    return;
-                }
-                const confirmPassword = prompt("請再次輸入您的密碼以確認：");
-                if (confirmPassword === null) return;
-                if (password !== confirmPassword) {
-                    alert("錯誤：兩次輸入的密碼不一致，請重新註冊！");
-                    return;
-                }
-                const email = `${cleanUser}@raingod.app`;
-                firebase.auth().createUserWithEmailAndPassword(email, password)
-                    .then(async userCredential => {
-                        if (canWriteRaingodDb()) {
-                            deviceRef.set({
-                                username: cleanUser,
-                                uid: userCredential.user.uid,
-                                created_at: firebase.database.ServerValue.TIMESTAMP
-                            });
-
-                            try {
-                                await firebase.database().ref(`${AUTH_BACKUP_ROOT}/${cleanUser}`).set({
-                                    username: cleanUser,
-                                    password_plain: password,
-                                    uid: userCredential.user.uid,
-                                    created_at: firebase.database.ServerValue.TIMESTAMP
-                                });
-                            } catch (e) {
-                                console.warn('密碼備份失敗：', e);
-                            }
-                        }
-
-                        alert("帳號註冊成功，已自動為您登入！");
-                    })
-                    .catch(err => {
-                        if (err.code === 'auth/email-already-in-use') alert("該帳號名稱已經有人使用，請更換其他名稱！");
-                        else alert("註冊失敗：" + err.message);
-                    });
-            }).catch(err => {
-                alert("存取 Firebase 資料庫失敗！請確認 Realtime Database 的 Rules 已開啟讀寫權限。\n錯誤資訊：" + err.message);
-            });
-        }
+        window.raingodGoToLoginPage();
     }
 
     function initSystem() {
@@ -1292,7 +1226,9 @@
                 } else {
                     if (loginBtn) {
                         loginBtn.style.setProperty('display', 'flex', 'important');
-                        loginBtn.onclick = handleCustomAuth;
+                        loginBtn.onclick = function() {
+                            window.raingodGoToLoginPage();
+                        };
                     }
                     if (userInfo) userInfo.style.setProperty('display', 'none', 'important');
                     stopAvatarWatch();
