@@ -481,17 +481,30 @@
 
         Storage.prototype.getItem = function(key) {
             const keyStr = String(key);
-            if (this !== localStorage || !activeAccountUid) return originalGetItem.call(this, keyStr);
+            if (this !== localStorage) return originalGetItem.call(this, keyStr);
+            if (!activeAccountUid) return originalGetItem.call(this, keyStr);
             const scopedKey = getAccountScopedKey(keyStr, activeAccountUid);
-            const value = originalGetItem.call(this, scopedKey);
-            if (value !== null) return value;
-            return originalGetItem.call(this, keyStr);
+            const scopedValue = originalGetItem.call(this, scopedKey);
+            if (scopedValue !== null) return scopedValue;
+            const legacyValue = originalGetItem.call(this, keyStr);
+            if (legacyValue !== null && !isGameLocalKey(keyStr) && !keyStr.startsWith(ACCOUNT_STORAGE_PREFIX)) {
+                originalSetItem.call(this, scopedKey, legacyValue);
+                originalRemoveItem.call(this, keyStr);
+            }
+            return legacyValue;
         };
 
         Storage.prototype.setItem = function(key, value) {
             const keyStr = String(key);
-            const scopedKey = getAccountScopedKey(keyStr, activeAccountUid);
+            if (this !== localStorage) return originalSetItem.call(this, keyStr, value);
+            if (keyStr === 'raingod_device_id' || keyStr === 'raingod_session_id') {
+                return originalSetItem.call(this, keyStr, value);
+            }
+            const scopedKey = getAccountScopedKey(keyStr, activeAccountUid || firebase.auth().currentUser?.uid);
             originalSetItem.call(this, scopedKey, value);
+            if (activeAccountUid || firebase.auth().currentUser?.uid) {
+                if (keyStr !== scopedKey) originalRemoveItem.call(this, keyStr);
+            }
             if (this === localStorage) {
                 const normalizedKey = normalizeStorageKey(keyStr);
                 if (!isGameLocalKey(normalizedKey)) scheduleAccountDataSave();
@@ -501,8 +514,13 @@
         };
         Storage.prototype.removeItem = function(key) {
             const keyStr = String(key);
-            const scopedKey = getAccountScopedKey(keyStr, activeAccountUid);
+            if (this !== localStorage) return originalRemoveItem.call(this, keyStr);
+            if (keyStr === 'raingod_device_id' || keyStr === 'raingod_session_id') {
+                return originalRemoveItem.call(this, keyStr);
+            }
+            const scopedKey = getAccountScopedKey(keyStr, activeAccountUid || firebase.auth().currentUser?.uid);
             originalRemoveItem.call(this, scopedKey);
+            if (keyStr !== scopedKey) originalRemoveItem.call(this, keyStr);
             if (this === localStorage) {
                 const normalizedKey = normalizeStorageKey(keyStr);
                 if (!isGameLocalKey(normalizedKey)) scheduleAccountDataSave();
@@ -667,13 +685,13 @@
         stopSessionWatch();
         sessionKicked = false;
 
-        const deviceId = getDeviceId();   // ★ 用裝置 ID 作為 session 識別
+        const sessionId = getTabId();
         const mySessionRef = sessionRef(user.uid);
 
         const handler = snap => {
             const val = snap.val();
             if (!val || !val.sessionId) return;
-            if (val.sessionId === deviceId) return;   // ★ 同裝置 → 不踢
+            if (val.sessionId === sessionId) return;
             kickOut('您的帳號已在其他地方登入，本頁將自動登出。');
         };
 
@@ -683,9 +701,9 @@
 
         try {
             await mySessionRef.set({
-                sessionId: deviceId,
-                deviceId: deviceId,
-                tabId: getTabId(),
+                sessionId,
+                deviceId: getDeviceId(),
+                tabId: sessionId,
                 timestamp: firebase.database.ServerValue.TIMESTAMP
             });
         } catch (e) {
@@ -696,7 +714,7 @@
         try {
             const check = await mySessionRef.once('value');
             const val = check.val();
-            if (val && val.sessionId && val.sessionId !== deviceId) {
+            if (val && val.sessionId && val.sessionId !== sessionId) {
                 kickOut('您的帳號已在其他地方登入，本頁將自動登出。');
             }
         } catch (e) {}
@@ -1036,6 +1054,7 @@
 
             if (user) {
                 activeAccountUid = user.uid;
+                migrateLegacyAccountStorage(user.uid);
 
                 await claimSession(user);
                 if (firebase.auth().currentUser?.uid !== user.uid) {
