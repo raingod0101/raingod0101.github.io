@@ -142,52 +142,79 @@
 
     function isGameLocalKey(key) {
         if (!key) return true;
-        if (key === 'raingod_device_id') return true;
-        if (key === 'raingod_session_id') return true;
-        if (key.startsWith('raingod_save_')) return true;
-        if (key.startsWith('raingod_game_lock_')) return true;
-        if (key.startsWith('raingod_save_choice_')) return true;
-        if (GAME_LOCAL_KEYS.has(key)) return true;
+        const normalizedKey = normalizeStorageKey(key);
+        if (normalizedKey === 'raingod_device_id') return true;
+        if (normalizedKey === 'raingod_session_id') return true;
+        if (normalizedKey.startsWith('raingod_save_')) return true;
+        if (normalizedKey.startsWith('raingod_game_lock_')) return true;
+        if (normalizedKey.startsWith('raingod_save_choice_')) return true;
+        if (GAME_LOCAL_KEYS.has(normalizedKey)) return true;
         return false;
     }
 
     const activeGameLocks = new Map();
     const GAME_LOCK_PREFIX = 'raingod_game_lock_';
+    const ACCOUNT_STORAGE_PREFIX = 'raingod_account_';
+    const ACCOUNT_STORAGE_DELIM = '__';
 
-    // === 帳號 session ===
-    const SESSION_STORAGE_KEY = 'raingod_session_id';
-    let _sessionId = null;
-
-    // ★ 關鍵修正：session 標識改成「裝置層級」，同裝置所有分頁共享同一個值。
-    // 這樣同一個瀏覽器開多個分頁時，大家寫入的值一樣 → 監聽時 val.sessionId === sessionId
-    // → 不會互踢。只有不同裝置（deviceId 不同）才會觸發踢人。
-    function getSessionId() {
-        if (_sessionId) return _sessionId;
-        _sessionId = getDeviceId();
-        try { sessionStorage.setItem(SESSION_STORAGE_KEY, _sessionId); } catch (e) {}
-        return _sessionId;
+    function getAccountScopedKey(key, uid = activeAccountUid) {
+        if (typeof key !== 'string' || !key) return key;
+        if (key === 'raingod_device_id' || key === 'raingod_session_id') return key;
+        if (key.startsWith(ACCOUNT_STORAGE_PREFIX) && key.includes(ACCOUNT_STORAGE_DELIM)) return key;
+        if (!uid) return key;
+        return `${ACCOUNT_STORAGE_PREFIX}${uid}${ACCOUNT_STORAGE_DELIM}${key}`;
     }
 
-    function accountDataRef(uid) {
-        return firebase.database().ref(`${ACCOUNT_DATA_ROOT}/${uid}/account_data`);
+    function normalizeStorageKey(key) {
+        if (typeof key !== 'string') return key;
+        if (key.startsWith(ACCOUNT_STORAGE_PREFIX) && key.includes(ACCOUNT_STORAGE_DELIM)) {
+            const rest = key.slice(ACCOUNT_STORAGE_PREFIX.length);
+            const idx = rest.indexOf(ACCOUNT_STORAGE_DELIM);
+            if (idx >= 0) return rest.slice(idx + ACCOUNT_STORAGE_DELIM.length);
+        }
+        return key;
     }
 
-    function sessionRef(uid) {
-        return firebase.database().ref(`${SESSION_ROOT}/${uid}`);
+    function getAccountStorageKeys(uid = activeAccountUid) {
+        const prefix = uid ? `${ACCOUNT_STORAGE_PREFIX}${uid}${ACCOUNT_STORAGE_DELIM}` : `${ACCOUNT_STORAGE_PREFIX}`;
+        const keys = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (!key) continue;
+            if (!uid) {
+                if (!key.startsWith(ACCOUNT_STORAGE_PREFIX) || !key.includes(ACCOUNT_STORAGE_DELIM)) continue;
+            } else if (!key.startsWith(prefix)) continue;
+            keys.push(key);
+        }
+        return keys;
     }
 
-    function lockRef(uid, gameId) {
-        return firebase.database().ref(`${LOCK_ROOT}/${uid}/${gameId}`);
+    function userGameSaveKey(gameId, uid = activeAccountUid) {
+        return getAccountScopedKey(`raingod_save_${gameId}`, uid);
+    }
+
+    function readLocalAccountSafeValue(key, uid = activeAccountUid) {
+        const scopedKey = getAccountScopedKey(key, uid);
+        return localStorage.getItem(scopedKey);
+    }
+
+    function writeLocalAccountSafeValue(key, value, uid = activeAccountUid) {
+        localStorage.setItem(getAccountScopedKey(key, uid), value);
+    }
+
+    function removeLocalAccountSafeValue(key, uid = activeAccountUid) {
+        localStorage.removeItem(getAccountScopedKey(key, uid));
     }
 
     function readAccountData() {
         const data = [];
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && !isGameLocalKey(key)) {
-                data.push({ key, value: localStorage.getItem(key) });
-            }
-        }
+        const keys = getAccountStorageKeys(activeAccountUid);
+        keys.forEach(key => {
+            const normalizedKey = normalizeStorageKey(key);
+            if (!normalizedKey || normalizedKey === 'raingod_device_id' || normalizedKey === 'raingod_session_id') return;
+            const value = localStorage.getItem(key);
+            if (value !== null) data.push({ key: normalizedKey, value });
+        });
         return data.sort((a, b) => a.key.localeCompare(b.key));
     }
 
@@ -198,12 +225,19 @@
     function clearLocalAccountData(clearSession = true) {
         const bindings = new Set(storageBindings.values());
         bindings.forEach(binding => { if (binding.pause) binding.pause(); });
-        const keys = [];
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && !isGameLocalKey(key)) keys.push(key);
-        }
+
+        const keys = getAccountStorageKeys(activeAccountUid);
         keys.forEach(key => localStorage.removeItem(key));
+
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+            const key = localStorage.key(i);
+            if (!key) continue;
+            const normalized = normalizeStorageKey(key);
+            if (normalized.startsWith('raingod_save_') || normalized.startsWith('raingod_game_lock_')) {
+                localStorage.removeItem(key);
+            }
+        }
+
         if (clearSession) {
             try {
                 for (let i = sessionStorage.length - 1; i >= 0; i--) {
@@ -233,19 +267,15 @@
             const bindings = new Set(storageBindings.values());
             bindings.forEach(binding => { if (binding.pause) binding.pause(); });
 
-            const keys = [];
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                if (key && !isGameLocalKey(key)) keys.push(key);
-            }
-            keys.forEach(key => localStorage.removeItem(key));
+            const currentKeys = getAccountStorageKeys(activeAccountUid);
+            currentKeys.forEach(key => localStorage.removeItem(key));
 
             (Array.isArray(data) ? data : []).forEach(entry => {
-                if (entry && typeof entry.key === 'string'
-                    && !isGameLocalKey(entry.key)
-                    && typeof entry.value === 'string') {
-                    localStorage.setItem(entry.key, entry.value);
-                }
+                if (!entry || typeof entry.key !== 'string') return;
+                const normalizedKey = normalizeStorageKey(entry.key);
+                if (!normalizedKey || normalizedKey === 'raingod_device_id' || normalizedKey === 'raingod_session_id') return;
+                if (typeof entry.value !== 'string') return;
+                localStorage.setItem(getAccountScopedKey(normalizedKey, activeAccountUid), entry.value);
             });
         } finally {
             accountDataSyncing = false;
@@ -254,7 +284,7 @@
 
     function isLocalSaveEffectivelyEmpty() {
         try {
-            const raw = localStorage.getItem('steal_an_egg_v17');
+            const raw = readLocalAccountSafeValue('steal_an_egg_v17', activeAccountUid);
             if (raw) {
                 const d = JSON.parse(raw);
                 if (d) {
@@ -277,7 +307,9 @@
         try {
             for (let i = 0; i < localStorage.length; i++) {
                 const key = localStorage.key(i);
-                if (!key || !key.startsWith('raingod_save_')) continue;
+                if (!key || !key.startsWith(ACCOUNT_STORAGE_PREFIX) || !key.includes(ACCOUNT_STORAGE_DELIM)) continue;
+                const normalizedKey = normalizeStorageKey(key);
+                if (!normalizedKey.startsWith('raingod_save_')) continue;
                 const raw = localStorage.getItem(key);
                 try {
                     const d = JSON.parse(raw);
@@ -444,23 +476,37 @@
         storageSyncInstalled = true;
         const originalSetItem = Storage.prototype.setItem;
         const originalRemoveItem = Storage.prototype.removeItem;
+        const originalGetItem = Storage.prototype.getItem;
         const originalClear = Storage.prototype.clear;
 
+        Storage.prototype.getItem = function(key) {
+            const keyStr = String(key);
+            if (this !== localStorage || !activeAccountUid) return originalGetItem.call(this, keyStr);
+            const scopedKey = getAccountScopedKey(keyStr, activeAccountUid);
+            const value = originalGetItem.call(this, scopedKey);
+            if (value !== null) return value;
+            return originalGetItem.call(this, keyStr);
+        };
+
         Storage.prototype.setItem = function(key, value) {
-            originalSetItem.call(this, key, value);
+            const keyStr = String(key);
+            const scopedKey = getAccountScopedKey(keyStr, activeAccountUid);
+            originalSetItem.call(this, scopedKey, value);
             if (this === localStorage) {
-                const keyStr = String(key);
-                if (!isGameLocalKey(keyStr)) scheduleAccountDataSave();
-                const binding = storageBindings.get(keyStr);
+                const normalizedKey = normalizeStorageKey(keyStr);
+                if (!isGameLocalKey(normalizedKey)) scheduleAccountDataSave();
+                const binding = storageBindings.get(normalizedKey);
                 if (binding) binding.scheduleSave();
             }
         };
         Storage.prototype.removeItem = function(key) {
-            originalRemoveItem.call(this, key);
+            const keyStr = String(key);
+            const scopedKey = getAccountScopedKey(keyStr, activeAccountUid);
+            originalRemoveItem.call(this, scopedKey);
             if (this === localStorage) {
-                const keyStr = String(key);
-                if (!isGameLocalKey(keyStr)) scheduleAccountDataSave();
-                const binding = storageBindings.get(keyStr);
+                const normalizedKey = normalizeStorageKey(keyStr);
+                if (!isGameLocalKey(normalizedKey)) scheduleAccountDataSave();
+                const binding = storageBindings.get(normalizedKey);
                 if (binding) binding.scheduleSave();
             }
         };
@@ -700,7 +746,8 @@
             }
         }
 
-        localStorage.setItem(`raingod_save_${gameId}`, JSON.stringify(gameData));
+        const saveKey = userGameSaveKey(gameId, activeAccountUid || firebase.auth().currentUser?.uid);
+        localStorage.setItem(saveKey, JSON.stringify(gameData));
 
         if (!canWriteRaingodDb()) return false;
 
@@ -757,14 +804,16 @@
             return data;
         };
 
+        const saveKey = userGameSaveKey(gameId, user?.uid || activeAccountUid);
+
         if (!user) {
-            const localSave = localStorage.getItem(`raingod_save_${gameId}`);
+            const localSave = localStorage.getItem(saveKey);
             const finalData = localSave ? JSON.parse(localSave) : defaultLocalData;
             return complete(finalData, { source: 'local', syncEnabled: false });
         }
 
         if (!canWriteRaingodDb()) {
-            const localSave = localStorage.getItem(`raingod_save_${gameId}`);
+            const localSave = localStorage.getItem(saveKey);
             const finalData = localSave ? JSON.parse(localSave) : defaultLocalData;
             return complete(finalData, { source: 'local', syncEnabled: false, cloudDisabled: true });
         }
@@ -778,7 +827,7 @@
 
             if (snapshot.exists()) {
                 const cloudData = snapshot.val().data;
-                const localSave = localStorage.getItem(`raingod_save_${gameId}`);
+                const localSave = localStorage.getItem(saveKey);
                 const localData = localSave ? JSON.parse(localSave) : null;
                 const localDiffers = localSave !== null
                     && comparableSaveData(gameId, localData) !== comparableSaveData(gameId, cloudData);
@@ -787,11 +836,11 @@
                     try { sessionStorage.setItem(saveChoiceKey(user.email ? user.email.split('@')[0] : user.uid), 'cloud'); } catch (e) {}
                 }
 
-                localStorage.setItem(`raingod_save_${gameId}`, JSON.stringify(cloudData));
+                localStorage.setItem(saveKey, JSON.stringify(cloudData));
                 return complete(cloudData, { source: 'cloud', syncEnabled: true });
             }
 
-            const localSave = localStorage.getItem(`raingod_save_${gameId}`);
+            const localSave = localStorage.getItem(saveKey);
             const initialData = localSave ? JSON.parse(localSave) : defaultLocalData;
             await gameRef.set({
                 data: initialData,
@@ -800,7 +849,7 @@
             return complete(initialData, { source: 'local', syncEnabled: true, created: true });
         } catch (err) {
             console.error("讀取雲端存檔失敗：", err);
-            const localSave = localStorage.getItem(`raingod_save_${gameId}`);
+            const localSave = localStorage.getItem(saveKey);
             const fallbackData = localSave ? JSON.parse(localSave) : defaultLocalData;
             return complete(fallbackData, { source: 'local', syncEnabled: false, error: err });
         }
@@ -809,7 +858,7 @@
     window.raingodBindStorage = function(gameId, keys, defaults, onLoaded, legacyCloudSave) {
         const storageKeys = Array.from(new Set(keys));
         const readValues = () => storageKeys.reduce((values, key) => {
-            const raw = localStorage.getItem(key);
+            const raw = localStorage.getItem(getAccountScopedKey(key, activeAccountUid));
             values[key] = raw === null ? defaults[key] : parseStorageValue(raw);
             return values;
         }, {});
@@ -854,7 +903,7 @@
                         await window.raingodWaitForAccountData(user.uid);
                         if (firebase.auth().currentUser?.uid !== user.uid) return;
                         const localData = readValues();
-                        const genericKey = `raingod_save_${gameId}`;
+                        const genericKey = userGameSaveKey(gameId, user.uid);
                         if (legacyCloudSave && user.email) {
                             const username = user.email.split('@')[0];
                             const accountRef = userGameSaveRef(user.uid, gameId);
@@ -864,7 +913,7 @@
                                 if (legacySnapshot.exists()) {
                                     const legacyData = legacySnapshot.val();
                                     const primaryKey = legacyCloudSave.key;
-                                    const localRaw = localStorage.getItem(primaryKey);
+                                    const localRaw = localStorage.getItem(getAccountScopedKey(primaryKey, user.uid));
                                     const differs = localRaw !== null && comparableSaveData(gameId, parseStorageValue(localRaw)) !== comparableSaveData(gameId, legacyData);
                                     let useLegacyCloud = true;
                                     if (differs) {
@@ -874,12 +923,12 @@
                                     }
                                     if (useLegacyCloud) {
                                         localData[primaryKey] = legacyData;
-                                        Storage.prototype.setItem.call(localStorage, primaryKey, encodeStorageValue(legacyData));
+                                        Storage.prototype.setItem.call(localStorage, getAccountScopedKey(primaryKey, user.uid), encodeStorageValue(legacyData));
                                     }
                                 }
                             }
                         }
-                        const hasLegacySave = storageKeys.some(key => localStorage.getItem(key) !== null);
+                        const hasLegacySave = storageKeys.some(key => localStorage.getItem(getAccountScopedKey(key, user.uid)) !== null);
                         if (hasLegacySave) {
                             Storage.prototype.setItem.call(localStorage, genericKey, JSON.stringify(localData));
                         }
@@ -898,8 +947,8 @@
                         if (!details.conflict && !details.error) {
                             storageKeys.forEach(key => {
                                 const value = Object.prototype.hasOwnProperty.call(selected, key) ? selected[key] : defaults[key];
-                                if (value === null || value === undefined) Storage.prototype.removeItem.call(localStorage, key);
-                                else Storage.prototype.setItem.call(localStorage, key, encodeStorageValue(value));
+                                if (value === null || value === undefined) Storage.prototype.removeItem.call(localStorage, getAccountScopedKey(key, user.uid));
+                                else Storage.prototype.setItem.call(localStorage, getAccountScopedKey(key, user.uid), encodeStorageValue(value));
                             });
                         }
 
