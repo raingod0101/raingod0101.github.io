@@ -1,2146 +1,1822 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="zh-TW">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>聊天室 | 雨神</title>
-<link rel="stylesheet" href="menu.css">
-<style>
-:root{
-  --me-bg:#007aff;--other-bg:#f2f2f7;--danger:#ff3b30;--text-gray:#8e8e93;
-  --success:#34c759;--border:#e2e6ed;
-}
-*{box-sizing:border-box}
-body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
-  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow-x:hidden}
-#nav_bar{position:relative;z-index:10}
-.hidden{display:none!important}
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>3D 槍戰對決 | Raingod</title>
+    <style>
+        * { touch-action: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+        html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; position: fixed; background: #020205; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        
+        #ui-container {
+            position: absolute; top: 75px; left: 15px;
+            display: flex; flex-direction: column; gap: 8px;
+            z-index: 100; pointer-events: none;
+        }
 
-.tab-bar{display:flex;gap:4px;max-width:860px;margin:20px auto 0;padding:5px;
-  background:#e8ecf2;border-radius:12px;width:calc(100% - 32px)}
-.tab-btn{flex:1;padding:11px 8px;border:0;border-radius:9px;background:transparent;
-  color:#5b6470;font:inherit;font-size:.92rem;font-weight:600;cursor:pointer;
-  transition:background .15s,color .15s;position:relative}
-.tab-btn.active{background:#fff;color:#1d1d1f;box-shadow:0 1px 4px rgba(25,40,60,.12)}
-.tab-badge{display:none;min-width:17px;height:17px;padding:0 4px;margin-left:4px;
-  border-radius:9px;background:var(--danger);color:#fff;font-size:10px;font-weight:700;
-  line-height:17px;text-align:center;vertical-align:middle}
-.tab-badge.show{display:inline-block}
+        .ui-badge {
+            font-size: 15px; font-weight: bold; color: #fff;
+            background: rgba(15, 15, 25, 0.85); padding: 8px 16px; 
+            border: 2px solid #a855f7; border-radius: 50px;
+            box-shadow: 0 0 12px rgba(168, 85, 247, 0.3); width: fit-content;
+            backdrop-filter: blur(8px);
+        }
 
-.page-wrap{max-width:860px;margin:18px auto 40px;padding:0 16px}
-.page{display:none}
-.page.active{display:block}
+        #radar-container {
+            position: absolute; top: 75px; right: 15px;
+            width: 120px; height: 120px; border-radius: 50%;
+            background: rgba(10, 10, 20, 0.85); border: 2px solid #06b6d4;
+            box-shadow: 0 0 15px rgba(6, 182, 212, 0.4);
+            z-index: 100; pointer-events: none; backdrop-filter: blur(8px);
+            overflow: hidden;
+        }
 
-.card{margin-bottom:18px;padding:24px;border:1px solid var(--border);border-radius:16px;
-  background:#fff;box-shadow:0 8px 24px rgba(25,40,60,.06)}
-.card h2{margin:0 0 8px;font-size:1.1rem}
-.card h3{margin:18px 0 8px;font-size:.95rem}
-.profile-help,.profile-status{color:#606a78;font-size:.88rem;line-height:1.5}
-.profile-status{min-height:1.4em;margin:10px 0 0}
-.profile-status.error{color:#b42318}
-.profile-status.ok{color:var(--success)}
+        #radar-canvas { width: 100%; height: 100%; }
 
-.page-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}
-.page-heading h1{margin:0;font-size:1.55rem}
+        #tracker-info {
+            position: absolute; bottom: 140px; width: 100%; text-align: center;
+            color: #00f3ff; font-weight: bold; font-size: 15px;
+            text-shadow: 0 0 10px rgba(0, 243, 255, 0.8);
+            z-index: 90; pointer-events: none;
+        }
 
-.profile-avatar-row{display:flex;align-items:center;gap:20px;flex-wrap:wrap}
-.avatar-wrap{position:relative;width:104px;height:104px;flex:0 0 auto}
-.profile-avatar{width:104px;height:104px;border:2px solid var(--border);border-radius:50%;
-  object-fit:cover;background:#fff}
-.avatar-edit-btn{position:absolute;right:-2px;bottom:-2px;width:34px;height:34px;
-  border-radius:50%;border:2px solid #fff;background:var(--me-bg);color:#fff;
-  font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+        #reconnect-hint {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            color: #ffffff; font-weight: bold; font-size: 18px;
+            background: rgba(0, 0, 0, 0.7); padding: 12px 24px; border-radius: 30px;
+            border: 1px solid #a855f7; pointer-events: none; display: none; z-index: 150;
+            box-shadow: 0 0 15px rgba(168, 85, 247, 0.5);
+        }
 
-.profile-form{display:grid;gap:14px;margin-top:16px}
-.profile-form label{display:grid;gap:7px;font-size:.9rem;font-weight:600}
-.profile-form input{width:100%;padding:11px 12px;border:1px solid #cbd2dc;
-  border-radius:8px;font:inherit}
-.profile-form input:focus{border-color:#4285f4;outline:2px solid rgba(66,133,244,.18)}
-.profile-button{width:fit-content;padding:10px 16px;border:0;border-radius:8px;
-  background:#2878e3;color:#fff;font:inherit;font-weight:600;cursor:pointer}
-.profile-button:disabled{cursor:wait;opacity:.65}
-.profile-button.secondary{background:#687385}
-.profile-button.danger{background:var(--danger)}
+        #joy-base {
+            position: absolute; bottom: 30px; left: 30px; width: 120px; height: 120px;
+            background: rgba(255, 255, 255, 0.08); border: 2px solid rgba(168, 85, 247, 0.5);
+            border-radius: 50%; z-index: 100; display: none; backdrop-filter: blur(4px);
+        }
+        #joy-stick {
+            position: absolute; top: 35px; left: 35px; width: 50px; height: 50px;
+            background: #a855f7; border-radius: 50%;
+            box-shadow: 0 0 15px #a855f7;
+        }
 
-.search-row{display:flex;gap:8px}
-.search-row input{flex:1;padding:10px 12px;border:1px solid #cbd2dc;border-radius:8px;font:inherit}
-.friend-list,.request-list,.search-results{list-style:none;margin:0;padding:0;
-  display:flex;flex-direction:column;gap:8px}
-.friend-item,.request-item{display:flex;align-items:center;gap:10px;padding:10px;
-  border-radius:12px;background:#f7f9fc;border:1px solid transparent}
-.friend-item.active{border-color:var(--me-bg);background:#eaf2ff}
-.friend-avatar{width:42px;height:42px;border-radius:50%;object-fit:cover;background:#fff;
-  flex:0 0 auto;border:1px solid var(--border)}
-.friend-name{flex:1;font-weight:600;font-size:.95rem;overflow:hidden;
-  text-overflow:ellipsis;white-space:nowrap}
-.friend-unread{min-width:18px;height:18px;padding:0 5px;border-radius:9px;
-  background:var(--danger);color:#fff;font-size:11px;font-weight:700;line-height:18px;
-  text-align:center;display:none}
-.friend-unread.show{display:inline-block}
-.friend-actions{display:flex;gap:6px;flex-wrap:wrap}
-.mini-btn{padding:6px 11px;border-radius:7px;border:1px solid #ccc;background:#fff;
-  font-size:12px;font-weight:600;cursor:pointer}
-.mini-btn.primary{background:var(--me-bg);color:#fff;border-color:var(--me-bg)}
-.mini-btn.success{background:var(--success);color:#fff;border-color:var(--success)}
-.mini-btn.danger{background:#fff0f0;color:var(--danger);border-color:#ffc9c9}
+        #jump-btn {
+            position: absolute; bottom: 35px; right: 25px; width: 85px; height: 85px;
+            background: linear-gradient(135deg, #a855f7, #7c3aed); color: #fff; border-radius: 50%;
+            display: none; justify-content: center; align-items: center;
+            font-size: 16px; font-weight: bold; z-index: 100;
+            box-shadow: 0 0 20px rgba(168, 85, 247, 0.6);
+            border: 2px solid rgba(255,255,255,0.4);
+        }
 
-.chat-panel{display:flex;flex-direction:column;background:#fff;border-radius:16px;
-  overflow:hidden;border:1px solid var(--border);
-  box-shadow:0 8px 24px rgba(25,40,60,.06);
-  height:calc(100vh - 190px);min-height:460px}
-.chat-layout{display:flex;height:100%}
-.chat-sidebar{width:210px;flex-shrink:0;border-right:1px solid #eee;overflow-y:auto;background:#fafbfd}
-.chat-sidebar-title{padding:12px 14px 6px;font-size:12px;font-weight:700;
-  color:var(--text-gray);letter-spacing:.4px}
-.chat-sidebar .friend-item{border-radius:0;border:0;background:transparent;cursor:pointer}
-.chat-sidebar .friend-item.active{background:#eaf2ff}
-.chat-main{flex:1;display:flex;flex-direction:column;min-width:0}
+        #fire-btn {
+            position: absolute; bottom: 130px; right: 25px; width: 85px; height: 85px;
+            background: linear-gradient(135deg, #ff4444, #cc0000); color: #fff; border-radius: 50%;
+            display: none; justify-content: center; align-items: center;
+            font-size: 15px; font-weight: bold; z-index: 100;
+            box-shadow: 0 0 20px rgba(255, 68, 68, 0.6);
+            border: 2px solid rgba(255,255,255,0.4);
+        }
 
-.chat-mobile-picker{display:none;padding:10px 12px;border-bottom:1px solid #eee;
-  background:#fff;flex-shrink:0}
-.chat-mobile-picker select{width:100%;padding:10px 12px;border:1px solid #cbd2dc;
-  border-radius:9px;font:inherit;background:#fff;color:#1d1d1f}
+        #scope-btn {
+            position: absolute; bottom: 130px; left: 25px; width: 75px; height: 75px;
+            background: linear-gradient(135deg, #06b6d4, #0891b2); color: #fff; border-radius: 50%;
+            display: none; justify-content: center; align-items: center;
+            font-size: 13px; font-weight: bold; z-index: 100;
+            box-shadow: 0 0 20px rgba(6, 182, 212, 0.6);
+            border: 2px solid rgba(255,255,255,0.4);
+        }
 
-.chat-header{padding:13px 16px;border-bottom:1px solid #eee;display:flex;
-  justify-content:space-between;align-items:center;background:#fff;flex-shrink:0}
-.chat-header .title{font-weight:700}
-.chat-header .sub{font-size:12px;color:var(--text-gray)}
-.chat-header-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
-.chat-box{flex:1;overflow-y:auto;padding:15px;display:flex;flex-direction:column;
-  gap:12px;background:#fbfcfe}
-.chat-empty{margin:auto;text-align:center;color:var(--text-gray);font-size:.92rem;padding:30px}
+        #weapon-panel {
+            position: absolute; bottom: 230px; right: 15px; width: 130px;
+            background: rgba(10, 10, 20, 0.9); border: 2px solid #06b6d4;
+            border-radius: 12px; padding: 8px; display: none;
+            z-index: 100; backdrop-filter: blur(8px);
+        }
 
-.upload-status{padding:8px 14px;font-size:12px;background:#fff8e1;color:#8a6d00;
-  border-bottom:1px solid #f0e0b0;display:none}
-.upload-status.show{display:block}
-.upload-status.error{background:#fff0f0;color:#b42318;border-bottom-color:#ffc9c9}
+        .weapon-slot {
+            display: flex; justify-content: space-between; align-items: center;
+            color: #fff; padding: 6px 8px; margin: 2px 0; border-radius: 6px;
+            font-size: 12px; font-weight: bold; cursor: pointer;
+            transition: background 0.15s;
+        }
+        .weapon-slot.active { background: #7c3aed; box-shadow: 0 0 10px #7c3aed; }
+        .weapon-slot .ammo { font-size: 11px; color: #67e8f9; }
 
-.msg-row{display:flex;align-items:flex-end;gap:8px;width:100%}
-.msg-row.me{flex-direction:row-reverse}
-.msg-avatar{width:34px;height:34px;border-radius:50%;object-fit:cover;background:#fff;
-  flex:0 0 auto;border:1px solid var(--border)}
-.msg-body{display:flex;flex-direction:column;max-width:78%}
-.msg-row.me .msg-body{align-items:flex-end}
-.msg-row.other .msg-body{align-items:flex-start}
-.msg-info{font-size:11px;color:var(--text-gray);margin-bottom:3px;padding:0 5px}
-.bubble{padding:10px 13px;border-radius:16px;font-size:14px;word-break:break-word;
-  box-shadow:0 1px 2px rgba(0,0,0,.06);white-space:pre-wrap;position:relative}
-.me .bubble{background:var(--me-bg);color:#fff;border-bottom-right-radius:4px}
-.other .bubble{background:var(--other-bg);color:#111;border-bottom-left-radius:4px}
-.bubble.recalled{background:transparent!important;color:var(--text-gray)!important;
-  font-style:italic;box-shadow:none;padding:4px 8px}
-.bubble img.msg-img{display:block;max-width:220px;max-height:220px;border-radius:10px;
-  cursor:pointer;background:#000}
-.bubble .img-expired{font-style:italic;color:var(--text-gray);font-size:13px}
-.msg-read{font-size:11px;color:var(--text-gray);margin-top:3px;padding:0 5px;cursor:pointer}
-.msg-read:hover{text-decoration:underline}
-.msg-recall-btn{display:none;margin-top:3px;font-size:11px;color:var(--text-gray);
-  background:transparent;border:0;cursor:pointer;padding:2px 5px}
-.msg-row.me .msg-recall-btn{align-self:flex-end}
-.msg-row:hover .msg-recall-btn{display:inline-block}
-@media (hover:none){.msg-row .msg-recall-btn{display:inline-block;opacity:.6}}
+        #overlay {
+            position: absolute; top: 60px; left: 0; width: 100%; height: calc(100% - 60px); 
+            background: rgba(5, 5, 10, 0.95);
+            display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 200;
+            padding: 20px; box-sizing: border-box; text-align: center; color: #fff;
+            overflow-y: auto;
+        }
 
-.chat-input-area{padding:10px 12px;border-top:1px solid #eee;display:flex;gap:8px;
-  align-items:center;background:#fff}
-.chat-input-area input[type="text"]{flex:1;padding:11px 14px;border:none;background:#f2f2f7;
-  border-radius:22px;outline:none;font-size:15px}
-.icon-btn{border:none;background:#f2f2f7;color:#333;width:38px;height:38px;border-radius:50%;
-  font-size:18px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center}
-.icon-btn:disabled{opacity:.4;cursor:not-allowed}
-.chat-send-btn{border:none;background:var(--me-bg);color:#fff;font-weight:700;
-  padding:10px 16px;border-radius:20px;cursor:pointer;font-size:14px;flex-shrink:0}
-.chat-send-btn:disabled{opacity:.5;cursor:not-allowed}
+        button.start-btn { 
+            padding: 16px 45px; font-size: 22px; font-weight: bold;
+            background: linear-gradient(135deg, #a855f7, #7c3aed); color: #fff; border: none; border-radius: 50px; cursor: pointer;
+            box-shadow: 0 0 25px rgba(168, 85, 247, 0.7); margin-top: 15px;
+            transition: transform 0.15s;
+        }
+        button.start-btn:active { transform: scale(0.96); }
 
-.quota-hint{font-size:11px;color:var(--text-gray);flex-shrink:0;padding:0 4px;white-space:nowrap}
+        #save-status {
+            min-height: 1.5em; margin: 10px 0 0; color: #b9a1d8; font-size: 13px;
+        }
+        .mode-btn { padding: 12px 20px; margin: 5px; border: 1px solid #06b6d4; border-radius: 24px; color: #fff; background: #111827; font-weight: bold; cursor: pointer; transition: all 0.15s; }
+        .mode-btn.selected { background: #7c3aed; border-color: #c4b5fd; box-shadow: 0 0 14px #7c3aed; }
+        #duel-status { color: #67e8f9; min-height: 1.5em; max-width: 420px; font-size: 13px; }
+        #opponent-hud { position:absolute; top:150px; left:15px; z-index:100; color:#fff; background:rgba(8,15,30,.88); border:1px solid #06b6d4; border-radius:12px; padding:9px 13px; display:none; font-weight:bold; pointer-events:none; font-size:13px; }
 
-.group-check-list{display:flex;flex-direction:column;gap:6px;max-height:260px;overflow-y:auto;
-  margin-top:8px}
-.group-check-item{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:9px;
-  background:#f7f9fc}
-.group-check-item input{width:18px;height:18px}
-.member-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
-.member-chip{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:14px;
-  background:#eef3fb;font-size:12px}
-.member-chip img{width:20px;height:20px;border-radius:50%;object-fit:cover}
+        #leaderboard-button {
+            position: absolute; top: 210px; right: 15px; z-index: 210;
+            padding: 9px 14px; border: 1px solid #06b6d4; border-radius: 20px;
+            color: #fff; background: rgba(10, 10, 20, 0.9); font-weight: bold;
+            cursor: pointer; pointer-events: auto; font-size: 13px;
+        }
 
-.group-item{display:flex;align-items:center;gap:10px;padding:10px;border-radius:12px;
-  background:#f7f9fc;cursor:pointer}
-.group-item.active{background:#eaf2ff}
-.group-item .friend-avatar{border-radius:12px}
+        #leaderboard {
+            position: absolute; top: 60px; left: 0; width: 100%; height: calc(100% - 60px); z-index: 220; display: none;
+            align-items: center; justify-content: center; padding: 20px;
+            background: rgba(5, 5, 10, 0.95); color: #fff; box-sizing: border-box;
+        }
 
-.reader-pop,.member-pop{position:fixed;z-index:100;background:#fff;border:1px solid var(--border);
-  border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.15);padding:10px 12px;max-height:300px;
-  overflow-y:auto;min-width:220px;font-size:13px}
-.reader-pop .r-item,.member-pop .r-item{display:flex;align-items:center;gap:7px;padding:6px 0;border-bottom:1px solid #f0f0f0}
-.reader-pop .r-item:last-child,.member-pop .r-item:last-child{border-bottom:none}
-.reader-pop .r-item img,.member-pop .r-item img{width:26px;height:26px;border-radius:50%;object-fit:cover}
-.reader-pop .r-title,.member-pop .r-title{font-weight:700;margin-bottom:6px;color:var(--text-gray);font-size:12px}
+        .leaderboard-card {
+            width: min(520px, 100%); max-height: 80vh; overflow-y: auto;
+            padding: 20px; border: 2px solid #06b6d4; border-radius: 18px;
+            background: #0b1020; box-sizing: border-box;
+        }
 
-/* ===== 頭像裁剪器 ===== */
-.crop-modal{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.6);
-  display:flex;align-items:center;justify-content:center;padding:16px}
-.crop-dialog{background:#fff;border-radius:16px;padding:18px;width:min(360px,100%);
-  display:flex;flex-direction:column;gap:12px}
-.crop-dialog h3{margin:0;font-size:1rem;text-align:center}
-.crop-stage{position:relative;width:100%;aspect-ratio:1/1;overflow:hidden;
-  border-radius:12px;background:#111;touch-action:none;cursor:grab}
-.crop-stage:active{cursor:grabbing}
-.crop-stage img{position:absolute;left:0;top:0;transform-origin:0 0;
-  user-select:none;-webkit-user-drag:none;pointer-events:none;max-width:none}
-.crop-mask{position:absolute;inset:0;pointer-events:none;border-radius:12px;
-  box-shadow:0 0 0 9999px rgba(0,0,0,.45) inset}
-.crop-mask::after{content:'';position:absolute;left:50%;top:50%;
-  width:82%;height:82%;transform:translate(-50%,-50%);
-  border:2px dashed rgba(255,255,255,.9);border-radius:50%}
-.crop-actions{display:flex;gap:10px;justify-content:flex-end}
+        .leaderboard-row {
+            display: flex; justify-content: space-between; gap: 12px;
+            padding: 10px; border-bottom: 1px solid #26334a; font-size: 14px;
+        }
 
-@media (max-width:640px){
-  .chat-sidebar{display:none}
-  .chat-mobile-picker{display:block}
-  .chat-panel{height:calc(100vh - 210px)}
-  .tab-btn{font-size:.78rem;padding:10px 3px}
-  .page-wrap{padding:0 10px}
-  .card{padding:18px}
-  .msg-body{max-width:82%}
-}
-</style>
+        .leaderboard-actions { display: flex; gap: 10px; margin-top: 16px; }
+        .leaderboard-actions button {
+            padding: 10px 16px; border: 0; border-radius: 8px; cursor: pointer;
+            color: #fff; background: #334155; font-weight: bold;
+        }
+        .leaderboard-actions button:first-child { background: #0891b2; }
+
+        #crosshair {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 40px; height: 40px; pointer-events: none; z-index: 50;
+            display: none;
+        }
+        #crosshair::before, #crosshair::after {
+            content: ''; position: absolute; background: #00f3ff;
+            box-shadow: 0 0 6px #00f3ff;
+        }
+        #crosshair::before { width: 2px; height: 14px; left: 19px; top: 13px; }
+        #crosshair::after { width: 14px; height: 2px; left: 13px; top: 19px; }
+
+        #health-bar {
+            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+            width: 200px; height: 20px; background: rgba(0,0,0,0.6);
+            border: 2px solid #06b6d4; border-radius: 10px; z-index: 100;
+            display: none; overflow: hidden;
+        }
+        #health-fill {
+            width: 100%; height: 100%; background: linear-gradient(90deg, #00f3ff, #a855f7);
+            transition: width 0.2s;
+        }
+        #health-text {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            color: #fff; font-weight: bold; font-size: 12px; z-index: 101;
+        }
+
+        .hit-marker {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            color: #ff4444; font-size: 28px; font-weight: bold; pointer-events: none;
+            z-index: 60; display: none; text-shadow: 0 0 10px #ff0000;
+        }
+
+        #kill-feed {
+            position: absolute; top: 200px; right: 15px; z-index: 100;
+            display: flex; flex-direction: column; gap: 4px; pointer-events: none;
+            font-size: 12px; color: #fff; text-align: right;
+        }
+        #kill-feed div { background: rgba(0,0,0,0.7); padding: 4px 10px; border-radius: 6px; animation: fadeIn 0.2s; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: translateX(0); } }
+
+        #damage-vignette {
+            position: absolute; top: 60px; left: 0; width: 100%; height: calc(100% - 60px);
+            pointer-events: none; z-index: 45; opacity: 0;
+            background: radial-gradient(circle, transparent 60%, rgba(255,0,0,0.6) 100%);
+            transition: opacity 0.2s;
+        }
+    </style>
 </head>
 <body>
-<div id="nav_bar"></div>
+    <link rel="stylesheet" href="menu.css">
+    <div id="nav_bar"></div>
+    <script src="menu.js"></script>
 
-<p id="login-required" class="profile-help" style="text-align:center;margin:24px;" hidden>
-  請先登入帳號，再管理個人檔案與好友。</p>
-
-<div id="app-area" hidden>
-  <div class="tab-bar" role="tablist">
-    <button class="tab-btn" data-page="profile" role="tab">個人檔案</button>
-    <button class="tab-btn" data-page="friends" role="tab">好友 <span class="tab-badge" id="tab-badge-requests"></span></button>
-    <button class="tab-btn" data-page="groups" role="tab">群組</button>
-    <button class="tab-btn active" data-page="chat" role="tab">聊天室 <span class="tab-badge" id="tab-badge-unread"></span></button>
-  </div>
-
-  <div class="page-wrap">
-    <section class="page" id="page-profile">
-      <div class="page-heading">
-        <h1>個人檔案</h1>
-        <button id="sign-out" class="profile-button secondary" type="button">登出</button>
-      </div>
-      <section class="card">
-        <h2>個人頭像</h2>
-        <div class="profile-avatar-row">
-          <div class="avatar-wrap">
-            <img id="profile-avatar" class="profile-avatar"
-                 src="https://raingod0101.github.io/catdragon.png" alt="個人頭像">
-            <button id="avatar-edit-btn" class="avatar-edit-btn" type="button" title="更換頭像">✎</button>
-          </div>
-          <div>
-            <p class="profile-help">點擊右下角鉛筆更換頭像，可拖動與縮放調整後儲存。</p>
-            <input id="avatar-file-input" type="file" accept="image/*" class="hidden">
-          </div>
+    <div id="overlay">
+        <h1 id="game-title" style="margin-bottom:8px; font-size:30px;">🔫 3D 槍戰對決</h1>
+        <p id="game-desc" style="margin-bottom:20px; color: #aaa; max-width: 440px; line-height: 1.6; font-size: 14px;">
+            選擇你的武器，與對手展開激烈槍戰！<br>
+            <b>多種武器</b>任你切換，擊殺對手獲勝！
+        </p>
+        <p id="record-info" style="margin:0; color:#c4b5fd; font-size:14px;">個人最佳：尚無紀錄</p>
+        <div id="mode-picker" style="margin-top:14px;">
+            <button class="mode-btn selected" id="solo-mode-btn" type="button">🎯 訓練模式</button>
+            <button class="mode-btn" id="duel-mode-btn" type="button">⚔️ 1 對 1 對決</button>
         </div>
-        <p id="avatar-status" class="profile-status" role="status"></p>
-      </section>
-      <section class="card">
-        <h2>顯示名稱</h2>
-        <form id="name-form" class="profile-form">
-          <label>名稱
-            <input id="display-name" type="text" maxlength="40" autocomplete="nickname" required>
-          </label>
-          <button class="profile-button" type="submit">儲存名稱</button>
-        </form>
-        <p id="name-status" class="profile-status" role="status"></p>
-      </section>
-      <section class="card">
-        <h2>變更密碼</h2>
-        <form id="password-form" class="profile-form">
-          <label>目前密碼<input id="current-password" type="password" autocomplete="current-password" required></label>
-          <label>新密碼（至少 6 個字元）<input id="new-password" type="password" minlength="6" autocomplete="new-password" required></label>
-          <label>確認新密碼<input id="confirm-password" type="password" minlength="6" autocomplete="new-password" required></label>
-          <button class="profile-button" type="submit">變更密碼</button>
-        </form>
-        <p id="password-status" class="profile-status" role="status"></p>
-      </section>
-    </section>
-
-    <section class="page" id="page-friends">
-      <div class="page-heading"><h1>好友</h1></div>
-      <section class="card">
-        <h2>搜尋好友</h2>
-        <p class="profile-help">輸入對方帳號（@ 前面的名稱）送出好友申請。</p>
-        <div class="search-row">
-          <input id="friend-search-input" type="text" placeholder="輸入帳號搜尋" autocomplete="off">
-          <button id="friend-search-btn" class="profile-button" type="button" style="width:auto;padding:10px 16px;">搜尋</button>
-        </div>
-        <ul id="search-results" class="search-results" style="margin-top:12px;"></ul>
-      </section>
-      <section class="card">
-        <h2>好友申請</h2>
-        <ul id="request-list" class="request-list">
-          <li class="profile-help" id="request-empty">目前沒有待處理的好友申請。</li>
-        </ul>
-      </section>
-      <section class="card">
-        <h2>好友列表</h2>
-        <ul id="friend-list" class="friend-list">
-          <li class="profile-help" id="friend-empty">尚未加入任何好友。</li>
-        </ul>
-      </section>
-    </section>
-
-    <section class="page" id="page-groups">
-      <div class="page-heading"><h1>群組</h1></div>
-      <section class="card" id="group-create-card">
-        <h2>建立群組</h2>
-        <p class="profile-help" id="group-limit-hint" hidden>你已經建立過一個群組，一人只能建立一個群組。</p>
-        <form id="group-create-form" class="profile-form">
-          <label>群組名稱
-            <input id="group-name" type="text" maxlength="40" placeholder="例如：週末出遊團" required>
-          </label>
-          <label>群組頭像（可選）
-            <input id="group-avatar-input" type="file" accept="image/*">
-          </label>
-          <div>
-            <h3 style="margin-top:0;">選擇成員</h3>
-            <div id="group-member-picker" class="group-check-list">
-              <p class="profile-help">尚無好友可加入。</p>
-            </div>
-          </div>
-          <button class="profile-button" type="submit" id="group-create-btn">建立群組</button>
-        </form>
-        <p id="group-status" class="profile-status" role="status"></p>
-      </section>
-      <section class="card">
-        <h2>我的群組</h2>
-        <ul id="group-list" class="friend-list">
-          <li class="profile-help" id="group-empty">尚未加入任何群組。</li>
-        </ul>
-      </section>
-    </section>
-
-    <section class="page active" id="page-chat">
-      <div class="chat-panel">
-        <div class="chat-layout">
-          <aside class="chat-sidebar">
-            <div class="chat-sidebar-title">好友對話</div>
-            <ul id="chat-sidebar-friends" style="list-style:none;margin:0;padding:0;"></ul>
-            <div class="chat-sidebar-title">群組對話</div>
-            <ul id="chat-sidebar-groups" style="list-style:none;margin:0;padding:0;"></ul>
-          </aside>
-          <div class="chat-main">
-            <div class="chat-mobile-picker">
-              <select id="chat-mobile-select">
-                <option value="">選擇好友或群組開始聊天…</option>
-              </select>
-            </div>
-            <div class="chat-header">
-              <div>
-                <div class="title" id="chat-title">聊天室</div>
-                <div class="sub" id="chat-subtitle">請選擇一位好友或群組開始聊天。</div>
-              </div>
-              <div class="chat-header-actions">
-                <button id="chat-edit-group-btn" class="mini-btn primary" type="button" hidden>改群名</button>
-                <button id="chat-alias-btn" class="mini-btn" type="button" hidden>設定匿名</button>
-                <button id="chat-delete-group" class="mini-btn danger" type="button" hidden>刪除群組</button>
-                <button id="chat-members-btn" class="mini-btn" type="button" hidden>成員</button>
-                <button id="chat-clear-friend" class="mini-btn" type="button" hidden>關閉</button>
-              </div>
-            </div>
-            <div class="upload-status" id="upload-status"></div>
-            <div class="chat-box" id="chat-box">
-              <div class="chat-empty" id="chat-empty">請選擇一位好友或群組開始聊天。</div>
-            </div>
-            <div class="chat-input-area">
-              <button id="img-upload-btn" class="icon-btn" type="button" title="上傳圖片" disabled>📷</button>
-              <span id="img-quota-hint" class="quota-hint"></span>
-              <input id="img-file-input" type="file" accept="image/*" class="hidden">
-              <input type="text" id="msg-input" placeholder="輸入訊息..." disabled>
-              <button class="chat-send-btn" id="chat-send-btn" type="button" disabled>傳送</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  </div>
-</div>
-
-<!-- 頭像裁剪彈窗 -->
-<div id="avatar-crop-modal" class="crop-modal hidden">
-  <div class="crop-dialog">
-    <h3>調整頭像</h3>
-    <div class="crop-stage" id="crop-stage">
-      <img id="crop-img" alt="">
-      <div class="crop-mask"></div>
+        <p id="duel-status" role="status">訓練模式：練習武器與移動。對決模式：先擊殺對手 5 次獲勝。</p>
+        <p id="save-status" role="status">登入後可將成績同步至帳號。</p>
+        <button class="start-btn" id="start-btn">開始槍戰</button>
     </div>
-    <input id="crop-zoom" type="range" min="1" max="3" step="0.01" value="1">
-    <div class="crop-actions">
-      <button type="button" class="profile-button secondary" id="crop-cancel">取消</button>
-      <button type="button" class="profile-button" id="crop-confirm">確定</button>
+
+    <button id="leaderboard-button" type="button">🏆 登入後查看排行榜</button>
+    <div id="leaderboard" role="dialog" aria-modal="true" aria-labelledby="leaderboard-title">
+        <section class="leaderboard-card">
+            <h2 id="leaderboard-title" style="color:#06b6d4; margin-top:0;">🏆 槍戰排行榜</h2>
+            <p id="leaderboard-status" style="color:#aaa;" role="status">請登入帳號後查看。</p>
+            <div id="leaderboard-list"></div>
+            <div class="leaderboard-actions">
+                <button id="leaderboard-refresh" type="button">重新整理</button>
+                <button id="leaderboard-close" type="button">關閉</button>
+            </div>
+        </section>
     </div>
-  </div>
-</div>
 
-<script src="menu.js"></script>
-<script>
-(function(){
-  var ready = window.raingodFirebaseReady || Promise.resolve();
-  var authReady = window.raingodAuthReady || Promise.resolve(null);
+    <div id="opponent-hud">⚔️ 對手：<span id="opponent-name">等待配對…</span><br>對手擊殺：<span id="opponent-score">0</span> / 5</div>
+    <div id="ui-container">
+        <div class="ui-badge">💀 擊殺: <span id="score">0</span> / <span id="target-count">5</span></div>
+        <div class="ui-badge" id="timer">⏱️ 時間: 0.00s</div>
+    </div>
 
-  var fallbackAvatar = 'https://raingod0101.github.io/catdragon.png';
-  var IMG_TTL_MS = 24 * 60 * 60 * 1000;
-  var DAILY_IMAGE_LIMIT = 5;
-  var ADMIN_USERNAME = 'raingod';
-  var IMG_MAX_BYTES = 280 * 1024;
+    <div id="radar-container">
+        <canvas id="radar-canvas" width="120" height="120"></canvas>
+    </div>
 
-  // ===== DOM =====
-  var loginRequired = document.getElementById('login-required');
-  var appArea = document.getElementById('app-area');
-  var avatarImg = document.getElementById('profile-avatar');
-  var avatarEditBtn = document.getElementById('avatar-edit-btn');
-  var avatarFileInput = document.getElementById('avatar-file-input');
-  var nameForm = document.getElementById('name-form');
-  var displayNameInput = document.getElementById('display-name');
-  var passwordForm = document.getElementById('password-form');
-  var signOutButton = document.getElementById('sign-out');
-  var friendSearchInput = document.getElementById('friend-search-input');
-  var friendSearchBtn = document.getElementById('friend-search-btn');
-  var searchResults = document.getElementById('search-results');
-  var requestList = document.getElementById('request-list');
-  var friendList = document.getElementById('friend-list');
-  var chatSidebarFriends = document.getElementById('chat-sidebar-friends');
-  var chatSidebarGroups = document.getElementById('chat-sidebar-groups');
-  var chatMobileSelect = document.getElementById('chat-mobile-select');
-  var chatTitle = document.getElementById('chat-title');
-  var chatSubtitle = document.getElementById('chat-subtitle');
-  var chatBox = document.getElementById('chat-box');
-  var chatEmpty = document.getElementById('chat-empty');
-  var msgInput = document.getElementById('msg-input');
-  var chatSendBtn = document.getElementById('chat-send-btn');
-  var chatClearFriend = document.getElementById('chat-clear-friend');
-  var chatMembersBtn = document.getElementById('chat-members-btn');
-  var chatDeleteGroupBtn = document.getElementById('chat-delete-group');
-  var chatEditGroupBtn = document.getElementById('chat-edit-group-btn');
-  var chatAliasBtn = document.getElementById('chat-alias-btn');
-  var imgUploadBtn = document.getElementById('img-upload-btn');
-  var imgFileInput = document.getElementById('img-file-input');
-  var imgQuotaHint = document.getElementById('img-quota-hint');
-  var uploadStatus = document.getElementById('upload-status');
-  var tabBadgeRequests = document.getElementById('tab-badge-requests');
-  var tabBadgeUnread = document.getElementById('tab-badge-unread');
-  var groupCreateForm = document.getElementById('group-create-form');
-  var groupNameInput = document.getElementById('group-name');
-  var groupAvatarInput = document.getElementById('group-avatar-input');
-  var groupMemberPicker = document.getElementById('group-member-picker');
-  var groupListEl = document.getElementById('group-list');
-  var groupLimitHint = document.getElementById('group-limit-hint');
-  var groupCreateBtn = document.getElementById('group-create-btn');
+    <div id="tracker-info">📍 搜尋敵人中...</div>
+    <div id="reconnect-hint">🖱️ 點擊畫面重新控制視角</div>
+    <div id="crosshair"></div>
+    <div class="hit-marker" id="hit-marker">✕</div>
+    <div id="kill-feed"></div>
+    <div id="damage-vignette"></div>
+    
+    <div id="health-bar">
+        <div id="health-fill"></div>
+        <div id="health-text">100 / 100</div>
+    </div>
 
-  // ===== 狀態 =====
-  var currentUser=null,currentUid='',currentUsername='',currentAvatar=fallbackAvatar;
-  var isAdmin=false;
-  var chatListeners=[];
-  var friendUnreadListeners=[];
-  var activeChat={type:'',id:''};
-  var friendsCache={};
-  var groupsCache={};
-  var unreadCache={};
-  var requestsCount=0;
-  var chatInitialized=false;
-  var friendAvatarRefs={};
-  var hasOwnedGroup=false;
-  var ownedGroupId='';
+    <div id="joy-base"><div id="joy-stick"></div></div>
+    <div id="jump-btn">JUMP</div>
+    <div id="fire-btn">FIRE</div>
+    <div id="scope-btn">SCOPE</div>
 
-  // ===== 工具 =====
-  function db(){ return window.firebase.database(); }
-  function setStatus(id,msg,type){
-    var el=document.getElementById(id); if(!el) return;
-    el.textContent=msg; el.classList.remove('error','ok'); if(type) el.classList.add(type);
-  }
-  function setUploadStatus(msg,isError){
-    if(!msg){ uploadStatus.classList.remove('show','error'); uploadStatus.textContent=''; return; }
-    uploadStatus.textContent=msg;
-    uploadStatus.classList.add('show');
-    uploadStatus.classList.toggle('error',!!isError);
-  }
-  function setFormDisabled(form,d){
-    var els=form.querySelectorAll('button,input');
-    for(var i=0;i<els.length;i++) els[i].disabled=d;
-  }
-  function errorMessage(err){
-    if(!err) return '操作失敗，請稍後再試。';
-    if(err.code==='auth/wrong-password'||err.code==='auth/invalid-credential')
-      return '目前密碼不正確，請確認後再試。';
-    if(err.code==='auth/requires-recent-login') return '登入時間過久，請重新登入後再變更密碼。';
-    if(err.code==='PERMISSION_DENIED') return '資料庫權限不足，請確認 Firebase rules 設定。';
-    return (err.code?('['+err.code+'] '):'')+(err.message||'操作失敗，請稍後再試。');
-  }
-  function escapeHtml(s){
-    return String(s==null?'':s).replace(/[&<>"']/g,function(c){
-      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
-    });
-  }
-  function chatIdFor(a,b){ return [a,b].sort().join('__'); }
-  function formatTime(ts){
-    if(!ts) return '';
-    var d=new Date(ts),now=new Date();
-    var t=('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
-    if(d.toDateString()===now.toDateString()) return '今天 '+t;
-    var y=new Date(now); y.setDate(now.getDate()-1);
-    if(d.toDateString()===y.toDateString()) return '昨天 '+t;
-    return (d.getMonth()+1)+'/'+d.getDate()+' '+t;
-  }
-  function friendAvatarOf(uid){
-    var f=friendsCache[uid]; return (f&&f.avatar)||fallbackAvatar;
-  }
-  function pushId(){ return db().ref().push().key; }
+    <div id="weapon-panel">
+        <div style="color:#06b6d4; font-weight:bold; text-align:center; margin-bottom:4px; font-size:12px;">武器庫</div>
+        <div id="weapon-list"></div>
+    </div>
 
-  function quotaDateKey(){
-    var d=new Date();
-    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-  }
-  function dateKeyFromTs(ts){
-    var d=new Date(ts);
-    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-  }
+    <script type="importmap">
+        { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+    </script>
 
-  function compressImage(file,maxDim,quality){
-    return new Promise(function(resolve,reject){
-      var reader=new FileReader();
-      reader.onerror=function(){ reject(new Error('讀取檔案失敗')); };
-      reader.onload=function(){
-        var img=new Image();
-        img.onerror=function(){ reject(new Error('圖片解碼失敗')); };
-        img.onload=function(){
-          var w=img.width,h=img.height;
-          var scale=Math.min(1,maxDim/Math.max(w,h));
-          var cw=Math.max(1,Math.round(w*scale)),ch=Math.max(1,Math.round(h*scale));
-          var canvas=document.createElement('canvas');
-          canvas.width=cw; canvas.height=ch;
-          var ctx=canvas.getContext('2d');
-          ctx.fillStyle='#fff'; ctx.fillRect(0,0,cw,ch);
-          ctx.drawImage(img,0,0,cw,ch);
-          try{ resolve(canvas.toDataURL('image/jpeg',quality)); }
-          catch(e){ reject(e); }
-        };
-        img.src=reader.result;
-      };
-      reader.readAsDataURL(file);
-    });
-  }
+    <script type="module">
+        import * as THREE from 'three';
 
-  function getImageQuotaUsed(){
-    return db().ref('users/'+currentUsername+'/imageQuota/'+quotaDateKey())
-      .once('value').then(function(s){ return s.val()||0; });
-  }
-  function consumeImageQuota(){
-    var ref=db().ref('users/'+currentUsername+'/imageQuota/'+quotaDateKey());
-    return ref.once('value').then(function(snap){
-      var cur=snap.val()||0;
-      if(cur>=DAILY_IMAGE_LIMIT) throw new Error('DAILY_LIMIT');
-      return ref.set(cur+1);
-    });
-  }
-  function refundImageQuota(){
-    var ref=db().ref('users/'+currentUsername+'/imageQuota/'+quotaDateKey());
-    return ref.once('value').then(function(snap){
-      var cur=snap.val()||0;
-      if(cur>0) return ref.set(cur-1);
-    }).catch(function(e){ console.warn('[退款] 失敗',e); });
-  }
-  function refundImageQuotaForDate(dateKey){
-    if(!currentUsername||!dateKey) return Promise.resolve();
-    var ref=db().ref('users/'+currentUsername+'/imageQuota/'+dateKey);
-    return ref.once('value').then(function(snap){
-      var cur=snap.val()||0;
-      if(cur>0) return ref.set(cur-1);
-    }).catch(function(e){ console.warn('[退款] 失敗',e); });
-  }
-  function updateQuotaHint(){
-    if(!currentUsername||!activeChat.type){ imgQuotaHint.textContent=''; return; }
-    getImageQuotaUsed().then(function(used){
-      var left=Math.max(0,DAILY_IMAGE_LIMIT-used);
-      imgQuotaHint.textContent='今日圖 '+left+'/'+DAILY_IMAGE_LIMIT;
-      imgQuotaHint.style.color=left===0?'var(--danger)':'var(--text-gray)';
-    }).catch(function(){});
-  }
+        // ========== 武器定義 ==========
+        const WEAPONS = [
+            { id: 'pistol', name: '手槍', damage: 25, fireRate: 350, ammo: 12, maxAmmo: 12, reloadTime: 1200, range: 80, spread: 0.01, color: 0x888888, auto: false },
+            { id: 'rifle', name: '步槍', damage: 18, fireRate: 120, ammo: 30, maxAmmo: 30, reloadTime: 1800, range: 120, spread: 0.03, color: 0x4a7c59, auto: true },
+            { id: 'shotgun', name: '霰彈槍', damage: 12, fireRate: 700, ammo: 6, maxAmmo: 6, reloadTime: 2200, range: 40, spread: 0.12, color: 0x8b4513, auto: false, pellets: 6 },
+            { id: 'sniper', name: '狙擊槍', damage: 80, fireRate: 1200, ammo: 5, maxAmmo: 5, reloadTime: 2500, range: 300, spread: 0.001, color: 0x2c3e50, auto: false, scope: true },
+            { id: 'smg', name: '衝鋒槍', damage: 12, fireRate: 80, ammo: 40, maxAmmo: 40, reloadTime: 1500, range: 70, spread: 0.05, color: 0x9b59b6, auto: true },
+            { id: 'lmg', name: '機槍', damage: 15, fireRate: 100, ammo: 60, maxAmmo: 60, reloadTime: 3500, range: 100, spread: 0.06, color: 0x7f8c8d, auto: true },
+            { id: 'rocket', name: '火箭筒', damage: 120, fireRate: 2000, ammo: 2, maxAmmo: 2, reloadTime: 4000, range: 60, spread: 0.02, color: 0xe74c3c, auto: false, explosive: true },
+            { id: 'railgun', name: '電磁炮', damage: 150, fireRate: 1500, ammo: 3, maxAmmo: 3, reloadTime: 3000, range: 200, spread: 0.0, color: 0x00f3ff, auto: false, pierce: true }
+        ];
 
-  // ===== 分頁 =====
-  var tabBtns=document.querySelectorAll('.tab-btn');
-  for(var i=0;i<tabBtns.length;i++){
-    (function(btn){
-      btn.addEventListener('click',function(){
-        var all=document.querySelectorAll('.tab-btn');
-        for(var j=0;j<all.length;j++) all[j].classList.remove('active');
-        var pages=document.querySelectorAll('.page');
-        for(var k=0;k<pages.length;k++) pages[k].classList.remove('active');
-        btn.classList.add('active');
-        var pg=document.getElementById('page-'+btn.dataset.page);
-        if(pg) pg.classList.add('active');
-        if(btn.dataset.page==='chat') chatBox.scrollTop=chatBox.scrollHeight;
-      });
-    })(tabBtns[i]);
-  }
-  function switchTab(name){
-    var all=document.querySelectorAll('.tab-btn');
-    for(var i=0;i<all.length;i++) all[i].classList.toggle('active',all[i].dataset.page===name);
-    var pages=document.querySelectorAll('.page');
-    for(var j=0;j<pages.length;j++) pages[j].classList.toggle('active',pages[j].id==='page-'+name);
-  }
+        const DEFAULT_PROFILE = { bestKills: 0, completedRuns: 0 };
+        const LEADERBOARD_URL = 'https://game-24b43-default-rtdb.firebaseio.com/space_runner_leaderboard';
+        const DUEL_ROOT = 'https://game-24b43-default-rtdb.firebaseio.com/space_runner_duel';
 
-  function fetchUserProfile(username,cb){
-    db().ref('users/'+username).once('value',function(s){
-      cb(s.exists()?s.val():null);
-    },function(err){ console.warn(err); cb(null); });
-  }
+        let gameMode = 'solo';
+        let duelRoomId = null, duelUid = null, duelName = '玩家', opponentUid = null;
+        let duelSeed = 1, opponentScore = 0, opponentMesh = null, opponentLabel = null;
+        let duelPollTimer = null, duelQueueId = null, lastDuelPublish = 0;
+        let mapSeed = 1;
+        let scene, camera, renderer, player;
+        let score = 0, prevTime = performance.now();
+        let moveInput = { x: 0, y: 0 }, velocityY = 0;
+        let jumpCount = 0, theta = 0, phi = Math.PI / 2.5;
+        let gameRunning = false;
+        let gameProfile = { ...DEFAULT_PROFILE };
 
-  // ===== 初始化 =====
-  function initProfile(user){
-    currentUser=user;
-    currentUid=user.uid;
-    currentUsername=user.email?user.email.split('@')[0]:'';
-    isAdmin = currentUsername === ADMIN_USERNAME;
-    loginRequired.hidden=true;
-    appArea.hidden=false;
-    avatarImg.src=user.photoURL||fallbackAvatar;
-    displayNameInput.value=user.displayName||currentUsername;
+        const MOVE_SPEED = 22;
+        const JUMP_POWER = 17;
+        const GRAVITY = 42;
+        const MAX_FALL_SPEED = 70;
+        let elapsedTime = 0;
+        const KILL_TARGET = 5;
 
-    fetchUserProfile(currentUsername,function(p){
-      if(p&&p.profile){
-        if(p.profile.avatar){ avatarImg.src=p.profile.avatar; currentAvatar=p.profile.avatar; }
-        if(p.profile.displayName) displayNameInput.value=p.profile.displayName;
-      }
-    });
+        // 玩家狀態
+        let playerHealth = 100;
+        let isDead = false;
+        let respawnTimer = 0;
+        let lastFireTime = 0;
+        let isReloading = false;
+        let reloadTimer = 0;
+        let currentWeaponIndex = 0;
+        let currentAmmo = WEAPONS[0].ammo;
+        let muzzleFlash = null;
 
-    db().ref('users/'+currentUsername+'/profile/avatar').on('value',function(s){
-      var url=s.val(); currentAvatar=url||fallbackAvatar;
-      avatarImg.src=currentAvatar; updateMyMessageAvatars();
-    });
+        // 第一人稱槍械模型
+        let weaponModels = [];
+        let currentWeaponModel = null;
+        let scoped = false;
+        const DEFAULT_FOV = 75;
 
-    listenFriendRequests();
-    listenFriends();
-    listenGroups();
+        // 鏡頭震動
+        let shakeIntensity = 0;
+        let shakeDecay = 0.85;
 
-    if(!chatInitialized){
-      chatInitialized=true;
-      switchTab('chat');
-      chatBox.scrollTop=chatBox.scrollHeight;
-    }
-  }
+        // 敵人與子彈
+        let enemies = [];
+        let enemyBullets = [];
+        let playerBullets = [];
+        let particles = [];
+        let casings = [];
 
-  // ===== 頭像裁剪上傳 =====
-  var cropModal   = document.getElementById('avatar-crop-modal');
-  var cropStage   = document.getElementById('crop-stage');
-  var cropImg     = document.getElementById('crop-img');
-  var cropZoom    = document.getElementById('crop-zoom');
-  var cropCancel  = document.getElementById('crop-cancel');
-  var cropConfirm = document.getElementById('crop-confirm');
+        const platforms = [];
+        const keys = { w: false, a: false, s: false, d: false, r: false };
 
-  var cropState = {
-    img: null, baseScale: 1, scale: 1, x: 0, y: 0, stageSize: 0,
-    dragging: false, startX: 0, startY: 0, originX: 0, originY: 0
-  };
+        const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
 
-  function openCropModal(file){
-    var url = URL.createObjectURL(file);
-    var img = new Image();
-    img.onload = function(){
-      var proceed = function(sourceImg, w, h){
-        cropModal.classList.remove('hidden');
-        setTimeout(function() {
-          cropState.img = sourceImg;
-          cropState.stageSize = cropStage.clientWidth;
-          if (cropState.stageSize === 0) cropState.stageSize = 300;
-          cropState.baseScale = Math.max(cropState.stageSize / w, cropState.stageSize / h);
-          cropState.scale = 1;
-          cropState.x = (cropState.stageSize - w * cropState.baseScale) / 2;
-          cropState.y = (cropState.stageSize - h * cropState.baseScale) / 2;
-          cropImg.src = sourceImg.src;
-          cropZoom.value = 1;
-          applyCropTransform();
-          URL.revokeObjectURL(url);
-        }, 50);
-      };
-      if(window.createImageBitmap){
-        fetch(url).then(function(r){ return r.blob(); })
-          .then(function(blob){ return createImageBitmap(blob, { imageOrientation: 'from-image' }); })
-          .then(function(bmp){
-            var c = document.createElement('canvas');
-            c.width = bmp.width; c.height = bmp.height;
-            c.getContext('2d').drawImage(bmp, 0, 0);
-            var fixed = new Image();
-            fixed.onload = function(){ proceed(fixed, bmp.width, bmp.height); };
-            fixed.src = c.toDataURL('image/jpeg', 0.95);
-          })
-          .catch(function(){ proceed(img, img.naturalWidth, img.naturalHeight); });
-      }else{
-        proceed(img, img.naturalWidth, img.naturalHeight);
-      }
-    };
-    img.onerror = function(){
-      URL.revokeObjectURL(url);
-      setStatus('avatar-status','圖片解碼失敗。','error');
-    };
-    img.src = url;
-  }
+        const radarCanvas = document.getElementById('radar-canvas');
+        const radarCtx = radarCanvas.getContext('2d');
+        const hintEl = document.getElementById('reconnect-hint');
+        const hitMarkerEl = document.getElementById('hit-marker');
+        const killFeedEl = document.getElementById('kill-feed');
+        const damageVignette = document.getElementById('damage-vignette');
 
-  function applyCropTransform(){
-    if(!cropState.img) return;
-    var s = cropState.baseScale * cropState.scale;
-    var displayW = cropState.img.naturalWidth * s;
-    var displayH = cropState.img.naturalHeight * s;
-    cropImg.style.width  = displayW + 'px';
-    cropImg.style.height = displayH + 'px';
-    cropImg.style.left   = cropState.x + 'px';
-    cropImg.style.top    = cropState.y + 'px';
-    cropImg.style.transform = 'none';
-  }
+        // ========== 個人資料 ==========
+        function normalizeProfile(value) {
+            if (!value || typeof value !== 'object' || Array.isArray(value)) return { ...DEFAULT_PROFILE };
+            return {
+                bestKills: Number.isFinite(Number(value.bestKills)) ? Number(value.bestKills) : 0,
+                completedRuns: Number.isFinite(Number(value.completedRuns)) ? Math.floor(Number(value.completedRuns)) : 0
+            };
+        }
 
-  function clampCrop(){
-    if(!cropState.img) return;
-    var s = cropState.baseScale * cropState.scale;
-    var iw = cropState.img.naturalWidth  * s;
-    var ih = cropState.img.naturalHeight * s;
-    var st = cropState.stageSize;
-    if(iw <= st) cropState.x = (st - iw) / 2;
-    else cropState.x = Math.min(0, Math.max(st - iw, cropState.x));
-    if(ih <= st) cropState.y = (st - ih) / 2;
-    else cropState.y = Math.min(0, Math.max(st - ih, cropState.y));
-  }
+        function renderProfile() {
+            document.getElementById('record-info').textContent = `個人最佳：最多擊殺 ${gameProfile.bestKills} · 完成 ${gameProfile.completedRuns} 場`;
+        }
 
-  function onCropPointerDown(e){
-    if(!cropState.img) return;
-    cropState.dragging = true;
-    var p = e.touches ? e.touches[0] : e;
-    cropState.startX = p.clientX; cropState.startY = p.clientY;
-    cropState.originX = cropState.x; cropState.originY = cropState.y;
-    e.preventDefault();
-  }
-  function onCropPointerMove(e){
-    if(!cropState.dragging) return;
-    var p = e.touches ? e.touches[0] : e;
-    cropState.x = cropState.originX + (p.clientX - cropState.startX);
-    cropState.y = cropState.originY + (p.clientY - cropState.startY);
-    clampCrop();
-    applyCropTransform();
-    e.preventDefault();
-  }
-  function onCropPointerUp(){ cropState.dragging = false; }
+        function setSaveStatus(message, isError = false) {
+            const status = document.getElementById('save-status');
+            status.textContent = message;
+            status.style.color = isError ? '#fca5a5' : '#b9a1d8';
+        }
 
-  cropStage.addEventListener('mousedown', onCropPointerDown);
-  cropStage.addEventListener('touchstart', onCropPointerDown, { passive:false });
-  window.addEventListener('mousemove', onCropPointerMove);
-  window.addEventListener('touchmove', onCropPointerMove, { passive:false });
-  window.addEventListener('mouseup', onCropPointerUp);
-  window.addEventListener('touchend', onCropPointerUp);
+        const profileReady = window.raingodInitGame('space-runner', DEFAULT_PROFILE, data => {
+            gameProfile = normalizeProfile(data);
+            renderProfile();
+        });
 
-  cropZoom.addEventListener('input', function(){
-    if(!cropState.img) return;
-    cropState.scale = parseFloat(cropZoom.value);
-    clampCrop();
-    applyCropTransform();
-  });
-
-  cropCancel.addEventListener('click', function(){ cropModal.classList.add('hidden'); });
-
-  cropConfirm.addEventListener('click', function(){
-    if(!cropState.img) return;
-    var size = 320;
-    var canvas = document.createElement('canvas');
-    canvas.width = size; canvas.height = size;
-    var ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#fff'; ctx.fillRect(0,0,size,size);
-    var st = cropState.stageSize;
-    var s = cropState.baseScale * cropState.scale;
-    var sx = (-cropState.x) / s;
-    var sy = (-cropState.y) / s;
-    var sw = st / s;
-    var sh = st / s;
-    sx = Math.max(0, sx); sy = Math.max(0, sy);
-    if (sx + sw > cropState.img.naturalWidth) sw = cropState.img.naturalWidth - sx;
-    if (sy + sh > cropState.img.naturalHeight) sh = cropState.img.naturalHeight - sy;
-    ctx.drawImage(cropState.img, sx, sy, sw, sh, 0, 0, size, size);
-    var dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-    setStatus('avatar-status','正在上傳頭像…');
-    db().ref('users/'+currentUsername+'/profile/avatar').set(dataUrl, function(err){
-      if(err){
-        setStatus('avatar-status','頭像儲存失敗：'+errorMessage(err),'error');
-        return;
-      }
-      avatarImg.src = dataUrl;
-      currentAvatar = dataUrl;
-      setStatus('avatar-status','頭像已更新並儲存。','ok');
-      refreshFriendsUI();
-      updateMyMessageAvatars();
-      cropModal.classList.add('hidden');
-    });
-  });
-
-  avatarEditBtn.addEventListener('click', function(){ avatarFileInput.click(); });
-
-  avatarFileInput.addEventListener('change', function(){
-    var file = avatarFileInput.files && avatarFileInput.files[0];
-    if(!file) return;
-    if(file.type.indexOf('image/') !== 0){
-      setStatus('avatar-status','請選擇圖片檔案。','error');
-      avatarFileInput.value = '';
-      return;
-    }
-    if(file.size > 10 * 1024 * 1024){
-      setStatus('avatar-status','圖片需小於 10MB。','error');
-      avatarFileInput.value = '';
-      return;
-    }
-    openCropModal(file);
-    avatarFileInput.value = '';
-  });
-
-  // ===== 名稱 / 密碼 / 登出 =====
-  nameForm.addEventListener('submit',function(e){
-    e.preventDefault();
-    var name=displayNameInput.value.trim();
-    if(!name){ setStatus('name-status','請輸入顯示名稱。','error'); return; }
-    setFormDisabled(nameForm,true); setStatus('name-status','正在儲存…');
-    currentUser.updateProfile({displayName:name}).then(function(){
-      return db().ref('users/'+currentUsername+'/profile/displayName').set(name);
-    }).then(function(){ return currentUser.reload(); })
-    .then(function(){ setStatus('name-status','顯示名稱已更新。','ok'); })
-    .catch(function(err){ setStatus('name-status',errorMessage(err),'error'); })
-    .finally(function(){ setFormDisabled(nameForm,false); });
-  });
-  passwordForm.addEventListener('submit',function(e){
-    e.preventDefault();
-    if(!currentUser||!currentUser.email) return;
-    var cur=document.getElementById('current-password').value;
-    var nw=document.getElementById('new-password').value;
-    var cf=document.getElementById('confirm-password').value;
-    if(nw.length<6){ setStatus('password-status','新密碼至少需要 6 個字元。','error'); return; }
-    if(nw!==cf){ setStatus('password-status','兩次輸入的新密碼不一致。','error'); return; }
-    setFormDisabled(passwordForm,true); setStatus('password-status','正在變更密碼…');
-    var cred=window.firebase.auth.EmailAuthProvider.credential(currentUser.email,cur);
-    currentUser.reauthenticateWithCredential(cred).then(function(){ return currentUser.updatePassword(nw); })
-    .then(function(){ passwordForm.reset(); setStatus('password-status','密碼已成功變更。','ok'); })
-    .catch(function(err){ setStatus('password-status',errorMessage(err),'error'); })
-    .finally(function(){ setFormDisabled(passwordForm,false); });
-  });
-  signOutButton.addEventListener('click',function(){
-    signOutButton.disabled=true;
-    window.firebase.auth().signOut().then(function(){
-      if(typeof window.raingodClearLocalAccountData==='function') window.raingodClearLocalAccountData();
-      window.location.href='index.html';
-    }).catch(function(err){ signOutButton.disabled=false; alert('登出失敗：'+err.message); });
-  });
-
-  // ===== 好友搜尋 =====
-  friendSearchBtn.addEventListener('click',function(){
-    var kw=friendSearchInput.value.trim().toLowerCase();
-    searchResults.innerHTML='';
-    if(!kw){ searchResults.innerHTML='<li class="profile-help">請輸入帳號關鍵字。</li>'; return; }
-    if(kw===currentUsername){ searchResults.innerHTML='<li class="profile-help">不能加入自己為好友。</li>'; return; }
-    fetchUserProfile(kw,function(p){
-      if(!p){ searchResults.innerHTML='<li class="profile-help">找不到此帳號。</li>'; return; }
-      db().ref('users/'+currentUsername+'/friends/'+p.uid).once('value').then(function(fs){
-        return db().ref('users/'+kw+'/friend_requests/'+currentUsername).once('value').then(function(rs){
-          var isFriend=fs.exists(),sent=rs.exists();
-          var name=(p.profile&&p.profile.displayName)||kw;
-          var avatar=(p.profile&&p.profile.avatar)||fallbackAvatar;
-          var li=document.createElement('li'); li.className='friend-item';
-          var action=isFriend?'<span class="profile-help">已是好友</span>':
-            sent?'<span class="profile-help">已送出申請</span>':
-            '<button class="mini-btn primary" data-uid="'+escapeHtml(p.uid)+'" data-name="'+escapeHtml(name)+'" data-username="'+escapeHtml(kw)+'">加好友</button>';
-          li.innerHTML='<img class="friend-avatar" src="'+escapeHtml(avatar)+'" alt="">'+
-            '<div class="friend-name">'+escapeHtml(name)+
-            ' <small style="color:var(--text-gray);font-weight:400;">@'+escapeHtml(kw)+'</small></div>'+
-            '<div class="friend-actions">'+action+'</div>';
-          searchResults.appendChild(li);
-          var btn=li.querySelector('button[data-uid]');
-          if(btn){
-            btn.addEventListener('click',function(){
-              btn.disabled=true; btn.textContent='送出中…';
-              sendFriendRequest(kw,p.uid,name).then(function(){ btn.textContent='已送出'; })
-              .catch(function(e){ btn.disabled=false; btn.textContent='加好友';
-                alert('送出好友申請失敗：'+errorMessage(e)); });
+        window.raingodFirebaseReady.then(() => {
+            window.raingodOnAuthStateChanged(user => {
+                const leaderboardButton = document.getElementById('leaderboard-button');
+                leaderboardButton.textContent = user ? '🏆 排行榜' : '🏆 登入後查看排行榜';
+                if (user) {
+                    setSaveStatus('已登入：戰績會儲存並同步至帳號。');
+                } else {
+                    setSaveStatus('戰績會儲存在此裝置；登入後可同步至帳號並參加排行榜。');
+                }
             });
-          }
         });
-      }).catch(function(e){
-        console.error(e); searchResults.innerHTML='<li class="profile-help">查詢好友狀態失敗。</li>';
-      });
-    });
-  });
-  function sendFriendRequest(toUsername,toUid,toName){
-    return db().ref('users/'+toUsername+'/friend_requests/'+currentUsername).set({
-      fromUid:currentUid,
-      fromName:currentUser.displayName||currentUsername,
-      fromUsername:currentUsername,
-      fromAvatar:currentAvatar||fallbackAvatar,
-      ts:window.firebase.database.ServerValue.TIMESTAMP
-    });
-  }
 
-  // ===== 好友申請 =====
-  function listenFriendRequests(){
-    db().ref('users/'+currentUsername+'/friend_requests').on('value',function(snap){
-      var val=snap.val()||{};
-      var entries=Object.keys(val).map(function(k){ return [k,val[k]]; });
-      requestList.innerHTML=''; requestsCount=entries.length; updateTabBadges();
-      if(!entries.length){
-        requestList.innerHTML='<li class="profile-help" id="request-empty">目前沒有待處理的好友申請。</li>';
-        return;
-      }
-      entries.forEach(function(pair){
-        var fromUsername=pair[0],req=pair[1];
-        var li=document.createElement('li'); li.className='request-item';
-        li.innerHTML='<img class="friend-avatar" src="'+escapeHtml(req.fromAvatar||fallbackAvatar)+'" alt="">'+
-          '<div class="friend-name">'+escapeHtml(req.fromName||fromUsername)+'</div>'+
-          '<div class="friend-actions">'+
-            '<button class="mini-btn success" data-accept="'+escapeHtml(fromUsername)+'" data-uid="'+escapeHtml(req.fromUid)+'" data-name="'+escapeHtml(req.fromName||fromUsername)+'" data-avatar="'+escapeHtml(req.fromAvatar||fallbackAvatar)+'">接受</button>'+
-            '<button class="mini-btn danger" data-reject="'+escapeHtml(fromUsername)+'">拒絕</button>'+
-          '</div>';
-        requestList.appendChild(li);
-      });
-      requestList.querySelectorAll('[data-accept]').forEach(function(btn){
-        btn.addEventListener('click',function(){
-          btn.disabled=true;
-          acceptFriendRequest(btn.dataset.accept,btn.dataset.uid,btn.dataset.name,btn.dataset.avatar)
-          .catch(function(e){ alert('接受好友申請失敗：'+errorMessage(e)); btn.disabled=false; });
-        });
-      });
-      requestList.querySelectorAll('[data-reject]').forEach(function(btn){
-        btn.addEventListener('click',function(){
-          btn.disabled=true;
-          rejectFriendRequest(btn.dataset.reject)
-          .catch(function(e){ alert('拒絕好友申請失敗：'+errorMessage(e)); btn.disabled=false; });
-        });
-      });
-    });
-  }
-  function acceptFriendRequest(fromUsername,fromUid,fromName,fromAvatar){
-    var myName=currentUser.displayName||currentUsername;
-    var myAvatar=currentAvatar||fallbackAvatar;
-    var updates={};
-    updates['users/'+currentUsername+'/friends/'+fromUid]={name:fromName,avatar:fromAvatar,username:fromUsername,since:window.firebase.database.ServerValue.TIMESTAMP};
-    updates['users/'+fromUsername+'/friends/'+currentUid]={name:myName,avatar:myAvatar,username:currentUsername,since:window.firebase.database.ServerValue.TIMESTAMP};
-    updates['users/'+currentUsername+'/friend_requests/'+fromUsername]=null;
-    return db().ref().update(updates);
-  }
-  function rejectFriendRequest(fromUsername){
-    return db().ref('users/'+currentUsername+'/friend_requests/'+fromUsername).remove();
-  }
-
-  // ===== 好友頭像監聽 =====
-  function stopFriendAvatarWatchers(){
-    Object.keys(friendAvatarRefs).forEach(function(uid){
-      var it=friendAvatarRefs[uid];
-      try{ it.ref.off('value',it.handler); }catch(e){}
-    });
-    friendAvatarRefs={};
-  }
-  function watchFriendAvatars(){
-    stopFriendAvatarWatchers();
-    Object.keys(friendsCache).forEach(function(uid){
-      var f=friendsCache[uid]; if(!f.username) return;
-      var ref=db().ref('users/'+f.username+'/profile/avatar');
-      var handler=function(snap){
-        var url=snap.val(); if(url) friendsCache[uid].avatar=url;
-        refreshFriendsUI(); updateMessageAvatars();
-      };
-      ref.on('value',handler);
-      friendAvatarRefs[uid]={ref:ref,handler:handler};
-    });
-  }
-
-  // ===== 好友列表 =====
-  function listenFriends(){
-    db().ref('users/'+currentUsername+'/friends').on('value',function(snap){
-      friendsCache=snap.val()||{};
-      refreshFriendsUI();
-      listenAllUnread();
-      watchFriendAvatars();
-    });
-  }
-
-  function refreshFriendsUI(){
-    friendList.innerHTML='';
-    var entries=Object.keys(friendsCache).map(function(k){ return [k,friendsCache[k]]; });
-    if(!entries.length){
-      friendList.innerHTML='<li class="profile-help" id="friend-empty">尚未加入任何好友。</li>';
-    }else{
-      entries.forEach(function(pair){
-        var uid=pair[0],f=pair[1];
-        var li=document.createElement('li');
-        li.className='friend-item'+(activeChat.type==='friend'&&uid===activeChat.id?' active':'');
-        li.innerHTML='<img class="friend-avatar" src="'+escapeHtml(f.avatar||fallbackAvatar)+'" alt="">'+
-          '<div class="friend-name">'+escapeHtml(f.name||f.username||'好友')+'</div>'+
-          '<span class="friend-unread" data-uid="'+escapeHtml(uid)+'"></span>'+
-          '<div class="friend-actions">'+
-            '<button class="mini-btn primary" data-chat-uid="'+escapeHtml(uid)+'" data-chat-name="'+escapeHtml(f.name||f.username||'好友')+'" data-chat-avatar="'+escapeHtml(f.avatar||fallbackAvatar)+'">私訊</button>'+
-          '</div>';
-        friendList.appendChild(li);
-      });
-      friendList.querySelectorAll('[data-chat-uid]').forEach(function(btn){
-        btn.addEventListener('click',function(){
-          openPrivateChat(btn.dataset.chatUid,btn.dataset.chatName,btn.dataset.chatAvatar);
-          switchTab('chat');
-        });
-      });
-    }
-
-    chatSidebarFriends.innerHTML='';
-    if(!entries.length){
-      chatSidebarFriends.innerHTML='<li class="profile-help" style="padding:12px;">尚無好友</li>';
-    }else{
-      entries.forEach(function(pair){
-        var uid=pair[0],f=pair[1];
-        var li=document.createElement('li');
-        li.className='friend-item'+(activeChat.type==='friend'&&uid===activeChat.id?' active':'');
-        li.innerHTML='<img class="friend-avatar" src="'+escapeHtml(f.avatar||fallbackAvatar)+'" alt="">'+
-          '<div class="friend-name">'+escapeHtml(f.name||f.username||'好友')+'</div>'+
-          '<span class="friend-unread" data-uid="'+escapeHtml(uid)+'"></span>';
-        li.addEventListener('click',(function(u,ff){ return function(){
-          openPrivateChat(u,ff.name||ff.username||'好友',ff.avatar||fallbackAvatar);
-        };})(uid,f));
-        chatSidebarFriends.appendChild(li);
-      });
-    }
-
-    chatSidebarGroups.innerHTML='';
-    var gEntries=Object.keys(groupsCache).map(function(k){ return [k,groupsCache[k]]; });
-    if(!gEntries.length){
-      chatSidebarGroups.innerHTML='<li class="profile-help" style="padding:12px;">尚無群組</li>';
-    }else{
-      gEntries.forEach(function(pair){
-        var gid=pair[0],g=pair[1];
-        var li=document.createElement('li');
-        li.className='friend-item'+(activeChat.type==='group'&&gid===activeChat.id?' active':'');
-        li.innerHTML='<img class="friend-avatar" src="'+escapeHtml(g.avatar||fallbackAvatar)+'" alt="" style="border-radius:12px;">'+
-          '<div class="friend-name">'+escapeHtml(g.name||'群組')+'</div>'+
-          '<span class="friend-unread" data-gid="'+escapeHtml(gid)+'"></span>';
-        li.addEventListener('click',function(){ openGroupChat(gid); });
-        chatSidebarGroups.appendChild(li);
-      });
-    }
-
-    refreshMobileSelect(entries,gEntries);
-    updateUnreadBadges();
-    renderGroupMemberPicker();
-    renderGroupList();
-    updateGroupLimitUI();
-  }
-
-  function refreshMobileSelect(entries,gEntries){
-    var val=activeChat.type?activeChat.type+':'+activeChat.id:'';
-    chatMobileSelect.innerHTML='<option value="">選擇好友或群組開始聊天…</option>';
-    entries.forEach(function(pair){
-      var uid=pair[0],f=pair[1];
-      var opt=document.createElement('option');
-      opt.value='friend:'+uid;
-      opt.textContent='👤 '+(f.name||f.username||'好友')+(unreadCache['f:'+uid]?' ('+unreadCache['f:'+uid]+')':'');
-      if(val==='friend:'+uid) opt.selected=true;
-      chatMobileSelect.appendChild(opt);
-    });
-    gEntries.forEach(function(pair){
-      var gid=pair[0],g=pair[1];
-      var opt=document.createElement('option');
-      opt.value='group:'+gid;
-      opt.textContent='👥 '+(g.name||'群組')+(unreadCache['g:'+gid]?' ('+unreadCache['g:'+gid]+')':'');
-      if(val==='group:'+gid) opt.selected=true;
-      chatMobileSelect.appendChild(opt);
-    });
-  }
-  chatMobileSelect.addEventListener('change',function(){
-    var v=chatMobileSelect.value; if(!v) return;
-    var parts=v.split(':');
-    if(parts[0]==='friend'){
-      var f=friendsCache[parts[1]]; if(!f) return;
-      openPrivateChat(parts[1],f.name||f.username||'好友',f.avatar||fallbackAvatar);
-    }else{
-      openGroupChat(parts[1]);
-    }
-  });
-
-  // ===== 未讀 =====
-  function listenAllUnread(){
-    for(var i=0;i<friendUnreadListeners.length;i++) friendUnreadListeners[i]();
-    friendUnreadListeners=[]; unreadCache={};
-
-    Object.keys(friendsCache).forEach(function(fuid){
-      var cid=chatIdFor(currentUid,fuid);
-      var msgsRef=db().ref('private_chats/'+cid+'/msgs');
-      var readRef=db().ref('private_chats/'+cid+'/read/'+currentUid);
-      var handler=function(snap){
-        var msgs=snap.val()||{};
-        readRef.once('value').then(function(rs){
-          var lastRead=rs.val()||0,unread=0;
-          Object.keys(msgs).forEach(function(id){
-            var m=msgs[id];
-            if(m.from!==currentUid&&(m.ts||0)>lastRead) unread++;
-          });
-          unreadCache['f:'+fuid]=unread;
-          updateUnreadBadges();
-          refreshMobileSelect(Object.keys(friendsCache).map(function(k){return [k,friendsCache[k]];}),
-                              Object.keys(groupsCache).map(function(k){return [k,groupsCache[k]];}));
-        }).catch(function(){});
-      };
-      msgsRef.on('value',handler);
-      friendUnreadListeners.push((function(ref){ return function(){ ref.off('value',handler); };})(msgsRef));
-    });
-
-    Object.keys(groupsCache).forEach(function(gid){
-      var msgsRef=db().ref('groups/'+gid+'/msgs');
-      var readRef=db().ref('groups/'+gid+'/read/'+currentUid);
-      var handler=function(snap){
-        var msgs=snap.val()||{};
-        readRef.once('value').then(function(rs){
-          var rv=rs.val()||{};
-          var lastRead=(typeof rv==='number')?rv:(rv.ts||0);
-          var unread=0;
-          Object.keys(msgs).forEach(function(id){
-            var m=msgs[id];
-            if(m.from!==currentUid&&(m.ts||0)>lastRead) unread++;
-          });
-          unreadCache['g:'+gid]=unread;
-          updateUnreadBadges();
-          refreshMobileSelect(Object.keys(friendsCache).map(function(k){return [k,friendsCache[k]];}),
-                              Object.keys(groupsCache).map(function(k){return [k,groupsCache[k]];}));
-        }).catch(function(){});
-      };
-      msgsRef.on('value',handler);
-      friendUnreadListeners.push((function(ref){ return function(){ ref.off('value',handler); };})(msgsRef));
-    });
-  }
-  function updateUnreadBadges(){
-    var els=document.querySelectorAll('.friend-unread');
-    for(var i=0;i<els.length;i++){
-      var key=els[i].dataset.uid?'f:'+els[i].dataset.uid:('g:'+els[i].dataset.gid);
-      var c=unreadCache[key]||0;
-      els[i].textContent=c>99?'99+':String(c);
-      els[i].classList.toggle('show',c>0);
-    }
-    var total=0; Object.keys(unreadCache).forEach(function(k){ total+=unreadCache[k]||0; });
-    tabBadgeUnread.textContent=total>99?'99+':String(total);
-    tabBadgeUnread.classList.toggle('show',total>0);
-    updateTabBadges();
-  }
-  function updateTabBadges(){
-    tabBadgeRequests.textContent=requestsCount>99?'99+':String(requestsCount);
-    tabBadgeRequests.classList.toggle('show',requestsCount>0);
-  }
-
-  // ===== 群組 =====
-  function listenGroups(){
-    db().ref('users/'+currentUsername+'/groups').on('value',function(snap){
-      var raw=snap.val()||{};
-      var gids=Object.keys(raw);
-      if(!gids.length){
-        groupsCache={};
-        recalcOwnedGroup();
-        refreshFriendsUI();
-        listenAllUnread();
-        return;
-      }
-      var checks=gids.map(function(gid){
-        return db().ref('groups/'+gid).once('value').then(function(s){
-          return {gid:gid, valid:s.exists()};
-        }).catch(function(){
-          return {gid:gid, valid:false};
-        });
-      });
-      Promise.all(checks).then(function(results){
-        var valid={}, orphan=[];
-        results.forEach(function(r){
-          if(r.valid) valid[r.gid]=raw[r.gid];
-          else orphan.push(r.gid);
-        });
-        groupsCache=valid;
-        recalcOwnedGroup();
-        refreshFriendsUI();
-        listenAllUnread();
-        orphan.forEach(function(gid){
-          console.warn('[groups] 清理孤兒索引:',gid);
-          db().ref('users/'+currentUsername+'/groups/'+gid).remove().catch(function(){});
-          if(ownedGroupId===gid){
-            db().ref('users/'+currentUsername+'/ownedGroup').remove().catch(function(){});
-            ownedGroupId='';
-            hasOwnedGroup=false;
-            updateGroupLimitUI();
-          }
-        });
-      });
-    });
-    db().ref('users/'+currentUsername+'/ownedGroup').on('value',function(snap){
-      ownedGroupId=snap.val()||'';
-      recalcOwnedGroup();
-      updateGroupLimitUI();
-    },function(err){
-      console.warn('ownedGroup 讀取失敗（可忽略）:',err&&err.message);
-    });
-  }
-  function recalcOwnedGroup(){
-    hasOwnedGroup = !!ownedGroupId || Object.keys(groupsCache).some(function(gid){
-      return groupsCache[gid] && groupsCache[gid].role==='owner';
-    });
-  }
-  function updateGroupLimitUI(){
-    if(hasOwnedGroup){
-      groupLimitHint.hidden=false;
-      groupCreateBtn.disabled=true;
-      groupCreateBtn.textContent='已建立過群組';
-    }else{
-      groupLimitHint.hidden=true;
-      groupCreateBtn.disabled=false;
-      groupCreateBtn.textContent='建立群組';
-    }
-  }
-
-  function renderGroupMemberPicker(){
-    var entries=Object.keys(friendsCache).map(function(k){ return [k,friendsCache[k]]; });
-    if(!entries.length){
-      groupMemberPicker.innerHTML='<p class="profile-help">尚無好友可加入。</p>';
-      return;
-    }
-    groupMemberPicker.innerHTML='';
-    entries.forEach(function(pair){
-      var uid=pair[0],f=pair[1];
-      var lab=document.createElement('label');
-      lab.className='group-check-item';
-      lab.innerHTML='<input type="checkbox" value="'+escapeHtml(uid)+'">'+
-        '<img class="friend-avatar" style="width:28px;height:28px;" src="'+escapeHtml(f.avatar||fallbackAvatar)+'" alt="">'+
-        '<span>'+escapeHtml(f.name||f.username||'好友')+'</span>';
-      groupMemberPicker.appendChild(lab);
-    });
-  }
-
-  function renderGroupList(){
-    groupListEl.innerHTML='';
-    var entries=Object.keys(groupsCache).map(function(k){ return [k,groupsCache[k]]; });
-    if(!entries.length){
-      groupListEl.innerHTML='<li class="profile-help" id="group-empty">尚未加入任何群組。</li>';
-      return;
-    }
-    entries.forEach(function(pair){
-      var gid=pair[0],g=pair[1];
-      var roleText=g.role==='owner'?'（建立者）':'';
-      var actions='<button class="mini-btn primary" data-open-group="'+escapeHtml(gid)+'">開啟</button>';
-      if(g.role==='owner'){
-        actions+='<button class="mini-btn danger" data-delete-group="'+escapeHtml(gid)+'">刪除</button>';
-      }
-      var li=document.createElement('li');
-      li.className='friend-item'+(activeChat.type==='group'&&gid===activeChat.id?' active':'');
-      li.innerHTML='<img class="friend-avatar" style="border-radius:12px;" src="'+escapeHtml(g.avatar||fallbackAvatar)+'" alt="">'+
-        '<div class="friend-name">'+escapeHtml(g.name||'群組')+
-        ' <small style="color:var(--text-gray);font-weight:400;">'+roleText+'</small></div>'+
-        '<div class="friend-actions">'+actions+'</div>';
-      groupListEl.appendChild(li);
-    });
-    groupListEl.querySelectorAll('[data-open-group]').forEach(function(btn){
-      btn.addEventListener('click',function(){
-        openGroupChat(btn.dataset.openGroup);
-        switchTab('chat');
-      });
-    });
-    groupListEl.querySelectorAll('[data-delete-group]').forEach(function(btn){
-      btn.addEventListener('click',function(){ deleteGroup(btn.dataset.deleteGroup); });
-    });
-  }
-
-  groupCreateForm.addEventListener('submit',function(e){
-    e.preventDefault();
-    if(hasOwnedGroup){ setStatus('group-status','一人只能建立一個群組。','error'); return; }
-    var name=groupNameInput.value.trim();
-    if(!name){ setStatus('group-status','請輸入群組名稱。','error'); return; }
-    var checks=groupMemberPicker.querySelectorAll('input[type="checkbox"]:checked');
-    var selected=Array.prototype.map.call(checks,function(c){ return c.value; });
-    if(selected.length<1){ setStatus('group-status','請至少選擇一位好友。','error'); return; }
-    setFormDisabled(groupCreateForm,true); setStatus('group-status','正在建立群組…');
-
-    var gid=pushId();
-    var doCreate=function(avatarUrl){
-      var members={}; members[currentUid]=true;
-      var memberUsernames={}; memberUsernames[currentUid]=currentUsername;
-      selected.forEach(function(u){
-        members[u]=true;
-        var uname=(friendsCache[u]&&friendsCache[u].username)||'';
-        if(uname) memberUsernames[u]=uname;
-      });
-      var memberCount=Object.keys(members).length;
-      var groupData={
-        name:name, avatar:avatarUrl||'', owner:currentUid,
-        createdAt:window.firebase.database.ServerValue.TIMESTAMP,
-        members:members, memberUsernames:memberUsernames, memberCount:memberCount
-      };
-      var updates={};
-      updates['groups/'+gid]=groupData;
-      updates['users/'+currentUsername+'/groups/'+gid]={name:name,avatar:avatarUrl||'',role:'owner',memberCount:memberCount};
-      updates['users/'+currentUsername+'/ownedGroup']=gid;
-      selected.forEach(function(u){
-        var uname=memberUsernames[u];
-        if(uname){
-          updates['users/'+uname+'/groups/'+gid]={name:name,avatar:avatarUrl||'',role:'member',memberCount:memberCount};
-        }
-      });
-      return db().ref().update(updates);
-    };
-
-    var file=groupAvatarInput.files&&groupAvatarInput.files[0];
-    if(file){
-      if(file.type.indexOf('image/')!==0){
-        setStatus('group-status','請選擇圖片檔案。','error');
-        setFormDisabled(groupCreateForm,false); return;
-      }
-      setStatus('group-status','正在壓縮群組頭像…');
-      compressImage(file,200,0.7).then(function(dataUrl){
-        return doCreate(dataUrl);
-      }).then(function(){
-        groupCreateForm.reset(); renderGroupMemberPicker();
-        setStatus('group-status','群組已建立。','ok');
-      }).catch(function(err){
-        setStatus('group-status','建立失敗：'+errorMessage(err),'error');
-      }).finally(function(){ setFormDisabled(groupCreateForm,false); updateGroupLimitUI(); });
-    }else{
-      doCreate('').then(function(){
-        groupCreateForm.reset(); renderGroupMemberPicker();
-        setStatus('group-status','群組已建立。','ok');
-      }).catch(function(err){
-        setStatus('group-status','建立失敗：'+errorMessage(err),'error');
-      }).finally(function(){ setFormDisabled(groupCreateForm,false); updateGroupLimitUI(); });
-    }
-  });
-
-  // ==== 刪除群組 ====
-  function deleteGroup(gid){
-    var g=groupsCache[gid];
-    if(!g||g.role!=='owner'){ alert('只有群組建立者可以刪除群組。'); return; }
-    if(!confirm('確定要刪除群組「'+(g.name||'')+'」嗎？\n所有成員將無法再看到此群組，此操作無法復原。')) return;
-
-    setStatus('group-status','正在刪除群組…');
-    console.log('[deleteGroup] 開始刪除',gid);
-
-    db().ref('groups/'+gid+'/memberUsernames').once('value').then(function(snap){
-      var map=snap.val()||{};
-      var tasks=[];
-      tasks.push(db().ref('groups/'+gid).remove().then(function(){
-        console.log('[deleteGroup] groups/'+gid+' 已刪除');
-      }).catch(function(e){
-        console.error('[deleteGroup] 主節點刪除失敗',e);
-        throw e;
-      }));
-      tasks.push(db().ref('users/'+currentUsername+'/groups/'+gid).remove().catch(function(e){
-        console.warn('[deleteGroup] 自己索引刪除失敗（不阻塞）',e);
-      }));
-      tasks.push(db().ref('users/'+currentUsername+'/ownedGroup').remove().catch(function(e){
-        console.warn('[deleteGroup] ownedGroup 刪除失敗（不阻塞）',e);
-      }));
-      Object.keys(map).forEach(function(uid){
-        var uname=map[uid];
-        if(uname && uname!==currentUsername){
-          tasks.push(db().ref('users/'+uname+'/groups/'+gid).remove().catch(function(e){
-            console.warn('[deleteGroup] 成員索引刪除失敗 '+uname+'（不阻塞）',e);
-          }));
-        }
-      });
-      return Promise.all(tasks);
-    }).then(function(){
-      delete groupsCache[gid];
-      if(ownedGroupId===gid) ownedGroupId='';
-      hasOwnedGroup = !!ownedGroupId || Object.keys(groupsCache).some(function(k){
-        return groupsCache[k] && groupsCache[k].role==='owner';
-      });
-      if(activeChat.type==='group'&&activeChat.id===gid) closeActiveChat();
-      refreshFriendsUI();
-      updateGroupLimitUI();
-      setStatus('group-status','群組已刪除。','ok');
-      console.log('[deleteGroup] 完成');
-    }).catch(function(e){
-      console.error('[deleteGroup] 失敗',e);
-      setStatus('group-status','刪除失敗：'+errorMessage(e),'error');
-      alert('刪除群組失敗：'+errorMessage(e)+'\n\n請至 Firebase 控制台確認 rules 是否允許寫入。');
-    });
-  }
-  chatDeleteGroupBtn.addEventListener('click',function(){
-    if(activeChat.type!=='group') return;
-    deleteGroup(activeChat.id);
-  });
-
-  // ==== 群主改群名 ====
-  chatEditGroupBtn.addEventListener('click',function(){
-    if(activeChat.type !== 'group') return;
-    var gid = activeChat.id;
-    var g = groupsCache[gid];
-    if(!g || g.role !== 'owner') return;
-
-    var newName = prompt('請輸入新的群組名稱：', g.name || '');
-    if(newName === null) return;
-    newName = newName.trim();
-    if(!newName || newName === g.name) return;
-
-    var updates = {};
-    updates['groups/'+gid+'/name'] = newName;
-
-    db().ref('groups/'+gid+'/memberUsernames').once('value').then(function(snap){
-      var map = snap.val() || {};
-      Object.keys(map).forEach(function(uid){
-        var uname = map[uid];
-        if(uname) updates['users/'+uname+'/groups/'+gid+'/name'] = newName;
-      });
-      return db().ref().update(updates);
-    }).then(function(){
-      alert('群組名稱已更新！');
-    }).catch(function(e){
-      alert('修改群名失敗：' + e.message);
-    });
-  });
-
-  // ==== 設定匿名 ====
-  chatAliasBtn.addEventListener('click', function(){
-    if(!activeChat.type) return;
-    var ref = activeChat.type==='friend'
-      ? db().ref('private_chats/'+chatIdFor(currentUid, activeChat.id)+'/aliases/'+currentUid)
-      : db().ref('groups/'+activeChat.id+'/aliases/'+currentUid);
-
-    ref.once('value').then(function(snap){
-      var cur = snap.val() || '';
-      var alias = prompt('請輸入你在這個聊天室的匿名（留空則恢復預設名稱）：', cur);
-      if(alias === null) return;
-      alias = alias.trim();
-      if(alias === '') {
-        ref.remove();
-      } else {
-        ref.set(alias);
-      }
-    });
-  });
-
-  // ===== 聊天核心 =====
-  function clearChatListeners(){
-    for(var i=0;i<chatListeners.length;i++) chatListeners[i]();
-    chatListeners=[];
-  }
-  function setChatEnabled(enabled){
-    msgInput.disabled=!enabled;
-    chatSendBtn.disabled=!enabled;
-    imgUploadBtn.disabled=!enabled;
-  }
-  function removeAllRows(){
-    var rows=chatBox.querySelectorAll('.msg-row');
-    for(var i=0;i<rows.length;i++) rows[i].remove();
-  }
-  function closeActiveChat(){
-    activeChat={type:'',id:''};
-    clearChatListeners();
-    chatTitle.textContent='聊天室';
-    chatSubtitle.textContent='請選擇一位好友或群組開始聊天。';
-    chatClearFriend.hidden=true; chatMembersBtn.hidden=true; chatDeleteGroupBtn.hidden=true;
-    chatEditGroupBtn.hidden=true; chatAliasBtn.hidden=true;
-    setChatEnabled(false); removeAllRows();
-    chatEmpty.style.display='block'; setUploadStatus('');
-    imgQuotaHint.textContent='';
-    chatMobileSelect.value='';
-    refreshFriendsUI();
-  }
-
-  function openPrivateChat(friendUid,friendName,friendAvatar){
-    activeChat={type:'friend',id:friendUid};
-    clearChatListeners();
-    chatTitle.textContent=friendName;
-    chatSubtitle.textContent='私訊對話';
-    chatClearFriend.hidden=false;
-    chatMembersBtn.hidden=true;
-    chatDeleteGroupBtn.hidden=true;
-    chatEditGroupBtn.hidden=true;
-    chatAliasBtn.hidden=false;
-    setChatEnabled(true);
-    chatEmpty.style.display='none';
-    removeAllRows();
-    setUploadStatus('');
-    updateQuotaHint();
-
-    var cid=chatIdFor(currentUid,friendUid);
-    var msgsRef=db().ref('private_chats/'+cid+'/msgs');
-    var recallsRef=db().ref('private_chats/'+cid+'/recalls');
-    var readRef=db().ref('private_chats/'+cid+'/read');
-    var aliasesRef=db().ref('private_chats/'+cid+'/aliases');
-
-    var state={msgs:{},recalls:{},read:{},aliases:{}};
-    var render=function(){ renderMessages('private',cid,state,friendUid,friendName,friendAvatar); };
-    var h1=function(s){ state.msgs=s.val()||{}; render(); };
-    var h2=function(s){ state.recalls=s.val()||{}; render(); };
-    var h3=function(s){ state.read=s.val()||{}; render(); };
-    var h4=function(s){ state.aliases=s.val()||{}; render(); };
-
-    msgsRef.on('value',h1); recallsRef.on('value',h2); readRef.on('value',h3); aliasesRef.on('value',h4);
-    chatListeners.push(function(){ msgsRef.off('value',h1); });
-    chatListeners.push(function(){ recallsRef.off('value',h2); });
-    chatListeners.push(function(){ readRef.off('value',h3); });
-    chatListeners.push(function(){ aliasesRef.off('value',h4); });
-
-    chatMobileSelect.value='friend:'+friendUid;
-    refreshFriendsUI();
-    markChatRead('private',cid);
-  }
-
-  function openGroupChat(gid){
-    var g=groupsCache[gid];
-    if(!g){ alert('群組不存在或你不在群組中。'); return; }
-
-    db().ref('groups/'+gid).once('value').then(function(groupSnap){
-      if(!groupSnap.exists()){
-        console.warn('[openGroupChat] 群組不存在，清理殘留索引:',gid);
-        db().ref('users/'+currentUsername+'/groups/'+gid).remove().catch(function(){});
-        if(ownedGroupId===gid){
-          db().ref('users/'+currentUsername+'/ownedGroup').remove().catch(function(){});
-        }
-        delete groupsCache[gid];
-        if(ownedGroupId===gid){ ownedGroupId=''; hasOwnedGroup=false; }
-        refreshFriendsUI();
-        alert('此群組已被刪除。');
-        closeActiveChat();
-        return;
-      }
-      return db().ref('groups/'+gid+'/members/'+currentUid).once('value').then(function(s){
-        if(!s.exists()){
-          alert('你不在這個群組裡，無法查看訊息。');
-          closeActiveChat();
-          return;
-        }
-        activeChat={type:'group',id:gid};
-        clearChatListeners();
-        chatTitle.textContent=g.name||'群組';
-        chatSubtitle.textContent=(g.memberCount||'?')+' 位成員';
-        chatClearFriend.hidden=false;
-        chatMembersBtn.hidden=false;
-        chatDeleteGroupBtn.hidden=(g.role!=='owner');
-        chatEditGroupBtn.hidden=(g.role!=='owner');
-        chatAliasBtn.hidden=false;
-        setChatEnabled(true);
-        chatEmpty.style.display='none';
-        removeAllRows();
-        setUploadStatus('');
-        updateQuotaHint();
-
-        var msgsRef=db().ref('groups/'+gid+'/msgs');
-        var recallsRef=db().ref('groups/'+gid+'/recalls');
-        var readRef=db().ref('groups/'+gid+'/read');
-        var membersRef=db().ref('groups/'+gid+'/members');
-        var aliasesRef=db().ref('groups/'+gid+'/aliases');
-
-        var state={msgs:{},recalls:{},read:{},members:{},aliases:{}};
-        var render=function(){ renderMessages('group',gid,state,null,g.name,g.avatar); };
-        var h1=function(s){ state.msgs=s.val()||{}; render(); };
-        var h2=function(s){ state.recalls=s.val()||{}; render(); };
-        var h3=function(s){ state.read=s.val()||{}; render(); };
-        var h4=function(s){ state.members=s.val()||{}; render(); };
-        var h5=function(s){ state.aliases=s.val()||{}; render(); };
-
-        msgsRef.on('value',h1); recallsRef.on('value',h2); readRef.on('value',h3); membersRef.on('value',h4); aliasesRef.on('value',h5);
-        chatListeners.push(function(){ msgsRef.off('value',h1); });
-        chatListeners.push(function(){ recallsRef.off('value',h2); });
-        chatListeners.push(function(){ readRef.off('value',h3); });
-        chatListeners.push(function(){ membersRef.off('value',h4); });
-        chatListeners.push(function(){ aliasesRef.off('value',h5); });
-
-        chatMobileSelect.value='group:'+gid;
-        refreshFriendsUI();
-        markChatRead('group',gid);
-      });
-    }).catch(function(e){
-      alert('無法讀取群組：'+errorMessage(e));
-      closeActiveChat();
-    });
-  }
-
-  // ===== 群組成員名單與管理（重寫） =====
-  chatMembersBtn.addEventListener('click',function(evt){
-    if(activeChat.type!=='group') return;
-    evt.stopPropagation();
-    showMembersPop(evt,activeChat.id);
-  });
-
-  function showMembersPop(evt, gid) {
-    var old = document.querySelector('.member-pop'); if (old) old.remove();
-    var pop = document.createElement('div');
-    pop.className = 'member-pop';
-    pop.innerHTML = '<div class="r-title">載入成員中…</div>';
-    document.body.appendChild(pop);
-    var r = evt.target.getBoundingClientRect();
-    pop.style.left = Math.min(r.left, window.innerWidth - 240) + 'px';
-    pop.style.top = (r.bottom + 6) + 'px';
-
-    var g = groupsCache[gid];
-    var isOwner = g && g.role === 'owner';
-
-    // 每次重新從 Firebase 抓成員（可重複呼叫）
-    function loadMembers() {
-      return Promise.all([
-        db().ref('groups/' + gid + '/members').once('value'),
-        db().ref('groups/' + gid + '/memberUsernames').once('value'),
-        db().ref('groups/' + gid + '/owner').once('value')
-      ]).then(function(results) {
-        return {
-          members: results[0].val() || {},
-          usernames: results[1].val() || {},
-          ownerUid: results[2].val() || '',
-          uids: Object.keys(results[0].val() || {})
-        };
-      });
-    }
-
-    function renderList(data) {
-      var members = data.members, usernames = data.usernames,
-          ownerUid = data.ownerUid, uids = data.uids;
-
-      pop.innerHTML = '';
-      var t = document.createElement('div'); t.className = 'r-title';
-      t.textContent = '成員名單（' + uids.length + '）';
-      pop.appendChild(t);
-
-      if (isOwner) {
-        var addBtn = document.createElement('button');
-        addBtn.className = 'mini-btn primary';
-        addBtn.textContent = '+ 加入成員';
-        addBtn.style.marginBottom = '8px';
-        addBtn.style.width = '100%';
-        addBtn.onclick = function() {
-          showAddMemberPanel(pop, gid, members, uids, function() {
-            loadMembers().then(renderList);
-          });
-        };
-        pop.appendChild(addBtn);
-      }
-
-      if (!uids.length) {
-        var e = document.createElement('div'); e.textContent = '沒有成員';
-        pop.appendChild(e);
-        return;
-      }
-
-      var pending = uids.length;
-      var list = [];
-      uids.forEach(function(uid, idx) {
-        list[idx] = { uid: uid, name: uid, avatar: fallbackAvatar,
-                      role: uid === ownerUid ? '建立者' : '' };
-        if (friendsCache[uid]) {
-          list[idx].name = friendsCache[uid].name || uid;
-          list[idx].avatar = friendsCache[uid].avatar || fallbackAvatar;
-          pending--; if (pending === 0) finish(); return;
-        }
-        var uname = usernames[uid];
-        if (!uname) { pending--; if (pending === 0) finish(); return; }
-        db().ref('users/' + uname + '/profile').once('value').then(function(snap) {
-          var p = snap.val() || {};
-          list[idx].name = p.displayName || uname;
-          list[idx].avatar = p.avatar || fallbackAvatar;
-          pending--; if (pending === 0) finish();
-        }).catch(function() { pending--; if (pending === 0) finish(); });
-      });
-
-      function finish() {
-        pop.innerHTML = '';
-        var t2 = document.createElement('div'); t2.className = 'r-title';
-        t2.textContent = '成員名單（' + uids.length + '）';
-        pop.appendChild(t2);
-
-        if (isOwner) {
-          var addBtn2 = document.createElement('button');
-          addBtn2.className = 'mini-btn primary';
-          addBtn2.textContent = '+ 加入成員';
-          addBtn2.style.marginBottom = '8px';
-          addBtn2.style.width = '100%';
-          addBtn2.onclick = function() {
-            showAddMemberPanel(pop, gid, members, uids, function() {
-              loadMembers().then(renderList);
-            });
-          };
-          pop.appendChild(addBtn2);
+        async function saveCompletedRun(isWin) {
+            try {
+                await profileReady;
+                const nextProfile = normalizeProfile(gameProfile);
+                nextProfile.bestKills = Math.max(nextProfile.bestKills, score);
+                if (isWin) nextProfile.completedRuns++;
+                const accountSaveSucceeded = await window.raingodSave('space-runner', nextProfile);
+                gameProfile = nextProfile;
+                renderProfile();
+                if (firebase.auth().currentUser && accountSaveSucceeded) {
+                    setSaveStatus('戰績已儲存並同步至帳號。');
+                } else if (firebase.auth().currentUser) {
+                    setSaveStatus('戰績已儲存在此裝置，但帳號同步失敗，請稍後重試。', true);
+                } else {
+                    setSaveStatus('戰績已儲存在此裝置；登入後可同步至帳號。');
+                }
+            } catch (error) {
+                console.error('儲存紀錄失敗：', error);
+                setSaveStatus('戰績儲存失敗，請確認瀏覽器儲存空間後重試。', true);
+            }
         }
 
-        list.forEach(function(m) {
-          var row = document.createElement('div'); row.className = 'r-item';
-          var roleTxt = m.role ? ' <span style="color:var(--text-gray);font-size:11px;">' + m.role + '</span>' : '';
-          row.innerHTML = '<img src="' + escapeHtml(m.avatar) + '" alt=""><span>' +
-                          escapeHtml(m.name) + roleTxt + '</span>';
+        // ========== 排行榜 ==========
+        async function submitLeaderboardTime(time) {
+            try {
+                await window.raingodFirebaseReady;
+                await window.raingodAuthReady;
+                const user = firebase.auth().currentUser;
+                if (!user || !Number.isFinite(time) || time <= 0) return;
+                const uid = user.uid;
+                const entryUrl = `${LEADERBOARD_URL}/${encodeURIComponent(uid)}.json`;
+                const previousResponse = await fetch(entryUrl);
+                if (!previousResponse.ok) throw new Error(`HTTP ${previousResponse.status}`);
+                const previous = await previousResponse.json();
+                if (window.raingodCurrentUser?.uid !== uid) return;
+                if (previous && Number(previous.bestTime) <= time) return;
 
-          if (isOwner && m.uid !== currentUid) {
-            var kickBtn = document.createElement('button');
-            kickBtn.className = 'mini-btn danger';
-            kickBtn.textContent = '踢出';
-            kickBtn.style.marginLeft = 'auto';
-            kickBtn.onclick = function() {
-              if (confirm('確定要將「' + m.name + '」踢出群組嗎？')) {
-                kickMember(gid, m.uid, usernames[m.uid], m.name, function() {
-                  loadMembers().then(renderList);
+                const payload = {
+                    name: user.displayName || (user.email ? user.email.split('@')[0] : '玩家'),
+                    bestTime: Number(time.toFixed(2)),
+                    updatedAt: Date.now()
+                };
+                const response = await fetch(entryUrl, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
                 });
-              }
-            };
-            row.appendChild(kickBtn);
-          }
-          pop.appendChild(row);
-        });
-      }
-
-      if (pending === 0) finish();
-    }
-
-    loadMembers().then(renderList).catch(function(e) {
-      pop.innerHTML = '<div class="r-title">讀取失敗</div><div>' + escapeHtml(errorMessage(e)) + '</div>';
-    });
-
-    var close = function(e2) {
-      if (!pop.contains(e2.target)) { pop.remove(); document.removeEventListener('click', close); }
-    };
-    setTimeout(function() { document.addEventListener('click', close); }, 0);
-  }
-
-  function showAddMemberPanel(pop, gid, currentMembers, uids, callback) {
-    pop.innerHTML = '<div class="r-title">選擇要加入的好友</div>';
-    var entries = Object.keys(friendsCache).map(function(k) { return [k, friendsCache[k]]; })
-      .filter(function(pair) { return !currentMembers[pair[0]]; });
-
-    if (!entries.length) {
-      var e = document.createElement('div'); e.textContent = '沒有可加入的好友';
-      pop.appendChild(e);
-      var backBtn0 = document.createElement('button');
-      backBtn0.className = 'mini-btn'; backBtn0.textContent = '返回名單';
-      backBtn0.style.marginTop = '8px'; backBtn0.style.width = '100%';
-      backBtn0.onclick = callback;
-      pop.appendChild(backBtn0);
-      return;
-    }
-
-    entries.forEach(function(pair) {
-      var fuid = pair[0], f = pair[1];
-      var row = document.createElement('div'); row.className = 'r-item';
-      row.innerHTML = '<img src="' + escapeHtml(f.avatar || fallbackAvatar) + '" alt=""><span>' +
-                      escapeHtml(f.name || f.username || fuid) + '</span>';
-      var btn = document.createElement('button');
-      btn.className = 'mini-btn success';
-      btn.textContent = '加入';
-      btn.style.marginLeft = 'auto';
-      btn.onclick = function() {
-        btn.disabled = true;
-        var uname = f.username || '';
-        if (!uname) {
-          alert('此好友缺少 username，無法加入（可能是舊資料），請請對方重新登入一次。');
-          btn.disabled = false;
-          return;
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                setSaveStatus('新紀錄已送入排行榜！');
+            } catch (error) {
+                console.error('上傳排行榜失敗：', error);
+                setSaveStatus('帳號成績已保存，但排行榜更新失敗，請稍後重試。', true);
+            }
         }
-        addMemberToGroup(gid, fuid, uname).then(function() {
-          btn.textContent = '已加入';
-          currentMembers[fuid] = true;
-          if (uids.indexOf(fuid) === -1) uids.push(fuid);
-          setTimeout(callback, 400);
-        }).catch(function(e) {
-          btn.disabled = false;
-          alert('加入失敗：' + (e && e.message ? e.message : e));
-        });
-      };
-      row.appendChild(btn);
-      pop.appendChild(row);
-    });
 
-    var backBtn = document.createElement('button');
-    backBtn.className = 'mini-btn'; backBtn.textContent = '返回名單';
-    backBtn.style.marginTop = '8px'; backBtn.style.width = '100%';
-    backBtn.onclick = callback;
-    pop.appendChild(backBtn);
-  }
-
-  function kickMember(gid, uid, uname, name, callback) {
-    var updates = {};
-    updates['groups/' + gid + '/members/' + uid] = null;
-    updates['groups/' + gid + '/memberUsernames/' + uid] = null;
-    if (uname) {
-      updates['users/' + uname + '/groups/' + gid] = null;
-    }
-
-    db().ref('groups/' + gid + '/members').once('value').then(function(snap) {
-      var count = Object.keys(snap.val() || {}).length - 1;
-      updates['groups/' + gid + '/memberCount'] = count;
-      return db().ref().update(updates);
-    }).then(function() {
-      alert('已將「' + name + '」踢出。');
-      if (callback) callback();
-    }).catch(function(e) {
-      alert('踢出失敗：' + e.message);
-    });
-  }
-
-  function addMemberToGroup(gid, uid, uname) {
-    var g = groupsCache[gid];
-    if (!g) return Promise.reject(new Error('找不到群組'));
-    if (!uname) return Promise.reject(new Error('缺少對方 username，無法加入'));
-
-    var updates = {};
-    updates['groups/' + gid + '/members/' + uid] = true;
-    updates['groups/' + gid + '/memberUsernames/' + uid] = uname;
-    updates['users/' + uname + '/groups/' + gid] = {
-      name: g.name, avatar: g.avatar || '', role: 'member',
-      memberCount: (g.memberCount || 0) + 1
-    };
-
-    return db().ref('groups/' + gid + '/members').once('value').then(function(snap) {
-      var count = Object.keys(snap.val() || {}).length + 1;
-      updates['groups/' + gid + '/memberCount'] = count;
-      return db().ref().update(updates);
-    });
-  }
-
-  // ==== 訊息渲染 ====
-  function renderMessages(kind,cid,state,friendUid,friendName,friendAvatar){
-    removeAllRows();
-    var msgs=state.msgs||{},recalls=state.recalls||{},read=state.read||{},aliases=state.aliases||{};
-    var list=Object.keys(msgs).map(function(id){ return [id,msgs[id]]; });
-    list.sort(function(a,b){ return (a[1].ts||0)-(b[1].ts||0); });
-    if(!list.length){ chatEmpty.style.display='block'; return; }
-    chatEmpty.style.display='none';
-
-    list.forEach(function(pair){
-      var id=pair[0],m=pair[1];
-      var isMe=m.from===currentUid;
-      var recalled=recalls[id];
-
-      var row=document.createElement('div');
-      row.className='msg-row '+(isMe?'me':'other');
-
-      var avatarUrl;
-      if(isMe) avatarUrl=currentAvatar||fallbackAvatar;
-      else if(kind==='group') avatarUrl=(groupsCache[cid]&&groupsCache[cid].avatar)||m.fromAvatar||fallbackAvatar;
-      else avatarUrl=friendAvatarOf(friendUid)||m.fromAvatar||friendAvatar||fallbackAvatar;
-
-      var rawName = m.name || (isMe ? (currentUser.displayName||currentUsername) : (friendName||'好友'));
-      var name = aliases[m.from] || rawName;
-
-      var avatarEl=document.createElement('img');
-      avatarEl.className='msg-avatar';
-      avatarEl.src=avatarUrl; avatarEl.alt='';
-
-      var bodyEl=document.createElement('div');
-      bodyEl.className='msg-body';
-
-      var info=document.createElement('div');
-      info.className='msg-info';
-      info.textContent=name+' • '+formatTime(m.ts);
-      bodyEl.appendChild(info);
-
-      if(recalled){
-        var r=document.createElement('div');
-        r.className='bubble recalled';
-        var rTxt;
-        if(recalled.byAdmin && recalled.by !== m.from){
-          rTxt='此訊息已被管理員刪除';
-        }else if(recalled.by === currentUid){
-          rTxt='你收回了一則訊息';
-        }else{
-          rTxt=(recalled.byName||name)+' 收回了一則訊息';
+        async function refreshLeaderboard() {
+            const status = document.getElementById('leaderboard-status');
+            const list = document.getElementById('leaderboard-list');
+            if (!await window.raingodRequireAuth('排行榜')) return;
+            const uid = window.raingodCurrentUser.uid;
+            status.textContent = '排行榜載入中…';
+            list.replaceChildren();
+            try {
+                const response = await fetch(`${LEADERBOARD_URL}.json`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                if (window.raingodCurrentUser?.uid !== uid) return;
+                const rows = await response.json() || {};
+                const entries = Object.entries(rows)
+                    .filter(([, row]) => row && Number.isFinite(Number(row.bestTime)) && Number(row.bestTime) > 0)
+                    .sort((a, b) => Number(a[1].bestTime) - Number(b[1].bestTime))
+                    .slice(0, 50);
+                entries.forEach(([entryUid, row], index) => {
+                    const line = document.createElement('div');
+                    line.className = 'leaderboard-row';
+                    const name = document.createElement('span');
+                    name.textContent = `${index + 1}. ${row.name || '玩家'}${entryUid === uid ? '（你）' : ''}`;
+                    const value = document.createElement('strong');
+                    value.textContent = `${Number(row.bestTime).toFixed(2)} 秒`;
+                    line.append(name, value);
+                    list.appendChild(line);
+                });
+                status.textContent = entries.length
+                    ? `已載入 ${entries.length} 位玩家，依最快通關時間排序。`
+                    : '目前還沒有通關紀錄，完成遊戲後就能上榜。';
+            } catch (error) {
+                console.error('載入排行榜失敗：', error);
+                status.textContent = '排行榜載入失敗，請稍後重試。';
+            }
         }
-        r.textContent=rTxt;
-        bodyEl.appendChild(r);
-      }else{
-        var bubble=document.createElement('div');
-        bubble.className='bubble';
-        if(m.type==='image'){
-          var now=Date.now();
-          var expireAt=m.expireAt||((m.ts||0)+IMG_TTL_MS);
-          var src=m.imageData||m.imageUrl||'';
-          if(now>expireAt||!src){
-            var exp=document.createElement('div');
-            exp.className='img-expired';
-            exp.textContent='圖片已過期';
-            bubble.appendChild(exp);
-          }else{
-            var img=document.createElement('img');
-            img.className='msg-img'; img.src=src; img.alt='圖片';
-            img.onerror=function(){
-              img.style.display='none';
-              var err=document.createElement('div');
-              err.className='img-expired';
-              err.textContent='圖片載入失敗';
-              bubble.appendChild(err);
-            };
-            img.addEventListener('click',function(){
-              var w=window.open('','_blank');
-              if(w) w.document.write('<title>圖片</title><img src="'+src+'" style="max-width:100%">');
-            });
-            bubble.appendChild(img);
-          }
-          if(m.text){
-            var cap=document.createElement('div');
-            cap.style.marginTop=src?'6px':'0';
-            cap.textContent=m.text;
-            bubble.appendChild(cap);
-          }
-        }else{
-          bubble.textContent=m.text||'';
-        }
-        bodyEl.appendChild(bubble);
-      }
 
-      if(isMe&&!recalled){
-        if(kind==='group'){
-          var readerIds=Object.keys(read).filter(function(uid){
-            if(uid===currentUid) return false;
-            var rv=read[uid];
-            var rts=(rv&&rv.ts)||(typeof rv==='number'?rv:0);
-            return rts>=(m.ts||0);
-          });
-          var rd=document.createElement('div');
-          rd.className='msg-read';
-          rd.textContent=readerIds.length>0?('已讀 '+readerIds.length+' 人'):'未讀';
-          rd.addEventListener('click',function(e){ showReadersPop(e,readerIds); });
-          bodyEl.appendChild(rd);
-        }else{
-          var other=friendUid;
-          var rv=read&&read[other];
-          var rts=(rv&&rv.ts)||(typeof rv==='number'?rv:0);
-          var isRead=rts>=(m.ts||0);
-          var rd2=document.createElement('div');
-          rd2.className='msg-read';
-          rd2.textContent=isRead?'已讀':'未讀';
-          bodyEl.appendChild(rd2);
-        }
-      }
-
-      if(!recalled && (isMe || isAdmin)){
-        var recallBtn=document.createElement('button');
-        recallBtn.type='button';
-        recallBtn.className='msg-recall-btn';
-        recallBtn.textContent=isMe?'收回':'刪除';
-        recallBtn.addEventListener('click',function(){
-          doRecall(kind,cid,id,m,isMe);
+        document.getElementById('leaderboard-button').addEventListener('click', async () => {
+            if (!await window.raingodRequireAuth('排行榜')) return;
+            document.getElementById('leaderboard').style.display = 'flex';
+            await refreshLeaderboard();
         });
-        bodyEl.appendChild(recallBtn);
-      }
-
-      row.appendChild(avatarEl);
-      row.appendChild(bodyEl);
-      chatBox.appendChild(row);
-    });
-    chatBox.scrollTop=chatBox.scrollHeight;
-  }
-
-  // ==== 收回 ====
-  function doRecall(kind,cid,msgId,m,isSelf){
-    var confirmMsg = isSelf
-      ? '確定要收回這則訊息嗎？收回後訊息內容會從資料庫刪除。'
-      : '確定要以管理員權限刪除這則訊息嗎？此操作無法復原。';
-    if(!confirm(confirmMsg)) return;
-
-    var shouldRefund = isSelf && m && m.type==='image';
-    var refundDateKey = '';
-    if(shouldRefund){
-      if(m.quotaKey) refundDateKey = m.quotaKey;
-      else if(m.expireAt) refundDateKey = dateKeyFromTs(m.expireAt - IMG_TTL_MS);
-      else if(m.ts && typeof m.ts==='number') refundDateKey = dateKeyFromTs(m.ts);
-      else refundDateKey = quotaDateKey();
-    }
-
-    var baseRef=kind==='private'?db().ref('private_chats/'+cid):db().ref('groups/'+cid);
-    var updates={};
-    updates['msgs/'+msgId]=null;
-    updates['recalls/'+msgId]={
-      by:currentUid,
-      byName:currentUser.displayName||currentUsername,
-      byAdmin: !isSelf && isAdmin,
-      senderName: m.name||'',
-      ts: window.firebase.database.ServerValue.TIMESTAMP
-    };
-
-    baseRef.update(updates).then(function(){
-      if(shouldRefund && refundDateKey){
-        refundImageQuotaForDate(refundDateKey).then(function(){
-          updateQuotaHint();
+        document.getElementById('leaderboard-refresh').addEventListener('click', refreshLeaderboard);
+        document.getElementById('leaderboard-close').addEventListener('click', () => {
+            document.getElementById('leaderboard').style.display = 'none';
         });
-      }
-    }).catch(function(e){
-      alert('收回失敗：'+errorMessage(e));
-    });
-  }
 
-  function showReadersPop(evt,readerIds){
-    evt.stopPropagation();
-    var old=document.querySelector('.reader-pop'); if(old) old.remove();
-    var pop=document.createElement('div');
-    pop.className='reader-pop';
-    var title=document.createElement('div');
-    title.className='r-title';
-    title.textContent='已讀名單（'+readerIds.length+'）';
-    pop.appendChild(title);
-    if(!readerIds.length){
-      var e=document.createElement('div'); e.textContent='目前無人已讀'; pop.appendChild(e);
-    }else{
-      readerIds.forEach(function(uid){
-        var f=friendsCache[uid];
-        var row=document.createElement('div'); row.className='r-item';
-        var name=(f&&f.name)||uid;
-        var av=(f&&f.avatar)||fallbackAvatar;
-        row.innerHTML='<img src="'+escapeHtml(av)+'" alt=""><span>'+escapeHtml(name)+'</span>';
-        pop.appendChild(row);
-      });
-    }
-    document.body.appendChild(pop);
-    var r=evt.target.getBoundingClientRect();
-    pop.style.left=Math.min(r.left,window.innerWidth-200)+'px';
-    pop.style.top=(r.bottom+6)+'px';
-    var close=function(e2){ if(!pop.contains(e2.target)){ pop.remove(); document.removeEventListener('click',close); } };
-    setTimeout(function(){ document.addEventListener('click',close); },0);
-  }
-
-  function updateMessageAvatars(){
-    if(activeChat.type!=='friend') return;
-    var otherAvatars=chatBox.querySelectorAll('.msg-row.other .msg-avatar');
-    var url=friendAvatarOf(activeChat.id);
-    for(var i=0;i<otherAvatars.length;i++) otherAvatars[i].src=url;
-    updateMyMessageAvatars();
-  }
-  function updateMyMessageAvatars(){
-    var mine=chatBox.querySelectorAll('.msg-row.me .msg-avatar');
-    for(var i=0;i<mine.length;i++) mine[i].src=currentAvatar||fallbackAvatar;
-  }
-
-  function markChatRead(kind,cid){
-    if(!currentUid) return;
-    var ref=kind==='private'
-      ? db().ref('private_chats/'+cid+'/read/'+currentUid)
-      : db().ref('groups/'+cid+'/read/'+currentUid);
-    var val=kind==='private'
-      ? window.firebase.database.ServerValue.TIMESTAMP
-      : {ts:window.firebase.database.ServerValue.TIMESTAMP};
-    ref.set(val).then(function(){
-      var key=kind==='private'?'f:'+activeChat.id:'g:'+activeChat.id;
-      unreadCache[key]=0; updateUnreadBadges();
-    }).catch(function(e){ console.warn('標記已讀失敗',e); });
-  }
-
-  chatClearFriend.addEventListener('click',function(){ closeActiveChat(); });
-
-  // ===== 傳文字 =====
-  var sending=false;
-  function sendMessage(){
-    if(sending||!activeChat.type) return;
-    var text=msgInput.value.trim();
-    if(!text){ msgInput.focus(); return; }
-    var payload={
-      from:currentUid,
-      name:currentUser.displayName||currentUsername,
-      fromAvatar:currentAvatar||fallbackAvatar,
-      text:text, type:'text',
-      ts:window.firebase.database.ServerValue.TIMESTAMP
-    };
-    sending=true; msgInput.value=''; msgInput.focus(); chatSendBtn.disabled=true;
-    var ref=activeChat.type==='friend'
-      ? db().ref('private_chats/'+chatIdFor(currentUid,activeChat.id)+'/msgs')
-      : db().ref('groups/'+activeChat.id+'/msgs');
-    ref.push(payload).catch(function(e){
-      if(!msgInput.value) msgInput.value=text;
-      alert('訊息傳送失敗：'+(e.code||e.message||'未知錯誤'));
-    }).finally(function(){ sending=false; chatSendBtn.disabled=false; });
-  }
-  chatSendBtn.addEventListener('click',sendMessage);
-  msgInput.addEventListener('keydown',function(e){
-    if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendMessage(); }
-  });
-
-  // ===== 傳圖片 =====
-  imgUploadBtn.addEventListener('click',function(){ imgFileInput.click(); });
-  imgFileInput.addEventListener('change',function(){
-    var file=imgFileInput.files&&imgFileInput.files[0];
-    if(!file) return;
-    if(!activeChat.type){ imgFileInput.value=''; return; }
-    if(file.type.indexOf('image/')!==0){
-      setUploadStatus('請選擇圖片檔案。',true); imgFileInput.value=''; return;
-    }
-    if(file.size>15*1024*1024){
-      setUploadStatus('原始檔案需小於 15MB。',true); imgFileInput.value=''; return;
-    }
-
-    imgUploadBtn.disabled=true;
-    setUploadStatus('正在壓縮圖片…',false);
-
-    compressImage(file,1000,0.78).then(function(dataUrl){
-      if(dataUrl.length <= IMG_MAX_BYTES) return dataUrl;
-      setUploadStatus('圖片較大，進一步壓縮…',false);
-      return compressImage(file,800,0.7).then(function(d2){
-        if(d2.length <= IMG_MAX_BYTES) return d2;
-        return compressImage(file,600,0.62).then(function(d3){
-          if(d3.length > IMG_MAX_BYTES){
-            throw new Error('圖片壓縮後仍過大（>'+(IMG_MAX_BYTES/1024|0)+'KB），請選小一點的圖。');
-          }
-          return d3;
+        // ========== 模式選擇 ==========
+        document.getElementById('solo-mode-btn').addEventListener('click', () => {
+            if (gameRunning) return;
+            gameMode = 'solo';
+            document.getElementById('solo-mode-btn').classList.add('selected');
+            document.getElementById('duel-mode-btn').classList.remove('selected');
+            document.getElementById('duel-status').textContent = '訓練模式：練習武器與移動，擊殺訓練機器人。';
+            document.getElementById('start-btn').textContent = '開始槍戰';
+            document.getElementById('target-count').textContent = KILL_TARGET;
         });
-      });
-    }).then(function(dataUrl){
-      return consumeImageQuota().then(function(){
-        setUploadStatus('正在送出圖片…',false);
-        var msgId=pushId();
-        var basePath=activeChat.type==='friend'
-          ? 'private_chats/'+chatIdFor(currentUid,activeChat.id)
-          : 'groups/'+activeChat.id;
-        var ts=Date.now();
-        var payload={
-          from:currentUid,
-          name:currentUser.displayName||currentUsername,
-          fromAvatar:currentAvatar||fallbackAvatar,
-          text:'', type:'image',
-          imageData:dataUrl,
-          imageSize:dataUrl.length,
-          quotaKey: quotaDateKey(),
-          expireAt:ts+IMG_TTL_MS,
-          ts:window.firebase.database.ServerValue.TIMESTAMP
+        document.getElementById('duel-mode-btn').addEventListener('click', () => {
+            if (gameRunning) return;
+            gameMode = 'duel';
+            document.getElementById('duel-mode-btn').classList.add('selected');
+            document.getElementById('solo-mode-btn').classList.remove('selected');
+            document.getElementById('duel-status').textContent = '對決模式：需要登入帳號，配對成功後先擊殺對手 5 次獲勝。';
+            document.getElementById('start-btn').textContent = '尋找對決對手';
+            document.getElementById('target-count').textContent = KILL_TARGET;
+        });
+
+        // ========== 開始遊戲 ==========
+        document.getElementById('start-btn').onclick = async () => {
+            if (gameMode === 'duel') {
+                const ok = await joinDuelQueue();
+                if (!ok) return;
+            }
+            document.getElementById('overlay').style.display = 'none';
+            document.getElementById('crosshair').style.display = 'block';
+            document.getElementById('health-bar').style.display = 'block';
+            if (!isTouch) requestLock();
+            if (isTouch) {
+                document.getElementById('joy-base').style.display = 'block';
+                document.getElementById('jump-btn').style.display = 'flex';
+                document.getElementById('fire-btn').style.display = 'flex';
+                document.getElementById('scope-btn').style.display = 'flex';
+            }
+            
+            resetGame();
+            if (!renderer) {
+                init();
+                animate();
+            }
+            gameRunning = true;
+            document.getElementById('weapon-panel').style.display = 'block';
+            document.getElementById('opponent-hud').style.display = gameMode === 'duel' ? 'block' : 'none';
+            updateWeaponPanel();
+            setWeaponModel(currentWeaponIndex);
         };
-        var msgRef=db().ref(basePath+'/msgs/'+msgId);
-        return msgRef.set(payload).catch(function(e){
-          refundImageQuota();
-          throw e;
-        });
-      });
-    }).then(function(){
-      setUploadStatus('圖片已送出。',false);
-      setTimeout(function(){ setUploadStatus(''); },1500);
-      updateQuotaHint();
-    }).catch(function(err){
-      if(err&&err.message==='DAILY_LIMIT'){
-        setUploadStatus('今日圖片額度已用完（每日 '+DAILY_IMAGE_LIMIT+' 張）。',true);
-      }else{
-        console.error('圖片傳送失敗',err);
-        setUploadStatus('圖片傳送失敗：'+errorMessage(err),true);
-      }
-    }).finally(function(){
-      imgUploadBtn.disabled=false;
-      imgFileInput.value='';
-    });
-  });
 
-  // ===== 啟動 =====
-  ready.then(function(){ return authReady; }).then(function(user){
-    if(!user){ loginRequired.hidden=false; appArea.hidden=true; return; }
-    initProfile(user);
-    window.firebase.auth().onAuthStateChanged(function(u){
-      if(u){ initProfile(u); }
-      else{
-        currentUser=null; currentUid=''; currentUsername=''; currentAvatar=fallbackAvatar; isAdmin=false;
-        appArea.hidden=true; loginRequired.hidden=false;
-        clearChatListeners();
-        for(var i=0;i<friendUnreadListeners.length;i++) friendUnreadListeners[i]();
-        friendUnreadListeners=[];
-        stopFriendAvatarWatchers();
-        friendsCache={}; groupsCache={}; unreadCache={};
-        ownedGroupId=''; hasOwnedGroup=false;
-        requestList.innerHTML=''; friendList.innerHTML='';
-        chatSidebarFriends.innerHTML=''; chatSidebarGroups.innerHTML='';
-        searchResults.innerHTML='';
-        chatMobileSelect.innerHTML='<option value="">選擇好友或群組開始聊天…</option>';
-        removeAllRows(); chatEmpty.style.display='block';
-        chatClearFriend.hidden=true; chatMembersBtn.hidden=true; chatDeleteGroupBtn.hidden=true;
-        chatEditGroupBtn.hidden=true; chatAliasBtn.hidden=true;
-        setChatEnabled(false); setUploadStatus(''); imgQuotaHint.textContent='';
-        updateUnreadBadges();
-      }
-    });
-  }).catch(function(e){
-    console.error('初始化失敗',e);
-    loginRequired.hidden=false;
-    loginRequired.textContent='載入個人檔案失敗：'+errorMessage(e);
-    loginRequired.classList.add('error');
-  });
-})();
-</script>
+        function requestLock() {
+            document.body.requestPointerLock();
+        }
+
+        document.addEventListener('pointerlockchange', () => {
+            if (!document.pointerLockElement && gameRunning && !isTouch) {
+                hintEl.style.display = 'block';
+            } else {
+                hintEl.style.display = 'none';
+            }
+        });
+
+        window.addEventListener('click', (e) => {
+            if (gameRunning && !isTouch && !document.pointerLockElement) {
+                if (e.target.closest('#overlay') || e.target.closest('#leaderboard') || e.target.closest('#leaderboard-button')) return;
+                requestLock();
+            }
+        });
+
+        // ========== 重置遊戲 ==========
+        function resetGame() {
+            score = 0;
+            elapsedTime = 0;
+            duelResultShown = false;
+            opponentScore = 0;
+            playerHealth = 100;
+            isDead = false;
+            respawnTimer = 0;
+            isReloading = false;
+            reloadTimer = 0;
+            currentWeaponIndex = 0;
+            currentAmmo = WEAPONS[0].ammo;
+            lastFireTime = 0;
+            scoped = false;
+            shakeIntensity = 0;
+            document.getElementById('score').innerText = score;
+            document.getElementById('target-count').innerText = KILL_TARGET;
+            document.getElementById('opponent-score').textContent = '0';
+            document.getElementById('health-fill').style.width = '100%';
+            document.getElementById('health-text').textContent = '100 / 100';
+            killFeedEl.replaceChildren();
+            damageVignette.style.opacity = '0';
+            
+            if (gameMode === 'duel') mapSeed = duelSeed >>> 0;
+            else mapSeed = (Date.now() >>> 0) || 1;
+            
+            if (opponentMesh && scene) { scene.remove(opponentMesh); opponentMesh = null; }
+            if (opponentLabel && scene) { scene.remove(opponentLabel); opponentLabel = null; }
+            
+            if (player) {
+                player.position.set(0, 5, 0);
+                velocityY = 0;
+            }
+            
+            // 清除子彈
+            playerBullets.forEach(b => { if (b.mesh && scene) scene.remove(b.mesh); });
+            enemyBullets.forEach(b => { if (b.mesh && scene) scene.remove(b.mesh); });
+            playerBullets.length = 0;
+            enemyBullets.length = 0;
+            
+            // 清除粒子
+            particles.forEach(p => { if (p.mesh && scene) scene.remove(p.mesh); });
+            particles.length = 0;
+            casings.forEach(c => { if (c.mesh && scene) scene.remove(c.mesh); });
+            casings.length = 0;
+            
+            // 清除訓練敵人
+            enemies.forEach(e => {
+                if (e.mesh && scene) scene.remove(e.mesh);
+                if (e.label && scene) scene.remove(e.label);
+                if (e.healthBarBg && scene) scene.remove(e.healthBarBg);
+                if (e.healthBarFill && scene) scene.remove(e.healthBarFill);
+            });
+            enemies.length = 0;
+            
+            platforms.forEach(p => scene && scene.remove(p.mesh));
+            platforms.length = 0;
+
+            if (scene) {
+                createMap();
+                if (gameMode === 'solo' && renderer) spawnTrainingEnemies();
+            }
+            if (camera) {
+                camera.fov = DEFAULT_FOV;
+                camera.updateProjectionMatrix();
+            }
+        }
+
+        // ========== 初始化 ==========
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x020205);
+            scene.fog = new THREE.FogExp2(0x020205, 0.0015);
+            
+            camera = new THREE.PerspectiveCamera(DEFAULT_FOV, window.innerWidth / (window.innerHeight - 60), 0.1, 2000);
+            
+            player = new THREE.Mesh(
+                new THREE.BoxGeometry(1.0, 1.6, 1.0), 
+                new THREE.MeshPhongMaterial({ color: 0x00f3ff, emissive: 0x006688 })
+            );
+            player.position.set(0, 5, 0);
+            player.visible = false; // 第一人稱不需要看到自己的身體
+            scene.add(player);
+
+            // 槍口閃光
+            muzzleFlash = new THREE.PointLight(0xffaa00, 0, 15);
+            scene.add(muzzleFlash);
+
+            scene.add(new THREE.AmbientLight(0x7777aa));
+            const light = new THREE.DirectionalLight(0xffffff, 1.2);
+            light.position.set(100, 200, 100);
+            scene.add(light);
+
+            createStars();
+            createMap();
+            buildWeaponModels();
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight - 60);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.domElement.style.position = 'absolute';
+            renderer.domElement.style.top = '60px';
+            renderer.domElement.style.left = '0';
+            document.body.appendChild(renderer.domElement);
+
+            window.addEventListener('resize', onResize);
+            if (!isTouch) {
+                window.addEventListener('keydown', (e) => handleKey(e.code, true));
+                window.addEventListener('keyup', (e) => handleKey(e.code, false));
+                window.addEventListener('mousemove', handleMouseMove);
+                window.addEventListener('mousedown', handleMouseDown);
+                window.addEventListener('mouseup', handleMouseUp);
+                window.addEventListener('contextmenu', e => e.preventDefault());
+            } else {
+                initTouchControls();
+            }
+        }
+
+        // ========== 第一人稱槍械模型 ==========
+        function buildWeaponModels() {
+            weaponModels.forEach(m => { if (m && camera) camera.remove(m); });
+            weaponModels = [];
+
+            const makeGun = (color, len, bodyH, bodyW, isSniper) => {
+                const g = new THREE.Group();
+                // 槍身
+                const body = new THREE.Mesh(
+                    new THREE.BoxGeometry(bodyW, bodyH, len),
+                    new THREE.MeshPhongMaterial({ color, emissive: 0x111111 })
+                );
+                body.position.set(0, 0, -len / 2);
+                g.add(body);
+                // 槍管
+                const barrel = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.05, 0.07, len * 0.7, 8),
+                    new THREE.MeshPhongMaterial({ color: 0x222222 })
+                );
+                barrel.rotation.x = Math.PI / 2;
+                barrel.position.set(0, 0.04, -len * 0.95);
+                g.add(barrel);
+                // 握把
+                const grip = new THREE.Mesh(
+                    new THREE.BoxGeometry(bodyW * 0.8, 0.35, 0.25),
+                    new THREE.MeshPhongMaterial({ color: 0x1a1a1a })
+                );
+                grip.position.set(0, -0.25, -0.2);
+                g.add(grip);
+                // 彈匣
+                const mag = new THREE.Mesh(
+                    new THREE.BoxGeometry(bodyW * 0.6, 0.5, 0.3),
+                    new THREE.MeshPhongMaterial({ color: 0x333333 })
+                );
+                mag.position.set(0, -0.35, -len * 0.3);
+                g.add(mag);
+                // 狙擊鏡
+                if (isSniper) {
+                    const scope = new THREE.Mesh(
+                        new THREE.CylinderGeometry(0.09, 0.09, 0.5, 12),
+                        new THREE.MeshPhongMaterial({ color: 0x111111, emissive: 0x003344 })
+                    );
+                    scope.rotation.x = Math.PI / 2;
+                    scope.position.set(0, 0.18, -len * 0.55);
+                    g.add(scope);
+                    const lens = new THREE.Mesh(
+                        new THREE.CircleGeometry(0.07, 12),
+                        new THREE.MeshBasicMaterial({ color: 0x00f3ff })
+                    );
+                    lens.position.set(0, 0.18, -len * 0.55 - 0.26);
+                    lens.rotation.y = Math.PI;
+                    g.add(lens);
+                }
+                return g;
+            };
+
+            WEAPONS.forEach((w, i) => {
+                const len = w.id === 'sniper' ? 2.2 : w.id === 'shotgun' ? 1.6 : w.id === 'rocket' ? 1.8 : 1.3;
+                const g = makeGun(w.color, len, 0.16, 0.18, w.id === 'sniper');
+                g.position.set(0.32, -0.28, -0.55);
+                g.rotation.y = 0.04;
+                g.visible = false;
+                camera.add(g);
+                weaponModels[i] = g;
+            });
+            if (scene && camera) scene.add(camera);
+        }
+
+        function setWeaponModel(index) {
+            weaponModels.forEach((m, i) => {
+                if (m) m.visible = (i === index) && !scoped;
+            });
+            currentWeaponModel = weaponModels[index] || null;
+            if (currentWeaponModel && scoped) currentWeaponModel.visible = false;
+        }
+
+        // ========== 狙擊槍開鏡 ==========
+        function setScope(on) {
+            if (!WEAPONS[currentWeaponIndex].scope) return;
+            scoped = on;
+            camera.fov = on ? 30 : DEFAULT_FOV;
+            camera.updateProjectionMatrix();
+            if (currentWeaponModel) currentWeaponModel.visible = !on;
+            const ch = document.getElementById('crosshair');
+            if (on) {
+                ch.style.border = '2px solid #00f3ff';
+                ch.style.borderRadius = '50%';
+                ch.style.width = '60px';
+                ch.style.height = '60px';
+                ch.style.background = 'radial-gradient(circle, transparent 45%, rgba(0,243,255,0.15) 46%)';
+                ch.style.boxShadow = '0 0 20px rgba(0,243,255,0.5)';
+            } else {
+                ch.style.border = 'none';
+                ch.style.borderRadius = '0';
+                ch.style.width = '40px';
+                ch.style.height = '40px';
+                ch.style.background = 'none';
+                ch.style.boxShadow = 'none';
+            }
+        }
+
+        function createStars() {
+            const starGeo = new THREE.BufferGeometry();
+            const count = 3000;
+            const pos = new Float32Array(count * 3);
+            for(let i=0; i<count*3; i++) {
+                pos[i] = (Math.random() - 0.5) * 2500;
+            }
+            starGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+            const starMat = new THREE.PointsMaterial({ color: 0x8888cc, size: 1.8 });
+            scene.add(new THREE.Points(starGeo, starMat));
+        }
+
+        function seededRandom() {
+            mapSeed = (mapSeed * 1664525 + 1013904223) >>> 0;
+            return mapSeed / 4294967296;
+        }
+
+        // ========== 創建地圖 ==========
+        function createMap() {
+            const addP = (x, y, z, w, d, type = 'normal') => {
+                let color = 0x1f1f3a;
+                if (type === 'bounce') color = 0xec4899;
+                if (type === 'center') color = 0xa855f7;
+
+                const mesh = new THREE.Mesh(
+                    new THREE.BoxGeometry(w, 1.2, d), 
+                    new THREE.MeshPhongMaterial({ color })
+                );
+                mesh.position.set(x, y, z);
+                scene.add(mesh);
+
+                const edge = new THREE.LineSegments(
+                    new THREE.EdgesGeometry(mesh.geometry), 
+                    new THREE.LineBasicMaterial({ color: type==='center'?0xffffff:(type==='bounce'?0xf472b6:0xa855f7) })
+                );
+                mesh.add(edge);
+
+                const pData = { mesh, x, y: y + 0.6, z, w, d, type };
+                platforms.push(pData);
+                return pData;
+            };
+
+            addP(0, -1, 0, 30, 30, 'center');
+
+            const range = 200; 
+            const step = 16; 
+
+            for (let x = -range; x <= range; x += step) {
+                for (let z = -range; z <= range; z += step) {
+                    const distFromCenter = Math.sqrt(x*x + z*z);
+                    if (distFromCenter < 18) continue;
+
+                    const y = Math.sin(x * 0.04) * 12 + Math.cos(z * 0.04) * 12 + (Math.sin(x * 0.08 + z * 0.08) * 6);
+                    
+                    const isBounce = Math.random() < 0.15;
+                    const size = 9 + Math.random() * 4;
+                    
+                    addP(x, y, z, size, size, isBounce ? 'bounce' : 'normal');
+                }
+            }
+        }
+
+        // ========== 訓練敵人 ==========
+        function spawnTrainingEnemies() {
+            if (!scene) return;
+            for (let i = 0; i < 6; i++) {
+                const angle = (i / 6) * Math.PI * 2 + Math.random() * 0.5;
+                const dist = 25 + Math.random() * 35;
+                const x = Math.cos(angle) * dist;
+                const z = Math.sin(angle) * dist;
+                const y = 3 + Math.random() * 8;
+                spawnEnemy(x, y, z);
+            }
+            console.log('[訓練模式] 已生成敵人數量：', enemies.length);
+        }
+
+        function spawnEnemy(x, y, z) {
+            const mesh = new THREE.Mesh(
+                new THREE.BoxGeometry(1.2, 1.8, 1.2),
+                new THREE.MeshPhongMaterial({ color: 0xff4444, emissive: 0x441111 })
+            );
+            mesh.position.set(x, y, z);
+            scene.add(mesh);
+
+            // 血條背景
+            const healthBarBg = new THREE.Mesh(
+                new THREE.PlaneGeometry(1.5, 0.15),
+                new THREE.MeshBasicMaterial({ color: 0x333333, depthTest: false })
+            );
+            healthBarBg.position.set(x, y + 1.4, z);
+            healthBarBg.renderOrder = 999;
+            scene.add(healthBarBg);
+
+            // 血條填充
+            const healthBarFill = new THREE.Mesh(
+                new THREE.PlaneGeometry(1.5, 0.15),
+                new THREE.MeshBasicMaterial({ color: 0xff4444, depthTest: false })
+            );
+            healthBarFill.position.set(x, y + 1.4, z + 0.01);
+            healthBarFill.renderOrder = 1000;
+            scene.add(healthBarFill);
+
+            const enemy = {
+                mesh, healthBarBg, healthBarFill,
+                health: 100, maxHealth: 100,
+                speed: 3 + Math.random() * 2,
+                lastShot: 0,
+                shootCooldown: 800 + Math.random() * 600,
+                alive: true,
+                rotation: Math.random() * Math.PI * 2
+            };
+            enemies.push(enemy);
+        }
+
+        // ========== 射擊系統 ==========
+        function shoot() {
+            if (!gameRunning || isDead || isReloading) return;
+            const weapon = WEAPONS[currentWeaponIndex];
+            const now = performance.now();
+            if (now - lastFireTime < weapon.fireRate) return;
+            if (currentAmmo <= 0) {
+                startReload();
+                return;
+            }
+
+            lastFireTime = now;
+            currentAmmo--;
+            updateWeaponPanel();
+
+            // 槍口閃光
+            if (muzzleFlash) {
+                muzzleFlash.position.copy(player.position);
+                muzzleFlash.position.y += 1.2;
+                muzzleFlash.intensity = 6;
+                setTimeout(() => { if (muzzleFlash) muzzleFlash.intensity = 0; }, 40);
+            }
+
+            // 鏡頭後座力
+            shakeIntensity = Math.min(shakeIntensity + (weapon.id === 'sniper' ? 0.06 : 0.02), 0.15);
+
+            // 拋彈殼
+            spawnCasing();
+
+            // 計算射擊方向
+            const direction = new THREE.Vector3(
+                Math.sin(theta) * Math.cos(phi - Math.PI/2),
+                Math.cos(phi),
+                Math.cos(theta) * Math.cos(phi - Math.PI/2)
+            ).normalize();
+
+            const origin = player.position.clone();
+            origin.y += 1.0;
+
+            const spread = weapon.spread;
+            const pellets = weapon.pellets || 1;
+
+            for (let i = 0; i < pellets; i++) {
+                const dir = direction.clone();
+                if (spread > 0) {
+                    dir.x += (Math.random() - 0.5) * spread * 2;
+                    dir.y += (Math.random() - 0.5) * spread * 2;
+                    dir.z += (Math.random() - 0.5) * spread * 2;
+                    dir.normalize();
+                }
+
+                const bullet = {
+                    mesh: createBulletMesh(origin, weapon.color),
+                    prevPos: origin.clone(),
+                    velocity: dir.multiplyScalar(120),
+                    damage: weapon.damage,
+                    life: weapon.range / 120,
+                    fromPlayer: true,
+                    pierce: weapon.pierce || false,
+                    explosive: weapon.explosive || false
+                };
+                bullet.mesh.lookAt(bullet.mesh.position.clone().add(bullet.velocity));
+                scene.add(bullet.mesh);
+                playerBullets.push(bullet);
+            }
+
+            if (currentAmmo <= 0) {
+                startReload();
+            }
+        }
+
+        // ========== 曳光彈視覺 ==========
+        function createBulletMesh(position, color) {
+            const group = new THREE.Group();
+            const core = new THREE.Mesh(
+                new THREE.SphereGeometry(0.18, 8, 8),
+                new THREE.MeshBasicMaterial({ color: 0xffff33 })
+            );
+            group.add(core);
+            const tracer = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.09, 0.02, 6, 6),
+                new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0.85 })
+            );
+            tracer.rotation.x = Math.PI / 2;
+            tracer.position.z = -3;
+            group.add(tracer);
+            const glow = new THREE.PointLight(0xffaa00, 2, 8);
+            group.add(glow);
+            group.position.copy(position);
+            return group;
+        }
+
+        // ========== 彈殼 ==========
+        function spawnCasing() {
+            if (!scene) return;
+            const casingMesh = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.04, 0.04, 0.12, 6),
+                new THREE.MeshPhongMaterial({ color: 0xd4a017 })
+            );
+            casingMesh.position.copy(player.position);
+            casingMesh.position.y += 1.0;
+            const sideDir = new THREE.Vector3(Math.cos(theta), 0, -Math.sin(theta));
+            casingMesh.position.addScaledVector(sideDir, 0.5);
+            scene.add(casingMesh);
+            casings.push({
+                mesh: casingMesh,
+                velocity: new THREE.Vector3(
+                    (Math.random() - 0.5) * 3 + Math.cos(theta) * 2,
+                    3 + Math.random() * 2,
+                    (Math.random() - 0.5) * 3 - Math.sin(theta) * 2
+                ),
+                life: 2
+            });
+        }
+
+        function startReload() {
+            if (isReloading) return;
+            const weapon = WEAPONS[currentWeaponIndex];
+            isReloading = true;
+            reloadTimer = weapon.reloadTime;
+            setTimeout(() => {
+                if (!gameRunning) return;
+                currentAmmo = weapon.maxAmmo;
+                isReloading = false;
+                updateWeaponPanel();
+            }, weapon.reloadTime);
+        }
+
+        // ========== 武器面板 ==========
+        function updateWeaponPanel() {
+            const list = document.getElementById('weapon-list');
+            list.innerHTML = '';
+            WEAPONS.forEach((w, i) => {
+                const div = document.createElement('div');
+                div.className = 'weapon-slot' + (i === currentWeaponIndex ? ' active' : '');
+                div.innerHTML = `<span>${w.name}</span><span class="ammo">${i === currentWeaponIndex ? (isReloading ? '...' : currentAmmo) : w.maxAmmo}</span>`;
+                div.addEventListener('click', () => {
+                    if (isReloading) return;
+                    if (scoped) setScope(false);
+                    currentWeaponIndex = i;
+                    currentAmmo = WEAPONS[i].maxAmmo;
+                    updateWeaponPanel();
+                    setWeaponModel(i);
+                });
+                list.appendChild(div);
+            });
+        }
+
+        // ========== 輸入處理 ==========
+        function handleKey(code, isDown) {
+            if (code === 'KeyW') keys.w = isDown;
+            if (code === 'KeyS') keys.s = isDown;
+            if (code === 'KeyA') keys.a = isDown;
+            if (code === 'KeyD') keys.d = isDown;
+            if (code === 'KeyR' && isDown) startReload();
+            if (code === 'Space' && isDown) handleJump();
+            if (code === 'Digit1' && isDown) switchWeapon(0);
+            if (code === 'Digit2' && isDown) switchWeapon(1);
+            if (code === 'Digit3' && isDown) switchWeapon(2);
+            if (code === 'Digit4' && isDown) switchWeapon(3);
+            if (code === 'Digit5' && isDown) switchWeapon(4);
+            if (code === 'Digit6' && isDown) switchWeapon(5);
+            if (code === 'Digit7' && isDown) switchWeapon(6);
+            if (code === 'Digit8' && isDown) switchWeapon(7);
+        }
+
+        function switchWeapon(index) {
+            if (isReloading) return;
+            if (scoped) setScope(false);
+            currentWeaponIndex = index;
+            currentAmmo = WEAPONS[index].maxAmmo;
+            updateWeaponPanel();
+            setWeaponModel(index);
+        }
+
+        function handleMouseMove(e) {
+            if (document.pointerLockElement === document.body && gameRunning) {
+                const sens = scoped ? 0.0012 : 0.002;
+                theta -= e.movementX * sens;
+                phi = Math.max(0.2, Math.min(Math.PI - 0.4, phi - e.movementY * sens));
+            }
+        }
+
+        let isMouseDown = false;
+        function handleMouseDown(e) {
+            if (e.button === 0) {
+                isMouseDown = true;
+                shoot();
+            }
+            if (e.button === 2) {
+                if (gameRunning && WEAPONS[currentWeaponIndex].scope) {
+                    setScope(!scoped);
+                }
+            }
+        }
+        function handleMouseUp(e) {
+            if (e.button === 0) isMouseDown = false;
+        }
+
+        let joyTouchId = null, camTouchId = null;
+        let lastCamX = 0, lastCamY = 0;
+
+        function initTouchControls() {
+            const stick = document.getElementById('joy-stick');
+            const base = document.getElementById('joy-base');
+
+            document.addEventListener('touchstart', (e) => {
+                if (!gameRunning) return;
+                for (let t of e.changedTouches) {
+                    const rect = base.getBoundingClientRect();
+                    const dx = t.clientX - (rect.left + 60);
+                    const dy = t.clientY - (rect.top + 60);
+
+                    if (Math.sqrt(dx*dx + dy*dy) < 90 && joyTouchId === null) {
+                        joyTouchId = t.identifier;
+                    } else if (t.clientX > window.innerWidth * 0.35 && camTouchId === null) {
+                        camTouchId = t.identifier;
+                        lastCamX = t.clientX;
+                        lastCamY = t.clientY;
+                    }
+                }
+            });
+
+            document.addEventListener('touchmove', (e) => {
+                if (!gameRunning) return;
+                e.preventDefault();
+                for (let t of e.changedTouches) {
+                    if (t.identifier === joyTouchId) {
+                        const rect = base.getBoundingClientRect();
+                        let dx = t.clientX - (rect.left + 60);
+                        let dy = t.clientY - (rect.top + 60);
+                        const dist = Math.min(Math.sqrt(dx*dx + dy*dy), 45);
+                        const angle = Math.atan2(dy, dx);
+                        stick.style.transform = `translate(${Math.cos(angle)*dist}px, ${Math.sin(angle)*dist}px)`;
+                        moveInput.x = (Math.cos(angle)*dist)/45;
+                        moveInput.y = -(Math.sin(angle)*dist)/45;
+                    } else if (t.identifier === camTouchId) {
+                        const deltaX = t.clientX - lastCamX;
+                        const deltaY = t.clientY - lastCamY;
+                        const sens = scoped ? 0.003 : 0.005;
+                        theta -= deltaX * sens;
+                        phi = Math.max(0.2, Math.min(Math.PI - 0.4, phi - deltaY * sens));
+                        lastCamX = t.clientX;
+                        lastCamY = t.clientY;
+                    }
+                }
+            }, { passive: false });
+
+            const endTouch = (e) => {
+                for (let t of e.changedTouches) {
+                    if (t.identifier === joyTouchId) {
+                        joyTouchId = null;
+                        stick.style.transform = `translate(0px, 0px)`;
+                        moveInput = { x: 0, y: 0 };
+                    }
+                    if (t.identifier === camTouchId) camTouchId = null;
+                }
+            };
+
+            document.addEventListener('touchend', endTouch);
+            document.addEventListener('touchcancel', endTouch);
+
+            document.getElementById('jump-btn').addEventListener('touchstart', (e) => {
+                e.preventDefault(); handleJump();
+            });
+
+            const fireBtn = document.getElementById('fire-btn');
+            fireBtn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                if (gameMode === 'solo' || gameMode === 'duel') {
+                    shoot();
+                    if (WEAPONS[currentWeaponIndex].auto) {
+                        fireBtn._autoInterval = setInterval(shoot, WEAPONS[currentWeaponIndex].fireRate);
+                    }
+                }
+            });
+            fireBtn.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                if (fireBtn._autoInterval) {
+                    clearInterval(fireBtn._autoInterval);
+                    fireBtn._autoInterval = null;
+                }
+            });
+
+            document.getElementById('scope-btn').addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                if (gameRunning && WEAPONS[currentWeaponIndex].scope) {
+                    setScope(!scoped);
+                }
+            });
+        }
+
+        function handleJump() {
+            if (!gameRunning || isDead) return;
+            if (jumpCount < 2) { 
+                velocityY = JUMP_POWER; 
+                jumpCount++; 
+            }
+        }
+
+        function onResize() {
+            camera.aspect = window.innerWidth / (window.innerHeight - 60);
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight - 60);
+        }
+
+        // ========== 遊戲結束 ==========
+        function gameOver(isWin, msg) {
+            gameRunning = false;
+            isDead = true;
+            if (document.pointerLockElement) document.exitPointerLock();
+            if (gameMode === 'solo') saveCompletedRun(isWin);
+
+            const title = document.getElementById('game-title');
+            const desc = document.getElementById('game-desc');
+            const overlay = document.getElementById('overlay');
+
+            title.innerText = isWin ? "🏆 勝利！" : "💀 你被擊敗了";
+            desc.innerHTML = `${msg}<br>最終擊殺：<b>${score}</b> · 費時：<b>${elapsedTime.toFixed(2)} 秒</b>`;
+            document.getElementById('start-btn').innerText = "再戰一場";
+            overlay.style.display = 'flex';
+            document.getElementById('crosshair').style.display = 'none';
+            document.getElementById('health-bar').style.display = 'none';
+            document.getElementById('weapon-panel').style.display = 'none';
+            document.getElementById('opponent-hud').style.display = 'none';
+            if (scoped) setScope(false);
+        }
+
+        // ========== 單挑模式 ==========
+        function getCurrentAccount() {
+            const user = window.raingodCurrentUser || (window.firebase && firebase.auth && firebase.auth().currentUser);
+            if (!user) return null;
+            return {
+                uid: user.uid,
+                name: (user.displayName || (user.email ? user.email.split('@')[0] : '') || '玩家').slice(0, 24)
+            };
+        }
+
+        async function dbRequest(path, method = 'GET', body) {
+            const response = await fetch(`${DUEL_ROOT}/${path}.json`, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                ...(body === undefined ? {} : { body: JSON.stringify(body) })
+            });
+            if (!response.ok) throw new Error(`Firebase HTTP ${response.status}`);
+            return response.json();
+        }
+
+        async function joinDuelQueue() {
+            const account = getCurrentAccount();
+            if (!account) {
+                document.getElementById('duel-status').textContent = '請先登入網站帳號，再開始對決配對。';
+                return false;
+            }
+            duelUid = account.uid;
+            duelName = account.name;
+            const btn = document.getElementById('start-btn');
+            btn.disabled = true;
+            btn.textContent = '正在尋找對手…';
+            document.getElementById('duel-status').textContent = '正在配對，請稍候；不要關閉頁面。';
+            try {
+                const queue = await dbRequest('queue');
+                const now = Date.now();
+                let waiting = Object.entries(queue || {}).find(([id, row]) =>
+                    id !== duelQueueId && row && row.status === 'waiting' &&
+                    row.uid !== duelUid && now - Number(row.createdAt || 0) < 90000
+                );
+
+                if (waiting) {
+                    const [queueId, row] = waiting;
+                    const roomId = `duel_${queueId}_${Math.random().toString(36).slice(2, 9)}`;
+                    const room = {
+                        status: 'playing', seed: ((now ^ Math.floor(Math.random() * 0xffffffff)) >>> 0) || 1,
+                        createdAt: now, players: {
+                            [row.uid]: { uid: row.uid, name: row.name || '玩家', score: 0, x: 0, y: 5, z: 0, done: false },
+                            [duelUid]: { uid: duelUid, name: duelName, score: 0, x: 0, y: 5, z: 0, done: false }
+                        }, winner: null
+                    };
+                    await dbRequest(`rooms/${roomId}`, 'PUT', room);
+                    await dbRequest(`queue/${queueId}`, 'PATCH', { status: 'matched', roomId, matchedAt: now });
+                    const myQueue = await dbRequest('queue', 'POST', { uid: duelUid, name: duelName, status: 'matched', roomId, createdAt: now });
+                    duelQueueId = myQueue && myQueue.name;
+                    await activateDuel(roomId, room);
+                    return true;
+                }
+
+                const created = await dbRequest('queue', 'POST', {
+                    uid: duelUid, name: duelName, status: 'waiting', createdAt: now
+                });
+                duelQueueId = created && created.name;
+                const started = Date.now();
+                while (Date.now() - started < 60000) {
+                    await new Promise(resolve => setTimeout(resolve, 1200));
+                    const mine = duelQueueId ? await dbRequest(`queue/${duelQueueId}`) : null;
+                    if (mine && mine.status === 'matched' && mine.roomId) {
+                        const room = await dbRequest(`rooms/${mine.roomId}`);
+                        if (room && room.status === 'playing') {
+                            await activateDuel(mine.roomId, room);
+                            return true;
+                        }
+                    }
+                    const latest = await dbRequest('queue');
+                    const candidate = Object.entries(latest || {}).find(([id, row]) =>
+                        id !== duelQueueId && row && row.status === 'waiting' &&
+                        row.uid !== duelUid && Date.now() - Number(row.createdAt || 0) < 90000
+                    );
+                    if (candidate) {
+                        const [otherId, row] = candidate;
+                        const roomId = `duel_${otherId}_${Math.random().toString(36).slice(2, 9)}`;
+                        const room = {
+                            status: 'playing', seed: ((Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0) || 1,
+                            createdAt: Date.now(), players: {
+                                [row.uid]: { uid: row.uid, name: row.name || '玩家', score: 0, x: 0, y: 5, z: 0, done: false },
+                                [duelUid]: { uid: duelUid, name: duelName, score: 0, x: 0, y: 5, z: 0, done: false }
+                            }, winner: null
+                        };
+                        await dbRequest(`rooms/${roomId}`, 'PUT', room);
+                        await dbRequest(`queue/${otherId}`, 'PATCH', { status: 'matched', roomId, matchedAt: Date.now() });
+                        await dbRequest(`queue/${duelQueueId}`, 'PATCH', { status: 'matched', roomId, matchedAt: Date.now() });
+                        await activateDuel(roomId, room);
+                        return true;
+                    }
+                    document.getElementById('duel-status').textContent = '等待另一位玩家加入…';
+                }
+                if (duelQueueId) await dbRequest(`queue/${duelQueueId}`, 'PATCH', { status: 'expired' }).catch(() => {});
+                document.getElementById('duel-status').textContent = '60 秒內沒有配對成功，請再試一次。';
+            } catch (error) {
+                console.error('對決配對失敗：', error);
+                document.getElementById('duel-status').textContent = '配對失敗：請確認 Firebase Realtime Database 規則允許讀寫 space_runner_duel。';
+            }
+            btn.disabled = false;
+            btn.textContent = '重新尋找對手';
+            return false;
+        }
+
+        async function activateDuel(roomId, room) {
+            duelRoomId = roomId;
+            duelSeed = Number(room.seed) || 1;
+            opponentUid = Object.keys(room.players || {}).find(uid => uid !== duelUid) || null;
+            const opponent = opponentUid ? room.players[opponentUid] : null;
+            document.getElementById('duel-status').textContent = `配對成功！對手：${opponent?.name || '玩家'}。先擊殺對手 5 次獲勝！`;
+            document.getElementById('opponent-hud').style.display = 'block';
+            document.getElementById('opponent-hud').innerHTML = `⚔️ 對手：<span id="opponent-name">${escapeHtml(opponent?.name || '玩家')}</span><br>對手擊殺：<span id="opponent-score">0</span> / 5`;
+            await publishDuelState();
+            if (duelPollTimer) clearInterval(duelPollTimer);
+            duelPollTimer = setInterval(pollDuelState, 900);
+        }
+
+        function escapeHtml(value) {
+            return String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        }
+
+        async function publishDuelState() {
+            if (!duelRoomId || !duelUid || !player) return;
+            try {
+                await dbRequest(`rooms/${duelRoomId}/players/${duelUid}`, 'PATCH', {
+                    uid: duelUid, name: duelName, score, x: player.position.x, y: player.position.y,
+                    z: player.position.z, done: score >= KILL_TARGET, updatedAt: Date.now()
+                });
+                if (score >= KILL_TARGET) {
+                    const room = await dbRequest(`rooms/${duelRoomId}`);
+                    if (room && !room.winner) await dbRequest(`rooms/${duelRoomId}`, 'PATCH', { winner: duelUid, status: 'finished' });
+                }
+            } catch (e) { console.warn('同步對決狀態失敗', e); }
+        }
+
+        async function pollDuelState() {
+            if (!duelRoomId || !gameRunning) return;
+            try {
+                const room = await dbRequest(`rooms/${duelRoomId}`);
+                if (!room) return;
+                const other = room.players && room.players[opponentUid];
+                if (other) {
+                    opponentScore = Number(other.score) || 0;
+                    const scoreEl = document.getElementById('opponent-score');
+                    if (scoreEl) scoreEl.textContent = opponentScore;
+                    if (!opponentMesh && scene) {
+                        opponentMesh = new THREE.Mesh(
+                            new THREE.BoxGeometry(1.0, 1.6, 1.0),
+                            new THREE.MeshPhongMaterial({ color: 0xffd166, emissive: 0x664400 })
+                        );
+                        scene.add(opponentMesh);
+                        const canvas = document.createElement('canvas');
+                        canvas.width = 512; canvas.height = 128;
+                        const ctx = canvas.getContext('2d');
+                        ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.fillRect(0, 0, 512, 128);
+                        ctx.font = 'bold 38px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#ffffff';
+                        ctx.fillText(String(other.name || '玩家').slice(0, 24), 256, 80);
+                        const texture = new THREE.CanvasTexture(canvas);
+                        opponentLabel = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true }));
+                        opponentLabel.scale.set(7, 1.75, 1);
+                        scene.add(opponentLabel);
+                    }
+                    if (opponentMesh) {
+                        opponentMesh.position.set(Number(other.x) || 0, Number(other.y) || 5, Number(other.z) || 0);
+                        if (opponentLabel) opponentLabel.position.set(opponentMesh.position.x, opponentMesh.position.y + 1.8, opponentMesh.position.z);
+                    }
+                }
+                if (room.winner && !duelResultShown) {
+                    duelResultShown = true;
+                    finishDuel(room.winner === duelUid, room.winner === duelUid ? '你先擊殺對手 5 次！' : '對手先擊殺你 5 次。');
+                }
+            } catch (e) { console.warn('讀取對決狀態失敗', e); }
+        }
+
+        let duelResultShown = false;
+        async function finishDuel(won, message) {
+            if (duelResultShown && gameRunning === false) return;
+            duelResultShown = true;
+            if (duelPollTimer) { clearInterval(duelPollTimer); duelPollTimer = null; }
+            gameRunning = false;
+            if (document.pointerLockElement) document.exitPointerLock();
+            await publishDuelState().catch(() => {});
+            const title = document.getElementById('game-title');
+            title.textContent = won ? '🏆 對決勝利！' : '💀 對決失敗';
+            document.getElementById('game-desc').innerHTML = `${escapeHtml(message)}<br>你的擊殺：${score} / 5 · 對手：${opponentScore} / 5`;
+            document.getElementById('start-btn').textContent = '再玩一次';
+            document.getElementById('overlay').style.display = 'flex';
+            document.getElementById('start-btn').disabled = false;
+            document.getElementById('crosshair').style.display = 'none';
+            document.getElementById('health-bar').style.display = 'none';
+            document.getElementById('weapon-panel').style.display = 'none';
+            document.getElementById('opponent-hud').style.display = 'none';
+            if (scoped) setScope(false);
+        }
+
+        // ========== 擊中反饋 ==========
+        function showHitMarker() {
+            hitMarkerEl.style.display = 'block';
+            setTimeout(() => { hitMarkerEl.style.display = 'none'; }, 120);
+        }
+
+        function addKillFeed(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            killFeedEl.prepend(div);
+            setTimeout(() => { if (div.parentNode) div.remove(); }, 3000);
+        }
+
+        // ========== 線段與球體相交檢測 ==========
+        function segmentSphereIntersect(p1, p2, center, radius) {
+            const d = new THREE.Vector3().subVectors(p2, p1);
+            const f = new THREE.Vector3().subVectors(p1, center);
+            const a = d.dot(d);
+            if (a < 1e-8) return p1.distanceTo(center) <= radius;
+            const b = 2 * f.dot(d);
+            const c = f.dot(f) - radius * radius;
+            let disc = b * b - 4 * a * c;
+            if (disc < 0) return false;
+            disc = Math.sqrt(disc);
+            const t1 = (-b - disc) / (2 * a);
+            const t2 = (-b + disc) / (2 * a);
+            return (t1 >= 0 && t1 <= 1) || (t2 >= 0 && t2 <= 1);
+        }
+
+        // ========== 死亡粒子 ==========
+        function spawnExplosion(position, color) {
+            if (!scene) return;
+            for (let i = 0; i < 12; i++) {
+                const mesh = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.1 + Math.random() * 0.15, 4, 4),
+                    new THREE.MeshBasicMaterial({ color: Math.random() < 0.5 ? color : 0xffaa00 })
+                );
+                mesh.position.copy(position);
+                scene.add(mesh);
+                particles.push({
+                    mesh,
+                    velocity: new THREE.Vector3(
+                        (Math.random() - 0.5) * 12,
+                        (Math.random() - 0.5) * 12 + 4,
+                        (Math.random() - 0.5) * 12
+                    ),
+                    life: 0.6 + Math.random() * 0.4
+                });
+            }
+        }
+
+        // ========== 子彈更新與碰撞 ==========
+        function updateBullets(delta) {
+            // 玩家子彈
+            for (let i = playerBullets.length - 1; i >= 0; i--) {
+                const b = playerBullets[i];
+                b.prevPos = b.prevPos || b.mesh.position.clone();
+                b.prevPos.copy(b.mesh.position);
+                b.mesh.position.addScaledVector(b.velocity, delta);
+                b.life -= delta;
+
+                let hit = false;
+                const segStart = b.prevPos;
+                const segEnd = b.mesh.position;
+
+                // 訓練敵人（線段-球體碰撞）
+                if (gameMode === 'solo') {
+                    for (const enemy of enemies) {
+                        if (!enemy.alive) continue;
+                        const center = enemy.mesh.position.clone();
+                        center.y += 0.5;
+                        if (segmentSphereIntersect(segStart, segEnd, center, 1.8)) {
+                            enemy.health -= b.damage;
+                            showHitMarker();
+                            spawnExplosion(b.mesh.position.clone(), 0xff4444);
+                            hit = true;
+                            if (enemy.health <= 0) {
+                                enemy.alive = false;
+                                scene.remove(enemy.mesh);
+                                scene.remove(enemy.healthBarBg);
+                                scene.remove(enemy.healthBarFill);
+                                spawnExplosion(enemy.mesh.position.clone(), 0xff8844);
+                                score++;
+                                document.getElementById('score').innerText = score;
+                                addKillFeed(`💀 擊殺訓練機器人 (${score}/${KILL_TARGET})`);
+                                if (score >= KILL_TARGET) {
+                                    gameOver(true, '你消滅了所有訓練機器人！');
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                // 對決模式 - 擊中對手
+                if (gameMode === 'duel' && opponentMesh && !hit) {
+                    const center = opponentMesh.position.clone();
+                    center.y += 0.8;
+                    if (segmentSphereIntersect(segStart, segEnd, center, 1.8)) {
+                        hit = true;
+                        showHitMarker();
+                        spawnExplosion(b.mesh.position.clone(), 0xffd166);
+                        score++;
+                        document.getElementById('score').innerText = score;
+                        addKillFeed(`💀 擊中對手！`);
+                        publishDuelState();
+                        if (score >= KILL_TARGET) {
+                            publishDuelState().finally(() => finishDuel(true, '你先擊殺對手 5 次！'));
+                        }
+                    }
+                }
+
+                if (hit || b.life <= 0) {
+                    scene.remove(b.mesh);
+                    playerBullets.splice(i, 1);
+                }
+            }
+
+            // 敵方子彈（訓練模式）
+            for (let i = enemyBullets.length - 1; i >= 0; i--) {
+                const b = enemyBullets[i];
+                b.prevPos = b.prevPos || b.mesh.position.clone();
+                b.prevPos.copy(b.mesh.position);
+                b.mesh.position.addScaledVector(b.velocity, delta);
+                b.life -= delta;
+
+                const segStart = b.prevPos;
+                const segEnd = b.mesh.position;
+                const center = player.position.clone();
+                center.y += 1.0;
+
+                if (segmentSphereIntersect(segStart, segEnd, center, 1.2) && !isDead) {
+                    playerHealth -= b.damage;
+                    shakeIntensity = Math.min(shakeIntensity + 0.05, 0.2);
+                    document.getElementById('health-fill').style.width = Math.max(0, playerHealth) + '%';
+                    document.getElementById('health-text').textContent = Math.max(0, Math.floor(playerHealth)) + ' / 100';
+                    damageVignette.style.opacity = '1';
+                    setTimeout(() => { damageVignette.style.opacity = '0'; }, 200);
+                    if (playerHealth <= 0) {
+                        isDead = true;
+                        respawnTimer = 3000;
+                        addKillFeed('💀 你被擊倒了！');
+                    }
+                    scene.remove(b.mesh);
+                    enemyBullets.splice(i, 1);
+                } else if (b.life <= 0) {
+                    scene.remove(b.mesh);
+                    enemyBullets.splice(i, 1);
+                }
+            }
+
+            // 粒子更新
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.velocity.y -= 20 * delta;
+                p.mesh.position.addScaledVector(p.velocity, delta);
+                p.life -= delta;
+                p.mesh.material.opacity = Math.max(0, p.life);
+                p.mesh.material.transparent = true;
+                if (p.life <= 0) {
+                    scene.remove(p.mesh);
+                    particles.splice(i, 1);
+                }
+            }
+
+            // 彈殼更新
+            for (let i = casings.length - 1; i >= 0; i--) {
+                const c = casings[i];
+                c.velocity.y -= 20 * delta;
+                c.mesh.position.addScaledVector(c.velocity, delta);
+                c.life -= delta;
+                if (c.life <= 0) {
+                    scene.remove(c.mesh);
+                    casings.splice(i, 1);
+                }
+            }
+        }
+
+        // ========== 敵人AI ==========
+        function updateEnemies(delta) {
+            if (gameMode !== 'solo') return;
+
+            const now = performance.now();
+            for (const enemy of enemies) {
+                if (!enemy.alive) continue;
+
+                // 自轉 + 朝向玩家
+                enemy.rotation += delta * 1.5;
+                const toPlayer = new THREE.Vector3().subVectors(player.position, enemy.mesh.position);
+                const angleToPlayer = Math.atan2(toPlayer.x, toPlayer.z);
+                enemy.mesh.rotation.y = angleToPlayer + Math.sin(enemy.rotation) * 0.3;
+
+                // 朝向玩家移動
+                const dir = toPlayer.clone();
+                dir.y = 0;
+                const dist = dir.length();
+                if (dist > 6) {
+                    dir.normalize();
+                    enemy.mesh.position.x += dir.x * enemy.speed * delta;
+                    enemy.mesh.position.z += dir.z * enemy.speed * delta;
+                }
+
+                // 更新血條位置
+                enemy.healthBarBg.position.copy(enemy.mesh.position);
+                enemy.healthBarBg.position.y += 1.6;
+                enemy.healthBarFill.position.copy(enemy.mesh.position);
+                enemy.healthBarFill.position.y += 1.6;
+                enemy.healthBarFill.position.z += 0.01;
+                enemy.healthBarFill.scale.x = Math.max(0.01, enemy.health / enemy.maxHealth);
+                enemy.healthBarFill.position.x = enemy.mesh.position.x - 0.75 * (1 - enemy.health / enemy.maxHealth);
+
+                enemy.healthBarBg.lookAt(camera.position);
+                enemy.healthBarFill.lookAt(camera.position);
+
+                // 射擊
+                if (now - enemy.lastShot > enemy.shootCooldown && dist < 60) {
+                    enemy.lastShot = now;
+                    enemy.shootCooldown = 800 + Math.random() * 800;
+
+                    const shootDir = new THREE.Vector3().subVectors(player.position, enemy.mesh.position).normalize();
+                    const bullet = {
+                        mesh: createBulletMesh(enemy.mesh.position.clone().add(new THREE.Vector3(0, 1.2, 0)), 0xff4444),
+                        prevPos: enemy.mesh.position.clone(),
+                        velocity: shootDir.multiplyScalar(100),
+                        damage: 8,
+                        life: 1.5
+                    };
+                    bullet.mesh.lookAt(bullet.mesh.position.clone().add(bullet.velocity));
+                    scene.add(bullet.mesh);
+                    enemyBullets.push(bullet);
+                }
+            }
+        }
+
+        // ========== 重生 ==========
+        function handleRespawn(delta) {
+            if (!isDead) return;
+            respawnTimer -= delta * 1000;
+            if (respawnTimer <= 0) {
+                isDead = false;
+                playerHealth = 100;
+                player.position.set(0, 5, 0);
+                velocityY = 0;
+                document.getElementById('health-fill').style.width = '100%';
+                document.getElementById('health-text').textContent = '100 / 100';
+                addKillFeed('🔄 重生');
+            }
+        }
+
+        // ========== 雷達 ==========
+        function updateRadar() {
+            radarCtx.clearRect(0, 0, 120, 120);
+            
+            radarCtx.fillStyle = '#ffffff';
+            radarCtx.beginPath();
+            radarCtx.arc(60, 60, 3, 0, Math.PI * 2);
+            radarCtx.fill();
+
+            let nearestDist = Infinity;
+
+            if (gameMode === 'solo') {
+                enemies.forEach(e => {
+                    if (!e.alive) return;
+                    const dx = e.mesh.position.x - player.position.x;
+                    const dz = e.mesh.position.z - player.position.z;
+                    const dist = Math.sqrt(dx*dx + dz*dz);
+                    if (dist < nearestDist) nearestDist = dist;
+                    const angle = Math.atan2(dz, dx) - theta + Math.PI/2;
+                    const radarDist = Math.min(dist * 0.22, 54);
+                    const rx = 60 + Math.cos(angle) * radarDist;
+                    const ry = 60 + Math.sin(angle) * radarDist;
+                    radarCtx.fillStyle = '#ff4444';
+                    radarCtx.beginPath();
+                    radarCtx.arc(rx, ry, 3, 0, Math.PI * 2);
+                    radarCtx.fill();
+                });
+            }
+
+            if (gameMode === 'duel' && opponentMesh) {
+                const dx = opponentMesh.position.x - player.position.x;
+                const dz = opponentMesh.position.z - player.position.z;
+                const dist = Math.sqrt(dx*dx + dz*dz);
+                if (dist < nearestDist) nearestDist = dist;
+                const angle = Math.atan2(dz, dx) - theta + Math.PI/2;
+                const radarDist = Math.min(dist * 0.22, 54);
+                const rx = 60 + Math.cos(angle) * radarDist;
+                const ry = 60 + Math.sin(angle) * radarDist;
+                radarCtx.fillStyle = '#ffd166';
+                radarCtx.beginPath();
+                radarCtx.arc(rx, ry, 4, 0, Math.PI * 2);
+                radarCtx.fill();
+            }
+
+            const trackerEl = document.getElementById('tracker-info');
+            if (nearestDist !== Infinity) {
+                trackerEl.innerText = `📍 最近敵人距離: ${Math.round(nearestDist)} 米`;
+            } else {
+                trackerEl.innerText = `🎯 搜尋敵人中...`;
+            }
+        }
+
+        // ========== 主循環 ==========
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const time = performance.now();
+            const delta = Math.min((time - prevTime) / 1000, 0.1);
+            prevTime = time;
+
+            if (gameRunning) {
+                elapsedTime += delta;
+                document.getElementById('timer').innerText = `⏱️ 時間: ${elapsedTime.toFixed(2)}s`;
+
+                handleRespawn(delta);
+
+                if (!isDead) {
+                    // 重力
+                    velocityY = Math.max(velocityY - GRAVITY * delta, -MAX_FALL_SPEED);
+                    const previousY = player.position.y;
+                    player.position.y += velocityY * delta;
+
+                    // 移動
+                    const fwd = new THREE.Vector3(Math.sin(theta), 0, Math.cos(theta)).negate();
+                    const rit = new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0), fwd).negate();
+                    
+                    let mx = moveInput.x, my = moveInput.y;
+                    if (keys.w) my = 1; if (keys.s) my = -1;
+                    if (keys.a) mx = -1; if (keys.d) mx = 1;
+
+                    player.position.addScaledVector(fwd, my * MOVE_SPEED * delta);
+                    player.position.addScaledVector(rit, mx * MOVE_SPEED * delta);
+
+                    // 平台碰撞
+                    for (let p of platforms) {
+                        if (Math.abs(player.position.x - p.x) < p.w / 2 + 0.6 && 
+                            Math.abs(player.position.z - p.z) < p.d / 2 + 0.6) {
+                            
+                            if (velocityY <= 0 && previousY - 0.7 >= p.y - 0.15 &&
+                                player.position.y - 0.7 <= p.y && player.position.y - 0.7 > p.y - 3.5) {
+                                player.position.y = p.y + 0.7;
+                                
+                                if (p.type === 'bounce') {
+                                    velocityY = 25;
+                                    jumpCount = 0;
+                                } else {
+                                    velocityY = 0;
+                                    jumpCount = 0;
+                                }
+                            }
+                        }
+                    }
+
+                    if (isMouseDown && WEAPONS[currentWeaponIndex].auto) {
+                        shoot();
+                    }
+
+                    if (player.position.y < -100) {
+                        player.position.set(0, 5, 0);
+                        velocityY = 0;
+                    }
+                }
+
+                updateBullets(delta);
+                updateEnemies(delta);
+                updateRadar();
+
+                if (gameMode === 'duel' && performance.now() - lastDuelPublish > 350) {
+                    lastDuelPublish = performance.now();
+                    publishDuelState();
+                }
+            }
+
+            // 相機跟隨 + 震動
+            if (player) {
+                let shakeX = 0, shakeY = 0, shakeZ = 0;
+                if (shakeIntensity > 0.001) {
+                    shakeX = (Math.random() - 0.5) * shakeIntensity * 2;
+                    shakeY = (Math.random() - 0.5) * shakeIntensity * 2;
+                    shakeZ = (Math.random() - 0.5) * shakeIntensity * 2;
+                    shakeIntensity *= shakeDecay;
+                } else {
+                    shakeIntensity = 0;
+                }
+                camera.position.set(
+                    player.position.x + 10 * Math.sin(phi) * Math.sin(theta) + shakeX, 
+                    player.position.y + 8 * Math.cos(phi) + shakeY, 
+                    player.position.z + 10 * Math.sin(phi) * Math.cos(theta) + shakeZ
+                );
+                camera.lookAt(player.position.x, player.position.y + 1, player.position.z);
+            }
+
+            if (renderer && scene && camera) {
+                renderer.render(scene, camera);
+            }
+        }
+
+        // 初始化 UI
+        renderProfile();
+        updateWeaponPanel();
+    </script>
 </body>
 </html>
