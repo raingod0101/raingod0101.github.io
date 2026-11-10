@@ -33,7 +33,7 @@
 
         .logo { color: #FFFFFF; font-weight: bold; letter-spacing: 2px; font-size: 14px; }
 
-        .btn-group { display: flex; gap: 5px; }
+        .btn-group { display: flex; gap: 5px; flex-wrap: wrap; }
 
         /* 主容器 */
         .main-container {
@@ -85,10 +85,6 @@
         }
 
         .btn:hover { background: var(--accent-color); color: #000; border-color: var(--accent-color); }
-
-        /* 全螢幕狀態微調 */
-        :-webkit-full-screen .toolbar { display: flex; }
-        :fullscreen .toolbar { display: flex; }
     </style>
 </head>
 <body>
@@ -96,6 +92,8 @@
     <div class="toolbar">
         <div class="logo">RAINGOD_EDT</div>
         <div class="btn-group">
+            <button class="btn" onclick="selectAllCode()">SELECT ALL</button>
+            <button class="btn" onclick="pasteFromClipboard()">PASTE & REPLACE</button>
             <button class="btn" onclick="importFromUrl()">IMPORT URL</button>
             <button class="btn" onclick="copyAll()">COPY</button>
             <button class="btn" onclick="clearCode()">CLEAR</button>
@@ -153,18 +151,45 @@
             highlight.innerHTML = code.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") + (code.endsWith('\n') ? ' ' : '');
         }
 
-        // --- 新功能函數 ---
+        // --- 新增功能函數 ---
 
-        // 1. 複製全部
+        // 1. 選取全部程式碼
+        function selectAllCode() {
+            input.focus();
+            input.select();
+        }
+
+        // 2. 直接從剪貼簿讀取並覆蓋
+        async function pasteFromClipboard() {
+            try {
+                // 使用現代瀏覽器的 Clipboard API
+                const text = await navigator.clipboard.readText();
+                if (text) {
+                    input.value = text;
+                    updateEditor();
+                    
+                    // 給按鈕一個短暫的視覺回饋
+                    const btn = event.target;
+                    const originalText = btn.innerText;
+                    btn.innerText = "PASTED!";
+                    setTimeout(() => { btn.innerText = originalText; }, 1500);
+                }
+            } catch (err) {
+                alert("讀取剪貼簿失敗！可能是瀏覽器未授權，或者你可以直接在編輯器內用鍵盤快捷鍵 (Ctrl+V / Cmd+V) 貼上。");
+            }
+        }
+
+        // 3. 複製全部
         function copyAll() {
             input.select();
             document.execCommand('copy');
-            const originalText = event.target.innerText;
-            event.target.innerText = "COPIED!";
-            setTimeout(() => { event.target.innerText = originalText; }, 1500);
+            const btn = event.target;
+            const originalText = btn.innerText;
+            btn.innerText = "COPIED!";
+            setTimeout(() => { btn.innerText = originalText; }, 1500);
         }
 
-        // 2. 輸入網址導入 (處理 CORS 問題，部分網站可能無法直接抓取)
+        // 4. 輸入網址導入
         async function importFromUrl() {
             const url = prompt("請輸入 HTML 檔案的完整網址 (需支援 CORS):", "https://example.com");
             if (url) {
@@ -180,7 +205,7 @@
             }
         }
 
-        // 3. 全螢幕切換
+        // 5. 全螢幕切換
         function toggleFullScreen() {
             if (!document.fullscreenElement) {
                 document.documentElement.requestFullscreen().catch(err => {
