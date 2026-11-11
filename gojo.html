@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>五條悟 VS 兩面宿儺｜極致流暢・完整劇情</title>
+<title>五條悟 VS 兩面宿儺｜五階段完整對決（受傷與恢復分離版）</title>
 <style>
 *{box-sizing:border-box}body{margin:0;background:#080b13;font-family:system-ui,"Noto Sans TC",sans-serif;overflow:hidden}
 main{max-width:1200px;margin:auto;padding:10px}
@@ -28,37 +28,39 @@ aside{padding:10px}.list{display:grid;gap:4px;max-height:520px;overflow-y:auto;s
 <script>
 (()=>{
 const c=document.getElementById('cv'),ctx=c.getContext('2d'),W=1280,H=720;
-// 完整劇情線：對峙→試探→領域→魔虛羅→黑閃→最終茈→宿儺被殺
+// 五階段完整對決 — 每個場景對應具體攻擊與傷勢，有來有回，受傷與恢復分離
 const scenes=[
-['','','intro'],           // 對峙
-['','','dash'],            // 高速衝刺
-['','','melee'],           // 近身互毆
-['','','slash'],           // 宿儺斬擊
-['','','domainG'],         // 無量空處
-['','','domainS'],         // 伏魔御廚子
-['','','clash'],           // 領域碰撞爆炸
-['','','wheel'],           // 魔虛羅登場
-['','','adapt'],           // 適應
-['','','mix'],             // 蒼赫混戰
-['','','black'],           // 黑閃
-['','','double'],          // 夾擊
-['','','finalPurple'],     // 最終茈
-['','','memeEnd']          // 宿儺被殺
+// 第一階段：遠程先制與近身拆樓
+['','','shrine200'],      // 200%虛式·茈 — 炸毀宿儺右手、左臂重創，後續恢復
+['','','demolish'],       // 近身拆樓 — 大樓殘骸砸擊，雙方表皮擦傷，微量反轉恢復
+// 第二階段：領域五連發大戰
+['','','domainFirst'],    // 第一回合領域戰 — 無量空處vs伏魔御神子，五條全身斬切，逆轉恢復
+['','','domainHollow'],   // 五條反擊 — 赫炸飛宿儺，臉胸凹陷，宿儺逆轉恢復
+['','','domainSmall'],    // 小丸子領域 — 壓縮領域近身肉搏，宿儺內臟受損，持續恢復
+['','','domainFinal'],    // 第五次領域 — 無量空處命中，貫穿心臟，宿儺無法自癒，魔虛羅登場
+// 第三階段：魔虛羅破局
+['','','mahoraga'],       // 魔虛羅斬碎無量空處，伏黑惠頂缸真相
+['','','brainDamage'],    // 雙方大腦永久損傷 — 鼻血特寫，不可逆
+// 第四階段：三打一混戰
+['','','threeOne'],       // 魔虛羅+顎吐夾擊 — 斬斷五條右臂，五條逆轉再生
+['','','crushAgito'],     // 五條蒼碾碎顎吐，顎吐永久死亡
+// 第五階段：高空戰術與無定向紫
+['','','blackFlash4'],    // 黑閃四連發 — 重創宿儺腹部臉部，五條狀態回復
+['','','skySetup'],       // 高空佈局 — 蒼與赫滯空
+['','','purpleExplode'],  // 無定向紫大爆炸 — 魔虛羅灰飛煙滅，宿儺左臂炸飛上半身燒焦
+['','','sukunaFallen'],   // 宿儺重傷 — 左臂炸飛、上半身燒焦，無法立即恢復
+['','','memeEnd']         // 迷因版結局 — 宿儺被殺、五條屹立
 ];
-// 總41秒：前13幕各3秒，最後一幕2秒
-const durations=[3,3,3,3,3,3,3,3,3,3,3,3,3,2];
+// 每幕持續時間（秒），受傷與恢復分離，所以需要更長時間
+const durations=[4.5,4,5,4,5,5,4,3.5,4,3.5,4.5,3,5,4,3];
 const total=durations.reduce((a,b)=>a+b,0);
 let starts=[],sum=0;durations.forEach(v=>{starts.push(sum);sum+=v});
 let time=0,playing=false,last=0,raf=0,speed=1,sceneIndex=0;
 let particles=[],shake=0,hitFlash=0,knockback=0,flashAlpha=0;
-// 新增：角色位置平滑、特效層級
-let gSmooth={x:330,y:590},sSmooth={x:1010,y:590};
-let lastFrameTime=0;
 const $=id=>document.getElementById(id);
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const ease=v=>{v=clamp(v,0,1);return v*v*(3-2*v)};
 const easeOut=v=>{v=clamp(v,0,1);return 1-(1-v)*(1-v)};
-const easeIn=v=>{v=clamp(v,0,1);return v*v};
 const lerp=(a,b,t)=>a+(b-a)*t;
 const random=(a,b)=>a+Math.random()*(b-a);
 
@@ -68,12 +70,10 @@ function addBurst(x,y,color,n=30,power=8,spread=1){
     let a=Math.random()*Math.PI*2;
     let sp=(0.3+Math.random())*power*spread;
     particles.push({
-      x,y,
-      vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,
+      x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,
       life:0.4+Math.random()*0.7,max:0.4+Math.random()*0.7,
-      r:1.5+Math.random()*6,
-      color,grav:0.08+Math.random()*0.06,
-      shrink:0.98+Math.random()*0.02
+      r:1.5+Math.random()*6,color,
+      grav:0.08+Math.random()*0.06,shrink:0.98+Math.random()*0.02
     });
   }
 }
@@ -83,8 +83,8 @@ function addTrail(x,y,color,n=2,spread=12){
       x:x+random(-spread,spread),y:y+random(-spread,spread),
       vx:random(-2,2),vy:random(-2,2),
       life:0.15+Math.random()*0.2,max:0.35,
-      r:1.5+Math.random()*5,
-      color,grav:0,shrink:0.96+Math.random()*0.02
+      r:1.5+Math.random()*5,color,
+      grav:0,shrink:0.96+Math.random()*0.02
     });
   }
 }
@@ -93,38 +93,29 @@ function addSpark(x,y,color,n=6,power=12){
     let a=Math.random()*Math.PI*2;
     let sp=(0.5+Math.random())*power;
     particles.push({
-      x,y,
-      vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,
+      x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,
       life:0.2+Math.random()*0.3,max:0.5,
-      r:1+Math.random()*3,
-      color,grav:0.02,shrink:0.95
+      r:1+Math.random()*3,color,
+      grav:0.02,shrink:0.95
     });
   }
 }
 function updateParticles(dt){
   particles=particles.filter(p=>p.life>0);
   for(const p of particles){
-    p.x+=p.vx*dt*60;
-    p.y+=p.vy*dt*60;
-    p.vy+=p.grav*dt*60;
-    p.vx*=0.99;
-    p.vy*=0.99;
-    p.r*=p.shrink;
-    p.life-=dt;
+    p.x+=p.vx*dt*60;p.y+=p.vy*dt*60;
+    p.vy+=p.grav*dt*60;p.vx*=0.99;p.vy*=0.99;
+    p.r*=p.shrink;p.life-=dt;
   }
 }
 function drawParticles(){
   for(const p of particles){
     let a=clamp(p.life/p.max,0,1);
     ctx.save();
-    ctx.globalAlpha=a;
-    ctx.fillStyle=p.color;
-    ctx.shadowBlur=16;
-    ctx.shadowColor=p.color;
-    ctx.beginPath();
-    ctx.arc(p.x,p.y,Math.max(0.5,p.r),0,Math.PI*2);
-    ctx.fill();
-    ctx.restore();
+    ctx.globalAlpha=a;ctx.fillStyle=p.color;
+    ctx.shadowBlur=16;ctx.shadowColor=p.color;
+    ctx.beginPath();ctx.arc(p.x,p.y,Math.max(0.5,p.r),0,Math.PI*2);
+    ctx.fill();ctx.restore();
   }
 }
 
@@ -149,7 +140,6 @@ function beam(x1,y1,x2,y2,color,width,alpha=1){
   ctx.save();ctx.globalAlpha=alpha;ctx.strokeStyle=color;ctx.lineWidth=width;
   ctx.shadowBlur=40;ctx.shadowColor=color;ctx.lineCap='round';
   ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
-  // 內層白光
   ctx.strokeStyle='white';ctx.lineWidth=Math.max(1.5,width*0.15);ctx.shadowBlur=20;
   ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
   ctx.restore();
@@ -159,10 +149,7 @@ function blast(x,y,r,color,p){
   glow(x,y,Math.max(10,r*a),color,1-a*0.4);
   ring(x,y,20+a*r,color,1-a*0.4,12*(1-p)+2);
   ring(x,y,12+a*r*0.72,'white',0.8*(1-p),5);
-  if(p<0.6){
-    ctx.fillStyle=`rgba(255,255,255,${0.3*(1-p/0.6)})`;
-    ctx.fillRect(0,0,W,H);
-  }
+  if(p<0.6){ctx.fillStyle=`rgba(255,255,255,${0.3*(1-p/0.6)})`;ctx.fillRect(0,0,W,H);}
 }
 function shakeCam(intensity){shake=Math.max(shake,intensity);}
 
@@ -171,38 +158,28 @@ function background(t){
   let g=ctx.createLinearGradient(0,0,0,H);
   g.addColorStop(0,'#0c1424');g.addColorStop(0.72,'#1f2436');g.addColorStop(1,'#060a12');
   ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
-  // 建築
   for(let i=0;i<28;i++){
     let xx=i*52-(t*18%52),hh=80+(i*67%240);
     ctx.fillStyle=i%2?'#111a2b':'#1a2236';
     ctx.fillRect(xx,580-hh,40,hh);
   }
-  // 地面
   ctx.fillStyle='#121828';ctx.fillRect(0,590,W,130);
-  // 地面裂紋
-  for(let i=0;i<22;i++){
-    let xx=i*70-(t*45%70);
-    line(xx,590,xx-30,660,'#2a3548',2,0.6);
-  }
-  // 風線
+  for(let i=0;i<22;i++){let xx=i*70-(t*45%70);line(xx,590,xx-30,660,'#2a3548',2,0.6);}
   for(let i=0;i<14;i++){
     let xx=(i*127-t*200%1600+1600)%1600;
     line(xx,120+i*32,xx+60,115+i*32,'#8aa8cc',1,0.1);
   }
 }
 
-// ===== 角色繪製（精緻版）=====
-function drawFighter(x,y,type,pose,t,scale=1,isHit=false,dead=false){
+// ===== 角色繪製（支援受傷部位與恢復視覺）=====
+function drawFighter(x,y,type,pose,t,scale=1,isHit=false,dead=false,injuries={},recoveryGlow=0){
   ctx.save();
-  ctx.translate(x,y);
-  ctx.scale(scale,scale);
+  ctx.translate(x,y);ctx.scale(scale,scale);
   if(dead){
-    ctx.globalAlpha=0.45;
-    ctx.rotate(0.85);
-    ctx.translate(0,55);
+    ctx.globalAlpha=0.45;ctx.rotate(0.85);ctx.translate(0,55);
     ctx.filter='grayscale(85%) brightness(0.35)';
   }
-  if(isHit && hitFlash>0){
+  if(isHit&&hitFlash>0){
     ctx.globalAlpha=0.5+0.5*Math.sin(hitFlash*55);
     ctx.translate(random(-12,12),random(-12,12));
     ctx.rotate(random(-0.12,0.12));
@@ -212,12 +189,20 @@ function drawFighter(x,y,type,pose,t,scale=1,isHit=false,dead=false){
   let cloth=go?'#e4ecf8':'#3d1f2e';
   let inner=go?'#182640':'#5a2238';
   let hairCol=go?'#e8f0ff':'#d4808e';
-  // 呼吸
   let bob=Math.sin(t*8+(go?0:1.5))*4;
-  // 姿勢傾斜
   let lean=pose==='dash'?(go?-0.25:0.22):pose==='hit'?(go?0.35:-0.32):pose==='dodge'?0.42:0;
-  ctx.translate(0,bob);
-  ctx.rotate(lean);
+  ctx.translate(0,bob);ctx.rotate(lean);
+
+  // 恢復光暈（表示正在用反轉術式修復）
+  if(recoveryGlow>0.05){
+    let rr=1+recoveryGlow*0.35;
+    ctx.save();
+    ctx.globalAlpha=0.15+recoveryGlow*0.25;
+    ctx.shadowBlur=40;ctx.shadowColor='#7dffb0';
+    ctx.fillStyle='#7dffb0';
+    ctx.beginPath();ctx.ellipse(0,-90,60*rr,130*rr,0,0,Math.PI*2);ctx.fill();
+    ctx.restore();
+  }
 
   // 腿部
   function limb(ax,ay,bx,by,w,col){
@@ -225,33 +210,54 @@ function drawFighter(x,y,type,pose,t,scale=1,isHit=false,dead=false){
     ctx.fillStyle=col;
     ctx.beginPath();ctx.arc(bx,by,w*0.46,0,7);ctx.fill();
   }
-  limb(-14,-62,-24,-6,18,cloth);
+  // 右腿受傷
+  if(injuries.rightLeg){limb(-14,-62,-24,-6,18,'#8a2030');}
+  else{limb(-14,-62,-24,-6,18,cloth);}
   limb(15,-62,30,-6,18,cloth);
 
   // 身體
-  ctx.fillStyle=inner;
-  ctx.fillRect(-26,-142,52,72);
+  ctx.fillStyle=inner;ctx.fillRect(-26,-142,52,72);
+  // 胸口燒焦
+  if(injuries.chest){
+    ctx.fillStyle='#1a0a0a';ctx.fillRect(-20,-130,40,40);
+    for(let k=0;k<5;k++) addTrail(x+random(-15,15),y-100+random(-10,10),'#ff4a60',1);
+  }
   // 外袍
   ctx.fillStyle=cloth;
   ctx.beginPath();
   ctx.moveTo(-28,-138);ctx.lineTo(0,-116);ctx.lineTo(28,-138);
   ctx.lineTo(42,-6);ctx.lineTo(9,-24);ctx.lineTo(0,-80);
-  ctx.lineTo(-16,-24);ctx.lineTo(-44,-6);ctx.closePath();
-  ctx.fill();
+  ctx.lineTo(-16,-24);ctx.lineTo(-44,-6);ctx.closePath();ctx.fill();
 
   // 手臂
   let punch=pose==='punch'||pose==='cast'||pose==='slash';
   let guard=pose==='guard';
   let armX=punch?(pose==='cast'?65:pose==='slash'?-65:90):guard?40:32;
   let armY=punch?(pose==='cast'?-175:pose==='slash'?-162:-108):guard?-168:-98;
+
+  // 左臂（正常）
   limb(-21,-124,-45,-92,14,cloth);
   limb(-45,-92,-52,-78,10,skin);
-  limb(21,-124,armX,armY,14,cloth);
-  limb(armX,armY,armX+20,armY-8,10,skin);
+  // 右臂受傷/斷臂
+  if(injuries.rightArmLost){
+    line(21,-124,30,-100,'#8a2030',14);
+    if(Math.random()<0.3) addBurst(x+30,y-100,'#ff2a40',3,8);
+  }else if(injuries.rightArmHurt){
+    limb(21,-124,armX,armY,14,'#8a2030');
+    limb(armX,armY,armX+20,armY-8,10,'#c08080');
+    if(Math.random()<0.2) addTrail(x+armX,y+armY,'#ff2a40',1);
+  }else{
+    limb(21,-124,armX,armY,14,cloth);
+    limb(armX,armY,armX+20,armY-8,10,skin);
+  }
 
   // 頭部
   ctx.fillStyle=skin;
   ctx.beginPath();ctx.arc(0,-180,27,0,7);ctx.fill();
+  // 臉部燒焦
+  if(injuries.faceBurn){
+    ctx.fillStyle='#1a0a0a';ctx.beginPath();ctx.arc(10,-185,18,0,7);ctx.fill();
+  }
 
   // 頭髮
   ctx.fillStyle=hairCol;
@@ -261,7 +267,7 @@ function drawFighter(x,y,type,pose,t,scale=1,isHit=false,dead=false){
   ctx.lineTo(23,-202);ctx.lineTo(37,-214);ctx.lineTo(26,-172);
   ctx.lineTo(-24,-169);ctx.fill();
 
-  // 面部特徵
+  // 面部
   if(go){
     ctx.fillStyle='#0e1828';ctx.fillRect(-27,-191,54,12);
   }else{
@@ -269,7 +275,7 @@ function drawFighter(x,y,type,pose,t,scale=1,isHit=false,dead=false){
     line(7,-188,21,-179,'#8a3044',3,0.9);
   }
 
-  // 氣場特效
+  // 氣場
   if(pose==='cast'){
     glow(armX+20,armY-8,20,go?'#4ad8ff':'#ff4a60',0.7);
     glow(armX+20,armY-8,10,'white',0.5);
@@ -280,12 +286,10 @@ function drawFighter(x,y,type,pose,t,scale=1,isHit=false,dead=false){
 // ===== 斬擊特效 =====
 function slashFX(x,y,p,color='#ff4a60',intensity=1){
   for(let i=0;i<12;i++){
-    let yy=y+i*24;
-    let xx=x+i*20;
+    let yy=y+i*24,xx=x+i*20;
     line(xx-100,yy-28,xx+100,yy+28,color,4*intensity,0.15+0.75*(1-p));
     line(xx-80,yy-28,xx+80,yy+28,'white',1.5,0.4*(1-p));
   }
-  // 額外火花
   if(p<0.5){
     for(let i=0;i<8;i++){
       let a=random(-0.5,0.5);
@@ -315,8 +319,10 @@ function render(){
   let travel=ease(clamp((p-0.15)/0.5,0,1));
   let gojoKbX=0,sukunaKbX=0;
   let sukunaDead=false;
+  let gInjuries={},sInjuries={};
+  let gRecovery=0,sRecovery=0;
 
-  // ===== 迷因結局：宿儺被殺 =====
+  // ===== 迷因結局 =====
   if(kind==='memeEnd'){
     gx=330;sx=980;gPose='idle';sPose='dead';sukunaDead=true;
     if(p>0.15&&p<0.85){
@@ -331,190 +337,283 @@ function render(){
         addTrail(sx+Math.cos(a)*45,500+Math.sin(a)*45,'#ff4a60',2);
       }
     }
-    // 角色
-    drawFighter(gx,590,'gojo',gPose,t,1.05,false,false);
-    drawFighter(sx,590,'sukuna','hit',t,1.05,true,true);
+    drawFighter(gx,590,'gojo',gPose,t,1.05,false,false,{});
+    drawFighter(sx,590,'sukuna','hit',t,1.05,true,true,{faceBurn:true,rightArmLost:true});
     drawParticles();
     ctx.restore();
     return;
   }
 
-  // ===== 開場對峙 =====
-  if(kind==='intro'){
-    gPose='idle';sPose='idle';gx=330;sx=1010;
-    glow(gx,400,85,'#4ad8ff',0.25+Math.sin(t*2.8)*0.08);
-    glow(sx,400,85,'#ff4a60',0.25+Math.sin(t*2.8+1.2)*0.08);
-    if(p>0.25){
-      shakeCam(2.5);
-      for(let k=0;k<2;k++) addTrail(random(280,620),random(550,580),'#8899bb',1);
+  // ===== 1. 200%虛式·茈（炸毀宿儺右手，左臂重創，後續恢復）=====
+  if(kind==='shrine200'){
+    gPose='cast';sPose='guard';gx=300;sx=1010;
+    let charge=clamp(p/0.35,0,1);
+    let flight=clamp((p-0.35)/0.3,0,1);
+    let hit=clamp((p-0.65)/0.25,0,1);
+    let recoveryPhase=clamp((p-0.9)/0.1,0,1); // 最後10%時間恢復
+    let sx0=380,sy0=415,ex=1010,ey=380;
+    
+    // 蓄力
+    ring(sx0,sy0,35+charge*45,'#4ad8ff',1,12);
+    ring(sx0+35,sy0,30+charge*38,'#ff4a60',1,12);
+    glow(sx0+18,sy0,40+charge*60,'#9c65ff',1);
+    if(p<0.25){
+      for(let k=0;k<12;k++){
+        let a=k*Math.PI/6+t*2;
+        line(sx0+Math.cos(a)*80,sy0+Math.sin(a)*80,sx0+Math.cos(a)*120,sy0+Math.sin(a)*120,'#4ad8ff',2,0.3);
+      }
     }
-  }
-
-  // ===== 高速衝刺 =====
-  if(kind==='dash'){
-    gx=lerp(330,500,easeOut(clamp(p*1.6,0,1)));
-    sx=lerp(1010,800,easeOut(clamp(p*1.6,0,1)));
-    gPose='dash';sPose='dash';
-    // 殘影
-    for(let k=0;k<6;k++){
-      ctx.save();
-      ctx.globalAlpha=0.12*(6-k)/6;
-      drawFighter(gx-k*28,590,'gojo','dash',t-k*0.08,1.05,false,false);
-      drawFighter(sx+k*28,590,'sukuna','dash',t-k*0.08,1.05,false,false);
-      ctx.restore();
+    
+    // 飛行
+    if(p>0.35&&p<0.65){
+      let q=ease(flight),px=lerp(sx0,ex,q),py=lerp(sy0,ey,q);
+      beam(sx0,sy0,px,py,'#a967ff',30,1);
+      beam(sx0,sy0,px,py,'white',12,1);
+      glow(px,py,80,'#c58aff',1);
+      glow(px,py,40,'white',0.9);
+      addTrail(px,py,'#bd7cff',6);
+      addTrail(px,py,'white',4);
+      shakeCam(14);
     }
-    if(p>0.55) shakeCam(7);
-    // 速度線
-    if(p>0.2){
-      for(let k=0;k<6;k++){
-        let yy=random(200,500);
-        line(gx-30,yy,gx-120,yy+random(-20,20),'#8aa8cc',1.5,0.15);
-        line(sx+30,yy,sx+120,yy+random(-20,20),'#ff8a9a',1.5,0.15);
+    
+    // 命中 — 炸毀右手、左臂重傷
+    if(p>=0.65){
+      blast(ex,ey,450,'#d7a6ff',hit);
+      if(p<0.9) shakeCam(50*(1-hit));
+      sukunaHit=true;hitFlash=2.2;
+      sukunaKbX=-knockback*55;
+      // 受傷部位：右手炸毀、左臂重創、胸口燒傷
+      sInjuries.rightArmLost=true;
+      sInjuries.leftArmHurt=true;
+      sInjuries.chest=true;
+      if(p>0.68&&p<0.85){
+        addBurst(ex,ey,'#d7a6ff',130,30);
+        addBurst(ex,ey,'white',70,24);
+        addBurst(ex,ey,'#9d6bff',80,22);
+        for(let k=0;k<8;k++) addBurst(ex-40,ey+random(-30,30),'#ff4a60',10,15);
+      }
+      if(p>0.65&&p<0.78){
+        flashAlpha=0.9*(1-(p-0.65)/0.13);
+        ctx.fillStyle=`rgba(255,255,255,${flashAlpha})`;
+        ctx.fillRect(0,0,W,H);
+      }
+      // 恢復階段：最後0.9~1.0 顯示反轉術式修復右手
+      if(p>0.88){
+        sRecovery=clamp((p-0.88)/0.12,0,1);
+        // 修復中：原本右臂斷裂處出現綠色再生光
+        if(p>0.9 && p<0.98){
+          glow(ex-30,ey-60,40,'#7dffb0',0.6);
+          if(Math.random()<0.5) addTrail(ex-30+random(-10,10),ey-60+random(-15,15),'#7dffb0',1);
+        }
+        // 恢復完成後清除斷臂標記
+        if(p>0.96){sInjuries.rightArmLost=false;}
       }
     }
   }
 
-  // ===== 近身互毆 =====
-  if(kind==='melee'){
-    gx=lerp(330,560,travel);
-    sx=lerp(1010,780,travel);
-    gPose=p<0.35?'dash':p<0.72?'punch':'dodge';
-    sPose=p<0.25?'guard':p<0.6?'hit':'punch';
-    if(p>0.15&&p<0.35){
-      sukunaHit=true;hitFlash=1.3;shakeCam(28);
-      sukunaKbX=-knockback*28;
-      addBurst(sx-20,380,'#ffb3c1',35,16);
-      addBurst(sx-10,400,'white',15,10);
-      addSpark(sx-30,390,'#ff9aaa',8,18);
+  // ===== 2. 近身拆樓 — 有來有回，互相攻擊，表皮擦傷 + 微量反轉恢復 =====
+  if(kind==='demolish'){
+    gPose='punch';sPose='punch';gx=lerp(330,560,travel);sx=lerp(1010,780,travel);
+    // 大樓殘骸
+    for(let k=0;k<12;k++){
+      let bx=random(200,1000),by=random(300,560);
+      ctx.fillStyle='#2a3548';ctx.fillRect(bx,by,random(20,50),random(15,35));
+      if(k%3===0) line(bx,by,bx+random(-30,30),by+random(-30,30),'#3a4a66',2,0.6);
     }
-    if(p>0.45&&p<0.65){
-      gojoHit=true;hitFlash=1.1;shakeCam(24);
-      gojoKbX=knockback*22;
-      addBurst(gx+30,390,'#b9eaff',35,15);
-      addBurst(gx+20,410,'white',12,9);
-      addSpark(gx+40,400,'#9adcff',8,16);
+    
+    // 第一波：五條壓制宿儺撞牆（0~0.3）
+    if(p>0.05&&p<0.35){
+      sukunaHit=true;hitFlash=1.3;shakeCam(30);
+      sukunaKbX=-knockback*30;
+      addBurst(sx-20,400,'#8899bb',40,18);
+      addBurst(sx-10,380,'#ffb3c1',20,12);
+      sInjuries.chest=true;
+      gPose='punch';
     }
-    if(p>0.75){
-      sukunaHit=true;hitFlash=1.5;shakeCam(32);
-      sukunaKbX=-knockback*32;
-      addBurst(sx-30,380,'#ffb3c1',45,18);
+    // 第二波：宿儺反擊「解」切碎殘骸擊中五條（0.35~0.65）
+    if(p>0.35&&p<0.65){
+      gojoHit=true;hitFlash=1.0;shakeCam(25);
+      gojoKbX=knockback*20;
+      addBurst(gx+30,400,'#b9eaff',35,15);
+      gInjuries.chest=true;
+      sPose='slash';
     }
-    // 衝擊環
-    if(p>0.2&&p<0.8){
-      let centerX=lerp(gx,sx,0.5);
-      ring(centerX,400,30+p*120,'#e8f0ff',0.6*(1-p*1.2),3);
+    // 第三波：五條再次壓制（0.65~0.85）
+    if(p>0.65&&p<0.85){
+      sukunaHit=true;hitFlash=1.1;shakeCam(20);
+      sukunaKbX=-knockback*20;
+      addBurst(sx-20,400,'#8899bb',25,12);
+      sPose='guard';
     }
-  }
-
-  // ===== 宿儺斬擊 =====
-  if(kind==='slash'){
-    sPose='slash';gPose='dodge';gx=lerp(330,450,travel);
-    if(p>0.3){
-      slashFX(lerp(900,400,ease(p)),330,p,'#ff4a60',1.2);
-      if(p>0.35&&p<0.7) shakeCam(18);
-    }
-    if(p>0.35){
-      gojoHit=true;hitFlash=1.3;shakeCam(30);
-      gojoKbX=knockback*32;
-      addBurst(gx+40,400,'#ff6a7a',55,18);
-      addBurst(gx+40,380,'#ff9aaa',30,12);
-      addBurst(gx+30,410,'white',20,10);
-    }
-    if(p>0.55){
-      for(let k=0;k<10;k++) line(280+k*80,660,340+k*80,700,'#ff4a60',3,0.6);
+    // 恢復階段：最後0.85~1.0 雙方微量反轉術式撫平表皮微傷
+    if(p>0.85){
+      gRecovery=clamp((p-0.85)/0.15,0,1);
+      sRecovery=clamp((p-0.85)/0.15,0,1);
+      if(p>0.95){
+        gInjuries.chest=false;
+        sInjuries.chest=false;
+      }
     }
   }
 
-  // ===== 無量空處（領域直接擴大覆蓋）=====
-  if(kind==='domainG'){
-    gPose='cast';sPose='guard';
-    let centerX=gx+60;
-    let r=40+easeOut(p)*720;
-    // 領域直接擴大到覆蓋宿儺
-    sx=lerp(sx,centerX+300,easeOut(clamp(p*2,0,1)));
-    if(p>0.25){sukunaHit=true;hitFlash=1.0;shakeCam(20);sukunaKbX=-knockback*14;}
-    // 領域球體
-    ring(centerX,360,r,'#4ad8ff',0.9,16);
-    ring(centerX,360,r*0.76,'white',0.35,6);
-    ring(centerX,360,r*0.5,'#4ad8ff',0.6,10);
-    ring(centerX,360,r*0.25,'white',0.4,4);
-    // 內部資訊流
-    for(let k=0;k<36;k++){
-      let a=k*Math.PI/18+t*4.5;
-      let rr=r*0.85;
-      line(centerX+Math.cos(a)*rr*0.55,360+Math.sin(a)*rr*0.55,
-           centerX+Math.cos(a)*rr,360+Math.sin(a)*rr,'#4ad8ff',3,0.7);
-    }
-    // 宿儺在領域內持續受擊
-    if(p>0.45){
-      for(let k=0;k<4;k++) addTrail(sx-20+random(-20,20),380+random(-20,20),'#4ad8ff',1);
-      if(Math.random()<0.3) addBurst(sx,400,'#4ad8ff',10,10);
-    }
-  }
-
-  // ===== 伏魔御廚子（領域直接擴大覆蓋）=====
-  if(kind==='domainS'){
-    sPose='cast';gPose='guard';
-    let centerX=sx-60;
-    let r=40+easeOut(p)*720;
-    // 領域直接擴大到覆蓋五條
-    gx=lerp(gx,centerX-300,easeOut(clamp(p*2,0,1)));
-    if(p>0.25){gojoHit=true;hitFlash=1.0;shakeCam(20);gojoKbX=knockback*14;}
-    ring(centerX,360,r,'#ff4a60',0.9,16);
-    ring(centerX,360,r*0.76,'white',0.35,6);
-    ring(centerX,360,r*0.5,'#ff4a60',0.6,10);
-    ring(centerX,360,r*0.25,'white',0.4,4);
-    for(let k=0;k<36;k++){
-      let a=k*Math.PI/18+t*4.5;
-      let rr=r*0.85;
-      line(centerX+Math.cos(a)*rr*0.55,360+Math.sin(a)*rr*0.55,
-           centerX+Math.cos(a)*rr,360+Math.sin(a)*rr,'#ff4a60',3,0.7);
-    }
-    if(p>0.45){
-      for(let k=0;k<4;k++) addTrail(gx-20+random(-20,20),380+random(-20,20),'#ff4a60',1);
-      if(Math.random()<0.3) addBurst(gx,400,'#ff4a60',10,10);
-    }
-  }
-
-  // ===== 領域同時碰撞爆炸 =====
-  if(kind==='clash'){
+  // ===== 3. 第一回合領域戰：無量空處 vs 伏魔御神子（五條全身斬切，逆轉恢復）=====
+  if(kind==='domainFirst'){
     gPose='cast';sPose='cast';
     let centerX=640;
-    let r=40+easeOut(p)*540;
-    let r1=r*1.1,r2=r*1.1;
-    // 五條領域（藍）
-    ring(centerX-r*0.25,360,r1,'#4ad8ff',0.9,14);
-    ring(centerX-r*0.25,360,r1*0.7,'white',0.3,5);
-    // 宿儺領域（紅）
-    ring(centerX+r*0.25,360,r2,'#ff4a60',0.9,14);
-    ring(centerX+r*0.25,360,r2*0.7,'white',0.3,5);
-    // 碰撞能量
-    let clashPower=easeOut(clamp(p*2.5,0,1));
-    glow(centerX,360,80+clashPower*220,'white',0.4);
-    glow(centerX,360,50+clashPower*160,'#c58aff',0.5);
-    // 衝擊波
+    let r=40+easeOut(p)*600;
+    // 五條領域（藍）有結界
+    ring(centerX-r*0.15,360,r*0.85,'#4ad8ff',0.9,14);
+    ring(centerX-r*0.15,360,r*0.65,'white',0.35,6);
+    // 宿儺領域（紅）無結界，範圍更大
+    ring(centerX+r*0.3,360,r*1.15,'#ff4a60',0.9,14);
+    ring(centerX+r*0.3,360,r*0.9,'white',0.3,5);
+    // 宿儺領域外側斬擊破壞五條結界
     if(p>0.25){
-      let ringR=50+(p-0.25)*520;
-      ring(centerX,360,ringR,'white',(1-p)*1.3,9);
-      ring(centerX,360,ringR*0.8,'#c58aff',(1-p)*1.0,5);
+      for(let k=0;k<10;k++){
+        let a=k*Math.PI/5+t*3;
+        line(centerX-r*0.15+Math.cos(a)*r*0.85,360+Math.sin(a)*r*0.85,
+             centerX+r*0.3+Math.cos(a)*r*1.15,360+Math.sin(a)*r*1.15,'#ff4a60',3,0.6);
+      }
     }
-    // 爆炸粒子
-    if(p>0.3&&Math.random()<0.7){
-      let a=random(0,Math.PI*2);
-      addBurst(centerX+Math.cos(a)*100,360+Math.sin(a)*100,
-               Math.random()<0.5?'#4ad8ff':'#ff4a60',8,18);
+    // 五條全身承受斬擊 — 脖子、胸口、雙臂、臉部
+    if(p>0.3&&p<0.65){
+      gojoHit=true;hitFlash=1.2;shakeCam(25);
+      gInjuries.faceBurn=true;gInjuries.chest=true;gInjuries.rightArmHurt=true;
+      for(let k=0;k<8;k++){
+        addBurst(gx+random(-30,30),400+random(-40,40),'#ff4a60',8,12);
+      }
     }
-    if(p>0.45){
-      shakeCam(22+p*18);
-      gojoHit=true;sukunaHit=true;hitFlash=0.9;
-      gojoKbX=knockback*12;sukunaKbX=-knockback*12;
+    // 五條反擊：赫炸飛宿儺
+    if(p>0.65&&p<0.9){
+      glow(gx+80,360,100,'#ff4a60',0.8);
+      blast(sx,360,300,'#ff4a60',clamp((p-0.65)/0.25,0,1));
+      sukunaHit=true;hitFlash=1.5;shakeCam(35);
+      sukunaKbX=-knockback*40;
+      sInjuries.chest=true;
+    }
+    // 恢復階段：五條瘋狂運作反轉術式修復脖子與全身
+    if(p>0.75){
+      gRecovery=clamp((p-0.75)/0.2,0,1);
+      if(p>0.88){
+        gInjuries.faceBurn=false;
+        gInjuries.chest=false;
+        gInjuries.rightArmHurt=false;
+      }
     }
   }
 
-  // ===== 魔虛羅 =====
-  if(kind==='wheel'||kind==='adapt'){
+  // ===== 4. 五條貼身「赫」轟飛宿儺（臉胸凹陷，宿儺逆轉恢復）=====
+  if(kind==='domainHollow'){
+    gPose='cast';sPose='hit';gx=400;sx=850;
+    if(p>0.2&&p<0.6){
+      glow(gx+80,380,120,'#ff4a60',0.9);
+      beam(gx+80,380,sx-60,380,'#ff4a60',25,1);
+      beam(gx+80,380,sx-60,380,'white',8,1);
+      blast(sx,380,350,'#ff4a60',clamp((p-0.2)/0.4,0,1));
+    }
+    if(p>0.35&&p<0.7){
+      sukunaHit=true;hitFlash=1.8;shakeCam(45);
+      sukunaKbX=-knockback*50;
+      sInjuries.chest=true;
+      sInjuries.faceBurn=true; // 臉部凹陷
+      addBurst(sx-50,380,'#ff4a60',80,25);
+      addBurst(sx-50,380,'white',40,18);
+    }
+    // 宿儺落地後發動反轉術式修復
+    if(p>0.7){
+      sRecovery=clamp((p-0.7)/0.3,0,1);
+      if(p>0.85){
+        sInjuries.chest=false;
+        sInjuries.faceBurn=false;
+      }
+    }
+  }
+
+  // ===== 5. 壓縮小丸子領域內部肉搏（宿儺內臟受損，持續恢復）=====
+  if(kind==='domainSmall'){
+    gPose='punch';sPose='punch';gx=560;sx=720;
+    let r=20+ease(p)*60;
+    ring(640,360,r,'#4ad8ff',0.9,10);
+    ring(640,360,r*0.8,'white',0.4,4);
+    ring(640,360,r*1.2,'#ff4a60',0.6,6);
+    // 近身肉搏 — 五條用雙拳與「蒼」重擊
+    if(p>0.15&&p<0.7){
+      for(let k=0;k<6;k++){
+        let a=k*Math.PI/3+t*5;
+        line(640+Math.cos(a)*r*0.5,360+Math.sin(a)*r*0.5,
+             640+Math.cos(a)*r,360+Math.sin(a)*r,'#e8f0ff',3,0.7);
+      }
+    }
+    if(p>0.3&&p<0.5){
+      sukunaHit=true;hitFlash=1.2;shakeCam(25);
+      sukunaKbX=-knockback*20;
+      addBurst(sx-20,380,'#ffb3c1',30,14);
+      sInjuries.chest=true; // 內臟受損
+    }
+    if(p>0.5&&p<0.7){
+      gojoHit=true;hitFlash=1.0;shakeCam(22);
+      gojoKbX=knockback*15;
+      addBurst(gx+20,380,'#b9eaff',25,12);
+      gInjuries.chest=true;
+    }
+    // 宿儺持續消耗咒力啟動反轉術式治療內臟
+    if(p>0.5){
+      sRecovery=clamp((p-0.5)/0.5,0,1)*0.8;
+      if(p>0.85){
+        sInjuries.chest=false;
+      }
+    }
+    // 五條微量恢復
+    if(p>0.7){
+      gRecovery=clamp((p-0.7)/0.3,0,1);
+      if(p>0.9) gInjuries.chest=false;
+    }
+  }
+
+  // ===== 6. 第五回合領域戰：關鍵0.01秒與貫穿心臟 =====
+  if(kind==='domainFinal'){
+    gPose='punch';sPose='hit';gx=lerp(400,650,travel);sx=850;
+    // 無量空處命中 — 宿儺大腦死機
+    if(p>0.15){
+      glow(640,360,150,'#4ad8ff',0.7);
+      ring(640,360,200+ease(p)*100,'#4ad8ff',0.6,12);
+      for(let k=0;k<20;k++){
+        let a=k*Math.PI/10+t*4;
+        line(640+Math.cos(a)*180,360+Math.sin(a)*180,
+             640+Math.cos(a)*280,360+Math.sin(a)*280,'#4ad8ff',3,0.5);
+      }
+      sukunaHit=true;hitFlash=1.5;shakeCam(30);
+      sInjuries.chest=true;
+    }
+    // 五條貫穿胸膛
+    if(p>0.45){
+      let hx=lerp(gx,sx-40,ease(clamp((p-0.45)/0.3,0,1)));
+      glow(hx,380,60,'#ff4a60',1);
+      glow(hx,380,30,'white',0.9);
+      beam(hx-100,380,hx+100,380,'#ff4a60',12,1);
+      if(p>0.6){
+        sukunaHit=true;hitFlash=2.0;shakeCam(50);
+        sukunaKbX=-knockback*45;
+        sInjuries.chest=true;
+        sInjuries.heartPuncture=true; // 心臟洞穿
+        addBurst(hx,380,'#ff4a60',80,25);
+        addBurst(hx,380,'white',40,18);
+      }
+    }
+    // 宿儺大腦癱瘓無法自行修復 — 沒有恢復，召喚魔虛羅
+    if(p>0.85){
+      // 陰影中魔虛羅開始出現
+      glow(850,480,120,'#1a1428',0.6);
+      glow(850,480,60,'#f1d99a',0.3);
+      if(Math.random()<0.3) addBurst(850,480,'#f1d99a',5,10);
+    }
+  }
+
+  // ===== 7. 魔虛羅斬碎領域與伏黑惠頂缸真相 =====
+  if(kind==='mahoraga'){
     sPose='cast';gPose='guard';
     let a=t*4.5;
+    // 法輪
     ring(780,205,75,'#f1d99a',0.9,12);
     ctx.save();ctx.translate(780,205);ctx.rotate(a);
     for(let k=0;k<12;k++){
@@ -524,117 +623,252 @@ function render(){
     ctx.restore();
     glow(780,480,130,'#1a1428',0.7);
     glow(780,480,65,'#f1d99a',0.3);
-    for(let k=0;k<12;k++){
-      let xx=680+random(0,200),yy=540+random(0,80);
-      addTrail(xx,yy,'#1a1428',1);
+    
+    // 法輪懸掛在伏黑惠靈魂上（視覺暗示：暗色氣場）
+    if(p>0.1&&p<0.5){
+      glow(850,420,80,'#5a2238',0.5);
+      ring(850,420,50,'#8a3044',0.4,5);
     }
-    if(kind==='adapt'&&p>0.35){
-      gojoHit=true;hitFlash=0.9;shakeCam(22);gojoKbX=-knockback*18;
-      addBurst(gx,380,'#b9eaff',35,14);
-      addBurst(gx,400,'#f1d99a',25,12);
-    }
-  }
-
-  // ===== 蒼赫混戰 =====
-  if(kind==='mix'){
-    gPose='dash';sPose='guard';gx=lerp(330,550,travel);
-    let q=(p*4)%1;
-    let bx=lerp(400,900,q),by=310+Math.sin(t*6)*130;
-    glow(bx,by,55,q<0.5?'#4ad8ff':'#ff4a60',1);
-    ring(bx,by,35+t%1*40,q<0.5?'#4ad8ff':'#ff4a60',0.9,7);
-    addTrail(bx,by,q<0.5?'#4ad8ff':'#ff4a60',3);
-    if(p>0.35){
-      sukunaHit=true;hitFlash=0.9;shakeCam(20);
-      sukunaKbX=-knockback*18;
-      addBurst(sx-30,380,'#ffb3c1',35,14);
-    }
-    if(p>0.65){
-      addBurst(650,380,'#9d6bff',30,16);
-    }
-  }
-
-  // ===== 黑閃 =====
-  if(kind==='black'){
-    gPose='punch';sPose='hit';gx=lerp(380,650,travel);sx=850;
-    if(p>0.45){
-      sukunaHit=true;hitFlash=2.0;shakeCam(50);
-      sukunaKbX=-knockback*50;
-      addBurst(sx-60,380,'#b9eaff',80,26);
-      addBurst(sx-40,400,'#090b12',55,20);
-      addBurst(sx-50,390,'white',35,16);
-      // 黑色閃電
-      for(let k=0;k<14;k++){
-        let a=t*11+k*Math.PI/7;
-        line(gx+50,380,gx+50+Math.cos(a)*200,380+Math.sin(a)*200,'#090b12',9,0.95);
-        line(gx+50,380,gx+50+Math.cos(a)*170,380+Math.sin(a)*170,'#b9eaff',3.5,0.9);
+    
+    // 一刀斬碎無量空處結界
+    if(p>0.25){
+      let q=clamp((p-0.25)/0.35,0,1);
+      beam(lerp(900,600,ease(q)),200,lerp(900,600,ease(q))-150,600,'#f4dfa8',12,1);
+      if(p>0.45){
+        for(let k=0;k<12;k++){
+          let ang=k*Math.PI/6;
+          line(640+Math.cos(ang)*200,360+Math.sin(ang)*200,
+               640+Math.cos(ang)*280,360+Math.sin(ang)*280,'#4ad8ff',3,0.5);
+        }
+        gojoHit=true;hitFlash=1.0;shakeCam(25);
+        gInjuries.faceBurn=true;
+        addBurst(640,360,'#4ad8ff',40,18);
       }
     }
-    if(p>0.65){
-      shakeCam(38);
-      addBurst(sx-30,380,'#9d6bff',45,20);
+    // 五條無法立即恢復（領域被破，術式冷卻中）
+    // 但後面他會用反轉術式修復表面傷
+    if(p>0.8){
+      gRecovery=clamp((p-0.8)/0.2,0,1)*0.6;
+      if(p>0.95) gInjuries.faceBurn=false;
     }
   }
 
-  // ===== 夾擊 =====
-  if(kind==='double'){
+  // ===== 8. 雙方大腦永久性毀損（鼻血特寫，不可逆）=====
+  if(kind==='brainDamage'){
+    gPose='guard';sPose='guard';gx=400;sx=880;
+    // 戰場安靜，特寫兩人
+    let zoom=1+clamp((p-0.2)/0.6,0,1)*0.5;
+    ctx.save();
+    ctx.translate(640,360);ctx.scale(zoom,zoom);ctx.translate(-640,-360);
+    
+    // 雙方都無法再開領域
+    gInjuries.faceBurn=true;gInjuries.brainDamage=true;
+    sInjuries.brainDamage=true;sInjuries.faceBurn=true;
+    
+    // 鼻血特寫：五條
+    if(p>0.1&&p<0.9){
+      let noseY=380;
+      // 鼻血滴落
+      let dropY=390+clamp((p-0.2)/0.6,0,1)*80;
+      if(p>0.2){
+        line(gx+5,noseY,gx+5,dropY,'#ff2a40',3,0.9);
+        glow(gx+5,dropY,8,'#ff2a40',0.7);
+      }
+      // 眼角血
+      line(gx-15,368,gx-25,378,'#ff2a40',2,0.7);
+    }
+    // 鼻血特寫：宿儺
+    if(p>0.3&&p<0.9){
+      let dropY2=390+clamp((p-0.4)/0.5,0,1)*70;
+      line(sx+5,380,sx+5,dropY2,'#ff2a40',3,0.9);
+      glow(sx+5,dropY2,8,'#ff2a40',0.7);
+    }
+    
+    // 心跳頻率般的暈眩模糊震動
+    if(p>0.4&&p<0.8){
+      shakeCam(8+Math.sin(p*40)*6);
+    }
+    ctx.restore();
+  }
+
+  // ===== 9. 三打一混戰 — 魔虛羅斬斷五條右臂，五條逆轉再生 =====
+  if(kind==='threeOne'){
     gPose='dodge';sPose='slash';gx=lerp(450,380,travel);
-    if(p>0.15){
-      let mx=180+p*120,my=500;
+    // 魔虛羅側面
+    if(p>0.1){
+      let mx=200+p*100,my=500;
       glow(mx,my,90,'#1a1428',0.8);
       ring(mx,my,55,'#f1d99a',0.7,7);
     }
-    if(p>0.45){
-      gojoHit=true;hitFlash=1.1;shakeCam(28);
-      gojoKbX=knockback*28;
-      addBurst(gx+30,400,'#ff9aaa',45,18);
-      addBurst(gx+20,380,'white',22,13);
+    // 顎吐
+    if(p>0.25){
+      let ax=900-p*80,ay=480;
+      glow(ax,ay,70,'#5a2238',0.7);
+      ring(ax,ay,45,'#ff4a60',0.6,5);
     }
+    // 魔虛羅斬斷五條右臂
+    if(p>0.4&&p<0.7){
+      gojoHit=true;hitFlash=1.5;shakeCam(40);
+      gojoKbX=knockback*30;
+      gInjuries.rightArmLost=true;
+      addBurst(gx+40,400,'#ff4a60',50,20);
+      addBurst(gx+40,380,'white',25,15);
+    }
+    // 五條拉開距離，集中反轉術式在斷臂處重新再生右手臂
     if(p>0.7){
-      sukunaHit=true;hitFlash=0.9;shakeCam(22);
-      sukunaKbX=-knockback*20;
-      addBurst(sx-30,380,'#ffb3c1',35,14);
+      gRecovery=clamp((p-0.7)/0.3,0,1);
+      // 再生過程視覺
+      if(p>0.75&&p<0.95){
+        glow(gx+40,380,35,'#7dffb0',0.7);
+        if(Math.random()<0.5) addTrail(gx+40+random(-15,15),380+random(-15,15),'#7dffb0',1);
+      }
+      if(p>0.92) gInjuries.rightArmLost=false;
     }
   }
 
-  // ===== 最終茈 =====
-  if(kind==='finalPurple'){
-    gPose='cast';
-    let charge=clamp(p/0.3,0,1);
-    let flight=clamp((p-0.3)/0.38,0,1);
-    let hit=clamp((p-0.68)/0.32,0,1);
-    let sx0=385,sy0=415,ex=1010,ey=380;
-    // 蓄力
-    ring(sx0,sy0,32+charge*38,'#4ad8ff',1,11);
-    ring(sx0+32,sy0,28+charge*32,'#ff4a60',1,11);
-    glow(sx0+16,sy0,35+charge*55,'#9c65ff',1);
-    // 飛行
-    if(p>0.3&&p<0.68){
-      let q=ease(flight),px=lerp(sx0,ex,q),py=lerp(sy0,ey,q);
-      beam(sx0,sy0,px,py,'#a967ff',28,1);
-      beam(sx0,sy0,px,py,'white',10,1);
-      glow(px,py,70,'#c58aff',1);
-      glow(px,py,35,'white',0.85);
-      addTrail(px,py,'#bd7cff',5);
-      addTrail(px,py,'white',3);
-      shakeCam(12);
+  // ===== 10. 五條「蒼」碾碎顎吐 =====
+  if(kind==='crushAgito'){
+    gPose='punch';sPose='guard';gx=lerp(330,600,travel);sx=850;
+    // 顎吐被蒼吸引
+    if(p>0.15){
+      let ax=900-p*200,ay=480;
+      glow(ax,ay,100,'#4ad8ff',0.8);
+      ring(ax,ay,70,'#4ad8ff',0.7,7);
+      for(let k=0;k<10;k++){
+        let ang=k*Math.PI/5+t*3;
+        line(ax+Math.cos(ang)*120,ay+Math.sin(ang)*120,
+             ax+Math.cos(ang)*60,ay+Math.sin(ang)*60,'#4ad8ff',3,0.6);
+      }
     }
-    // 命中
-    if(p>=0.68){
-      blast(ex,ey,420,'#d7a6ff',hit);
-      if(p<0.92) shakeCam(45*(1-hit));
-      sukunaHit=true;hitFlash=2.2;
-      sukunaKbX=-knockback*55;
-      if(p>0.72&&p<0.92){
-        addBurst(ex,ey,'#d7a6ff',120,28);
-        addBurst(ex,ey,'white',60,22);
-        addBurst(ex,ey,'#9d6bff',70,20);
+    // 碾碎
+    if(p>0.4){
+      let ax=700,ay=480;
+      glow(ax,ay,150,'#4ad8ff',1);
+      glow(ax,ay,75,'white',0.8);
+      addBurst(ax,ay,'#4ad8ff',60,22);
+      addBurst(ax,ay,'#ff4a60',30,16);
+      addBurst(ax,ay,'white',20,12);
+      shakeCam(30);
+      // 顎吐徹底死亡，無法恢復
+    }
+    // 五條自身無大礙
+  }
+
+  // ===== 11. 五條連續黑閃四連發 =====
+  if(kind==='blackFlash4'){
+    gPose='punch';sPose='hit';gx=lerp(380,650,travel);sx=850;
+    for(let n=0;n<4;n++){
+      let np=(p-n*0.15)/0.12;
+      if(np>0&&np<1){
+        let hx=lerp(gx+50,sx-40,ease(np));
+        glow(hx,380,50,'#090b12',1);
+        glow(hx,380,25,'#b9eaff',0.9);
+        for(let k=0;k<10;k++){
+          let a=t*12+k*Math.PI/5;
+          line(hx,380,hx+Math.cos(a)*160,380+Math.sin(a)*160,'#090b12',8,0.95);
+          line(hx,380,hx+Math.cos(a)*130,380+Math.sin(a)*130,'#b9eaff',3,0.9);
+        }
+        if(np>0.5){
+          sukunaHit=true;hitFlash=1.8;shakeCam(40);
+          sukunaKbX=-knockback*40;
+          sInjuries.chest=true;
+          sInjuries.faceBurn=true;
+          addBurst(hx,380,'#090b12',40,20);
+          addBurst(hx,380,'#b9eaff',25,15);
+        }
       }
-      // 全屏白閃
-      if(p>0.68&&p<0.82){
-        flashAlpha=0.85*(1-(p-0.68)/0.14);
-        ctx.fillStyle=`rgba(255,255,255,${flashAlpha})`;
-        ctx.fillRect(0,0,W,H);
+    }
+    // 五條藉由黑閃將反轉術式輸出恢復至巔峰 — 自身狀態回復
+    if(p>0.6){
+      gRecovery=clamp((p-0.6)/0.4,0,1);
+      if(p>0.9) gInjuries.chest=false;
+    }
+    // 宿儺被打得無力及時修復
+    if(p>0.7&&p<0.95){
+      sRecovery=clamp((p-0.7)/0.25,0,1)*0.3; // 緩慢恢復
+    }
+  }
+
+  // ===== 12. 高空佈局 =====
+  if(kind==='skySetup'){
+    gPose='cast';sPose='guard';gx=400;sx=900;
+    // 蒼滯空
+    if(p>0.15){
+      glow(600,200,80,'#4ad8ff',0.8);
+      ring(600,200,50,'#4ad8ff',0.7,8);
+      addTrail(600,200,'#4ad8ff',2);
+    }
+    // 赫滯空
+    if(p>0.4){
+      glow(700,150,70,'#ff4a60',0.8);
+      ring(700,150,45,'#ff4a60',0.7,7);
+      addTrail(700,150,'#ff4a60',2);
+    }
+    // 蒼與赫靠近
+    if(p>0.6){
+      let mx=lerp(600,700,ease((p-0.6)/0.4));
+      let my=lerp(200,150,ease((p-0.6)/0.4));
+      glow(mx,my,100,'#9c65ff',1);
+      ring(mx,my,60,'#9c65ff',0.8,9);
+    }
+  }
+
+  // ===== 13. 無定向紫大爆炸 =====
+  if(kind==='purpleExplode'){
+    gPose='cast';sPose='hit';gx=400;sx=900;
+    let mx=650,my=175;
+    if(p<0.25){
+      glow(mx,my,120,'#9c65ff',1);
+      glow(mx,my,60,'white',0.8);
+      ring(mx,my,80,'#9c65ff',0.8,10);
+    }
+    if(p>=0.25){
+      let q=clamp((p-0.25)/0.45,0,1);
+      blast(mx,my,500,'#d7a6ff',q);
+      // 魔虛羅灰飛煙滅
+      if(p>0.35){
+        addBurst(mx,my,'#d7a6ff',100,30);
+        addBurst(mx,my,'white',50,24);
+        addBurst(mx,my,'#9d6bff',60,22);
+        // 宿儺被波及
+        sukunaHit=true;hitFlash=2.0;shakeCam(45);
+        sInjuries.leftArmLost=true;sInjuries.faceBurn=true;sInjuries.chest=true;
+        sukunaKbX=-knockback*50;
       }
+      // 五條僅受輕傷
+      gInjuries.chest=true;
+    }
+    // 全屏白閃
+    if(p>0.25&&p<0.45){
+      flashAlpha=0.85*(1-(p-0.25)/0.2);
+      ctx.fillStyle=`rgba(255,255,255,${flashAlpha})`;
+      ctx.fillRect(0,0,W,H);
+    }
+    // 五條自身咒力構成，僅受輕微外傷 — 快速恢復
+    if(p>0.7){
+      gRecovery=clamp((p-0.7)/0.3,0,1);
+      if(p>0.9) gInjuries.chest=false;
+    }
+    // 宿儺重傷，無法立即恢復（後面也沒有恢復）
+  }
+
+  // ===== 14. 宿儺重傷（左臂炸飛、上半身燒焦，無法立即恢復）=====
+  if(kind==='sukunaFallen'){
+    gPose='idle';sPose='hit';gx=330;sx=980;
+    sInjuries.leftArmLost=true;sInjuries.faceBurn=true;sInjuries.chest=true;
+    sukunaHit=true;hitFlash=0.6;
+    if(p>0.15){
+      for(let k=0;k<5;k++) addTrail(sx+random(-40,40),480+random(-40,40),'#ff4a60',1);
+      glow(gx,400,60,'#4ad8ff',0.3);
+    }
+    // 宿儺嘗試恢復但失敗（重傷，反轉術式效率極低）
+    if(p>0.4){
+      sRecovery=clamp((p-0.4)/0.6,0,1)*0.15;
+      // 傷口幾乎沒有癒合
+    }
+    // 五條屹立，輕微恢復
+    if(p>0.5){
+      gRecovery=clamp((p-0.5)/0.5,0,1)*0.3;
     }
   }
 
@@ -642,14 +876,9 @@ function render(){
   gx+=gojoKbX;
   sx+=sukunaKbX;
 
-  // 繪製角色
-  drawFighter(gx,590,'gojo',gPose,t,1.05,gojoHit,false);
-  drawFighter(sx,590,'sukuna',sPose,t,1.05,sukunaHit,sukunaDead);
-
-  if(kind==='wheel'||kind==='adapt'){
-    ctx.fillStyle='#f2dfaa';ctx.font='bold 26px sans-serif';
-    ctx.fillText('魔虛羅',735,590);
-  }
+  // 繪製角色（帶恢復光暈）
+  drawFighter(gx,590,'gojo',gPose,t,1.05,gojoHit,false,gInjuries,gRecovery);
+  drawFighter(sx,590,'sukuna',sPose,t,1.05,sukunaHit,sukunaDead,sInjuries,sRecovery);
 
   drawParticles();
   ctx.restore();
