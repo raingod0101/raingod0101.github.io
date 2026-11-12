@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
@@ -467,6 +467,8 @@
 
 <script>
     const SAVE_KEY = 'RainGod100_Save_v2';
+    const SAVE_KEY_GENERIC = 'raingod_save_raingod-wars';
+    const GAME_ID = 'raingod-wars';
     const WARS_LEADERBOARD_URL = 'https://game-24b43-default-rtdb.firebaseio.com/raingod_wars_leaderboard';
     
     // 屬性系統：紅(Red)、飛(Float)、聖(Angel)、星(Alien)、屍(Undead)、無(None)
@@ -693,7 +695,14 @@
     Object.keys(CHARS).forEach(k => user.lvs[k] = 1);
 
     function save() {
-        localStorage.setItem(SAVE_KEY, JSON.stringify(user));
+        const payload = JSON.stringify(user);
+        localStorage.setItem(SAVE_KEY, payload);
+        try { localStorage.setItem(SAVE_KEY_GENERIC, payload); } catch (e) {}
+        try {
+            if (typeof window.raingodSave === 'function') {
+                window.raingodSave(GAME_ID, user).catch(() => {});
+            }
+        } catch (e) {}
         document.getElementById('res-xp').innerText = Math.floor(user.xp);
         document.getElementById('res-count').innerText = `${user.owned.length}/${Object.keys(CHARS).length}`;
         document.getElementById('res-stage').innerText = `${user.cleared}/${STAGES.length}`;
@@ -702,7 +711,7 @@
     }
 
     function loadGame(savedData) {
-        const data = savedData === undefined ? localStorage.getItem(SAVE_KEY) : savedData;
+        const data = savedData === undefined ? localStorage.getItem(SAVE_KEY_GENERIC) || localStorage.getItem(SAVE_KEY) : savedData;
         if (data) {
             try {
                 const d = typeof data === 'string' ? JSON.parse(data) : data;
@@ -788,10 +797,25 @@
     }
 
     async function initializeWars() {
+        try {
+            const raw = localStorage.getItem(SAVE_KEY_GENERIC) || localStorage.getItem(SAVE_KEY);
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (parsed && typeof parsed === 'object') loadGame(parsed);
+            }
+        } catch (e) {}
+
+        if (typeof window.raingodInitGame === 'function') {
+            try {
+                const accountData = await window.raingodInitGame(GAME_ID, null, () => {});
+                if (accountData && typeof accountData === 'object') loadGame(accountData);
+            } catch (e) {}
+        }
+
         await window.raingodFirebaseReady;
         await window.raingodAuthReady;
-        await window.raingodBindStorage('raingod-wars', [SAVE_KEY], { [SAVE_KEY]: null }, data => {
-            loadGame(data[SAVE_KEY]);
+        await window.raingodBindStorage(GAME_ID, [SAVE_KEY_GENERIC], { [SAVE_KEY_GENERIC]: null }, data => {
+            if (data && data[SAVE_KEY_GENERIC]) loadGame(data[SAVE_KEY_GENERIC]);
             if (window.raingodCurrentUser) uploadWarsLeaderboardScore();
         });
         window.raingodOnAuthStateChanged(currentUser => {
