@@ -7,8 +7,8 @@
   'use strict';
 
   /* ==== BGM（同位置檔名） ==== */
-  let BGM_URL       = 'Aventure - A Beautiful Garden (freetouse.com).mp3';
-  let BGM_HALLOWEEN = 'Chill Pulse - Icicle (freetouse.com).mp3';
+  let BGM_URL       = 'stealeggs-music1.mp3';
+  let BGM_HALLOWEEN = 'stealeggs-music2.mp3';
 
   const VOL_MASTER = 0.7;
   const VOL_SFX    = 0.5;
