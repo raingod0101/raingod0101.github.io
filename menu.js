@@ -1119,6 +1119,7 @@
             clearNavListeners();
             navCurrentUsername = username;
 
+            // 好友申請數量
             const reqRef = userDataRef(username, 'friend_requests');
             const reqHandler = snap => {
                 const val = snap.val() || {};
@@ -1128,10 +1129,12 @@
             reqRef.on('value', reqHandler);
             navListeners.push(() => reqRef.off('value', reqHandler));
 
+            // 私訊未讀
             navCounts.unread = {};
             const friendsRef = userDataRef(username, 'friends');
             const friendsHandler = snap => {
                 const friends = snap.val() || {};
+                // 清掉舊的 unread listeners
                 navListeners.filter(x => x.__isUnread).forEach(fn => { try { fn(); } catch (e) {} });
                 navListeners = navListeners.filter(x => !x.__isUnread);
                 navCounts.unread = {};
@@ -1143,13 +1146,14 @@
                     const handler = msgSnap => {
                         const msgs = msgSnap.val() || {};
                         readRef.once('value').then(readSnap => {
-                            const lastRead = readSnap.val() || 0;
+                            const rv = readSnap.val();
+                            const lastRead = (typeof rv === 'number') ? rv : ((rv && rv.ts) || 0);
                             let unread = 0;
                             Object.keys(msgs).forEach(id => {
                                 const m = msgs[id];
                                 if (m.from !== uid && (m.ts || 0) > lastRead) unread++;
                             });
-                            navCounts.unread[friendUid] = unread;
+                            navCounts.unread['f:' + friendUid] = unread;
                             recomputeNavTotal();
                         }).catch(() => {});
                     };
@@ -1162,8 +1166,38 @@
             };
             friendsRef.on('value', friendsHandler);
             navListeners.push(() => friendsRef.off('value', friendsHandler));
-        }
 
+            // 群組未讀（原本缺少這段）
+            const groupsRef = userDataRef(username, 'groups');
+            const groupsHandler = snap => {
+                const groups = snap.val() || {};
+                Object.keys(groups).forEach(gid => {
+                    const msgsRef = firebase.database().ref(`groups/${gid}/msgs`);
+                    const readRef = firebase.database().ref(`groups/${gid}/read/${uid}`);
+                    const handler = msgSnap => {
+                        const msgs = msgSnap.val() || {};
+                        readRef.once('value').then(readSnap => {
+                            const rv = readSnap.val();
+                            const lastRead = (typeof rv === 'number') ? rv : ((rv && rv.ts) || 0);
+                            let unread = 0;
+                            Object.keys(msgs).forEach(id => {
+                                const m = msgs[id];
+                                if (m.from !== uid && (m.ts || 0) > lastRead) unread++;
+                            });
+                            navCounts.unread['g:' + gid] = unread;
+                            recomputeNavTotal();
+                        }).catch(() => {});
+                    };
+                    msgsRef.on('value', handler);
+                    const offFn = () => msgsRef.off('value', handler);
+                    offFn.__isUnread = true;
+                    navListeners.push(offFn);
+                });
+                recomputeNavTotal();
+            };
+            groupsRef.on('value', groupsHandler);
+            navListeners.push(() => groupsRef.off('value', groupsHandler));
+        }
         let avatarProfileRef = null;
         let avatarProfileHandler = null;
         let avatarProfileFallbackRef = null;
