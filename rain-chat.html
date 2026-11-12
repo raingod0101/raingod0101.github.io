@@ -92,8 +92,12 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
 .chat-sidebar{width:210px;flex-shrink:0;border-right:1px solid #eee;overflow-y:auto;background:#fafbfd}
 .chat-sidebar-title{padding:12px 14px 6px;font-size:12px;font-weight:700;
   color:var(--text-gray);letter-spacing:.4px}
-.chat-sidebar .friend-item{border-radius:0;border:0;background:transparent;cursor:pointer}
+.chat-sidebar .friend-item{border-radius:0;border:0;background:transparent;cursor:pointer;position:relative}
 .chat-sidebar .friend-item.active{background:#eaf2ff}
+.chat-sidebar .friend-item .sidebar-del-btn{display:none;position:absolute;right:6px;top:50%;
+  transform:translateY(-50%);padding:3px 7px;font-size:11px;border-radius:6px;
+  background:#fff0f0;color:var(--danger);border:1px solid #ffc9c9;cursor:pointer}
+.chat-sidebar .friend-item:hover .sidebar-del-btn{display:inline-block}
 .chat-main{flex:1;display:flex;flex-direction:column;min-width:0}
 
 .chat-mobile-picker{display:none;padding:10px 12px;border-bottom:1px solid #eee;
@@ -103,6 +107,8 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
 
 .chat-header{padding:13px 16px;border-bottom:1px solid #eee;display:flex;
   justify-content:space-between;align-items:center;background:#fff;flex-shrink:0}
+.chat-header-left{display:flex;align-items:center;gap:10px;min-width:0}
+.chat-header-left .friend-avatar{width:38px;height:38px;display:none;cursor:pointer}
 .chat-header .title{font-weight:700}
 .chat-header .sub{font-size:12px;color:var(--text-gray)}
 .chat-header-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
@@ -333,9 +339,12 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
               </select>
             </div>
             <div class="chat-header">
-              <div>
-                <div class="title" id="chat-title">聊天室</div>
-                <div class="sub" id="chat-subtitle">請選擇一位好友或群組開始聊天。</div>
+              <div class="chat-header-left">
+                <img id="chat-header-avatar" class="friend-avatar" src="" alt="">
+                <div style="min-width:0;">
+                  <div class="title" id="chat-title">聊天室</div>
+                  <div class="sub" id="chat-subtitle">請選擇一位好友或群組開始聊天。</div>
+                </div>
               </div>
               <div class="chat-header-actions">
                 <button id="chat-edit-group-btn" class="mini-btn primary" type="button" hidden>改群名</button>
@@ -411,6 +420,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
   var chatMobileSelect = document.getElementById('chat-mobile-select');
   var chatTitle = document.getElementById('chat-title');
   var chatSubtitle = document.getElementById('chat-subtitle');
+  var chatHeaderAvatar = document.getElementById('chat-header-avatar');
   var chatBox = document.getElementById('chat-box');
   var chatEmpty = document.getElementById('chat-empty');
   var msgInput = document.getElementById('msg-input');
@@ -613,6 +623,9 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     db().ref('users/'+currentUsername+'/profile/avatar').on('value',function(s){
       var url=s.val(); currentAvatar=url||fallbackAvatar;
       avatarImg.src=currentAvatar; updateMyMessageAvatars();
+      if(activeChat.type==='friend' && chatHeaderAvatar.style.display!=='none'){
+        // 自己的頭像不影響 header（header 顯示對方），這裡不用改
+      }
     });
 
     listenFriendRequests();
@@ -649,26 +662,20 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     var img = new Image();
     img.onload = function(){
       var proceed = function(sourceImg, w, h){
-        // 确保模态框已经显示，再获取尺寸，否则 clientWidth 为 0
         cropModal.classList.remove('hidden');
-        
         setTimeout(function() {
           cropState.img = sourceImg;
           cropState.stageSize = cropStage.clientWidth;
-          
-          if (cropState.stageSize === 0) cropState.stageSize = 300; // 兜底
-          
+          if (cropState.stageSize === 0) cropState.stageSize = 300;
           cropState.baseScale = Math.max(cropState.stageSize / w, cropState.stageSize / h);
           cropState.scale = 1;
           cropState.x = (cropState.stageSize - w * cropState.baseScale) / 2;
           cropState.y = (cropState.stageSize - h * cropState.baseScale) / 2;
-          
           cropImg.src = sourceImg.src;
           cropZoom.value = 1;
-          
           applyCropTransform();
           URL.revokeObjectURL(url);
-        }, 50); // 给 DOM 一点时间渲染出宽高
+        }, 50);
       };
 
       if(window.createImageBitmap){
@@ -696,18 +703,16 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     img.src = url;
   }
 
-  // 使用 left/top/width/height 进行布局，摒弃 transform
   function applyCropTransform(){
     if(!cropState.img) return;
     var s = cropState.baseScale * cropState.scale;
     var displayW = cropState.img.naturalWidth * s;
     var displayH = cropState.img.naturalHeight * s;
-    
     cropImg.style.width  = displayW + 'px';
     cropImg.style.height = displayH + 'px';
     cropImg.style.left   = cropState.x + 'px';
     cropImg.style.top    = cropState.y + 'px';
-    cropImg.style.transform = 'none'; 
+    cropImg.style.transform = 'none';
   }
 
   function clampCrop(){
@@ -773,8 +778,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     var sy = (-cropState.y) / s;
     var sw = st / s;
     var sh = st / s;
-    
-    // 防止越界
+
     sx = Math.max(0, sx);
     sy = Math.max(0, sy);
     if (sx + sw > cropState.img.naturalWidth) sw = cropState.img.naturalWidth - sx;
@@ -950,6 +954,29 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     return db().ref('users/'+currentUsername+'/friend_requests/'+fromUsername).remove();
   }
 
+  // ===== 刪除好友 =====
+  function deleteFriend(friendUid, friendName){
+    if(!confirm('確定要刪除好友「'+friendName+'」嗎？\n刪除後雙方好友關係會解除，聊天記錄仍會保留。')) return;
+    var f = friendsCache[friendUid];
+    if(!f) return;
+    var friendUsername = f.username;
+    var updates = {};
+    updates['users/'+currentUsername+'/friends/'+friendUid] = null;
+    if(friendUsername){
+      updates['users/'+friendUsername+'/friends/'+currentUid] = null;
+    }
+    db().ref().update(updates).then(function(){
+      if(activeChat.type==='friend' && activeChat.id===friendUid){
+        closeActiveChat();
+      }
+      delete friendsCache[friendUid];
+      refreshFriendsUI();
+      alert('已刪除好友。');
+    }).catch(function(e){
+      alert('刪除好友失敗：'+errorMessage(e));
+    });
+  }
+
   // ===== 好友頭像監聽 =====
   function stopFriendAvatarWatchers(){
     Object.keys(friendAvatarRefs).forEach(function(uid){
@@ -966,6 +993,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
       var handler=function(snap){
         var url=snap.val(); if(url) friendsCache[uid].avatar=url;
         refreshFriendsUI(); updateMessageAvatars();
+        updateChatHeaderAvatar();
       };
       ref.on('value',handler);
       friendAvatarRefs[uid]={ref:ref,handler:handler};
@@ -979,6 +1007,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
       refreshFriendsUI();
       listenAllUnread();
       watchFriendAvatars();
+      updateChatHeaderAvatar();
     });
   }
 
@@ -997,6 +1026,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
           '<span class="friend-unread" data-uid="'+escapeHtml(uid)+'"></span>'+
           '<div class="friend-actions">'+
             '<button class="mini-btn primary" data-chat-uid="'+escapeHtml(uid)+'" data-chat-name="'+escapeHtml(f.name||f.username||'好友')+'" data-chat-avatar="'+escapeHtml(f.avatar||fallbackAvatar)+'">私訊</button>'+
+            '<button class="mini-btn danger" data-del-friend="'+escapeHtml(uid)+'" data-del-name="'+escapeHtml(f.name||f.username||'好友')+'">刪除</button>'+
           '</div>';
         friendList.appendChild(li);
       });
@@ -1004,6 +1034,11 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
         btn.addEventListener('click',function(){
           openPrivateChat(btn.dataset.chatUid,btn.dataset.chatName,btn.dataset.chatAvatar);
           switchTab('chat');
+        });
+      });
+      friendList.querySelectorAll('[data-del-friend]').forEach(function(btn){
+        btn.addEventListener('click',function(){
+          deleteFriend(btn.dataset.delFriend, btn.dataset.delName);
         });
       });
     }
@@ -1018,10 +1053,19 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
         li.className='friend-item'+(activeChat.type==='friend'&&uid===activeChat.id?' active':'');
         li.innerHTML='<img class="friend-avatar" src="'+escapeHtml(f.avatar||fallbackAvatar)+'" alt="">'+
           '<div class="friend-name">'+escapeHtml(f.name||f.username||'好友')+'</div>'+
-          '<span class="friend-unread" data-uid="'+escapeHtml(uid)+'"></span>';
-        li.addEventListener('click',(function(u,ff){ return function(){
+          '<span class="friend-unread" data-uid="'+escapeHtml(uid)+'"></span>'+
+          '<button class="sidebar-del-btn" type="button" title="刪除好友">刪</button>';
+        li.addEventListener('click',(function(u,ff){ return function(e){
+          if(e.target && e.target.classList && e.target.classList.contains('sidebar-del-btn')) return;
           openPrivateChat(u,ff.name||ff.username||'好友',ff.avatar||fallbackAvatar);
         };})(uid,f));
+        var delBtn = li.querySelector('.sidebar-del-btn');
+        if(delBtn){
+          delBtn.addEventListener('click',(function(u,ff){ return function(e){
+            e.stopPropagation();
+            deleteFriend(u, ff.name||ff.username||'好友');
+          };})(uid,f));
+        }
         chatSidebarFriends.appendChild(li);
       });
     }
@@ -1093,7 +1137,9 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
       var handler=function(snap){
         var msgs=snap.val()||{};
         readRef.once('value').then(function(rs){
-          var lastRead=rs.val()||0,unread=0;
+          var rv=rs.val();
+          var lastRead=(typeof rv==='number')?rv:((rv&&rv.ts)||0);
+          var unread=0;
           Object.keys(msgs).forEach(function(id){
             var m=msgs[id];
             if(m.from!==currentUid&&(m.ts||0)>lastRead) unread++;
@@ -1447,11 +1493,38 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     var rows=chatBox.querySelectorAll('.msg-row');
     for(var i=0;i<rows.length;i++) rows[i].remove();
   }
+  function hideHeaderAvatar(){
+    chatHeaderAvatar.style.display='none';
+    chatHeaderAvatar.src='';
+    chatHeaderAvatar.onclick=null;
+  }
+  function showHeaderAvatar(url, name){
+    chatHeaderAvatar.src = url || fallbackAvatar;
+    chatHeaderAvatar.alt = name || '';
+    chatHeaderAvatar.style.display = 'block';
+    chatHeaderAvatar.onclick = function(){
+      var src = chatHeaderAvatar.src;
+      if(!src) return;
+      var w = window.open('','_blank');
+      if(w) w.document.write('<title>頭像</title><img src="'+src+'" style="max-width:100%">');
+    };
+  }
+  function updateChatHeaderAvatar(){
+    if(activeChat.type==='friend'){
+      showHeaderAvatar(friendAvatarOf(activeChat.id), '');
+    }else if(activeChat.type==='group'){
+      var g = groupsCache[activeChat.id];
+      showHeaderAvatar((g&&g.avatar)||fallbackAvatar, g?g.name:'');
+    }else{
+      hideHeaderAvatar();
+    }
+  }
   function closeActiveChat(){
     activeChat={type:'',id:''};
     clearChatListeners();
     chatTitle.textContent='聊天室';
     chatSubtitle.textContent='請選擇一位好友或群組開始聊天。';
+    hideHeaderAvatar();
     chatClearFriend.hidden=true; chatMembersBtn.hidden=true; chatDeleteGroupBtn.hidden=true;
     chatEditGroupBtn.hidden=true; chatAliasBtn.hidden=true;
     setChatEnabled(false); removeAllRows();
@@ -1466,6 +1539,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     clearChatListeners();
     chatTitle.textContent=friendName;
     chatSubtitle.textContent='私訊對話';
+    showHeaderAvatar(friendAvatar || friendAvatarOf(friendUid), friendName);
     chatClearFriend.hidden=false;
     chatMembersBtn.hidden=true;
     chatDeleteGroupBtn.hidden=true;
@@ -1529,6 +1603,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
         clearChatListeners();
         chatTitle.textContent=g.name||'群組';
         chatSubtitle.textContent=(g.memberCount||'?')+' 位成員';
+        showHeaderAvatar(g.avatar||fallbackAvatar, g.name);
         chatClearFriend.hidden=false;
         chatMembersBtn.hidden=false;
         chatDeleteGroupBtn.hidden=(g.role!=='owner');
@@ -1978,6 +2053,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     var url=friendAvatarOf(activeChat.id);
     for(var i=0;i<otherAvatars.length;i++) otherAvatars[i].src=url;
     updateMyMessageAvatars();
+    updateChatHeaderAvatar();
   }
   function updateMyMessageAvatars(){
     var mine=chatBox.querySelectorAll('.msg-row.me .msg-avatar');
@@ -2117,6 +2193,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
         searchResults.innerHTML='';
         chatMobileSelect.innerHTML='<option value="">選擇好友或群組開始聊天…</option>';
         removeAllRows(); chatEmpty.style.display='block';
+        hideHeaderAvatar();
         chatClearFriend.hidden=true; chatMembersBtn.hidden=true; chatDeleteGroupBtn.hidden=true;
         chatEditGroupBtn.hidden=true; chatAliasBtn.hidden=true;
         setChatEnabled(false); setUploadStatus(''); imgQuotaHint.textContent='';
