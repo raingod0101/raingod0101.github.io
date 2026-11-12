@@ -7,6 +7,7 @@
         const SAVE_KEY = 'raingod_tycoon_save_v4';
         const SAVE_KEY_GENERIC = 'raingod_save_raingod-tycoon';
         const GAME_ID = 'raingod-tycoon';
+        const TYCOON_LEADERBOARD_URL = 'https://game-24b43-default-rtdb.firebaseio.com/raingod_tycoon_leaderboard';
 
         // ---- 核心變數 ----
         let money = 2000, darkMatter = 0, frame = 0;
@@ -303,6 +304,13 @@
             CORE:    { name: '量子核心', val: 12000, color: '#a855f7' },
             ANTIM:   { name: '反物質', val: 100000, color: '#e11d48' }
         };
+        const FACTORY_RECIPES = {
+            smelter: { input: 'RAW', output: 'STEEL' },
+            chipFab: { input: 'STEEL', output: 'CHIP' },
+            nukeFab: { input: 'CHIP', output: 'BATTERY' },
+            qFab: { input: 'BATTERY', output: 'CORE' },
+            antiFab: { input: 'CORE', output: 'ANTIM' }
+        };
 
         function switchTab(tabId) {
             document.querySelectorAll('.panel > div[id^="tab-"]').forEach(d => d.style.display = 'none');
@@ -330,6 +338,57 @@
             if (techTier >= 4) b.qFab    = { x: startX, y: startY + 560, w: 130, h: 85, color: '#a855f7', label: '🟣 量子合成', type: 'qFab' };
             if (techTier >= 5) b.antiFab = { x: startX, y: startY + 700, w: 130, h: 85, color: '#e11d48', label: '💎 反物質所', type: 'antiFab' };
             return b;
+        }
+
+        function interact(obj, buildings) {
+            const isNear = building =>
+                obj.x >= building.x - 12 && obj.x <= building.x + building.w + 12 &&
+                obj.y >= building.y - 12 && obj.y <= building.y + building.h + 12;
+
+            if (obj.bag.length < capacity) {
+                let nearestIndex = -1;
+                let nearestDistance = 20;
+                for (let i = 0; i < items.length; i++) {
+                    const distance = Math.hypot(obj.x - items[i].x, obj.y - items[i].y);
+                    if (distance < nearestDistance) {
+                        nearestDistance = distance;
+                        nearestIndex = i;
+                    }
+                }
+                if (nearestIndex >= 0) {
+                    obj.bag.push(items.splice(nearestIndex, 1)[0]);
+                    return;
+                }
+            }
+
+            const topItem = obj.bag[obj.bag.length - 1];
+            if (!topItem) return;
+
+            for (const [factoryType, recipe] of Object.entries(FACTORY_RECIPES)) {
+                const factory = buildings[factoryType];
+                if (!factory || topItem.type !== recipe.input || !isNear(factory)) continue;
+
+                topItem.type = recipe.output;
+                const animation = factoryAnim[factoryType];
+                if (animation) {
+                    animation.active = true;
+                    animation.progress = 0;
+                    animation.timer = 0;
+                }
+                spawnParticles(factory.x + factory.w / 2, factory.y + factory.h / 2, factory.color, 4);
+                spawnFloatText(obj.x, obj.y - 20, ITEMS[recipe.output].name, factory.color);
+                return;
+            }
+
+            if (isNear(buildings.hub)) {
+                const value = obj.bag.reduce((total, item) => total + (ITEMS[item.type]?.val || 0), 0);
+                if (value > 0) {
+                    money += value;
+                    obj.bag.length = 0;
+                    spawnFloatText(obj.x, obj.y - 20, `+$${value.toLocaleString()}`, '#4ade80');
+                    saveGame();
+                }
+            }
         }
 
         const resize = () => { cvs.width = window.innerWidth; cvs.height = window.innerHeight; };
