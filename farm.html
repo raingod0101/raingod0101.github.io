@@ -271,6 +271,10 @@ const SPRINKLER_GROWTH_BONUS = 0.5;
             let searchTerm = "";
 
 
+            const GAME_ID = "raingod-farm";
+            const SAVE_KEY = "raingod_farm_save_v1";
+            const SAVE_KEY_GENERIC = "raingod_save_" + GAME_ID;
+
             function parseSave(key) {
                 const raw = localStorage.getItem(key);
                 if (!raw) return null;
@@ -280,7 +284,7 @@ const SPRINKLER_GROWTH_BONUS = 0.5;
             function loadData() {
                 let saved = null;
                 try {
-                    saved = parseSave("raingod_save_game4") || parseSave("RAINGOD_SAVE");
+                    saved = parseSave(SAVE_KEY_GENERIC) || parseSave(SAVE_KEY) || parseSave("raingod_save_game4") || parseSave("RAINGOD_SAVE");
                     const extras = parseSave("RAINGOD_ECONOMY");
                     if (extras && Number(extras.updatedAt) > Number(saved && saved._extrasUpdatedAt || 0)) {
                         saved = Object.assign({}, saved || {}, {
@@ -327,8 +331,14 @@ const SPRINKLER_GROWTH_BONUS = 0.5;
                     farm:data.farm
                 };
                 try {
-                    localStorage.setItem("raingod_save_game4", JSON.stringify(data));
+                    const raw = JSON.stringify(data);
+                    localStorage.setItem(SAVE_KEY, raw);
+                    localStorage.setItem(SAVE_KEY_GENERIC, raw);
+                    localStorage.setItem("raingod_save_game4", raw);
                     localStorage.setItem("RAINGOD_ECONOMY", JSON.stringify(economy));
+                    if (typeof window.raingodSave === 'function') {
+                        window.raingodSave(GAME_ID, data).catch(() => {});
+                    }
                     $("tool-message").textContent = "進度已儲存，返回遊戲後會接續你的農莊。";
                 } catch (error) {
                     console.error("儲存農場進度失敗：", error);
