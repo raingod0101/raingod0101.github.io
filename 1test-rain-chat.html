@@ -1221,57 +1221,107 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
   }
 
   function renderThreadList(){
-    var items=[];
+    var items = [];
+    var orderIdx = 0;
+
     Object.keys(friendsCache).forEach(function(uid){
-      var f=friendsCache[uid]||{}; var last=lastMsgCache['f:'+uid];
-      var alias = (threadAliasCache['f:'+uid] || {})[uid];
-      items.push({key:'f:'+uid,type:'friend',id:uid,
+      var f = friendsCache[uid] || {};
+      var last = lastMsgCache['f:' + uid];
+      var alias = (threadAliasCache['f:' + uid] || {})[uid];
+      items.push({
+        key: 'f:' + uid,
+        type: 'friend',
+        id: uid,
         name: alias || f.name || f.username || '好友',
-        avatar:f.avatar||null,
+        avatar: f.avatar || null,
         avatarLoaded: f.avatarLoaded === true,
-        lastTs:last?last.ts:0,
-        preview:last?last.preview:'還沒有訊息',unread:unreadCache['f:'+uid]||0,
-        loaded: !!unreadCache['f:'+uid+':loaded']});
+        lastTs: last ? last.ts : 0,
+        preview: last ? last.preview : '還沒有訊息',
+        unread: unreadCache['f:' + uid] || 0,
+        loaded: !!unreadCache['f:' + uid + ':loaded'],
+        order: orderIdx++
+      });
     });
+
     Object.keys(groupsCache).forEach(function(gid){
-      var g=groupsCache[gid]||{}; var last=lastMsgCache['g:'+gid];
-      var alias = (threadAliasCache['g:'+gid] || {})[gid];
-      items.push({key:'g:'+gid,type:'group',id:gid,
+      var g = groupsCache[gid] || {};
+      var last = lastMsgCache['g:' + gid];
+      var alias = (threadAliasCache['g:' + gid] || {})[gid];
+      items.push({
+        key: 'g:' + gid,
+        type: 'group',
+        id: gid,
         name: alias || g.name || '群組',
-        avatar:g.avatar||null,
+        avatar: g.avatar || null,
         avatarLoaded: true,
-        lastTs:last?last.ts:0,
-        preview:last?last.preview:'還沒有訊息',unread:unreadCache['g:'+gid]||0,
-        loaded: !!unreadCache['g:'+gid+':loaded']});
+        lastTs: last ? last.ts : 0,
+        preview: last ? last.preview : '還沒有訊息',
+        unread: unreadCache['g:' + gid] || 0,
+        loaded: !!unreadCache['g:' + gid + ':loaded'],
+        order: orderIdx++
+      });
     });
-    items.sort(function(a,b){
-      if(a.loaded !== b.loaded) return a.loaded ? 1 : -1;
-      return (b.lastTs||0)-(a.lastTs||0);
+
+    // ★ 已載入的排前面（上面），未載入的排後面（下面）；同組按原始順序（order）
+    //   這樣載入時是「由上往下」逐項替換，位置不會跳動
+    items.sort(function(a, b){
+      if(a.loaded !== b.loaded) return a.loaded ? -1 : 1;
+      return (a.order || 0) - (b.order || 0);
     });
-    chatThreadList.innerHTML='';
+
+    chatThreadList.innerHTML = '';
     if(!items.length){
       checkLoaded();
       return;
     }
+
     items.forEach(function(it){
-      var li=document.createElement('li'); li.className='chat-thread-item';
-      var groupStyle = it.type==='group' ? 'border-radius:12px;' : '';
+      var li = document.createElement('li');
+      li.className = 'chat-thread-item';
+
+      var groupStyle = it.type === 'group' ? 'border-radius:12px;' : '';
+
       if(!it.loaded){
-        li.innerHTML='<span class="friend-avatar avatar-loading" style="'+groupStyle+'"></span>'+
-          '<div class="chat-thread-main"><div class="chat-thread-top"><span class="chat-thread-name">'+escapeHtml(it.name)+'</span></div>'+
-          '<div class="chat-thread-preview" style="color:var(--text-gray);">載入中…</div></div>';
+        // 訊息未載入：灰色頭像骨架 + 「載入中…」
+        li.innerHTML =
+          '<span class="friend-avatar avatar-loading" style="' + groupStyle + '"></span>' +
+          '<div class="chat-thread-main">' +
+            '<div class="chat-thread-top">' +
+              '<span class="chat-thread-name">' + escapeHtml(it.name) + '</span>' +
+            '</div>' +
+            '<div class="chat-thread-preview" style="color:var(--text-gray);">載入中…</div>' +
+          '</div>';
       }else{
         var avatarInner = avatarHtml(it.avatarLoaded, it.avatar, 'friend-avatar', groupStyle);
-        var previewText=it.preview||''; if(previewText.length>30) previewText=previewText.substring(0,30)+'…';
-        li.innerHTML = avatarInner +
-          '<div class="chat-thread-main"><div class="chat-thread-top"><span class="chat-thread-name">'+escapeHtml(it.name)+'</span><span class="chat-thread-time">'+(it.lastTs?formatTime(it.lastTs):'')+'</span></div><div class="chat-thread-preview">'+escapeHtml(previewText)+'</div></div><span class="friend-unread'+(it.unread>0?' show':'')+'">'+(it.unread>99?'99+':it.unread)+'</span>';
-        li.addEventListener('click',function(){
-          if(it.type==='friend'){ var f=friendsCache[it.id]||{}; openPrivateChat(it.id,f.name||f.username||'好友',friendAvatarOf(it.id)); }
-          else openGroupChat(it.id);
+        var previewText = it.preview || '';
+        if(previewText.length > 30) previewText = previewText.substring(0, 30) + '…';
+
+        li.innerHTML =
+          avatarInner +
+          '<div class="chat-thread-main">' +
+            '<div class="chat-thread-top">' +
+              '<span class="chat-thread-name">' + escapeHtml(it.name) + '</span>' +
+              '<span class="chat-thread-time">' + (it.lastTs ? formatTime(it.lastTs) : '') + '</span>' +
+            '</div>' +
+            '<div class="chat-thread-preview">' + escapeHtml(previewText) + '</div>' +
+          '</div>' +
+          '<span class="friend-unread' + (it.unread > 0 ? ' show' : '') + '">' +
+            (it.unread > 99 ? '99+' : it.unread) +
+          '</span>';
+
+        li.addEventListener('click', function(){
+          if(it.type === 'friend'){
+            var f = friendsCache[it.id] || {};
+            openPrivateChat(it.id, f.name || f.username || '好友', friendAvatarOf(it.id));
+          }else{
+            openGroupChat(it.id);
+          }
         });
       }
+
       chatThreadList.appendChild(li);
     });
+
     checkLoaded();
   }
 
