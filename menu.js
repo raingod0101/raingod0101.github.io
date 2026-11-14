@@ -526,9 +526,6 @@
     }
 
     // === 遊戲鎖 ===
-    // ★ 關鍵修正：遊戲鎖用 tabId（每分頁獨立），不能用 deviceId，
-    // 否則同裝置兩個分頁會共用同一個鎖值，localStorage 的 storage 事件
-    // 不會觸發，兩邊都會以為鎖是自己的。
     async function acquireGameLock(gameId, onLost) {
         const tabId = getTabId();
         const localKey = GAME_LOCK_PREFIX + gameId;
@@ -617,8 +614,6 @@
 
     // =============================================================
     // ★★★ 多地方登入搶佔（以帳號為單位，tab 為唯一 session）★★★
-    // 任何同一個 uid 只保留一個 active session；同一個 tab 會自我覆蓋，
-    // 其他 tab/device 會收到 kickOut 並被強制登出。
     // =============================================================
     let sessionWatchRef = null;
     let sessionWatchHandler = null;
@@ -730,6 +725,7 @@
                 if (res.type === 'js') el.src = res.url;
                 else { el.rel = 'stylesheet'; el.href = res.url; }
                 el.onload = resolve;
+                el.onerror = resolve;
                 document.head.appendChild(el);
             });
         }
@@ -1013,6 +1009,9 @@
         window.raingodGoToLoginPage();
     }
 
+    // =============================================================
+    // nav badge 與導覽列
+    // =============================================================
     function initSystem() {
         if (!firebase.apps.length) {
             firebase.initializeApp({
@@ -1092,6 +1091,8 @@
         const navCounts = { requests: 0, unread: {} };
         let navTotalCount = 0;
         let navCurrentUsername = '';
+        // 用序號避免 race condition
+        let navUnreadEpoch = 0;
 
         function clearNavListeners() {
             navListeners.forEach(fn => { try { fn(); } catch (e) {} });
@@ -1115,23 +1116,62 @@
             updateNavBadge(total);
         }
 
+        // 把 badge 掛到頭像或 fallback 到 user-info / nav_bar
+        function ensureNavBadge() {
+            if (navBadge && document.body.contains(navBadge)) return navBadge;
+            const userAvatar = document.getElementById('user-avatar');
+            const userInfo = document.getElementById('user-info');
+            let wrap = null;
+            if (userAvatar && userAvatar.parentElement) {
+                wrap = userAvatar.parentElement;
+            } else if (userInfo) {
+                wrap = userInfo;
+            } else {
+                wrap = container;
+            }
+            if (!wrap) return null;
+            if (getComputedStyle(wrap).position === 'static') wrap.style.position = 'relative';
+            let existing = wrap.querySelector('.nav-avatar-badge');
+            if (existing) { navBadge = existing; return navBadge; }
+            navBadge = document.createElement('span');
+            navBadge.className = 'nav-avatar-badge';
+            navBadge.textContent = '0';
+            navBadge.style.cssText = [
+                'position:absolute','top:-4px','right:-4px',
+                'min-width:17px','height:17px','padding:0 4px','border-radius:9px',
+                'background:#ff3b30','color:#fff','font-size:10px','font-weight:700',
+                'line-height:17px','text-align:center','box-sizing:border-box',
+                'display:none','pointer-events:none','z-index:5','box-shadow:0 0 0 2px #fff'
+            ].join(';');
+            wrap.appendChild(navBadge);
+            return navBadge;
+        }
+
         function listenNavCounts(username, uid) {
             clearNavListeners();
             navCurrentUsername = username;
+            const epoch = ++navUnreadEpoch;
 
+            // 好友申請
             const reqRef = userDataRef(username, 'friend_requests');
             const reqHandler = snap => {
+                if (epoch !== navUnreadEpoch) return;
                 const val = snap.val() || {};
                 navCounts.requests = Object.keys(val).length;
                 recomputeNavTotal();
             };
-            reqRef.on('value', reqHandler);
+            const reqErr = err => console.warn('[nav] friend_requests 讀取失敗', err);
+            reqRef.on('value', reqHandler, reqErr);
             navListeners.push(() => reqRef.off('value', reqHandler));
 
+            // 好友私訊未讀
             navCounts.unread = {};
             const friendsRef = userDataRef(username, 'friends');
             const friendsHandler = snap => {
+                if (epoch !== navUnreadEpoch) return;
                 const friends = snap.val() || {};
+
+                // 先清掉舊的 unread listeners
                 navListeners.filter(x => x.__isUnread).forEach(fn => { try { fn(); } catch (e) {} });
                 navListeners = navListeners.filter(x => !x.__isUnread);
                 navCounts.unread = {};
@@ -1141,27 +1181,69 @@
                     const msgsRef = firebase.database().ref(`private_chats/${cid}/msgs`);
                     const readRef = firebase.database().ref(`private_chats/${cid}/read/${uid}`);
                     const handler = msgSnap => {
+                        if (epoch !== navUnreadEpoch) return;
                         const msgs = msgSnap.val() || {};
                         readRef.once('value').then(readSnap => {
-                            const lastRead = readSnap.val() || 0;
+                            if (epoch !== navUnreadEpoch) return;
+                            const rv = readSnap.val();
+                            const lastRead = (typeof rv === 'number') ? rv : ((rv && rv.ts) || 0);
                             let unread = 0;
                             Object.keys(msgs).forEach(id => {
                                 const m = msgs[id];
                                 if (m.from !== uid && (m.ts || 0) > lastRead) unread++;
                             });
-                            navCounts.unread[friendUid] = unread;
+                            navCounts.unread['f:' + friendUid] = unread;
                             recomputeNavTotal();
                         }).catch(() => {});
                     };
-                    msgsRef.on('value', handler);
+                    msgsRef.on('value', handler, err => console.warn('[nav] private msgs 讀取失敗', err));
                     const offFn = () => msgsRef.off('value', handler);
                     offFn.__isUnread = true;
                     navListeners.push(offFn);
                 });
                 recomputeNavTotal();
             };
-            friendsRef.on('value', friendsHandler);
+            const friendsErr = err => console.warn('[nav] friends 讀取失敗', err);
+            friendsRef.on('value', friendsHandler, friendsErr);
             navListeners.push(() => friendsRef.off('value', friendsHandler));
+
+            // ★ 群組未讀（新增）
+            const groupsRef = userDataRef(username, 'groups');
+            const groupsHandler = snap => {
+                if (epoch !== navUnreadEpoch) return;
+                const groups = snap.val() || {};
+                // 清掉舊的 group unread listeners
+                navListeners.filter(x => x.__isGroupUnread).forEach(fn => { try { fn(); } catch (e) {} });
+                navListeners = navListeners.filter(x => !x.__isGroupUnread);
+                Object.keys(groups).forEach(gid => {
+                    const gMsgsRef = firebase.database().ref(`groups/${gid}/msgs`);
+                    const gReadRef = firebase.database().ref(`groups/${gid}/read/${uid}`);
+                    const gHandler = msgSnap => {
+                        if (epoch !== navUnreadEpoch) return;
+                        const msgs = msgSnap.val() || {};
+                        gReadRef.once('value').then(readSnap => {
+                            if (epoch !== navUnreadEpoch) return;
+                            const rv = readSnap.val();
+                            const lastRead = (typeof rv === 'number') ? rv : ((rv && rv.ts) || 0);
+                            let unread = 0;
+                            Object.keys(msgs).forEach(id => {
+                                const m = msgs[id];
+                                if (m.from !== uid && (m.ts || 0) > lastRead) unread++;
+                            });
+                            navCounts.unread['g:' + gid] = unread;
+                            recomputeNavTotal();
+                        }).catch(() => {});
+                    };
+                    gMsgsRef.on('value', gHandler, err => console.warn('[nav] group msgs 讀取失敗', err));
+                    const offG = () => gMsgsRef.off('value', gHandler);
+                    offG.__isGroupUnread = true;
+                    navListeners.push(offG);
+                });
+                recomputeNavTotal();
+            };
+            const groupsErr = err => console.warn('[nav] groups 讀取失敗', err);
+            groupsRef.on('value', groupsHandler, groupsErr);
+            navListeners.push(() => groupsRef.off('value', groupsHandler));
         }
 
         let avatarProfileRef = null;
@@ -1213,9 +1295,9 @@
                 if (avatarProfileFallbackRef) return;
                 avatarProfileFallbackRef = firebase.database().ref(`users/${username}/profile/avatar`);
                 avatarProfileFallbackHandler = applyAvatar;
-                avatarProfileFallbackRef.on('value', avatarProfileFallbackHandler);
+                avatarProfileFallbackRef.on('value', avatarProfileFallbackHandler, () => {});
             };
-            avatarProfileRef.on('value', avatarProfileHandler);
+            avatarProfileRef.on('value', avatarProfileHandler, () => {});
         }
 
         fetch(`${baseUrl}menu.html?v=${v}`).then(r => r.text()).then(html => {
@@ -1233,25 +1315,7 @@
             const userInfo = document.getElementById('user-info');
             const userAvatar = document.getElementById('user-avatar');
 
-            if (userAvatar && userAvatar.parentElement) {
-                const wrap = userAvatar.parentElement;
-                if (!wrap.querySelector('.nav-avatar-badge')) {
-                    if (getComputedStyle(wrap).position === 'static') wrap.style.position = 'relative';
-                    navBadge = document.createElement('span');
-                    navBadge.className = 'nav-avatar-badge';
-                    navBadge.textContent = '0';
-                    navBadge.style.cssText = [
-                        'position:absolute','top:-4px','right:-4px',
-                        'min-width:17px','height:17px','padding:0 4px','border-radius:9px',
-                        'background:#ff3b30','color:#fff','font-size:10px','font-weight:700',
-                        'line-height:17px','text-align:center','box-sizing:border-box',
-                        'display:none','pointer-events:none','z-index:5','box-shadow:0 0 0 2px #fff'
-                    ].join(';');
-                    wrap.appendChild(navBadge);
-                } else {
-                    navBadge = wrap.querySelector('.nav-avatar-badge');
-                }
-            }
+            ensureNavBadge();
 
             firebase.auth().onAuthStateChanged(user => {
                 if (user) {
@@ -1261,12 +1325,17 @@
                     const username = user.email ? user.email.split('@')[0] : '';
                     const displayUsername = user.displayName || username || 'User';
 
+                    // 動態更新頭像後，badge 需跟著移到新的父層
+                    ensureNavBadge();
+
                     if (userAvatar) {
                         userAvatar.src = user.photoURL || `${baseUrl}catdragon.png`;
                         userAvatar.title = "個人檔案：" + displayUsername;
                         watchProfileAvatar(username, userAvatar);
                     }
-                    listenNavCounts(username, user.uid);
+                    if (username) {
+                        listenNavCounts(username, user.uid);
+                    }
                     syncData(user);
 
                     const isAdmin = username.toLowerCase() === ADMIN_USERNAME;
@@ -1308,6 +1377,8 @@
                     if (adminBtn) adminBtn.style.display = 'none';
                 }
             });
+        }).catch(err => {
+            console.error('[nav] menu.html 載入失敗', err);
         });
     }
 })();
