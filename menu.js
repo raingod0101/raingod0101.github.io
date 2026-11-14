@@ -1,4 +1,4 @@
-(function() {
+((function() {
     const baseUrl = "https://raingod0101.github.io/";
     const v = new Date().getTime();
     let currentIp = "Unknown_IP";
@@ -526,9 +526,6 @@
     }
 
     // === 遊戲鎖 ===
-    // ★ 關鍵修正：遊戲鎖用 tabId（每分頁獨立），不能用 deviceId，
-    // 否則同裝置兩個分頁會共用同一個鎖值，localStorage 的 storage 事件
-    // 不會觸發，兩邊都會以為鎖是自己的。
     async function acquireGameLock(gameId, onLost) {
         const tabId = getTabId();
         const localKey = GAME_LOCK_PREFIX + gameId;
@@ -617,8 +614,6 @@
 
     // =============================================================
     // ★★★ 多地方登入搶佔（以帳號為單位，tab 為唯一 session）★★★
-    // 任何同一個 uid 只保留一個 active session；同一個 tab 會自我覆蓋，
-    // 其他 tab/device 會收到 kickOut 並被強制登出。
     // =============================================================
     let sessionWatchRef = null;
     let sessionWatchHandler = null;
@@ -1118,7 +1113,6 @@
         function listenNavCounts(username, uid) {
             clearNavListeners();
             navCurrentUsername = username;
-            console.log('[Nav] 開始監聽未讀，帳號:', username, 'UID:', uid);
 
             // 1. 好友申請數量
             const reqRef = firebase.database().ref(`users/${username}/friend_requests`);
@@ -1134,9 +1128,7 @@
             const friendsRef = firebase.database().ref(`users/${username}/friends`);
             const friendsHandler = snap => {
                 const friends = snap.val() || {};
-                console.log('[Nav] 讀取到好友列表:', Object.keys(friends).length, '人');
                 
-                // 清掉舊的私訊監聽
                 navListeners.filter(x => x.__isUnread).forEach(fn => { try { fn(); } catch (e) {} });
                 navListeners = navListeners.filter(x => !x.__isUnread);
                 navCounts.unread = {};
@@ -1148,7 +1140,6 @@
                     
                     const handler = msgSnap => {
                         const msgs = msgSnap.val() || {};
-                        // 每次訊息變動，重新計算該好友的未讀
                         readRef.once('value').then(readSnap => {
                             const rv = readSnap.val();
                             const lastRead = (typeof rv === 'number') ? rv : ((rv && rv.ts) || 0);
@@ -1157,11 +1148,6 @@
                                 const m = msgs[id];
                                 if (m.from !== uid && (m.ts || 0) > lastRead) unread++;
                             });
-                            
-                            // 只有當數字改變時才印 log，避免洗頻
-                            if (navCounts.unread['f:' + friendUid] !== unread) {
-                                console.log(`[Nav] 好友 ${friendUid} 未讀數:`, unread);
-                            }
                             navCounts.unread['f:' + friendUid] = unread;
                             recomputeNavTotal();
                         }).catch(e => console.warn('讀取 read 失敗', e));
@@ -1206,6 +1192,7 @@
             groupsRef.on('value', groupsHandler);
             navListeners.push(() => groupsRef.off('value', groupsHandler));
         }
+
         let avatarProfileRef = null;
         let avatarProfileHandler = null;
         let avatarProfileFallbackRef = null;
@@ -1300,7 +1287,6 @@
                     if (loginBtn) loginBtn.style.setProperty('display', 'none', 'important');
                     if (userInfo) userInfo.style.setProperty('display', 'flex', 'important');
 
-                    // 確保這裡抓到的 username 是正確的（例如去掉 @ 後綴）
                     const username = user.email ? user.email.split('@')[0] : '';
                     const displayUsername = user.displayName || username || 'User';
 
@@ -1310,11 +1296,9 @@
                         watchProfileAvatar(username, userAvatar);
                     }
                     
-                    // 這裡呼叫重寫後的監聽
                     listenNavCounts(username, user.uid); 
                     
                     syncData(user);
-                    // ... 後續管理員按鈕邏輯保持不變 ...
 
                     const isAdmin = username.toLowerCase() === ADMIN_USERNAME;
                     let adminBtn = document.getElementById('raingod-admin-btn');
