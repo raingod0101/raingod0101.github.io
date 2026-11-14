@@ -569,8 +569,10 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
   var lastMsgRefs = {};
   var currentAliases = {};
   var currentMembersMap = {};
-  // 目前聊天室顯示用名稱（已套用匿名）快取，供頂部標題更新
   var currentHeaderBase = { friendName:'', groupName:'' };
+  // 列表用匿名快取（每個對話自己的 aliases）
+  var threadAliasCache = {}; // key: 'f:'+uid 或 'g:'+gid -> { targetUid: alias }
+  var threadAliasRefs = {};
 
   function db(){ return window.firebase.database(); }
   function setStatus(id,msg,type){
@@ -713,7 +715,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     box.appendChild(img);
     document.body.appendChild(box);
     var close=function(e){
-      if(e && e.target===img) return; // 點圖片本身不關
+      if(e && e.target===img) return;
       box.remove();
       document.removeEventListener('click',close,true);
     };
@@ -1087,17 +1089,22 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     updateUnreadBadges();
   }
 
+  // ===== 私訊列表：套用匿名 =====
   function renderThreadList(){
     var items=[];
     Object.keys(friendsCache).forEach(function(uid){
       var f=friendsCache[uid]||{}; var last=lastMsgCache['f:'+uid];
-      items.push({key:'f:'+uid,type:'friend',id:uid,name:f.name||f.username||'好友',
+      var alias = (threadAliasCache['f:'+uid] || {})[uid];
+      items.push({key:'f:'+uid,type:'friend',id:uid,
+        name: alias || f.name || f.username || '好友',
         avatar:f.avatar||fallbackAvatar,lastTs:last?last.ts:0,
         preview:last?last.preview:'還沒有訊息',unread:unreadCache['f:'+uid]||0});
     });
     Object.keys(groupsCache).forEach(function(gid){
       var g=groupsCache[gid]||{}; var last=lastMsgCache['g:'+gid];
-      items.push({key:'g:'+gid,type:'group',id:gid,name:g.name||'群組',
+      var alias = (threadAliasCache['g:'+gid] || {})[gid];
+      items.push({key:'g:'+gid,type:'group',id:gid,
+        name: alias || g.name || '群組',
         avatar:g.avatar||fallbackAvatar,lastTs:last?last.ts:0,
         preview:last?last.preview:'還沒有訊息',unread:unreadCache['g:'+gid]||0});
     });
@@ -1114,6 +1121,45 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
         else openGroupChat(it.id);
       });
       chatThreadList.appendChild(li);
+    });
+  }
+
+  // ===== 列表用匿名監聽 =====
+  function stopThreadAliasWatchers(){
+    Object.keys(threadAliasRefs).forEach(function(k){
+      try{ threadAliasRefs[k].ref.off('value', threadAliasRefs[k].handler); }catch(e){}
+    });
+    threadAliasRefs = {};
+    threadAliasCache = {};
+  }
+  function watchThreadAliases(){
+    stopThreadAliasWatchers();
+    // 好友
+    Object.keys(friendsCache).forEach(function(uid){
+      var cid = chatIdFor(currentUid, uid);
+      var ref = db().ref('private_chats/'+cid+'/aliases/'+currentUid);
+      var handler = (function(u){
+        return function(snap){
+          var val = snap.val() || {};
+          threadAliasCache['f:'+u] = val;
+          renderThreadList();
+        };
+      })(uid);
+      ref.on('value', handler);
+      threadAliasRefs['f:'+uid] = { ref: ref, handler: handler };
+    });
+    // 群組
+    Object.keys(groupsCache).forEach(function(gid){
+      var ref = db().ref('groups/'+gid+'/aliases/'+currentUid);
+      var handler = (function(g){
+        return function(snap){
+          var val = snap.val() || {};
+          threadAliasCache['g:'+g] = val;
+          renderThreadList();
+        };
+      })(gid);
+      ref.on('value', handler);
+      threadAliasRefs['g:'+gid] = { ref: ref, handler: handler };
     });
   }
 
@@ -1167,6 +1213,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
       friendUnreadListeners.push((function(ref){return function(){ref.off('value',handler);};})(msgsRef));
       lastMsgRefs['g:'+gid]={ref:msgsRef,handler:handler};
     });
+    watchThreadAliases();
     renderThreadList();
   }
   function updateUnreadBadges(){
@@ -1315,7 +1362,6 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     }).then(function(){alert('群組名稱已更新！');}).catch(function(e){alert('修改群名失敗：'+e.message);});
   });
 
-  // ==== 群組改頭像 ====
   chatEditAvatarBtn.addEventListener('click', function(){
     if(activeChat.type!=='group') return;
     var gid=activeChat.id, g=groupsCache[gid];
@@ -1330,7 +1376,6 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     var gid = activeChat.id;
     var g = groupsCache[gid];
     if(!g) { groupAvatarChangeInput.value=''; return; }
-    // 先裁剪，再上傳
     openCropModal(file, function(dataUrl){
       setUploadStatus('正在更新群組頭像…', false);
       var updates = {};
@@ -1505,7 +1550,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     setTimeout(function(){ target.classList.remove('highlight'); },1600);
   }
 
-  // ===== 資訊卡（點頭像顯示原始帳號名稱） =====
+  // ===== 資訊卡 =====
   function showProfileCard(evt, uid, avatarUrl, displayName, username){
     var old=document.querySelector('.profile-card-pop'); if(old) old.remove();
     var pop=document.createElement('div');
@@ -1518,7 +1563,6 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     closeBtn.onclick=function(){ pop.remove(); };
     pop.appendChild(closeBtn);
     document.body.appendChild(pop);
-    // 置中顯示
     pop.style.left = '50%';
     pop.style.top = '50%';
     pop.style.transform = 'translate(-50%,-50%)';
@@ -1854,7 +1898,6 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
       var isMe=m.from===currentUid;
       var recalled=recalls[id];
 
-      // msg-line 包住頭像＋訊息＋回覆按鈕
       var line=document.createElement('div');
       line.className='msg-line '+(isMe?'me':'other');
       line.setAttribute('data-msg-id',id);
@@ -2169,7 +2212,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
         for(var i=0;i<friendUnreadListeners.length;i++) friendUnreadListeners[i]();
         friendUnreadListeners=[];
         Object.keys(lastMsgRefs).forEach(function(k){try{lastMsgRefs[k].ref.off('value',lastMsgRefs[k].handler);}catch(e){}});
-        lastMsgRefs={}; stopFriendAvatarWatchers();
+        lastMsgRefs={}; stopFriendAvatarWatchers(); stopThreadAliasWatchers();
         friendsCache={};groupsCache={};unreadCache={};lastMsgCache={};
         ownedGroupId='';hasOwnedGroup=false;
         requestList.innerHTML='';friendList.innerHTML='';
