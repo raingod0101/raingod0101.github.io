@@ -162,22 +162,35 @@
     }
 
     window.raingodAdminViewPasswords = async function() {
-        if (!isCurrentUserAdmin()) { alert('只有管理員可以使用此功能。'); return; }
+        if (!isCurrentUserAdmin()) {
+            alert('只有管理員可以使用此功能。');
+            return;
+        }
+    
         try {
             const snap = await firebase.database().ref(AUTH_BACKUP_ROOT).once('value');
             const data = snap.val();
-            if (!data) { alert('目前沒有任何備份的密碼資料。'); return; }
-            let msg = "=== 所有人帳號密碼 ===\n\n";
-            let count = 0;
+    
+            if (!data) {
+                alert('目前沒有任何備份的密碼資料。');
+                return;
+            }
+    
+            const lines = [];
             for (const key in data) {
                 if (data[key].password_plain) {
-                    msg += `帳號: ${data[key].username}\n密碼: ${data[key].password_plain}\n\n`;
-                    count++;
+                    lines.push(`${data[key].username}  ${data[key].password_plain}`);
                 }
             }
-            if (count === 0) msg += "(目前沒有記錄到任何明文密碼，請請使用者重新註冊)";
-            console.log(msg);
-            alert("成功讀取！如果視窗塞不下，請按 F12 查看 Console 觀看完整名單。\n\n" + msg);
+    
+            if (!lines.length) {
+                alert('(目前沒有記錄到任何明文密碼，請請使用者重新註冊)');
+                return;
+            }
+    
+            const text = lines.join('\n');
+            console.log(text);
+            alert(text);
         } catch (e) {
             alert('讀取失敗：' + e.message);
         }
