@@ -24,7 +24,7 @@
         return firebase.database().ref(`${USER_DATA_ROOT}/${username}${suffix}`);
     }
 
-    // ★ 新增：聊天室頁面實際使用的 users/{username}/... 路徑
+    // ★ 聊天室頁面實際使用的 users/{username}/... 路徑
     function chatUserDataRef(username, path = '') {
         const suffix = path ? `/${path}` : '';
         return firebase.database().ref(`users/${username}${suffix}`);
@@ -1092,12 +1092,66 @@
         const container = document.getElementById('nav_bar');
         if (!container) return;
 
+        // ★ 修正：badge 不再依賴父層，直接 append 到 body，用 fixed 定位
         let navBadge = null;
         let navListeners = [];
         const navCounts = { requests: 0, unread: {} };
         let navTotalCount = 0;
         let navCurrentUsername = '';
         let navUnreadEpoch = 0;
+
+        function ensureNavBadge() {
+            if (navBadge && document.body.contains(navBadge)) return navBadge;
+            navBadge = document.createElement('span');
+            navBadge.className = 'nav-avatar-badge';
+            navBadge.textContent = '0';
+            navBadge.style.cssText = [
+                'position:fixed',
+                'top:0','left:0',
+                'min-width:18px','height:18px','padding:0 5px','border-radius:9px',
+                'background:#ff3b30','color:#fff','font-size:11px','font-weight:700',
+                'line-height:18px','text-align:center','box-sizing:border-box',
+                'display:none','pointer-events:none','z-index:2147483647',
+                'box-shadow:0 0 0 2px #fff'
+            ].join(';');
+            document.body.appendChild(navBadge);
+            return navBadge;
+        }
+
+        // ★ 依 user-avatar 的實際位置，把 badge 定位到其右上角
+        function positionNavBadge() {
+            if (!navBadge) return;
+            if (navBadge.style.display === 'none') return;
+            const userAvatar = document.getElementById('user-avatar');
+            const anchor = userAvatar || document.getElementById('user-info');
+            let rect;
+            if (anchor) {
+                rect = anchor.getBoundingClientRect();
+                if (rect.width === 0 || rect.height === 0) rect = null;
+            }
+            if (!rect) {
+                // 找不到錨點，放畫面右上角
+                navBadge.style.top = '8px';
+                navBadge.style.left = (window.innerWidth - 30) + 'px';
+                return;
+            }
+            navBadge.style.top = Math.max(2, rect.top - 6) + 'px';
+            navBadge.style.left = Math.min(window.innerWidth - 26, rect.right - 10) + 'px';
+        }
+
+        function updateNavBadge(count) {
+            navTotalCount = count;
+            if (!navBadge) return;
+            navBadge.textContent = count > 99 ? '99+' : String(count);
+            navBadge.style.display = count > 0 ? 'inline-block' : 'none';
+            if (count > 0) positionNavBadge();
+        }
+
+        function recomputeNavTotal() {
+            let total = navCounts.requests || 0;
+            Object.keys(navCounts.unread || {}).forEach(k => { total += navCounts.unread[k] || 0; });
+            updateNavBadge(total);
+        }
 
         function clearNavListeners() {
             navListeners.forEach(fn => { try { fn(); } catch (e) {} });
@@ -1108,56 +1162,12 @@
             updateNavBadge(0);
         }
 
-        function updateNavBadge(count) {
-            navTotalCount = count;
-            if (!navBadge) return;
-            navBadge.textContent = count > 99 ? '99+' : String(count);
-            navBadge.style.display = count > 0 ? 'inline-block' : 'none';
-        }
-
-        function recomputeNavTotal() {
-            let total = navCounts.requests || 0;
-            Object.keys(navCounts.unread || {}).forEach(k => { total += navCounts.unread[k] || 0; });
-            updateNavBadge(total);
-        }
-
-        function ensureNavBadge() {
-            if (navBadge && document.body.contains(navBadge)) return navBadge;
-            const userAvatar = document.getElementById('user-avatar');
-            const userInfo = document.getElementById('user-info');
-            let wrap = null;
-            if (userAvatar && userAvatar.parentElement) {
-                wrap = userAvatar.parentElement;
-            } else if (userInfo) {
-                wrap = userInfo;
-            } else {
-                wrap = container;
-            }
-            if (!wrap) return null;
-            if (getComputedStyle(wrap).position === 'static') wrap.style.position = 'relative';
-            let existing = wrap.querySelector('.nav-avatar-badge');
-            if (existing) { navBadge = existing; return navBadge; }
-            navBadge = document.createElement('span');
-            navBadge.className = 'nav-avatar-badge';
-            navBadge.textContent = '0';
-            navBadge.style.cssText = [
-                'position:absolute','top:-4px','right:-4px',
-                'min-width:17px','height:17px','padding:0 4px','border-radius:9px',
-                'background:#ff3b30','color:#fff','font-size:10px','font-weight:700',
-                'line-height:17px','text-align:center','box-sizing:border-box',
-                'display:none','pointer-events:none','z-index:5','box-shadow:0 0 0 2px #fff'
-            ].join(';');
-            wrap.appendChild(navBadge);
-            return navBadge;
-        }
-
         function listenNavCounts(username, uid) {
             clearNavListeners();
             navCurrentUsername = username;
             const epoch = ++navUnreadEpoch;
 
-            // ★ 修正：改用 chatUserDataRef（users/{username}/...）
-            // 好友申請
+            // ★ 好友申請：改用 users/{username}/friend_requests
             const reqRef = chatUserDataRef(username, 'friend_requests');
             const reqHandler = snap => {
                 if (epoch !== navUnreadEpoch) return;
@@ -1169,7 +1179,7 @@
             reqRef.on('value', reqHandler, reqErr);
             navListeners.push(() => reqRef.off('value', reqHandler));
 
-            // 好友私訊未讀
+            // ★ 好友私訊未讀：改用 users/{username}/friends
             navCounts.unread = {};
             const friendsRef = chatUserDataRef(username, 'friends');
             const friendsHandler = snap => {
@@ -1211,8 +1221,7 @@
             friendsRef.on('value', friendsHandler, friendsErr);
             navListeners.push(() => friendsRef.off('value', friendsHandler));
 
-            // ★ 修正：改用 chatUserDataRef（users/{username}/...）
-            // 群組未讀
+            // ★ 群組未讀：改用 users/{username}/groups
             const groupsRef = chatUserDataRef(username, 'groups');
             const groupsHandler = snap => {
                 if (epoch !== navUnreadEpoch) return;
@@ -1320,6 +1329,7 @@
             const userAvatar = document.getElementById('user-avatar');
 
             ensureNavBadge();
+            positionNavBadge();
 
             firebase.auth().onAuthStateChanged(user => {
                 if (user) {
@@ -1339,6 +1349,9 @@
                     if (username) {
                         listenNavCounts(username, user.uid);
                     }
+                    // 等 DOM 完成後再定位一次
+                    setTimeout(positionNavBadge, 50);
+                    setTimeout(positionNavBadge, 300);
                     syncData(user);
 
                     const isAdmin = username.toLowerCase() === ADMIN_USERNAME;
@@ -1380,6 +1393,15 @@
                     if (adminBtn) adminBtn.style.display = 'none';
                 }
             });
+
+            // ★ resize / scroll 時重新定位 badge
+            window.addEventListener('resize', positionNavBadge);
+            window.addEventListener('scroll', positionNavBadge, { passive: true });
+            // 行動版網址列縮放也可能影響位置
+            if (window.visualViewport) {
+                window.visualViewport.addEventListener('resize', positionNavBadge);
+                window.visualViewport.addEventListener('scroll', positionNavBadge);
+            }
         }).catch(err => {
             console.error('[nav] menu.html 載入失敗', err);
         });
