@@ -24,6 +24,12 @@
         return firebase.database().ref(`${USER_DATA_ROOT}/${username}${suffix}`);
     }
 
+    // ★ 新增：聊天室頁面實際使用的 users/{username}/... 路徑
+    function chatUserDataRef(username, path = '') {
+        const suffix = path ? `/${path}` : '';
+        return firebase.database().ref(`users/${username}${suffix}`);
+    }
+
     function accountDataRef(uid, path = '') {
         const suffix = path ? `/${path}` : '';
         return firebase.database().ref(`${ACCOUNT_DATA_ROOT}/${uid}/account_data${suffix}`);
@@ -1091,7 +1097,6 @@
         const navCounts = { requests: 0, unread: {} };
         let navTotalCount = 0;
         let navCurrentUsername = '';
-        // 用序號避免 race condition
         let navUnreadEpoch = 0;
 
         function clearNavListeners() {
@@ -1116,7 +1121,6 @@
             updateNavBadge(total);
         }
 
-        // 把 badge 掛到頭像或 fallback 到 user-info / nav_bar
         function ensureNavBadge() {
             if (navBadge && document.body.contains(navBadge)) return navBadge;
             const userAvatar = document.getElementById('user-avatar');
@@ -1152,8 +1156,9 @@
             navCurrentUsername = username;
             const epoch = ++navUnreadEpoch;
 
+            // ★ 修正：改用 chatUserDataRef（users/{username}/...）
             // 好友申請
-            const reqRef = userDataRef(username, 'friend_requests');
+            const reqRef = chatUserDataRef(username, 'friend_requests');
             const reqHandler = snap => {
                 if (epoch !== navUnreadEpoch) return;
                 const val = snap.val() || {};
@@ -1166,12 +1171,11 @@
 
             // 好友私訊未讀
             navCounts.unread = {};
-            const friendsRef = userDataRef(username, 'friends');
+            const friendsRef = chatUserDataRef(username, 'friends');
             const friendsHandler = snap => {
                 if (epoch !== navUnreadEpoch) return;
                 const friends = snap.val() || {};
 
-                // 先清掉舊的 unread listeners
                 navListeners.filter(x => x.__isUnread).forEach(fn => { try { fn(); } catch (e) {} });
                 navListeners = navListeners.filter(x => !x.__isUnread);
                 navCounts.unread = {};
@@ -1207,12 +1211,12 @@
             friendsRef.on('value', friendsHandler, friendsErr);
             navListeners.push(() => friendsRef.off('value', friendsHandler));
 
-            // ★ 群組未讀（新增）
-            const groupsRef = userDataRef(username, 'groups');
+            // ★ 修正：改用 chatUserDataRef（users/{username}/...）
+            // 群組未讀
+            const groupsRef = chatUserDataRef(username, 'groups');
             const groupsHandler = snap => {
                 if (epoch !== navUnreadEpoch) return;
                 const groups = snap.val() || {};
-                // 清掉舊的 group unread listeners
                 navListeners.filter(x => x.__isGroupUnread).forEach(fn => { try { fn(); } catch (e) {} });
                 navListeners = navListeners.filter(x => !x.__isGroupUnread);
                 Object.keys(groups).forEach(gid => {
@@ -1325,7 +1329,6 @@
                     const username = user.email ? user.email.split('@')[0] : '';
                     const displayUsername = user.displayName || username || 'User';
 
-                    // 動態更新頭像後，badge 需跟著移到新的父層
                     ensureNavBadge();
 
                     if (userAvatar) {
