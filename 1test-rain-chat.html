@@ -1262,10 +1262,24 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
       });
     });
 
-    // ★ 已載入的排前面（上面），未載入的排後面（下面）；同組按原始順序（order）
-    //   這樣載入時是「由上往下」逐項替換，位置不會跳動
+    // ★ 排序規則：
+    //   1. 已載入的項目按 lastTs 從新到舊（最近有訊息的在上）
+    //   2. 已載入的項目全部排在未載入之前
+    //   3. 未載入的項目按原始順序（order）排在後面
+    //   這樣群組載入後，若它有最新訊息會移到最上面，不會永遠被擠在最下面。
     items.sort(function(a, b){
-      if(a.loaded !== b.loaded) return a.loaded ? -1 : 1;
+      var aLoaded = a.loaded;
+      var bLoaded = b.loaded;
+
+      if(aLoaded && bLoaded){
+        if((a.lastTs || 0) !== (b.lastTs || 0)){
+          return (b.lastTs || 0) - (a.lastTs || 0);
+        }
+        return (a.order || 0) - (b.order || 0);
+      }
+
+      if(aLoaded !== bLoaded) return aLoaded ? -1 : 1;
+
       return (a.order || 0) - (b.order || 0);
     });
 
