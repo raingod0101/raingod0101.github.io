@@ -1373,7 +1373,7 @@
                         if (!adminBtn) {
                             adminBtn = document.createElement('button');
                             adminBtn.id = 'raingod-admin-btn';
-                            adminBtn.textContent = '🛠 管理';
+                            adminBtn.textContent = '.';
                             adminBtn.style.cssText = [
                                 'margin-left:8px','padding:4px 10px','border-radius:6px',
                                 'border:1px solid #ff9800','background:#fff3e0','color:#e65100',
