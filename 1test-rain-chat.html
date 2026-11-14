@@ -171,23 +171,11 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
 
 /* ===== 回覆引用（清楚可見） ===== */
 .reply-quote{
-  display:block;
-  margin:0 0 6px;
-  padding:6px 9px;
-  border-left:3px solid #8e8e93;
-  background:#eceff3;
-  border-radius:6px;
-  font-size:12px;
-  line-height:1.4;
-  color:#4a4f57;
-  cursor:pointer;
-  max-height:44px;
-  overflow:hidden;
-  text-overflow:ellipsis;
-  display:-webkit-box;
-  -webkit-line-clamp:2;
-  -webkit-box-orient:vertical;
-  word-break:break-word;
+  display:block;margin:0 0 6px;padding:6px 9px;
+  border-left:3px solid #8e8e93;background:#eceff3;border-radius:6px;
+  font-size:12px;line-height:1.4;color:#4a4f57;cursor:pointer;
+  max-height:44px;overflow:hidden;text-overflow:ellipsis;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word;
 }
 .reply-quote:hover{background:#e2e6ed}
 .me .reply-quote{border-left-color:#ffffffaa;background:rgba(255,255,255,.22);color:#fff}
@@ -195,7 +183,6 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
 .reply-quote .rq-name{font-weight:700;margin-right:5px;color:#1d1d1f}
 .me .reply-quote .rq-name{color:#fff}
 
-/* 回覆預覽條 */
 .reply-preview-bar{display:none;padding:8px 14px;background:#fff8e1;border-bottom:1px solid #f0e0b0;
   font-size:12px;color:#8a6d00;align-items:center;gap:10px}
 .reply-preview-bar.show{display:flex}
@@ -203,7 +190,6 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
 .reply-preview-bar .rp-close{border:0;background:transparent;color:#8a6d00;font-size:16px;
   cursor:pointer;padding:0 4px;flex-shrink:0}
 
-/* ===== 輸入區 ===== */
 .chat-input-area{padding:10px 12px;border-top:1px solid #eee;display:flex;gap:8px;
   align-items:center;background:#fff;width:100%;max-width:100%}
 .chat-input-area input[type="text"]{flex:1 1 0;min-width:0;padding:11px 14px;border:none;
@@ -217,7 +203,6 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
 .quota-hint{font-size:11px;color:var(--text-gray);flex:0 1 auto;padding:0 2px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:72px}
 
-/* 回覆圖示 */
 .reply-icon-btn{position:absolute;top:-8px;right:-8px;width:28px;height:28px;
   border-radius:50%;background:#fff;border:1px solid var(--border);color:#555;
   font-size:14px;cursor:pointer;display:none;align-items:center;justify-content:center;
@@ -225,12 +210,17 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
 .msg-row.me .reply-icon-btn{right:auto;left:-8px}
 .msg-row.reply-active .reply-icon-btn{display:flex}
 
-/* 側邊欄（桌機） */
-.chat-sidebar{width:210px;flex-shrink:0;border-right:1px solid #eee;overflow-y:auto;background:#fafbfd}
-.chat-sidebar-title{padding:12px 14px 6px;font-size:12px;font-weight:700;
-  color:var(--text-gray);letter-spacing:.4px}
-.chat-sidebar .friend-item{border-radius:0;border:0;background:transparent;cursor:pointer;position:relative}
-.chat-sidebar .friend-item.active{background:#eaf2ff}
+/* 匿名設定彈窗 */
+.alias-pop{position:fixed;z-index:110;background:#fff;border:1px solid var(--border);
+  border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.18);padding:12px 14px;
+  max-height:70vh;overflow-y:auto;min-width:280px;max-width:340px;font-size:13px}
+.alias-pop .ap-title{font-weight:700;margin-bottom:10px;color:var(--text-gray);font-size:12px;letter-spacing:.3px}
+.alias-pop .ap-item{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #f0f0f0}
+.alias-pop .ap-item:last-child{border-bottom:none}
+.alias-pop .ap-item img{width:30px;height:30px;border-radius:50%;object-fit:cover;flex-shrink:0}
+.alias-pop .ap-item .ap-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.alias-pop .ap-item .ap-alias{font-size:11px;color:var(--text-gray);margin-left:4px}
+.alias-pop .ap-close{width:100%;margin-top:8px}
 
 .group-check-list{display:flex;flex-direction:column;gap:6px;max-height:260px;overflow-y:auto;margin-top:8px}
 .group-check-item{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:9px;background:#f7f9fc}
@@ -552,6 +542,10 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
   var ownedGroupId='';
   var replyToMsg = null;
   var lastMsgRefs = {};
+  // 目前聊天室的 aliases（由監聽更新），供匿名彈窗顯示
+  var currentAliases = {};
+  // 目前聊天室的成員名單（uid -> 顯示名稱/頭像），供匿名彈窗使用
+  var currentMembersMap = {};
 
   function db(){ return window.firebase.database(); }
   function setStatus(id,msg,type){
@@ -1040,7 +1034,6 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     updateUnreadBadges();
   }
 
-  // ===== 私訊列表 =====
   function renderThreadList(){
     var items=[];
     Object.keys(friendsCache).forEach(function(uid){
@@ -1134,7 +1127,6 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     tabBadgeRequests.classList.toggle('show',requestsCount>0);
   }
 
-  // ===== 群組 =====
   function listenGroups(){
     db().ref('users/'+currentUsername+'/groups').on('value',function(snap){
       var raw=snap.val()||{}; var gids=Object.keys(raw);
@@ -1270,19 +1262,99 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     }).then(function(){alert('群組名稱已更新！');}).catch(function(e){alert('修改群名失敗：'+e.message);});
   });
 
-  chatAliasBtn.addEventListener('click',function(){
+  // ===== 匿名：每個人都可以改別人（只自己看得到） =====
+  chatAliasBtn.addEventListener('click',function(evt){
+    evt.stopPropagation();
     if(!activeChat.type) return;
-    var ref=activeChat.type==='friend'
-      ?db().ref('private_chats/'+chatIdFor(currentUid,activeChat.id)+'/aliases/'+currentUid)
-      :db().ref('groups/'+activeChat.id+'/aliases/'+currentUid);
-    ref.once('value').then(function(snap){
-      var cur=snap.val()||'';
-      var alias=prompt('請輸入你在這個聊天室的匿名（留空則恢復預設名稱）：',cur);
-      if(alias===null) return;
-      alias=alias.trim();
-      if(alias==='') ref.remove(); else ref.set(alias);
-    });
+    openAliasPop(evt);
   });
+
+  function openAliasPop(evt){
+    var old=document.querySelector('.alias-pop'); if(old) old.remove();
+    var pop=document.createElement('div');
+    pop.className='alias-pop';
+    document.body.appendChild(pop);
+    var r=evt.target.getBoundingClientRect();
+    pop.style.left=Math.min(r.left,window.innerWidth-300)+'px';
+    pop.style.top=(r.bottom+6)+'px';
+
+    var isGroup = activeChat.type==='group';
+    var gid = activeChat.id;
+    var cid = isGroup ? gid : chatIdFor(currentUid, gid);
+
+    // 收集成員：私訊 = 自己 + 對方；群組 = 成員名單
+    var memberUids = [];
+    if(isGroup){
+      Object.keys(currentMembersMap).forEach(function(uid){ memberUids.push(uid); });
+      if(!memberUids.length){ memberUids.push(currentUid); }
+    }else{
+      memberUids = [currentUid, gid];
+    }
+
+    var aliasRef = isGroup
+      ? db().ref('groups/'+gid+'/aliases/'+currentUid)
+      : db().ref('private_chats/'+cid+'/aliases/'+currentUid);
+
+    aliasRef.once('value').then(function(snap){
+      var myAliases = snap.val() || {};
+      pop.innerHTML = '<div class="ap-title">設定匿名（只有自己看得到）</div>';
+      memberUids.forEach(function(uid){
+        if(uid === currentUid) return; // 自己略過
+        var info = currentMembersMap[uid] || friendsCache[uid] || {};
+        var displayName = info.name || info.username || uid;
+        var avatar = info.avatar || fallbackAvatar;
+        var curAlias = myAliases[uid] || '';
+        var row = document.createElement('div');
+        row.className='ap-item';
+        row.innerHTML='<img src="'+escapeHtml(avatar)+'" alt=""><div class="ap-name">'+escapeHtml(displayName)+
+          (curAlias?' <span class="ap-alias">（'+escapeHtml(curAlias)+'）</span>':'')+'</div>';
+        var btn=document.createElement('button');
+        btn.className='mini-btn'; btn.textContent='設定';
+        btn.onclick=function(){
+          var v=prompt('輸入要顯示的匿名（留空則恢復預設）', curAlias);
+          if(v===null) return;
+          v=v.trim();
+          var updates={};
+          if(v==='') updates[uid]=null;
+          else updates[uid]=v;
+          aliasRef.update(updates).then(function(){
+            openAliasPop(evt); // 重新整理
+          }).catch(function(e){alert('設定失敗：'+e.message);});
+        };
+        row.appendChild(btn);
+        pop.appendChild(row);
+      });
+      // 自己的匿名設定
+      var selfRow=document.createElement('div');
+      selfRow.className='ap-item';
+      selfRow.innerHTML='<img src="'+escapeHtml(currentAvatar)+'" alt=""><div class="ap-name">自己（'+escapeHtml(currentUser.displayName||currentUsername)+'）'+
+        (myAliases[currentUid]?' <span class="ap-alias">（'+escapeHtml(myAliases[currentUid])+'）</span>':'')+'</div>';
+      var selfBtn=document.createElement('button');
+      selfBtn.className='mini-btn'; selfBtn.textContent='設定';
+      selfBtn.onclick=function(){
+        var cur=myAliases[currentUid]||'';
+        var v=prompt('輸入自己在聊天室顯示的匿名（留空則恢復預設）', cur);
+        if(v===null) return;
+        v=v.trim();
+        var updates={};
+        if(v==='') updates[currentUid]=null;
+        else updates[currentUid]=v;
+        aliasRef.update(updates).then(function(){ openAliasPop(evt); }).catch(function(e){alert('設定失敗：'+e.message);});
+      };
+      selfRow.appendChild(selfBtn);
+      pop.appendChild(selfRow);
+
+      var closeBtn=document.createElement('button');
+      closeBtn.className='mini-btn ap-close'; closeBtn.textContent='關閉';
+      closeBtn.onclick=function(){ pop.remove(); };
+      pop.appendChild(closeBtn);
+    }).catch(function(e){
+      pop.innerHTML='<div class="ap-title">讀取失敗</div><div>'+escapeHtml(errorMessage(e))+'</div>';
+    });
+
+    var close=function(e2){ if(!pop.contains(e2.target)){ pop.remove(); document.removeEventListener('click',close); } };
+    setTimeout(function(){ document.addEventListener('click',close); },0);
+  }
 
   // ===== 回覆 =====
   function setReplyTo(msgId,msgData){
@@ -1318,7 +1390,6 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     chatBox.querySelectorAll('.msg-row.reply-active').forEach(function(r){r.classList.remove('reply-active');});
   });
 
-  // 點擊回覆引用 → 捲動到原始訊息並高亮
   function scrollToMessage(msgId){
     var target=chatBox.querySelector('.msg-row[data-msg-id="'+msgId+'"]');
     if(!target) return;
@@ -1379,6 +1450,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     setChatEnabled(false); removeAllRows();
     chatEmpty.style.display='block'; setUploadStatus(''); imgQuotaHint.textContent='';
     clearReply(); showChatList(); renderThreadList();
+    currentAliases = {}; currentMembersMap = {};
   }
   chatBackBtn.addEventListener('click',function(){closeActiveChat();});
   chatClearFriend.addEventListener('click',function(){closeActiveChat();});
@@ -1395,17 +1467,21 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     setChatEnabled(true); chatEmpty.style.display='none'; removeAllRows();
     setUploadStatus(''); updateQuotaHint(); showChatMain();
 
+    currentMembersMap = {};
+    currentMembersMap[currentUid] = { name: currentUser.displayName||currentUsername, avatar: currentAvatar||fallbackAvatar, username: currentUsername };
+    currentMembersMap[friendUid] = { name: friendName, avatar: friendAvatar||friendAvatarOf(friendUid), username: (friendsCache[friendUid]&&friendsCache[friendUid].username)||'' };
+
     var cid=chatIdFor(currentUid,friendUid);
     var msgsRef=db().ref('private_chats/'+cid+'/msgs');
     var recallsRef=db().ref('private_chats/'+cid+'/recalls');
     var readRef=db().ref('private_chats/'+cid+'/read');
-    var aliasesRef=db().ref('private_chats/'+cid+'/aliases');
+    var aliasesRef=db().ref('private_chats/'+cid+'/aliases/'+currentUid);
     var state={msgs:{},recalls:{},read:{},aliases:{}};
     var render=function(){renderMessages('private',cid,state,friendUid,friendName,friendAvatar);};
     var h1=function(s){state.msgs=s.val()||{};render();};
     var h2=function(s){state.recalls=s.val()||{};render();};
     var h3=function(s){state.read=s.val()||{};render();};
-    var h4=function(s){state.aliases=s.val()||{};render();};
+    var h4=function(s){state.aliases=s.val()||{};currentAliases=s.val()||{};render();};
     msgsRef.on('value',h1); recallsRef.on('value',h2); readRef.on('value',h3); aliasesRef.on('value',h4);
     chatListeners.push(function(){msgsRef.off('value',h1);});
     chatListeners.push(function(){recallsRef.off('value',h2);});
@@ -1438,18 +1514,50 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
         setChatEnabled(true); chatEmpty.style.display='none'; removeAllRows();
         setUploadStatus(''); updateQuotaHint(); showChatMain();
 
+        // 載入成員名單供匿名使用
+        currentMembersMap = {};
+        db().ref('groups/'+gid+'/members').once('value').then(function(ms){
+          var members=ms.val()||{};
+          var uids=Object.keys(members);
+          if(!uids.length){ currentMembersMap[currentUid]={name:currentUser.displayName||currentUsername,avatar:currentAvatar||fallbackAvatar}; }
+          db().ref('groups/'+gid+'/memberUsernames').once('value').then(function(us){
+            var usernames=us.val()||{};
+            var pending=uids.length;
+            if(!pending){ currentMembersMap[currentUid]={name:currentUser.displayName||currentUsername,avatar:currentAvatar||fallbackAvatar}; return; }
+            uids.forEach(function(uid){
+              var uname=usernames[uid];
+              if(friendsCache[uid]){
+                currentMembersMap[uid]={name:friendsCache[uid].name||uid,avatar:friendsCache[uid].avatar||fallbackAvatar,username:friendsCache[uid].username||uname||''};
+                pending--; if(!pending) finishMembers();
+              }else if(uname){
+                db().ref('users/'+uname+'/profile').once('value').then(function(ps){
+                  var p=ps.val()||{};
+                  currentMembersMap[uid]={name:p.displayName||uname,avatar:p.avatar||fallbackAvatar,username:uname};
+                  pending--; if(!pending) finishMembers();
+                }).catch(function(){pending--;if(!pending)finishMembers();});
+              }else{
+                currentMembersMap[uid]={name:uid,avatar:fallbackAvatar,username:''};
+                pending--; if(!pending) finishMembers();
+              }
+            });
+          });
+        });
+        function finishMembers(){
+          // 成員名單已備妥，匿名彈窗會用到
+        }
+
         var msgsRef=db().ref('groups/'+gid+'/msgs');
         var recallsRef=db().ref('groups/'+gid+'/recalls');
         var readRef=db().ref('groups/'+gid+'/read');
         var membersRef=db().ref('groups/'+gid+'/members');
-        var aliasesRef=db().ref('groups/'+gid+'/aliases');
+        var aliasesRef=db().ref('groups/'+gid+'/aliases/'+currentUid);
         var state={msgs:{},recalls:{},read:{},members:{},aliases:{}};
         var render=function(){renderMessages('group',gid,state,null,g.name,g.avatar);};
         var h1=function(s){state.msgs=s.val()||{};render();};
         var h2=function(s){state.recalls=s.val()||{};render();};
         var h3=function(s){state.read=s.val()||{};render();};
         var h4=function(s){state.members=s.val()||{};render();};
-        var h5=function(s){state.aliases=s.val()||{};render();};
+        var h5=function(s){state.aliases=s.val()||{};currentAliases=s.val()||{};render();};
         msgsRef.on('value',h1); recallsRef.on('value',h2); readRef.on('value',h3); membersRef.on('value',h4); aliasesRef.on('value',h5);
         chatListeners.push(function(){msgsRef.off('value',h1);});
         chatListeners.push(function(){recallsRef.off('value',h2);});
@@ -1595,7 +1703,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     });
   }
 
-  // ==== 訊息渲染（引用放在泡泡內、可點擊跳轉） ====
+  // ==== 訊息渲染（匿名套用到所有名字顯示） ====
   function renderMessages(kind,cid,state,friendUid,friendName,friendAvatar){
     removeAllRows();
     var msgs=state.msgs||{},recalls=state.recalls||{},read=state.read||{},aliases=state.aliases||{};
@@ -1619,6 +1727,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
       else avatarUrl=friendAvatarOf(friendUid)||m.fromAvatar||friendAvatar||fallbackAvatar;
 
       var rawName=m.name||(isMe?(currentUser.displayName||currentUsername):(friendName||'好友'));
+      // 匿名：套用自己的 aliases（從 m.from 取得對應匿名）
       var name=aliases[m.from]||rawName;
 
       var avatarEl=document.createElement('img');
@@ -1638,14 +1747,13 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
         var rTxt;
         if(recalled.byAdmin&&recalled.by!==m.from) rTxt='此訊息已被管理員刪除';
         else if(recalled.by===currentUid) rTxt='你收回了一則訊息';
-        else rTxt=(recalled.byName||name)+' 收回了一則訊息';
+        else rTxt=(aliases[recalled.by]||recalled.byName||name)+' 收回了一則訊息';
         r.textContent=rTxt;
         bodyEl.appendChild(r);
       }else{
         var bubble=document.createElement('div');
         bubble.className='bubble';
 
-        // 回覆引用（放在泡泡內最上方）
         if(m.replyTo){
           var quote=document.createElement('div');
           quote.className='reply-quote';
@@ -1713,7 +1821,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
           });
           var rd=document.createElement('div');
           rd.className='msg-read'; rd.textContent=readerIds.length>0?('已讀 '+readerIds.length+' 人'):'未讀';
-          rd.addEventListener('click',function(e){showReadersPop(e,readerIds);});
+          rd.addEventListener('click',function(e){showReadersPop(e,readerIds,aliases);});
           bodyEl.appendChild(rd);
         }else{
           var other=friendUid; var rv=read&&read[other];
@@ -1759,7 +1867,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     }).catch(function(e){alert('收回失敗：'+errorMessage(e));});
   }
 
-  function showReadersPop(evt,readerIds){
+  function showReadersPop(evt,readerIds,aliases){
     evt.stopPropagation();
     var old=document.querySelector('.reader-pop'); if(old) old.remove();
     var pop=document.createElement('div'); pop.className='reader-pop';
@@ -1769,7 +1877,8 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     else{
       readerIds.forEach(function(uid){
         var f=friendsCache[uid]; var row=document.createElement('div'); row.className='r-item';
-        var name=(f&&f.name)||uid; var av=(f&&f.avatar)||fallbackAvatar;
+        var name=(aliases&&aliases[uid])||(f&&f.name)||uid;
+        var av=(f&&f.avatar)||fallbackAvatar;
         row.innerHTML='<img src="'+escapeHtml(av)+'" alt=""><span>'+escapeHtml(name)+'</span>';
         pop.appendChild(row);
       });
@@ -1929,6 +2038,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
         chatEditGroupBtn.hidden=true;chatAliasBtn.hidden=true;
         setChatEnabled(false);setUploadStatus('');imgQuotaHint.textContent='';
         clearReply(); document.body.classList.remove('in-chat');
+        currentAliases={}; currentMembersMap={};
         updateUnreadBadges();
       }
     });
