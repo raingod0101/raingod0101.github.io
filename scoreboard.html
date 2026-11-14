@@ -31,7 +31,6 @@
             margin: 0 0 20px;
         }
 
-        /* ───── 主分頁 ───── */
         .main-tabs {
             display: flex;
             gap: 4px;
@@ -58,7 +57,6 @@
             color: #fff;
         }
 
-        /* ───── 子分頁 ───── */
         .tab-row {
             display: flex;
             gap: 6px;
@@ -96,7 +94,6 @@
             min-width: 62px;
         }
 
-        /* ───── 卡片 ───── */
         .card {
             background: var(--card);
             border: 1px solid var(--border);
@@ -181,7 +178,6 @@
             line-height: 1.6;
         }
 
-        /* ───── 排行榜 ───── */
         .rank-row {
             display: grid;
             grid-template-columns: 40px 1fr auto;
@@ -219,7 +215,6 @@
             font-weight: 700;
         }
 
-        /* ───── 表格 ───── */
         .records-table-wrap {
             overflow-x: auto;
             margin: 0 -18px;
@@ -291,7 +286,6 @@
             <button type="button" class="main-tab" data-view="admin" id="admin-tab" style="display:none;">🛠 管理</button>
         </div>
 
-        <!-- ══════ 成績輸入 ══════ -->
         <div class="view" id="view-input">
             <div class="tab-row" id="input-grade-tabs"></div>
             <div class="tab-row" id="input-sem-tabs"></div>
@@ -317,14 +311,12 @@
             <div class="hint" id="hint"></div>
         </div>
 
-        <!-- ══════ 我的記錄 ══════ -->
         <div class="view" id="view-records" style="display:none;">
             <div class="card" id="records-card">
                 <div class="empty">載入中…</div>
             </div>
         </div>
 
-        <!-- ══════ 排行榜 ══════ -->
         <div class="view" id="view-ranking" style="display:none;">
             <div class="tab-row" id="rank-grade-tabs"></div>
             <div class="tab-row" id="rank-sem-tabs"></div>
@@ -336,7 +328,6 @@
             </div>
         </div>
 
-        <!-- ══════ 管理員 ══════ -->
         <div class="view" id="view-admin" style="display:none;">
             <div class="tab-row" id="admin-grade-tabs"></div>
             <div class="tab-row" id="admin-sem-tabs"></div>
@@ -371,10 +362,12 @@
         'use strict';
 
         // ═════════════════ 常數 ═════════════════
+        // 註：key 沿用 'biology' 只是為了不破壞已存的資料，
+        //     顯示名稱已統一改為「自然」。
         const SUBJECTS = [
             { key: 'chinese', name: '國文', weight: 5 },
             { key: 'math',    name: '數學', weight: 4 },
-            { key: 'biology', name: '生物', weight: 3 },
+            { key: 'biology', name: '自然', weight: 3 },
             { key: 'english', name: '英語', weight: 3 },
             { key: 'social',  name: '社會', weight: 3 },
         ];
@@ -448,6 +441,7 @@
             }));
         }
 
+        // ★ 只有五科全填才回傳 weighted / plain，否則都是 null
         function computeWeighted(scores) {
             let sumWeight = 0, sumWeighted = 0, sumScore = 0, filled = 0;
             SUBJECTS.forEach(sub => {
@@ -459,10 +453,12 @@
                     filled++;
                 }
             });
+            const complete = filled === SUBJECTS.length;
             return {
-                weighted: sumWeight > 0 ? +(sumWeighted / sumWeight).toFixed(2) : null,
-                plain:    filled > 0    ? +(sumScore / filled).toFixed(2)       : null,
+                weighted: complete ? +(sumWeighted / sumWeight).toFixed(2) : null,
+                plain:    complete ? +(sumScore / filled).toFixed(2)       : null,
                 filled,
+                complete,
             };
         }
 
@@ -632,8 +628,10 @@
                 calc.plain != null ? calc.plain.toFixed(2) : '–';
 
             let msg = `已填 ${filled} / ${SUBJECTS.length} 科`;
-            if (filled > 0 && filled < SUBJECTS.length) {
-                msg += '（分母只計算已填科目）';
+            if (filled > 0 && !calc.complete) {
+                msg += '（五科全填完才會計算加權與平均）';
+            } else if (filled === 0) {
+                msg += '（請輸入成績）';
             }
             document.getElementById('hint').textContent = msg;
         }
@@ -645,11 +643,12 @@
             const examId = currentExamId();
             const calc = computeWeighted(scores);
 
-            const data = {
-                ...scores,
-                weighted: calc.weighted,
-                plain: calc.plain,
-            };
+            // 只有五科全填才寫入 weighted / plain
+            const data = { ...scores };
+            if (calc.complete) {
+                data.weighted = calc.weighted;
+                data.plain = calc.plain;
+            }
 
             try {
                 if (filled > 0) {
@@ -941,8 +940,7 @@
             const keys = Object.keys(students);
 
             if (!keys.length) {
-                listEl.innerHTML =
-                    '<div class="empty">此段考尚無學生填寫</div>';
+                listEl.innerHTML = '<div class="empty">此段考尚無學生填寫</div>';
                 return;
             }
 
@@ -1017,22 +1015,24 @@
 
         function updateAdminPreview() {
             const scores = {};
+            let filled = 0;
             SUBJECTS.forEach(sub => {
                 const el = document.getElementById(`admin-score-${sub.key}`);
                 if (!el) return;
                 const raw = el.value.trim();
                 if (raw === '') return;
                 const v = parseFloat(raw);
-                if (!isNaN(v)) scores[sub.key] = v;
+                if (!isNaN(v)) { scores[sub.key] = v; filled++; }
             });
             const calc = computeWeighted(scores);
             const preview = document.getElementById('admin-edit-preview');
             if (!preview) return;
-            if (calc.weighted != null) {
+            if (calc.complete) {
                 preview.textContent =
-                    `加權 ${calc.weighted.toFixed(2)} ・ 平均 ${calc.plain.toFixed(2)} ・ 已填 ${calc.filled}/${SUBJECTS.length}`;
+                    `加權 ${calc.weighted.toFixed(2)} ・ 平均 ${calc.plain.toFixed(2)}`;
             } else {
-                preview.textContent = '';
+                preview.textContent =
+                    `已填 ${filled} / ${SUBJECTS.length} 科（五科全填才會算出加權與平均）`;
             }
         }
 
@@ -1068,11 +1068,13 @@
 
             const cloudData = {
                 ...scores,
-                weighted: calc.weighted,
-                plain: calc.plain,
                 username,
                 updated_at: firebase.database.ServerValue.TIMESTAMP,
             };
+            if (calc.complete) {
+                cloudData.weighted = calc.weighted;
+                cloudData.plain = calc.plain;
+            }
 
             const btn = document.getElementById('admin-save-btn');
             btn.disabled = true;
@@ -1171,7 +1173,7 @@
                     const waitAuth = window.raingodAuthReady || Promise.resolve();
                     waitAuth.then(() => {
                         updateAdminTabVisibility();
-                        if (state.view === 'input')   loadCurrentExam();
+                        if (state.view === 'input')        loadCurrentExam();
                         else if (state.view === 'records') loadMyRecords();
                         else if (state.view === 'ranking') loadRankingData();
                         else if (state.view === 'admin')   loadAdminStudents();
