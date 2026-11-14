@@ -373,7 +373,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
       <section class="card">
         <h2>好友列表</h2>
         <ul id="friend-list" class="friend-list">
-          <li class="profile-help" id="friend-empty">尚未加入任何好友。</li>
+          <li class="profile-help" id="friend-empty">好友列表載入中…</li>
         </ul>
       </section>
     </section>
@@ -581,8 +581,12 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
   var threadAliasCache = {};
   var threadAliasRefs = {};
 
+  // ★ 分階段載入狀態
   var friendsLoaded = false;
   var groupsLoaded = false;
+  var dmUnreadLoaded = false;
+  var groupUnreadLoaded = false;
+  var loadingPhase = 'init';   // init | dm | groups | done
 
   function db(){ return window.firebase.database(); }
   function setStatus(id,msg,type){
@@ -646,24 +650,30 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     document.body.classList.toggle('in-chat', !!inChat);
   }
 
-  // ★ 修正：checkLoaded 保持原邏輯（僅在 friends+groups 都 true 時結束 spinner）
+  // ★ 分階段 checkLoaded：friends 一 true 就結束聊天室大 spinner
   function checkLoaded(){
-    var allLoaded = friendsLoaded && groupsLoaded;
-    if(allLoaded){
+    if(friendsLoaded && groupsLoaded){
       groupLoading.classList.add('hidden');
       groupContent.classList.remove('hidden');
     }else{
       groupLoading.classList.remove('hidden');
       groupContent.classList.add('hidden');
     }
-    if(allLoaded){
+
+    if(friendsLoaded){
       chatLoading.classList.add('hidden');
+      // thread list 有內容（含骨架）就顯示；否則若還在載入階段，顯示骨架
       if(chatThreadList.children.length){
         chatThreadList.classList.remove('hidden');
         chatListEmpty.classList.add('hidden');
       }else{
-        chatThreadList.classList.add('hidden');
-        chatListEmpty.classList.remove('hidden');
+        if(!(dmUnreadLoaded && groupUnreadLoaded) && (Object.keys(friendsCache).length || Object.keys(groupsCache).length)){
+          chatThreadList.classList.remove('hidden');
+          chatListEmpty.classList.add('hidden');
+        }else{
+          chatThreadList.classList.add('hidden');
+          chatListEmpty.classList.remove('hidden');
+        }
       }
     }else{
       chatLoading.classList.remove('hidden');
@@ -787,7 +797,6 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     },function(err){ console.warn(err); cb(null); });
   }
 
-  // ★ 修正：initProfile 加 currentUsername 空值保護
   function initProfile(user){
     currentUser=user;
     currentUid=user.uid;
@@ -997,7 +1006,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
           var avatar=(p.profile&&p.profile.avatar)||fallbackAvatar;
           var li=document.createElement('li'); li.className='friend-item';
           var action=isFriend?'<span class="profile-help">已是好友</span>':sent?'<span class="profile-help">已送出申請</span>':'<button class="mini-btn primary" data-uid="'+escapeHtml(p.uid)+'" data-name="'+escapeHtml(name)+'" data-username="'+escapeHtml(kw)+'">加好友</button>';
-          li.innerHTML='<img class="friend-avatar" src="'+escapeHtml(avatar)+'" alt=""><div class="friend-name">'+escapeHtml(name)+' <small style="color:var(--text-gray);font-weight:400;">@'+escapeHtml(kw)+'</small></div><div class="friend-actions">'+action+'</div>';
+          li.innerHTML='<img class="friend-avatar" src="'+escapeHtml(avatar)+'" alt="" onerror="this.src=\''+fallbackAvatar+'\'"><div class="friend-name">'+escapeHtml(name)+' <small style="color:var(--text-gray);font-weight:400;">@'+escapeHtml(kw)+'</small></div><div class="friend-actions">'+action+'</div>';
           searchResults.appendChild(li);
           var btn=li.querySelector('button[data-uid]');
           if(btn){
@@ -1019,7 +1028,6 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     });
   }
 
-  // ★ 修正：listenFriendRequests 加 error 回呼
   function listenFriendRequests(){
     db().ref('users/'+currentUsername+'/friend_requests').on('value',function(snap){
       var val=snap.val()||{};
@@ -1029,7 +1037,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
       entries.forEach(function(pair){
         var fromUsername=pair[0],req=pair[1];
         var li=document.createElement('li'); li.className='request-item';
-        li.innerHTML='<img class="friend-avatar" src="'+escapeHtml(req.fromAvatar||fallbackAvatar)+'" alt=""><div class="friend-name">'+escapeHtml(req.fromName||fromUsername)+'</div><div class="friend-actions"><button class="mini-btn success" data-accept="'+escapeHtml(fromUsername)+'" data-uid="'+escapeHtml(req.fromUid)+'" data-name="'+escapeHtml(req.fromName||fromUsername)+'" data-avatar="'+escapeHtml(req.fromAvatar||fallbackAvatar)+'">接受</button><button class="mini-btn danger" data-reject="'+escapeHtml(fromUsername)+'">拒絕</button></div>';
+        li.innerHTML='<img class="friend-avatar" src="'+escapeHtml(req.fromAvatar||fallbackAvatar)+'" alt="" onerror="this.src=\''+fallbackAvatar+'\'"><div class="friend-name">'+escapeHtml(req.fromName||fromUsername)+'</div><div class="friend-actions"><button class="mini-btn success" data-accept="'+escapeHtml(fromUsername)+'" data-uid="'+escapeHtml(req.fromUid)+'" data-name="'+escapeHtml(req.fromName||fromUsername)+'" data-avatar="'+escapeHtml(req.fromAvatar||fallbackAvatar)+'">接受</button><button class="mini-btn danger" data-reject="'+escapeHtml(fromUsername)+'">拒絕</button></div>';
         requestList.appendChild(li);
       });
       requestList.querySelectorAll('[data-accept]').forEach(function(btn){
@@ -1085,10 +1093,13 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     });
     friendAvatarRefs={};
   }
+  // ★ 只有缺頭像的好友才監聽
   function watchFriendAvatars(){
     stopFriendAvatarWatchers();
     Object.keys(friendsCache).forEach(function(uid){
-      var f=friendsCache[uid]; if(!f.username) return;
+      var f=friendsCache[uid];
+      if(!f||!f.username) return;
+      if(f.avatar) return;   // 已有頭像就不必監聽
       var ref=db().ref('users/'+f.username+'/profile/avatar');
       var handler=function(snap){
         var url=snap.val(); if(url) friendsCache[uid].avatar=url;
@@ -1099,7 +1110,6 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     });
   }
 
-  // ★ 修正：listenFriends 加 error 回呼，失敗也設 friendsLoaded=true
   function listenFriends(){
     db().ref('users/'+currentUsername+'/friends').on('value',function(snap){
       friendsCache=snap.val()||{};
@@ -1112,23 +1122,29 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     },function(err){
       console.error('[friends] 讀取失敗',err);
       friendsCache={};
-      friendsLoaded = true;   // ★ 讓 spinner 結束
+      friendsLoaded = true;
       refreshFriendsUI();
       checkLoaded();
     });
   }
 
+  // ★ 好友列表：名稱立刻顯示，頭像 onerror fallback
   function refreshFriendsUI(){
     friendList.innerHTML='';
     var entries=Object.keys(friendsCache).map(function(k){return [k,friendsCache[k]];});
     if(!entries.length){
-      friendList.innerHTML='<li class="profile-help" id="friend-empty">尚未加入任何好友。</li>';
+      if(!friendsLoaded){
+        friendList.innerHTML='<li class="profile-help" id="friend-empty">好友列表載入中…</li>';
+      }else{
+        friendList.innerHTML='<li class="profile-help" id="friend-empty">尚未加入任何好友。</li>';
+      }
     }else{
       entries.forEach(function(pair){
         var uid=pair[0],f=pair[1];
+        var avatarUrl=f.avatar||fallbackAvatar;
         var li=document.createElement('li');
         li.className='friend-item'+(activeChat.type==='friend'&&uid===activeChat.id?' active':'');
-        li.innerHTML='<img class="friend-avatar" src="'+escapeHtml(f.avatar||fallbackAvatar)+'" alt=""><div class="friend-name">'+escapeHtml(f.name||f.username||'好友')+'</div><span class="friend-unread" data-uid="'+escapeHtml(uid)+'"></span><div class="friend-actions"><button class="mini-btn primary" data-chat-uid="'+escapeHtml(uid)+'" data-chat-name="'+escapeHtml(f.name||f.username||'好友')+'" data-chat-avatar="'+escapeHtml(f.avatar||fallbackAvatar)+'">私訊</button><button class="mini-btn danger" data-del-friend="'+escapeHtml(uid)+'" data-del-name="'+escapeHtml(f.name||f.username||'好友')+'">刪除</button></div>';
+        li.innerHTML='<img class="friend-avatar" src="'+escapeHtml(avatarUrl)+'" alt="" onerror="this.src=\''+fallbackAvatar+'\'"><div class="friend-name">'+escapeHtml(f.name||f.username||'好友')+'</div><span class="friend-unread" data-uid="'+escapeHtml(uid)+'"></span><div class="friend-actions"><button class="mini-btn primary" data-chat-uid="'+escapeHtml(uid)+'" data-chat-name="'+escapeHtml(f.name||f.username||'好友')+'" data-chat-avatar="'+escapeHtml(avatarUrl)+'">私訊</button><button class="mini-btn danger" data-del-friend="'+escapeHtml(uid)+'" data-del-name="'+escapeHtml(f.name||f.username||'好友')+'">刪除</button></div>';
         friendList.appendChild(li);
       });
       friendList.querySelectorAll('[data-chat-uid]').forEach(function(btn){
@@ -1148,6 +1164,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     updateUnreadBadges();
   }
 
+  // ★ thread list：未載入項目顯示骨架「載入中」，由上往下遞補
   function renderThreadList(){
     var items=[];
     Object.keys(friendsCache).forEach(function(uid){
@@ -1156,7 +1173,8 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
       items.push({key:'f:'+uid,type:'friend',id:uid,
         name: alias || f.name || f.username || '好友',
         avatar:f.avatar||fallbackAvatar,lastTs:last?last.ts:0,
-        preview:last?last.preview:'還沒有訊息',unread:unreadCache['f:'+uid]||0});
+        preview:last?last.preview:'還沒有訊息',unread:unreadCache['f:'+uid]||0,
+        loaded: !!unreadCache['f:'+uid+':loaded']});
     });
     Object.keys(groupsCache).forEach(function(gid){
       var g=groupsCache[gid]||{}; var last=lastMsgCache['g:'+gid];
@@ -1164,9 +1182,13 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
       items.push({key:'g:'+gid,type:'group',id:gid,
         name: alias || g.name || '群組',
         avatar:g.avatar||fallbackAvatar,lastTs:last?last.ts:0,
-        preview:last?last.preview:'還沒有訊息',unread:unreadCache['g:'+gid]||0});
+        preview:last?last.preview:'還沒有訊息',unread:unreadCache['g:'+gid]||0,
+        loaded: !!unreadCache['g:'+gid+':loaded']});
     });
-    items.sort(function(a,b){return (b.lastTs||0)-(a.lastTs||0);});
+    items.sort(function(a,b){
+      if(a.loaded !== b.loaded) return a.loaded ? 1 : -1;
+      return (b.lastTs||0)-(a.lastTs||0);
+    });
     chatThreadList.innerHTML='';
     if(!items.length){
       checkLoaded();
@@ -1174,12 +1196,18 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     }
     items.forEach(function(it){
       var li=document.createElement('li'); li.className='chat-thread-item';
-      var previewText=it.preview||''; if(previewText.length>30) previewText=previewText.substring(0,30)+'…';
-      li.innerHTML='<img class="friend-avatar" src="'+escapeHtml(it.avatar)+'" alt=""'+(it.type==='group'?' style="border-radius:12px;"':'')+'><div class="chat-thread-main"><div class="chat-thread-top"><span class="chat-thread-name">'+escapeHtml(it.name)+'</span><span class="chat-thread-time">'+(it.lastTs?formatTime(it.lastTs):'')+'</span></div><div class="chat-thread-preview">'+escapeHtml(previewText)+'</div></div><span class="friend-unread'+(it.unread>0?' show':'')+'">'+(it.unread>99?'99+':it.unread)+'</span>';
-      li.addEventListener('click',function(){
-        if(it.type==='friend'){ var f=friendsCache[it.id]||{}; openPrivateChat(it.id,f.name||f.username||'好友',f.avatar||fallbackAvatar); }
-        else openGroupChat(it.id);
-      });
+      if(!it.loaded){
+        li.innerHTML='<div class="friend-avatar" style="background:#e9edf3;"></div>'+
+          '<div class="chat-thread-main"><div class="chat-thread-top"><span class="chat-thread-name">'+escapeHtml(it.name)+'</span></div>'+
+          '<div class="chat-thread-preview" style="color:var(--text-gray);">載入中…</div></div>';
+      }else{
+        var previewText=it.preview||''; if(previewText.length>30) previewText=previewText.substring(0,30)+'…';
+        li.innerHTML='<img class="friend-avatar" src="'+escapeHtml(it.avatar)+'" alt="" onerror="this.src=\''+fallbackAvatar+'\'"'+(it.type==='group'?' style="border-radius:12px;"':'')+'><div class="chat-thread-main"><div class="chat-thread-top"><span class="chat-thread-name">'+escapeHtml(it.name)+'</span><span class="chat-thread-time">'+(it.lastTs?formatTime(it.lastTs):'')+'</span></div><div class="chat-thread-preview">'+escapeHtml(previewText)+'</div></div><span class="friend-unread'+(it.unread>0?' show':'')+'">'+(it.unread>99?'99+':it.unread)+'</span>';
+        li.addEventListener('click',function(){
+          if(it.type==='friend'){ var f=friendsCache[it.id]||{}; openPrivateChat(it.id,f.name||f.username||'好友',f.avatar||fallbackAvatar); }
+          else openGroupChat(it.id);
+        });
+      }
       chatThreadList.appendChild(li);
     });
     checkLoaded();
@@ -1221,13 +1249,29 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     });
   }
 
+  // ★ 序列載入：先私訊，逐項載入，載完再載群組
   function listenAllUnread(){
     for(var i=0;i<friendUnreadListeners.length;i++) friendUnreadListeners[i]();
     friendUnreadListeners=[]; unreadCache={};
     Object.keys(lastMsgRefs).forEach(function(k){try{lastMsgRefs[k].ref.off('value',lastMsgRefs[k].handler);}catch(e){}});
     lastMsgRefs={};
 
-    Object.keys(friendsCache).forEach(function(fuid){
+    dmUnreadLoaded = false;
+    groupUnreadLoaded = false;
+    loadingPhase = 'dm';
+
+    var friendUids = Object.keys(friendsCache);
+    var fi = 0;
+
+    function nextFriend(){
+      if(fi >= friendUids.length){
+        dmUnreadLoaded = true;
+        loadingPhase = 'groups';
+        renderThreadList();
+        nextGroupStart();
+        return;
+      }
+      var fuid = friendUids[fi++];
       var cid=chatIdFor(currentUid,fuid);
       var msgsRef=db().ref('private_chats/'+cid+'/msgs');
       var readRef=db().ref('private_chats/'+cid+'/read/'+currentUid);
@@ -1242,40 +1286,75 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
         readRef.once('value').then(function(rs){
           var rv=rs.val(); var lastRead=(typeof rv==='number')?rv:((rv&&rv.ts)||0); var unread=0;
           Object.keys(msgs).forEach(function(id){var m=msgs[id];if(m.from!==currentUid&&(m.ts||0)>lastRead) unread++;});
-          unreadCache['f:'+fuid]=unread; updateUnreadBadges(); renderThreadList();
-        }).catch(function(){});
+          unreadCache['f:'+fuid]=unread;
+          unreadCache['f:'+fuid+':loaded']=true;
+          updateUnreadBadges(); renderThreadList();
+          nextFriend();
+        }).catch(function(){
+          unreadCache['f:'+fuid]=0;
+          unreadCache['f:'+fuid+':loaded']=true;
+          updateUnreadBadges(); renderThreadList();
+          nextFriend();
+        });
       };
-      msgsRef.on('value',handler,function(){});
-      friendUnreadListeners.push((function(ref){return function(){ref.off('value',handler);};})(msgsRef));
+      msgsRef.on('value',handler,function(){
+        unreadCache['f:'+fuid]=0;
+        unreadCache['f:'+fuid+':loaded']=true;
+        renderThreadList(); nextFriend();
+      });
+      friendUnreadListeners.push(function(){msgsRef.off('value',handler);});
       lastMsgRefs['f:'+fuid]={ref:msgsRef,handler:handler};
-    });
+    }
 
-    Object.keys(groupsCache).forEach(function(gid){
-      var msgsRef=db().ref('groups/'+gid+'/msgs');
-      var readRef=db().ref('groups/'+gid+'/read/'+currentUid);
-      var handler=function(snap){
-        var msgs=snap.val()||{}; var ids=Object.keys(msgs); var last=null;
-        ids.forEach(function(id){if(!last||(msgs[id].ts||0)>(last.ts||0)) last=msgs[id];});
-        if(last){
-          var pv='';
-          if(last.type==='image') pv='📷 圖片'; else if(last.type==='file') pv='📎 '+(last.fileName||'檔案'); else pv=last.text||'';
-          lastMsgCache['g:'+gid]={ts:last.ts,preview:pv,type:last.type};
-        }else delete lastMsgCache['g:'+gid];
-        readRef.once('value').then(function(rs){
-          var rv=rs.val()||{}; var lastRead=(typeof rv==='number')?rv:(rv.ts||0); var unread=0;
-          Object.keys(msgs).forEach(function(id){var m=msgs[id];if(m.from!==currentUid&&(m.ts||0)>lastRead) unread++;});
-          unreadCache['g:'+gid]=unread; updateUnreadBadges(); renderThreadList();
-        }).catch(function(){});
-      };
-      msgsRef.on('value',handler,function(){});
-      friendUnreadListeners.push((function(ref){return function(){ref.off('value',handler);};})(msgsRef));
-      lastMsgRefs['g:'+gid]={ref:msgsRef,handler:handler};
-    });
+    function nextGroupStart(){
+      var groupGids = Object.keys(groupsCache);
+      var gi = 0;
+      if(gi >= groupGids.length){ groupUnreadLoaded = true; loadingPhase='done'; renderThreadList(); checkLoaded(); return; }
+      function nextGroup(){
+        if(gi >= groupGids.length){ groupUnreadLoaded = true; loadingPhase='done'; renderThreadList(); checkLoaded(); return; }
+        var gid = groupGids[gi++];
+        var msgsRef=db().ref('groups/'+gid+'/msgs');
+        var readRef=db().ref('groups/'+gid+'/read/'+currentUid);
+        var handler=function(snap){
+          var msgs=snap.val()||{}; var ids=Object.keys(msgs); var last=null;
+          ids.forEach(function(id){if(!last||(msgs[id].ts||0)>(last.ts||0)) last=msgs[id];});
+          if(last){
+            var pv='';
+            if(last.type==='image') pv='📷 圖片'; else if(last.type==='file') pv='📎 '+(last.fileName||'檔案'); else pv=last.text||'';
+            lastMsgCache['g:'+gid]={ts:last.ts,preview:pv,type:last.type};
+          }else delete lastMsgCache['g:'+gid];
+          readRef.once('value').then(function(rs){
+            var rv=rs.val()||{}; var lastRead=(typeof rv==='number')?rv:(rv.ts||0); var unread=0;
+            Object.keys(msgs).forEach(function(id){var m=msgs[id];if(m.from!==currentUid&&(m.ts||0)>lastRead) unread++;});
+            unreadCache['g:'+gid]=unread;
+            unreadCache['g:'+gid+':loaded']=true;
+            updateUnreadBadges(); renderThreadList();
+            nextGroup();
+          }).catch(function(){
+            unreadCache['g:'+gid]=0; unreadCache['g:'+gid+':loaded']=true;
+            renderThreadList(); nextGroup();
+          });
+        };
+        msgsRef.on('value',handler,function(){
+          unreadCache['g:'+gid]=0; unreadCache['g:'+gid+':loaded']=true;
+          renderThreadList(); nextGroup();
+        });
+        friendUnreadListeners.push(function(){msgsRef.off('value',handler);});
+        lastMsgRefs['g:'+gid]={ref:msgsRef,handler:handler};
+      }
+      nextGroup();
+    }
+
     watchThreadAliases();
     renderThreadList();
+    nextFriend();
   }
+
   function updateUnreadBadges(){
-    var total=0; Object.keys(unreadCache).forEach(function(k){total+=unreadCache[k]||0;});
+    var total=0; Object.keys(unreadCache).forEach(function(k){
+      if(k.indexOf(':loaded')>=0) return;
+      total+=unreadCache[k]||0;
+    });
     tabBadgeUnread.textContent=total>99?'99+':String(total);
     tabBadgeUnread.classList.toggle('show',total>0);
     updateTabBadges();
@@ -1285,40 +1364,47 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     tabBadgeRequests.classList.toggle('show',requestsCount>0);
   }
 
-  // ★ 修正：listenGroups 加 error 回呼，失敗也設 groupsLoaded=true
+  // ★ 群組：先顯示清單，背景驗證；讀取失敗不當孤兒
   function listenGroups(){
+    db().ref('users/'+currentUsername+'/ownedGroup').on('value',function(snap){
+      ownedGroupId=snap.val()||''; recalcOwnedGroup(); updateGroupLimitUI();
+    },function(err){console.warn(err); ownedGroupId=''; recalcOwnedGroup(); updateGroupLimitUI();});
+
     db().ref('users/'+currentUsername+'/groups').on('value',function(snap){
       var raw=snap.val()||{}; var gids=Object.keys(raw);
       if(!gids.length){
         groupsCache={}; groupsLoaded=true;
         recalcOwnedGroup(); refreshFriendsUI(); listenAllUnread(); checkLoaded(); return;
       }
+      // 先直接放進 groupsCache，名稱立刻顯示
+      groupsCache={};
+      gids.forEach(function(gid){ groupsCache[gid]=raw[gid]; });
+      groupsLoaded=true;
+      recalcOwnedGroup(); refreshFriendsUI(); checkLoaded();
+
+      // 背景驗證，只有「明確不存在」才當孤兒
       var checks=gids.map(function(gid){
-        return db().ref('groups/'+gid).once('value').then(function(s){return {gid:gid,valid:s.exists()};})
-        .catch(function(){return {gid:gid,valid:false};});
+        return db().ref('groups/'+gid).once('value').then(function(s){
+          return { gid:gid, exists:s.exists(), error:null };
+        }).catch(function(err){
+          return { gid:gid, exists:true, error:err };   // 讀取失敗保留
+        });
       });
       Promise.all(checks).then(function(results){
-        var valid={},orphan=[];
-        results.forEach(function(r){if(r.valid) valid[r.gid]=raw[r.gid]; else orphan.push(r.gid);});
-        groupsCache=valid; groupsLoaded=true;
-        recalcOwnedGroup(); refreshFriendsUI(); listenAllUnread(); checkLoaded();
+        var orphan=[];
+        results.forEach(function(r){ if(!r.exists) orphan.push(r.gid); });
         orphan.forEach(function(gid){
+          delete groupsCache[gid];
           db().ref('users/'+currentUsername+'/groups/'+gid).remove().catch(function(){});
           if(ownedGroupId===gid){db().ref('users/'+currentUsername+'/ownedGroup').remove().catch(function(){});ownedGroupId='';hasOwnedGroup=false;updateGroupLimitUI();}
         });
-      }).catch(function(err){
-        console.error('[groups] 驗證群組失敗',err);
-        groupsCache={}; groupsLoaded=true;
-        recalcOwnedGroup(); refreshFriendsUI(); checkLoaded();
+        if(orphan.length){ refreshFriendsUI(); }
       });
     },function(err){
       console.error('[groups] users/{username}/groups 讀取失敗',err);
-      groupsCache={}; groupsLoaded=true;   // ★ 關鍵：失敗也結束 spinner
+      groupsCache={}; groupsLoaded=true;
       recalcOwnedGroup(); refreshFriendsUI(); checkLoaded();
     });
-    db().ref('users/'+currentUsername+'/ownedGroup').on('value',function(snap){
-      ownedGroupId=snap.val()||''; recalcOwnedGroup(); updateGroupLimitUI();
-    },function(err){console.warn(err); ownedGroupId=''; recalcOwnedGroup(); updateGroupLimitUI();});
   }
   function recalcOwnedGroup(){
     hasOwnedGroup=!!ownedGroupId||Object.keys(groupsCache).some(function(gid){return groupsCache[gid]&&groupsCache[gid].role==='owner';});
@@ -1335,7 +1421,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     entries.forEach(function(pair){
       var uid=pair[0],f=pair[1];
       var lab=document.createElement('label'); lab.className='group-check-item';
-      lab.innerHTML='<input type="checkbox" value="'+escapeHtml(uid)+'"><img class="friend-avatar" style="width:28px;height:28px;" src="'+escapeHtml(f.avatar||fallbackAvatar)+'" alt=""><span>'+escapeHtml(f.name||f.username||'好友')+'</span>';
+      lab.innerHTML='<input type="checkbox" value="'+escapeHtml(uid)+'"><img class="friend-avatar" style="width:28px;height:28px;" src="'+escapeHtml(f.avatar||fallbackAvatar)+'" alt="" onerror="this.src=\''+fallbackAvatar+'\'"><span>'+escapeHtml(f.name||f.username||'好友')+'</span>';
       groupMemberPicker.appendChild(lab);
     });
   }
@@ -1350,7 +1436,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
       if(g.role==='owner') actions+='<button class="mini-btn danger" data-delete-group="'+escapeHtml(gid)+'">刪除</button>';
       var li=document.createElement('li');
       li.className='friend-item'+(activeChat.type==='group'&&gid===activeChat.id?' active':'');
-      li.innerHTML='<img class="friend-avatar" style="border-radius:12px;" src="'+escapeHtml(g.avatar||fallbackAvatar)+'" alt=""><div class="friend-name">'+escapeHtml(g.name||'群組')+' <small style="color:var(--text-gray);font-weight:400;">'+roleText+'</small></div><div class="friend-actions">'+actions+'</div>';
+      li.innerHTML='<img class="friend-avatar" style="border-radius:12px;" src="'+escapeHtml(g.avatar||fallbackAvatar)+'" alt="" onerror="this.src=\''+fallbackAvatar+'\'"><div class="friend-name">'+escapeHtml(g.name||'群組')+' <small style="color:var(--text-gray);font-weight:400;">'+roleText+'</small></div><div class="friend-actions">'+actions+'</div>';
       groupListEl.appendChild(li);
     });
     groupListEl.querySelectorAll('[data-open-group]').forEach(function(btn){
@@ -1532,7 +1618,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
         var curAlias = myAliases[uid] || '';
         var row = document.createElement('div');
         row.className='ap-item';
-        row.innerHTML='<img src="'+escapeHtml(avatar)+'" alt=""><div class="ap-name">'+escapeHtml(displayName)+
+        row.innerHTML='<img src="'+escapeHtml(avatar)+'" alt="" onerror="this.src=\''+fallbackAvatar+'\'"><div class="ap-name">'+escapeHtml(displayName)+
           (curAlias?' <span class="ap-alias">（'+escapeHtml(curAlias)+'）</span>':'')+'</div>';
         var btn=document.createElement('button');
         btn.className='mini-btn'; btn.textContent='設定';
@@ -1552,7 +1638,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
       });
       var selfRow=document.createElement('div');
       selfRow.className='ap-item';
-      selfRow.innerHTML='<img src="'+escapeHtml(currentAvatar)+'" alt=""><div class="ap-name">自己（'+escapeHtml(currentUser.displayName||currentUsername)+'）'+
+      selfRow.innerHTML='<img src="'+escapeHtml(currentAvatar)+'" alt="" onerror="this.src=\''+fallbackAvatar+'\'"><div class="ap-name">自己（'+escapeHtml(currentUser.displayName||currentUsername)+'）'+
         (myAliases[currentUid]?' <span class="ap-alias">（'+escapeHtml(myAliases[currentUid])+'）</span>':'')+'</div>';
       var selfBtn=document.createElement('button');
       selfBtn.className='mini-btn'; selfBtn.textContent='設定';
@@ -1627,7 +1713,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     var old=document.querySelector('.profile-card-pop'); if(old) old.remove();
     var pop=document.createElement('div');
     pop.className='profile-card-pop';
-    var html = '<img src="'+escapeHtml(avatarUrl||fallbackAvatar)+'" alt="">'+
+    var html = '<img src="'+escapeHtml(avatarUrl||fallbackAvatar)+'" alt="" onerror="this.src=\''+fallbackAvatar+'\'">'+
       '<div class="pc-name">'+escapeHtml(displayName||'（未設定名稱）')+'</div>';
     if(!isGroup){
       var validUsername = username && username !== uid && String(username).indexOf('-') !== 0;
@@ -1748,7 +1834,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     var h2=function(s){state.recalls=s.val()||{};render();};
     var h3=function(s){state.read=s.val()||{};render();};
     var h4=function(s){state.aliases=s.val()||{};currentAliases=s.val()||{};refreshHeaderNameWithAlias();render();};
-    msgsRef.on('value',h1); recallsRef.on('value',h2); readRef.on('value',h3); aliasesRef.on('value',h4);
+    msgsRef.on('value',h1,function(){}); recallsRef.on('value',h2,function(){}); readRef.on('value',h3,function(){}); aliasesRef.on('value',h4,function(){});
     chatListeners.push(function(){msgsRef.off('value',h1);});
     chatListeners.push(function(){recallsRef.off('value',h2);});
     chatListeners.push(function(){readRef.off('value',h3);});
@@ -1762,10 +1848,10 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     if(!g){alert('群組不存在或你不在群組中。');return;}
     db().ref('groups/'+gid).once('value').then(function(groupSnap){
       if(!groupSnap.exists()){
-        db().ref('users/'+currentUsername+'/groups/'+gid).remove().catch(function(){});
-        if(ownedGroupId===gid) db().ref('users/'+currentUsername+'/ownedGroup').remove().catch(function(){});
-        delete groupsCache[gid]; if(ownedGroupId===gid){ownedGroupId='';hasOwnedGroup=false;}
-        refreshFriendsUI(); alert('此群組已被刪除。'); closeActiveChat(); return;
+        // ★ 不刪任何使用者資料，只提示
+        alert('此群組不存在或已被刪除。');
+        closeActiveChat();
+        return;
       }
       return db().ref('groups/'+gid+'/members/'+currentUid).once('value').then(function(s){
         if(!s.exists()){alert('你不在這個群組裡，無法查看訊息。');closeActiveChat();return;}
@@ -1840,7 +1926,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
         var h3=function(s){state.read=s.val()||{};render();};
         var h4=function(s){state.members=s.val()||{};render();};
         var h5=function(s){state.aliases=s.val()||{};currentAliases=s.val()||{};refreshHeaderNameWithAlias();render();};
-        msgsRef.on('value',h1); recallsRef.on('value',h2); readRef.on('value',h3); membersRef.on('value',h4); aliasesRef.on('value',h5);
+        msgsRef.on('value',h1,function(){}); recallsRef.on('value',h2,function(){}); readRef.on('value',h3,function(){}); membersRef.on('value',h4,function(){}); aliasesRef.on('value',h5,function(){});
         chatListeners.push(function(){msgsRef.off('value',h1);});
         chatListeners.push(function(){recallsRef.off('value',h2);});
         chatListeners.push(function(){readRef.off('value',h3);});
@@ -1913,7 +1999,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
           list.forEach(function(m){
             var row=document.createElement('div'); row.className='r-item';
             var roleTxt=m.role?' <span style="color:var(--text-gray);font-size:11px;">'+m.role+'</span>':'';
-            row.innerHTML='<img src="'+escapeHtml(m.avatar)+'" alt=""><span>'+escapeHtml(m.name)+roleTxt+'</span>';
+            row.innerHTML='<img src="'+escapeHtml(m.avatar)+'" alt="" onerror="this.src=\''+fallbackAvatar+'\'"><span>'+escapeHtml(m.name)+roleTxt+'</span>';
             if(isOwner&&m.uid!==currentUid){
               var kickBtn=document.createElement('button');
               kickBtn.className='mini-btn danger'; kickBtn.textContent='踢出'; kickBtn.style.marginLeft='auto';
@@ -1943,7 +2029,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     entries.forEach(function(pair){
       var fuid=pair[0],f=pair[1];
       var row=document.createElement('div'); row.className='r-item';
-      row.innerHTML='<img src="'+escapeHtml(f.avatar||fallbackAvatar)+'" alt=""><span>'+escapeHtml(f.name||f.username)+'</span>';
+      row.innerHTML='<img src="'+escapeHtml(f.avatar||fallbackAvatar)+'" alt="" onerror="this.src=\''+fallbackAvatar+'\'"><span>'+escapeHtml(f.name||f.username)+'</span>';
       var btn=document.createElement('button');
       btn.className='mini-btn success'; btn.textContent='加入'; btn.style.marginLeft='auto';
       btn.onclick=function(){
@@ -2022,6 +2108,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
 
       var avatarEl=document.createElement('img');
       avatarEl.className='msg-avatar'; avatarEl.src=avatarUrl; avatarEl.alt='';
+      avatarEl.onerror=function(){this.src=fallbackAvatar;};
       avatarEl.addEventListener('click',function(e){
         e.stopPropagation();
         var uname = '';
@@ -2182,7 +2269,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
         var f=friendsCache[uid]; var row=document.createElement('div'); row.className='r-item';
         var name=(aliases&&aliases[uid])||(f&&f.name)||uid;
         var av=(f&&f.avatar)||fallbackAvatar;
-        row.innerHTML='<img src="'+escapeHtml(av)+'" alt=""><span>'+escapeHtml(name)+'</span>';
+        row.innerHTML='<img src="'+escapeHtml(av)+'" alt="" onerror="this.src=\''+fallbackAvatar+'\'"><span>'+escapeHtml(name)+'</span>';
         pop.appendChild(row);
       });
     }
@@ -2316,7 +2403,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     }
   });
 
-  // ★ 啟動流程：auth 進來了才 initProfile，並避免重複初始化
+  // ★ 啟動流程：等 firebase 載入完成，避免重複初始化
   var authListenerInstalled = false;
   var lastInitedUid = '';
 
@@ -2348,7 +2435,9 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
         Object.keys(lastMsgRefs).forEach(function(k){try{lastMsgRefs[k].ref.off('value',lastMsgRefs[k].handler);}catch(e){}});
         lastMsgRefs={}; stopFriendAvatarWatchers(); stopThreadAliasWatchers();
         friendsCache={};groupsCache={};unreadCache={};lastMsgCache={};
-        ownedGroupId='';hasOwnedGroup=false; friendsLoaded=false; groupsLoaded=false;
+        ownedGroupId='';hasOwnedGroup=false;
+        friendsLoaded=false; groupsLoaded=false;
+        dmUnreadLoaded=false; groupUnreadLoaded=false; loadingPhase='init';
         requestList.innerHTML='';friendList.innerHTML='';
         chatThreadList.innerHTML='';chatListEmpty.classList.add('hidden');
         searchResults.innerHTML='';
@@ -2366,7 +2455,6 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     });
   }
 
-  // 等 firebase 載入完成才綁定
   if(window.firebase && window.firebase.auth){
     bindAuthFlow();
   }else{
