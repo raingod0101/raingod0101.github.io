@@ -228,7 +228,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
 .alias-pop .ap-item .ap-alias{font-size:11px;color:var(--text-gray);margin-left:4px}
 .alias-pop .ap-close{width:100%;margin-top:8px}
 
-/* 資訊卡：只有好友顯示帳號，群組不顯示 */
+/* 資訊卡 */
 .profile-card-pop{position:fixed;z-index:120;background:#fff;border:1px solid var(--border);
   border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.22);padding:20px;
   width:min(300px,calc(100vw - 40px));display:flex;flex-direction:column;align-items:center;gap:10px}
@@ -587,7 +587,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
   var threadAliasCache = {};
   var threadAliasRefs = {};
 
-  // 載入狀態：好友與群組是否完成初次載入
+  // 載入狀態
   var friendsLoaded = false;
   var groupsLoaded = false;
 
@@ -653,10 +653,8 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     document.body.classList.toggle('in-chat', !!inChat);
   }
 
-  // 載入狀態檢查：好友與群組都載入後才顯示列表/表單
   function checkLoaded(){
     var allLoaded = friendsLoaded && groupsLoaded;
-    // 群組頁
     if(allLoaded){
       groupLoading.classList.add('hidden');
       groupContent.classList.remove('hidden');
@@ -664,7 +662,6 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
       groupLoading.classList.remove('hidden');
       groupContent.classList.add('hidden');
     }
-    // 聊天室列表
     if(allLoaded){
       chatLoading.classList.add('hidden');
       if(chatThreadList.children.length){
@@ -1307,7 +1304,6 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
   function updateGroupLimitUI(){
     if(hasOwnedGroup){groupLimitHint.hidden=false;groupCreateBtn.disabled=true;groupCreateBtn.textContent='已建立過群組';}
     else{groupLimitHint.hidden=true;groupCreateBtn.disabled=false;groupCreateBtn.textContent='建立群組';}
-    // 未載入完成時也禁用建立按鈕
     if(!(friendsLoaded&&groupsLoaded)){ groupCreateBtn.disabled=true; }
   }
   function renderGroupMemberPicker(){
@@ -1605,7 +1601,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     setTimeout(function(){ target.classList.remove('highlight'); },1600);
   }
 
-  // ===== 資訊卡：好友才顯示帳號，群組不顯示 =====
+  // ===== 資訊卡：修正亂碼 =====
   function showProfileCard(evt, uid, avatarUrl, displayName, username, isGroup){
     var old=document.querySelector('.profile-card-pop'); if(old) old.remove();
     var pop=document.createElement('div');
@@ -1613,7 +1609,13 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     var html = '<img src="'+escapeHtml(avatarUrl||fallbackAvatar)+'" alt="">'+
       '<div class="pc-name">'+escapeHtml(displayName||'（未設定名稱）')+'</div>';
     if(!isGroup){
-      html += '<div class="pc-username">@'+escapeHtml(username||uid)+'</div>';
+      // 判斷 username 是否有效：不能是 uid、不能是空、不能是 Firebase push key
+      var validUsername = username && username !== uid && String(username).indexOf('-') !== 0;
+      if(validUsername){
+        html += '<div class="pc-username">@'+escapeHtml(username)+'</div>';
+      }else{
+        html += '<div class="pc-username" style="color:var(--text-gray);">（未知帳號）</div>';
+      }
     }
     pop.innerHTML = html;
     var closeBtn=document.createElement('button');
@@ -1759,28 +1761,50 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
         setChatEnabled(true); chatEmpty.style.display='none'; removeAllRows();
         setUploadStatus(''); updateQuotaHint(); showChatMain();
 
+        // 載入成員資料：確保 username 正確
         currentMembersMap = {};
+        // 先放入自己
+        currentMembersMap[currentUid] = { name: currentUser.displayName||currentUsername, avatar: currentAvatar||fallbackAvatar, username: currentUsername, memberUsername: currentUsername };
         db().ref('groups/'+gid+'/members').once('value').then(function(ms){
           var members=ms.val()||{};
           var uids=Object.keys(members);
-          if(!uids.length){ currentMembersMap[currentUid]={name:currentUser.displayName||currentUsername,avatar:currentAvatar||fallbackAvatar,username:currentUsername}; }
+          if(!uids.length){ return; }
           db().ref('groups/'+gid+'/memberUsernames').once('value').then(function(us){
             var usernames=us.val()||{};
             var pending=uids.length;
-            if(!pending){ currentMembersMap[currentUid]={name:currentUser.displayName||currentUsername,avatar:currentAvatar||fallbackAvatar,username:currentUsername}; return; }
+            if(!pending){ return; }
             uids.forEach(function(uid){
-              var uname=usernames[uid];
+              var uname=usernames[uid] || '';
+              if(uid === currentUid){
+                // 自己已放入
+                currentMembersMap[uid] = currentMembersMap[uid] || { name: currentUser.displayName||currentUsername, avatar: currentAvatar||fallbackAvatar, username: currentUsername, memberUsername: currentUsername };
+                pending--; if(!pending) finishMembers(); return;
+              }
               if(friendsCache[uid]){
-                currentMembersMap[uid]={name:friendsCache[uid].name||uid,avatar:friendsCache[uid].avatar||fallbackAvatar,username:friendsCache[uid].username||uname||''};
+                currentMembersMap[uid] = {
+                  name: friendsCache[uid].name || uname || '好友',
+                  avatar: friendsCache[uid].avatar || fallbackAvatar,
+                  username: friendsCache[uid].username || uname || '',
+                  memberUsername: uname
+                };
                 pending--; if(!pending) finishMembers();
               }else if(uname){
                 db().ref('users/'+uname+'/profile').once('value').then(function(ps){
                   var p=ps.val()||{};
-                  currentMembersMap[uid]={name:p.displayName||uname,avatar:p.avatar||fallbackAvatar,username:uname};
+                  currentMembersMap[uid] = {
+                    name: p.displayName || uname,
+                    avatar: p.avatar || fallbackAvatar,
+                    username: uname,
+                    memberUsername: uname
+                  };
                   pending--; if(!pending) finishMembers();
-                }).catch(function(){pending--;if(!pending)finishMembers();});
+                }).catch(function(){
+                  currentMembersMap[uid] = { name: uname || '未知成員', avatar: fallbackAvatar, username: uname || '', memberUsername: uname || '' };
+                  pending--; if(!pending) finishMembers();
+                });
               }else{
-                currentMembersMap[uid]={name:uid,avatar:fallbackAvatar,username:''};
+                // 真的沒有資料：標記為未知成員，不要顯示 uid
+                currentMembersMap[uid] = { name: '未知成員', avatar: fallbackAvatar, username: '', memberUsername: '' };
                 pending--; if(!pending) finishMembers();
               }
             });
@@ -1846,13 +1870,18 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
         var pending=uids.length,list=[];
         uids.forEach(function(uid,idx){
           list[idx]={uid:uid,name:uid,avatar:fallbackAvatar,role:uid===ownerUid?'建立者':''};
+          if(uid===currentUid){
+            list[idx].name = currentUser.displayName||currentUsername;
+            list[idx].avatar = currentAvatar||fallbackAvatar;
+            pending--; if(pending===0)finish(); return;
+          }
           if(friendsCache[uid]){list[idx].name=friendsCache[uid].name||uid;list[idx].avatar=friendsCache[uid].avatar||fallbackAvatar;pending--;if(pending===0)finish();return;}
           var uname=usernames[uid];
-          if(!uname){pending--;if(pending===0)finish();return;}
+          if(!uname){list[idx].name='未知成員';pending--;if(pending===0)finish();return;}
           db().ref('users/'+uname+'/profile').once('value').then(function(snap){
             var p=snap.val()||{}; list[idx].name=p.displayName||uname; list[idx].avatar=p.avatar||fallbackAvatar;
             pending--; if(pending===0)finish();
-          }).catch(function(){pending--;if(pending===0)finish();});
+          }).catch(function(){list[idx].name=uname;pending--;if(pending===0)finish();});
         });
         function finish(){
           pop.innerHTML='';
@@ -1945,7 +1974,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     });
   }
 
-  // ==== 訊息渲染：群組中別人的頭像用成員自己的頭像 ====
+  // ==== 訊息渲染：群組中頭像用成員自己的頭像，帳號正確顯示 ====
   function renderMessages(kind,cid,state,friendUid,friendName,friendAvatar){
     removeAllRows();
     var msgs=state.msgs||{},recalls=state.recalls||{},read=state.read||{},aliases=state.aliases||{};
@@ -1965,10 +1994,9 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
 
       var avatarUrl;
       var info = currentMembersMap[m.from] || {};
-      var usernameForCard = info.username || '';
-      if(isMe) avatarUrl=currentAvatar||fallbackAvatar;
-      else if(kind==='group'){
-        // 群組中，別人傳訊息顯示「該成員自己的頭像」，而不是群組頭像
+      if(isMe){
+        avatarUrl = currentAvatar||fallbackAvatar;
+      }else if(kind==='group'){
         avatarUrl = info.avatar || m.fromAvatar || fallbackAvatar;
       }else{
         avatarUrl = friendAvatarOf(friendUid)||m.fromAvatar||friendAvatar||fallbackAvatar;
@@ -1981,12 +2009,16 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
       avatarEl.className='msg-avatar'; avatarEl.src=avatarUrl; avatarEl.alt='';
       avatarEl.addEventListener('click',function(e){
         e.stopPropagation();
+        var uname = '';
         if(kind==='group'){
-          // 群組訊息頭像：顯示該成員資訊（含帳號，因為是成員不是群組）
-          showProfileCard(e, m.from, avatarUrl, rawName, usernameForCard, false);
+          var mi = currentMembersMap[m.from];
+          if(mi && mi.username) uname = mi.username;
+          else if(mi && mi.memberUsername) uname = mi.memberUsername;
+          if(!uname && friendsCache[m.from] && friendsCache[m.from].username) uname = friendsCache[m.from].username;
         }else{
-          showProfileCard(e, m.from, avatarUrl, rawName, usernameForCard, false);
+          uname = info.username || '';
         }
+        showProfileCard(e, m.from, avatarUrl, rawName, uname, false);
       });
 
       var bodyEl=document.createElement('div');
