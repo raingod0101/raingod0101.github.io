@@ -542,8 +542,8 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
     if (!uid) return null;
     try {
       const ref = getStealEggCloudRef(uid);
-      if (!ref) return null;
-      const snap = await ref.once('value');
+      if (!ref) throw new Error('無法建立雲端存檔參照');
+      const snap = await window.raingodReadServerValue(ref);
       if (!snap.exists()) return null;
       const val = snap.val();
       const data = val && val.data !== undefined ? val.data : val;
@@ -551,7 +551,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
       return data;
     } catch (e) {
       console.warn('[steal-eggs] 雲端存檔讀取失敗', e);
-      return null;
+      throw e;
     }
   }
 
@@ -3019,10 +3019,9 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
       const user = firebase.auth().currentUser;
       if (user) { try { await window.raingodWaitForAccountData(user.uid); } catch (e) {} }
       let data = null;
+      let invalidStoredSave = false;
       if (typeof window.raingodInitGame === 'function') {
-        try {
-          data = await window.raingodInitGame('steal_egg_v17', null, (loaded, meta) => { console.log('[steal-eggs] 存檔來源:', meta); });
-        } catch (e) { console.warn('[steal-eggs] raingodInitGame 失敗', e); }
+        data = await window.raingodInitGame('steal_egg_v17', null, (loaded, meta) => { console.log('[steal-eggs] 存檔來源:', meta); });
       }
       if ((!data || data.version !== 17) && user) {
         const cloud = await loadStealEggCloud(user.uid);
@@ -3031,8 +3030,15 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
       if (!data || data.version !== 17) {
         try {
           const raw = localStorage.getItem(SAVE_KEY);
-          if (raw) { const parsed = JSON.parse(raw); if (parsed && parsed.version === 17) data = parsed; }
-        } catch (e) {}
+          if (raw !== null) {
+            const parsed = JSON.parse(raw);
+            if (parsed && parsed.version === 17) data = parsed;
+            else invalidStoredSave = true;
+          }
+        } catch (e) { invalidStoredSave = true; }
+      }
+      if (invalidStoredSave || (data && data.version !== 17)) {
+        throw new Error('存檔格式無效，為避免覆蓋進度已停止載入');
       }
       if (data && data.version === 17) {
         try { applyLoadedData(data); } catch (e) { console.warn('應用存檔失敗', e); }
@@ -3087,41 +3093,13 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
       else if (data) showToast('💾 已載入本機存檔', '#3a6a8a', '#1a3a5a');
       __saveEnabled = true;
       fireInitOnce();
+      window.raingodMarkGameDataReady();
     })();
     return __loadingPromise;
   }
-  setTimeout(() => {
-    if (!__saveEnabled) {
-      try {
-        const raw = localStorage.getItem(SAVE_KEY);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (parsed && parsed.version === 17) {
-            console.warn('[保底] 讀檔超時，使用本機存檔並啟用存檔');
-            applyLoadedData(parsed);
-            __saveEnabled = true;
-            buildIndexUI(); updateUI();
-          }
-        }
-      } catch (e) {}
-      if (!__saveEnabled) { __saveEnabled = true; buildIndexUI(); updateUI(); }
-    }
-  }, 8000);
   loadStealEggsSave().catch(e => {
     console.error('偷蛋初始化失敗', e);
-    try {
-      const raw = localStorage.getItem(SAVE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && parsed.version === 17) {
-          applyLoadedData(parsed);
-          showToast('⚠️ 雲端載入失敗，已從本機恢復進度', '#8a5a2a', '#5a3a0a');
-        }
-      }
-    } catch (e2) { console.error('本機恢復失敗', e2); }
-    buildIndexUI(); updateUI();
-    __saveEnabled = true;
-    fireInitOnce();
+    window.raingodMarkGameDataLoadFailed(e);
   });
   initEggSync();
   initEggEventSync();
