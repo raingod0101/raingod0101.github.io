@@ -678,7 +678,10 @@ const SaveSystem = {
                     if (initialState) {
                         initialState = false;
                         if (user) {
-                            this.bindAccount(user).catch(console.error).finally(resolve);
+                            this.bindAccount(user).then(resolve).catch(error => {
+                                console.error('帳號遊戲資料載入失敗：', error);
+                                window.raingodMarkGameDataLoadFailed(error);
+                            });
                         } else {
                             this.setAccountStatus('未登入：目前僅同步此裝置');
                             resolve();
@@ -736,16 +739,15 @@ const SaveSystem = {
             } else {
                 initialAccountData = this._defaultData;
             }
-        } else if (this._hasDeviceSave) {
-            localStorage.setItem('raingod_save_game4', JSON.stringify(this.currentData));
         }
 
-        const result = await new Promise(resolve => {
-            window.raingodInitGame('game4', initialAccountData, (data, details) => resolve({ data, details }));
+        let details = {};
+        const accountData = await window.raingodInitGame('game4', initialAccountData, (data, metadata) => {
+            details = metadata || {};
         });
-        const accountData = result.data;
-        const details = result.details || {};
-        if (this._accountUid !== user.uid || !accountData || typeof accountData !== 'object') return;
+        if (this._accountUid !== user.uid || !accountData || typeof accountData !== 'object' || Array.isArray(accountData)) {
+            throw new Error('帳號遊戲資料尚未載入完成');
+        }
 
         if (details.conflict) {
             this.setAccountStatus('保留本機進度；帳號存檔未更動');
@@ -754,6 +756,7 @@ const SaveSystem = {
 
         const devicePlayerId = this.currentData.playerId;
         this.currentData = { ...this.currentData, ...accountData, playerId: devicePlayerId };
+        localStorage.setItem('raingod_save_game4', JSON.stringify(this.currentData));
         try { localStorage.removeItem('RAINGOD_SAVE'); } catch (e) { console.error('移除已遷移的舊版存檔失敗：', e); }
         this.ensureDefaults();
         this._accountSyncEnabled = details.syncEnabled === true;
@@ -2385,6 +2388,7 @@ window.GameEngine = {
         this.showSection('stages');
         this.populateTestPanel();
         Background.init(this.bgCtx, this.currentStage);
+        window.raingodMarkGameDataReady();
         // 進大廳即自動同步／上榜
         SaveSystem.pushCloud(true);
     },
