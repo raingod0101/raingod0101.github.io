@@ -540,14 +540,19 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
 
   async function loadStealEggCloud(uid) {
     if (!uid) return null;
-    const ref = getStealEggCloudRef(uid);
-    if (!ref) throw new Error('無法連線至雲端存檔');
-    const snap = await ref.once('value');
-    if (!snap.exists()) return null;
-    const val = snap.val();
-    const data = val && val.data !== undefined ? val.data : val;
-    if (!data || data.version !== 17) return null;
-    return data;
+    try {
+      const ref = getStealEggCloudRef(uid);
+      if (!ref) return null;
+      const snap = await ref.once('value');
+      if (!snap.exists()) return null;
+      const val = snap.val();
+      const data = val && val.data !== undefined ? val.data : val;
+      if (!data || data.version !== 17) return null;
+      return data;
+    } catch (e) {
+      console.warn('[steal-eggs] 雲端存檔讀取失敗', e);
+      return null;
+    }
   }
 
   const EGG_REFRESH_MS = 5 * 60 * 1000;
@@ -3015,7 +3020,9 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
       if (user) { try { await window.raingodWaitForAccountData(user.uid); } catch (e) {} }
       let data = null;
       if (typeof window.raingodInitGame === 'function') {
-        data = await window.raingodInitGame('steal_egg_v17', null, (loaded, meta) => { console.log('[steal-eggs] 存檔來源:', meta); });
+        try {
+          data = await window.raingodInitGame('steal_egg_v17', null, (loaded, meta) => { console.log('[steal-eggs] 存檔來源:', meta); });
+        } catch (e) { console.warn('[steal-eggs] raingodInitGame 失敗', e); }
       }
       if ((!data || data.version !== 17) && user) {
         const cloud = await loadStealEggCloud(user.uid);
@@ -3028,7 +3035,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
         } catch (e) {}
       }
       if (data && data.version === 17) {
-        applyLoadedData(data);
+        try { applyLoadedData(data); } catch (e) { console.warn('應用存檔失敗', e); }
       }
       const lastOnline = (data && (data.lastOnlineTime || data.lastHatchTime)) || 0;
       if (lastOnline > 0 && Date.now() > lastOnline) {
@@ -3083,15 +3090,46 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
     })();
     return __loadingPromise;
   }
-  loadStealEggsSave().then(() => {
-    requestAnimationFrame(loop);
-  }).catch(window.raingodShowStorageLoadError);
+  setTimeout(() => {
+    if (!__saveEnabled) {
+      try {
+        const raw = localStorage.getItem(SAVE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && parsed.version === 17) {
+            console.warn('[保底] 讀檔超時，使用本機存檔並啟用存檔');
+            applyLoadedData(parsed);
+            __saveEnabled = true;
+            buildIndexUI(); updateUI();
+          }
+        }
+      } catch (e) {}
+      if (!__saveEnabled) { __saveEnabled = true; buildIndexUI(); updateUI(); }
+    }
+  }, 8000);
+  loadStealEggsSave().catch(e => {
+    console.error('偷蛋初始化失敗', e);
+    try {
+      const raw = localStorage.getItem(SAVE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.version === 17) {
+          applyLoadedData(parsed);
+          showToast('⚠️ 雲端載入失敗，已從本機恢復進度', '#8a5a2a', '#5a3a0a');
+        }
+      }
+    } catch (e2) { console.error('本機恢復失敗', e2); }
+    buildIndexUI(); updateUI();
+    __saveEnabled = true;
+    fireInitOnce();
+  });
   initEggSync();
   initEggEventSync();
   initGuardSync();
   setTimeout(() => publishGlobalEggs(), 1500);
   initMultiplayer();
   setInterval(pushGuards, GUARD_SYNC_MS);
+  requestAnimationFrame(loop);
   setInterval(updateUI,150);
   setInterval(()=>{if(S.indexOpen)buildIndexUI()},300);
   setInterval(()=>{ if (__saveEnabled) saveGame(true); }, 3000);
