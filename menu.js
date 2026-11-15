@@ -2,6 +2,77 @@
     const baseUrl = "https://raingod0101.github.io/";
     const v = new Date().getTime();
     let currentIp = "Unknown_IP";
+    const gameDataGatePages = new Set([
+        'stealeggs.html',
+        'raingod-agent.html',
+        'fireworks.html',
+        'farm.html',
+        'raingod-wars.html',
+        '2048snake.html'
+    ]);
+    const currentPage = (window.location.pathname || '').split('/').pop().toLowerCase();
+    let gameDataGate = null;
+
+    if (gameDataGatePages.has(currentPage)) {
+        const overlay = document.createElement('div');
+        overlay.setAttribute('role', 'status');
+        overlay.setAttribute('aria-live', 'polite');
+        overlay.setAttribute('aria-busy', 'true');
+        overlay.style.cssText = [
+            'position:fixed','inset:0','z-index:2147483647','display:flex',
+            'align-items:center','justify-content:center','padding:24px',
+            'background:#080c10','color:#fff','font:600 16px/1.6 system-ui,sans-serif',
+            'text-align:center','pointer-events:auto'
+        ].join(';');
+
+        const panel = document.createElement('div');
+        panel.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:14px;max-width:420px';
+        const spinner = document.createElement('div');
+        spinner.setAttribute('aria-hidden', 'true');
+        spinner.style.cssText = 'width:42px;height:42px;border:4px solid #ffffff35;border-top-color:#fff;border-radius:50%;animation:raingod-data-spin .8s linear infinite';
+        const style = document.createElement('style');
+        style.textContent = '@keyframes raingod-data-spin{to{transform:rotate(360deg)}}';
+        document.head.appendChild(style);
+
+        const message = document.createElement('div');
+        message.textContent = '正在載入遊戲資料，請稍候…';
+        const retry = document.createElement('button');
+        retry.type = 'button';
+        retry.textContent = '重新載入';
+        retry.style.cssText = 'display:none;padding:10px 18px;border:0;border-radius:8px;background:#fff;color:#111;font:700 15px system-ui,sans-serif;cursor:pointer';
+        retry.addEventListener('click', () => window.location.reload());
+        panel.append(spinner, message, retry);
+        overlay.appendChild(panel);
+        (document.body || document.documentElement).appendChild(overlay);
+        gameDataGate = { overlay, spinner, message, retry, failed: false, readyFrame: 0 };
+
+        ['keydown', 'keyup'].forEach(type => {
+            window.addEventListener(type, event => {
+                if (gameDataGate) event.stopImmediatePropagation();
+            }, true);
+        });
+    }
+
+    window.raingodMarkGameDataReady = function() {
+        if (!gameDataGate || gameDataGate.failed || gameDataGate.readyFrame) return;
+        gameDataGate.readyFrame = requestAnimationFrame(() => {
+            if (!gameDataGate || gameDataGate.failed) return;
+            gameDataGate.overlay.remove();
+            gameDataGate = null;
+        });
+    };
+
+    window.raingodMarkGameDataLoadFailed = function(error) {
+        if (!gameDataGate) return;
+        if (gameDataGate.readyFrame) cancelAnimationFrame(gameDataGate.readyFrame);
+        gameDataGate.readyFrame = 0;
+        gameDataGate.failed = true;
+        gameDataGate.spinner.style.display = 'none';
+        const detail = error && error.message ? ` (${error.message})` : '';
+        gameDataGate.message.textContent = `遊戲資料載入失敗${detail}。請確認網路連線後重新載入；載入完成前不會進入遊戲或覆蓋存檔。`;
+        gameDataGate.retry.style.display = 'inline-block';
+        if (error) console.error('[game data] 載入失敗', error);
+    };
 
     const ACCOUNT_DATA_ROOT = 'raingod_accounts';
     const USER_DATA_ROOT = 'raingod_users';
@@ -42,6 +113,28 @@
     function lockRef(uid, gameId) {
         return firebase.database().ref(`${LOCK_ROOT}/${uid}/${gameId}`);
     }
+
+    async function readServerValue(ref) {
+        const connectionRef = firebase.database().ref('.info/connected');
+        while (true) {
+            await new Promise((resolve, reject) => {
+                const handler = snapshot => {
+                    if (snapshot.val() !== true) return;
+                    connectionRef.off('value', handler);
+                    resolve();
+                };
+                connectionRef.on('value', handler, error => {
+                    connectionRef.off('value', handler);
+                    reject(error);
+                });
+            });
+
+            const snapshot = await ref.once('value');
+            const connection = await connectionRef.once('value');
+            if (connection.val() === true) return snapshot;
+        }
+    }
+    window.raingodReadServerValue = readServerValue;
 
     function migrateLegacyAccountStorage(uid) {
         if (!uid || !window.localStorage) return;
@@ -360,7 +453,7 @@
         }
         const uid = user.uid;
         const localData = readAccountData();
-        const snapshot = await accountDataRef(uid).once('value');
+        const snapshot = await readServerValue(accountDataRef(uid));
         if (firebase.auth().currentUser?.uid !== uid) return;
 
         if (!snapshot.exists()) {
@@ -374,8 +467,17 @@
             return;
         }
 
-        const cloudData = snapshot.val().data;
-        if (!Array.isArray(cloudData)) throw new Error('雲端帳號資料格式無效');
+        const cloudSnapshotData = snapshot.val();
+        if (!cloudSnapshotData || typeof cloudSnapshotData !== 'object' || !Array.isArray(cloudSnapshotData.data)) {
+            throw new Error('雲端帳號資料格式無效');
+        }
+        const cloudData = cloudSnapshotData.data;
+        if (!cloudData.length && localData.length) {
+            accountDataCloudLoaded = false;
+            window.raingodAccountDataCloudLoaded = false;
+            console.warn('[syncAccountData] 雲端帳號資料為空，保留本機資料');
+            return;
+        }
         const cloudKeys = new Set();
         if (cloudData.some(entry => {
             if (!entry || typeof entry.key !== 'string'
@@ -455,6 +557,13 @@
             return item;
         };
         return JSON.stringify(sortKeys(value));
+    }
+
+    function isEmptySaveData(data) {
+        if (data === null || data === undefined || data === '') return true;
+        if (Array.isArray(data)) return data.length === 0;
+        if (typeof data === 'object') return Object.keys(data).length === 0;
+        return false;
     }
 
     function parseStorageValue(raw) {
@@ -739,18 +848,24 @@
             { type: 'css', url: "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" }
         ];
         for (const res of resources) {
-            await new Promise(resolve => {
+            await new Promise((resolve, reject) => {
                 let el = res.type === 'js' ? document.createElement('script') : document.createElement('link');
                 if (res.type === 'js') el.src = res.url;
                 else { el.rel = 'stylesheet'; el.href = res.url; }
                 el.onload = resolve;
-                el.onerror = resolve;
+                el.onerror = () => {
+                    if (res.type === 'js') reject(new Error(`遊戲資料服務載入失敗：${res.url}`));
+                    else resolve();
+                };
                 document.head.appendChild(el);
             });
         }
         initSystem();
     }
-    loadResources();
+    loadResources().catch(error => {
+        console.error('遊戲服務初始化失敗：', error);
+        window.raingodMarkGameDataLoadFailed(error);
+    });
 
     window.raingodOnAuthStateChanged = function(callback) {
         return firebase.auth().onAuthStateChanged(callback);
@@ -786,7 +901,7 @@
         if (user && user.email) {
             try {
                 const gameRef = userGameSaveRef(user.uid, gameId);
-                const snap = await gameRef.once('value');
+                const snap = await readServerValue(gameRef);
                 const cloudData = snap.val();
                 if (cloudData && cloudData.updated_at && cloudData.updated_at > Date.now() - 5000) {
                     console.warn("存檔衝突：雲端版本較新，放棄覆蓋。");
@@ -850,14 +965,23 @@
         const gameRef = userGameSaveRef(user.uid, gameId);
 
         try {
-            const snapshot = await gameRef.once('value');
+            const snapshot = await readServerValue(gameRef);
             if (firebase.auth().currentUser?.uid !== user.uid) return null;
             if (!lock.owned) return null;
 
             if (snapshot.exists()) {
-                const cloudData = snapshot.val().data;
+                const cloudSave = snapshot.val();
+                if (!cloudSave || typeof cloudSave !== 'object'
+                    || !Object.prototype.hasOwnProperty.call(cloudSave, 'data')) {
+                    throw new Error('雲端遊戲存檔格式無效');
+                }
+                const cloudData = cloudSave.data;
                 const localSave = localStorage.getItem(saveKey);
                 const localData = localSave ? JSON.parse(localSave) : null;
+                if (isEmptySaveData(cloudData)
+                    && (cloudData !== null || !isEmptySaveData(localData) || !isEmptySaveData(defaultLocalData))) {
+                    throw new Error('雲端存檔是空資料，為避免覆蓋進度已停止載入');
+                }
                 const localDiffers = localSave !== null
                     && comparableSaveData(gameId, localData) !== comparableSaveData(gameId, cloudData);
 
@@ -878,9 +1002,10 @@
             return complete(initialData, { source: 'local', syncEnabled: true, created: true });
         } catch (err) {
             console.error("讀取雲端存檔失敗：", err);
-            const localSave = localStorage.getItem(saveKey);
-            const fallbackData = localSave ? JSON.parse(localSave) : defaultLocalData;
-            return complete(fallbackData, { source: 'local', syncEnabled: false, error: err });
+            try { lock.release(); } catch (releaseError) { console.error('釋放遊戲鎖失敗：', releaseError); }
+            if (activeGameLocks.get(gameId) === lock) activeGameLocks.delete(gameId);
+            window.raingodMarkGameDataLoadFailed(err);
+            throw err;
         }
     };
 
@@ -918,6 +1043,7 @@
                         if (initialState) {
                             initialState = false;
                             if (onLoaded) onLoaded(readValues(), { source: 'local', syncEnabled: false });
+                            window.raingodMarkGameDataReady();
                             resolve();
                         }
                         activeUserId = '';
@@ -936,9 +1062,9 @@
                         if (legacyCloudSave && user.email) {
                             const username = user.email.split('@')[0];
                             const accountRef = userGameSaveRef(user.uid, gameId);
-                            const accountSnapshot = await accountRef.once('value');
+                            const accountSnapshot = await readServerValue(accountRef);
                             if (!accountSnapshot.exists()) {
-                                const legacySnapshot = await firebase.database().ref(`${ACCOUNT_DATA_ROOT}/${user.uid}/${legacyCloudSave.path}`).once('value');
+                                const legacySnapshot = await readServerValue(firebase.database().ref(`${ACCOUNT_DATA_ROOT}/${user.uid}/${legacyCloudSave.path}`));
                                 if (legacySnapshot.exists()) {
                                     const legacyData = legacySnapshot.val();
                                     const primaryKey = legacyCloudSave.key;
@@ -957,16 +1083,13 @@
                                 }
                             }
                         }
-                        const hasLegacySave = storageKeys.some(key => localStorage.getItem(getAccountScopedKey(key, user.uid)) !== null);
-                        if (hasLegacySave) {
-                            Storage.prototype.setItem.call(localStorage, genericKey, JSON.stringify(localData));
-                        }
                         let details = {};
                         const data = await window.raingodInitGame(gameId, localData, (loaded, metadata) => { details = metadata || {}; });
 
                         if (details.loggedOut) {
                             enabled = false;
                             if (onLoaded) onLoaded(localData, details);
+                            window.raingodMarkGameDataReady();
                             if (initialState) { initialState = false; resolve(); }
                             return;
                         }
@@ -974,6 +1097,7 @@
 
                         const selected = data && typeof data === 'object' ? data : localData;
                         if (!details.conflict && !details.error) {
+                            Storage.prototype.setItem.call(localStorage, genericKey, JSON.stringify(selected));
                             storageKeys.forEach(key => {
                                 const value = Object.prototype.hasOwnProperty.call(selected, key) ? selected[key] : defaults[key];
                                 if (value === null || value === undefined) Storage.prototype.removeItem.call(localStorage, getAccountScopedKey(key, user.uid));
@@ -983,9 +1107,10 @@
 
                         enabled = details.syncEnabled === true;
                         if (onLoaded) onLoaded(details.conflict || details.error ? localData : selected, details);
+                        window.raingodMarkGameDataReady();
                     } catch (err) {
                         console.error("帳號存檔載入失敗：", err);
-                        if (onLoaded) onLoaded(readValues(), { source: 'local', syncEnabled: false, error: err });
+                        window.raingodMarkGameDataLoadFailed(err);
                     } finally {
                         if (initialState) { initialState = false; resolve(); }
                     }
