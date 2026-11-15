@@ -119,6 +119,12 @@
             pointer-events: none; opacity: 0; transition: opacity 0.3s;
             z-index: 25;
         }
+        #boss-progress {
+            position: absolute; top: 15px; right: 15px;
+            background: rgba(0,0,0,0.85); border: 1px solid var(--pink);
+            padding: 6px 12px; color: var(--pink); font-weight: 900; font-size: 11px;
+            pointer-events: none; z-index: 30; letter-spacing: 1px;
+        }
     </style>
 </head>
 <body>
@@ -139,10 +145,12 @@
                     <button class="ctrl-btn" onclick="toggleModal('shop-window')">商店 (SHOP)</button>
                     <button class="ctrl-btn" style="border-color:var(--gold)" onclick="toggleModal('talent-window')">天賦 (TALENTS)</button>
                     <button id="leaderboard-btn" class="ctrl-btn" style="border-color:var(--neon)" onclick="toggleLeaderboard()">登入後查看排行榜</button>
-                    <button id="boss-btn" class="ctrl-btn" style="border-color:var(--pink); background:#200;" onclick="spawnBoss()">召喚 BOSS</button>
+                    <button id="boss-btn" class="ctrl-btn" style="border-color:var(--pink); background:#200;" onclick="spawnBoss()">召喚 BOSS（1/3）</button>
                     <button id="prestige-btn" class="ctrl-btn" style="border-color: var(--gold); display:none;" onclick="doPrestige()">轉生 (ASCEND)</button>
                 </div>
             </div>
+
+            <div id="boss-progress">BOSS 進度 0/3</div>
 
             <div id="boss-hud">
                 <div id="boss-name">BOSS ENTERING...</div>
@@ -186,11 +194,9 @@
         const ctx = canvas.getContext('2d', { alpha: false });
         const container = document.getElementById('game-container');
 
-        // ============ 場景縮放 ============
         const BASE_W = 1280, BASE_H = 720;
         let width = BASE_W, height = BASE_H;
-        let S = 1;
-        let areaRatio = 1;
+        let S = 1, areaRatio = 1;
 
         function resizeScene() {
             width = canvas.width = container.clientWidth;
@@ -200,7 +206,6 @@
             areaRatio = (width * height) / (BASE_W * BASE_H);
         }
 
-        // ============ 怪物定義（VOID/MAGMA 血量下調） ============
         const MOB_TYPES = {
             COMMON:   { name: 'Drone',     color: '#00f2ff', hp: 2,      reward: 15,      size: 30,  behavior: 'normal', tier: 0 },
             ELITE:    { name: 'Hunter',    color: '#ff007b', hp: 12,     reward: 120,     size: 45,  behavior: 'fast',   tier: 1 },
@@ -237,9 +242,41 @@
 
         function fwTier(fw) { return Math.floor(fw.id / 2); }
 
+        // ============ 三 Boss 定義（新增兩個超強 Boss） ============
+        const BOSSES = [
+            {
+                mark: 'MARK-I',
+                name: '【滅世核心·虛空主宰】',
+                color: '#ff007b',
+                accent: '#00f2ff',
+                baseHp: 150000,
+                size: 180,
+                rewardTP: 1
+            },
+            {
+                mark: 'MARK-II',
+                name: '【星海吞噬者·深淵皇帝】',
+                color: '#ff6600',
+                accent: '#ffee00',
+                baseHp: 3000000,         // 20x
+                size: 200,
+                rewardTP: 2
+            },
+            {
+                mark: 'MARK-III',
+                name: '【終焉寂滅神·零之終章】',
+                color: '#ffffff',
+                accent: '#ff0066',
+                baseHp: 60000000,        // 400x
+                size: 220,
+                rewardTP: 3
+            }
+        ];
+
         const OLD_SAVE_KEY = 'raingod_fusion_v3_save';
         const SAVE_KEY = 'raingod_fusion_v4_save';
-        const LEADERBOARD_URL = 'https://game-24b43-default-rtdb.firebaseio.com/explosion_clicker_leaderboard';
+        // ★ 換新 path，舊排行榜完全隔離
+        const LEADERBOARD_URL = 'https://game-24b43-default-rtdb.firebaseio.com/explosion_clicker_leaderboard_v2';
 
         let gameData = createDefaultGameData();
         let combo = 0;
@@ -248,7 +285,7 @@
         let activeBoss = null;
         let gameStarted = false;
         let leaderboardTimer = null;
-        let bossSpawnCount = 0;
+        let bossKillsThisRun = 0;        // ★ 本輪已擊殺 Boss 數（0→3 才能轉生）
         let bossCooldownTime = 0;
         let bossCooldownTimer = null;
 
@@ -264,6 +301,7 @@
         function createDefaultGameData() {
             return {
                 money: 0, totalEarned: 0, prestige: 1, tp: 0,
+                bossKillsThisRun: 0,                    // ★ 存檔欄位
                 upgrades: {
                     range: { lv: 1, cost: 100, mult: 1.45, name: "共振距離", desc: "擴大連鎖爆炸的傳播範圍" },
                     luck: { lv: 1, cost: 200, mult: 1.8, name: "命運干涉", desc: "降低弱怪機率，大幅提升稀有與極限怪出現率" }
@@ -289,6 +327,8 @@
                 gameStarted = true;
                 refreshUI();
                 renderFireworkShop();
+                updateBossBtn();
+                updateBossProgressUI();
                 scheduleLeaderboardUpload();
             });
             window.raingodOnAuthStateChanged(user => {
@@ -307,6 +347,7 @@
             if (!gameStarted) return;
             gameData.fireworks = FIREWORKS.map(f => ({ unlocked: f.unlocked }));
             gameData.fireworkUpgrades = { autoLaunchLevel: fireworkState.autoLaunchLevel, frenzyLevel: fireworkState.frenzyLevel };
+            gameData.bossKillsThisRun = bossKillsThisRun;   // ★ 存檔
             try { localStorage.setItem(SAVE_KEY, JSON.stringify(gameData)); } catch (e) { console.error(e); }
             scheduleLeaderboardUpload();
         }
@@ -334,6 +375,8 @@
                 fireworkState.autoLaunchLevel = gameData.fireworkUpgrades.autoLaunchLevel || 0;
                 fireworkState.frenzyLevel = gameData.fireworkUpgrades.frenzyLevel || 1;
             }
+            // ★ 讀取 bossKillsThisRun（舊存檔沒有此欄位就歸零）
+            bossKillsThisRun = Math.max(0, Math.min(BOSSES.length, gameData.bossKillsThisRun || 0));
         }
 
         function getAtkPower() {
@@ -345,27 +388,25 @@
             return Math.floor(up.cost * Math.pow(up.mult, up.lv - 1));
         }
 
-        function prestigeRequirement() {
-            return 1e6 * Math.pow(3, gameData.prestige - 1);
-        }
+        // ============ 轉生邏輯（改成 Boss 擊殺制） ============
         function canPrestige() {
-            return gameData.totalEarned >= prestigeRequirement();
-        }
-        function calcPrestigeTP() {
-            const ratio = gameData.totalEarned / prestigeRequirement();
-            return Math.max(1, Math.floor(Math.pow(ratio, 0.6) * (1 + gameData.prestige * 0.15)));
+            return bossKillsThisRun >= BOSSES.length;    // ★ 3 個 Boss 全部擊殺
         }
 
-        // 抗性放寬：0.7 → 0.82
+        function calcPrestigeTP() {
+            const base = 3 + Math.floor((gameData.prestige - 1) * 1.5);
+            const bonus = Math.floor(Math.log10(gameData.totalEarned + 10) / 4);
+            return base + bonus;
+        }
+
         function damageMultiplier(fw, mobTier) {
             const fT = fwTier(fw);
             if (mobTier <= fT) return 1.0;
             return Math.max(0.05, Math.pow(0.82, mobTier - fT));
         }
 
-        // 冷卻大幅縮短
         function cooldownFrames(fw) {
-            if (fw.cost === 0) return 4; // 0.067 秒，幾乎無感
+            if (fw.cost === 0) return 4;
             return Math.max(4, 14 - Math.floor(Math.log2(fw.cost + 1)));
         }
 
@@ -373,7 +414,6 @@
         class Cube {
             constructor() {
                 const luckLv = gameData.upgrades.luck.lv;
-                // COMMON 權重上調，讓前期多出小怪
                 const weights = {
                     COMMON:  Math.max(10, 800 - luckLv * 80),
                     ELITE:   Math.max(20, 300 - luckLv * 30),
@@ -466,25 +506,33 @@
             }
         }
 
+        // ============ Boss（支援 3 種型號） ============
         class Boss {
-            constructor() {
-                this.name = `【滅世核心·虛空主宰 MK-${bossSpawnCount + 1}】`;
+            constructor(config) {
+                this.config = config;
+                this.name = `${config.name} ${config.mark}（${bossKillsThisRun + 1}/${BOSSES.length}）`;
                 this.x = width / 2;
                 this.y = height / 3;
-                this.size = 180 * S;
-                const baseHp = 150000;
-                const scale = Math.pow(1.8, gameData.prestige - 1) * Math.pow(1.8, bossSpawnCount);
-                this.maxHp = Math.floor(baseHp * scale);
+                this.size = config.size * S;
+                // ★ 改用 1.15 縮放（跟怪物一致），避免後期 Boss HP 爆炸
+                const prestigeScale = Math.pow(1.15, gameData.prestige - 1);
+                this.maxHp = Math.floor(config.baseHp * prestigeScale);
                 this.hp = this.maxHp;
-                this.color = "#ff007b";
+                this.color = config.color;
+                this.accent = config.accent;
                 this.dead = false;
                 document.getElementById('boss-hud').style.display = 'flex';
                 document.getElementById('boss-name').innerText = this.name;
+                document.getElementById('boss-name').style.color = config.color;
+                document.getElementById('boss-name').style.textShadow = `0 0 10px ${config.color}`;
+                document.getElementById('boss-bar-wrap').style.borderColor = config.color;
                 this.updateBar();
             }
             updateBar() {
                 const pct = Math.max(0, (this.hp / this.maxHp) * 100);
-                document.getElementById('boss-bar-fill').style.width = `${pct}%`;
+                const fill = document.getElementById('boss-bar-fill');
+                fill.style.width = `${pct}%`;
+                fill.style.background = `linear-gradient(90deg, ${this.color}, ${this.accent})`;
             }
             update() {
                 this.x += Math.sin(Date.now() * 0.002) * 3 * S;
@@ -497,10 +545,20 @@
                 ctx.lineWidth = 6 * S;
                 ctx.shadowBlur = 25 * S; ctx.shadowColor = this.color;
                 ctx.strokeRect(-this.size/2, -this.size/2, this.size, this.size);
+
                 ctx.rotate(Date.now() * 0.001);
-                ctx.strokeStyle = '#00f2ff';
+                ctx.strokeStyle = this.accent;
                 ctx.lineWidth = 2 * S;
+                ctx.shadowColor = this.accent;
                 ctx.strokeRect(-this.size/4, -this.size/4, this.size/2, this.size/2);
+
+                // MARK-II/III 加第二層光環
+                if (this.config.mark !== 'MARK-I') {
+                    ctx.rotate(-Date.now() * 0.002);
+                    ctx.strokeStyle = this.color;
+                    ctx.lineWidth = 1.5 * S;
+                    ctx.strokeRect(-this.size/1.5, -this.size/1.5, this.size/0.75, this.size/0.75);
+                }
                 ctx.restore();
             }
             takeDamage(dmg) {
@@ -513,13 +571,27 @@
             onDefeat() {
                 document.getElementById('boss-hud').style.display = 'none';
                 activeBoss = null;
-                bossSpawnCount++;
+
                 const rewardMoney = this.maxHp * 1.2;
-                const rewardTP = 2 + Math.floor(gameData.prestige * 1.2);
+                const rewardTP = this.config.rewardTP;
                 gameData.money += rewardMoney;
                 gameData.tp += rewardTP;
-                spawnText(width/2, height/2, `BOSS CLEAR! +${rewardTP} TP`, '#ffcc00', 30);
-                startBossCooldown(30);
+
+                bossKillsThisRun++;
+                gameData.bossKillsThisRun = bossKillsThisRun;
+
+                spawnText(width/2, height/2 - 40*S, `${this.config.mark} CLEAR!`, this.color, 28);
+                spawnText(width/2, height/2, `+${rewardTP} TP  +$${Math.floor(rewardMoney).toLocaleString()}`, '#ffcc00', 20);
+
+                updateBossProgressUI();
+                updateBossBtn();
+
+                // ★ 打完全部 3 個 → 停止冷卻，等玩家轉生
+                if (bossKillsThisRun >= BOSSES.length) {
+                    spawnText(width/2, height/2 + 60*S, '全部 BOSS 已擊殺！可進行轉生', '#ffcc00', 22);
+                } else {
+                    startBossCooldown(30);
+                }
                 refreshUI();
                 saveGame();
             }
@@ -534,20 +606,45 @@
                 bossCooldownTime--;
                 if (bossCooldownTime <= 0) {
                     clearInterval(bossCooldownTimer);
-                    btn.disabled = false;
-                    btn.innerText = '召喚 BOSS';
+                    bossCooldownTime = 0;
+                    updateBossBtn();
                 } else {
-                    btn.innerText = `冷卻中 (${bossCooldownTime}s)`;
+                    btn.innerText = `冷卻中（${bossCooldownTime}s）`;
                 }
             }, 1000);
         }
 
-        function spawnBoss() {
-            if(activeBoss || bossCooldownTime > 0) return;
-            activeBoss = new Boss();
+        function updateBossBtn() {
+            const btn = document.getElementById('boss-btn');
+            if (bossKillsThisRun >= BOSSES.length) {
+                btn.disabled = true;
+                btn.innerText = '全部 BOSS 已擊殺，請轉生';
+                return;
+            }
+            if (bossCooldownTime > 0) {
+                btn.disabled = true;
+                return;
+            }
+            btn.disabled = false;
+            btn.innerText = `召喚 BOSS（${bossKillsThisRun + 1}/${BOSSES.length}）`;
         }
 
-        // ============ 煙火火箭與粒子 ============
+        function updateBossProgressUI() {
+            const el = document.getElementById('boss-progress');
+            if (!el) return;
+            el.textContent = `BOSS 進度 ${bossKillsThisRun}/${BOSSES.length}`;
+            el.style.color = bossKillsThisRun >= BOSSES.length ? '#ffcc00' : 'var(--pink)';
+            el.style.borderColor = bossKillsThisRun >= BOSSES.length ? '#ffcc00' : 'var(--pink)';
+        }
+
+        function spawnBoss() {
+            if (activeBoss || bossCooldownTime > 0) return;
+            if (bossKillsThisRun >= BOSSES.length) return;
+            const config = BOSSES[bossKillsThisRun];
+            activeBoss = new Boss(config);
+        }
+
+        // ============ 火箭/粒子 ============
         class Rocket {
             constructor(startX, startY, targetX, targetY, fwConfig) {
                 this.x = startX; this.y = startY;
@@ -637,7 +734,6 @@
                     }
                 }
 
-                // 效能優化：抽樣
                 if (!this.checkedCombo && this.life > 0.8 && Math.random() < 0.03) {
                     this.checkedCombo = true;
                     let nearby = 0;
@@ -656,22 +752,16 @@
             const isRainbow = fw.color === "rainbow";
             const isAurora = fw.color === "aurora";
             const isGalaxy = fw.color === "galaxy";
-            // 傷害用 round，避免早期 floor 掉到 0
             const particleDamage = Math.max(1, Math.round(fw.power * heightBonus));
-
-            // 粒子數縮放放寬：手機從 0.55 → 0.8 倍
             const scale = Math.max(0.8, Math.min(1.0, Math.sqrt(areaRatio)));
             const count = Math.round(fw.count * scale);
-
             const maxFrags = Math.min(4500, Math.round(2000 * Math.max(0.5, areaRatio)));
             if (fragments.length >= maxFrags) return;
 
             for(let i = 0; i < count; i++) {
                 let angle = Math.random() * Math.PI * 2;
-                // 速度縮放放寬：手機從 0.65 → 0.85 倍
                 let speed = (Math.random() * 0.8 + 0.2) * fw.force * Math.max(S, 0.85);
                 let color = fw.color;
-
                 if (isRainbow) color = `hsl(${Math.random() * 360}, 100%, 65%)`;
                 else if (isAurora) color = `hsl(${120 + Math.random() * 100}, 100%, 60%)`;
                 else if (isGalaxy) color = `hsl(${240 + Math.random() * 80}, 100%, 70%)`;
@@ -838,16 +928,31 @@
             const tpEarned = calcPrestigeTP();
             gameData.tp += tpEarned;
             gameData.prestige++;
+
+            // 轉生重置
             gameData.money = 5000 * Math.pow(2, gameData.prestige - 2);
             gameData.totalEarned = 0;
-            bossSpawnCount = 0;
+            bossKillsThisRun = 0;                       // ★ Boss 進度重置
+            gameData.bossKillsThisRun = 0;
             for (let k in gameData.upgrades) gameData.upgrades[k].lv = 1;
-            FIREWORKS.forEach((f, i) => { f.unlocked = (i === 0); });
-            fireworkState.selectedFirework = 0;
+
+            // ★ 保留煙火解鎖（不再全部重置），只重置自動升級
             fireworkState.autoLaunchLevel = 0;
             fireworkState.frenzyLevel = 1;
             fireworkState.cooldownTimer = 0;
             fireworkState.cooldownTotal = 0;
+            // 如果當前選中的煙火在轉生前是解鎖的，則保留；否則回到仙女棒
+            const currentFw = FIREWORKS[fireworkState.selectedFirework];
+            if (!currentFw || !currentFw.unlocked) {
+                fireworkState.selectedFirework = 0;
+            }
+
+            // Boss 按鈕恢復
+            clearInterval(bossCooldownTimer);
+            bossCooldownTime = 0;
+            updateBossBtn();
+            updateBossProgressUI();
+
             spawnText(width/2, height/2, `ASCEND! +${tpEarned} TP`, '#ffcc00', 36);
             refreshUI();
             renderFireworkShop();
@@ -957,6 +1062,7 @@
             });
         }
 
+        // ============ 排行榜 ============
         window.toggleLeaderboard = async () => {
             if (!await window.raingodRequireAuth('排行榜')) return;
             const modal = document.getElementById('leaderboard-window');
@@ -1033,11 +1139,11 @@
             }
         }
 
+        // ============ 主迴圈 ============
         function loop() {
             ctx.fillStyle = 'rgba(2, 2, 5, 0.25)';
             ctx.fillRect(0, 0, width, height);
 
-            // 怪物數量：手機下限 12
             const maxCubes = Math.min(25, Math.max(12, Math.round(15 * Math.sqrt(Math.max(0.5, areaRatio)))));
             while (cubes.length < maxCubes) cubes.push(new Cube());
             cubes = cubes.filter(c => !c.dead);
@@ -1105,18 +1211,13 @@
             requestAnimationFrame(loop);
         }
 
-        // ============ 點擊處理（核心修復：點擊傷害不受冷卻影響） ============
         function handleAction(ex, ey, isTouch = false) {
             const rect = canvas.getBoundingClientRect();
             const mouseX = ex - rect.left;
             const mouseY = ey - rect.top;
-
             if (mouseY > height - 100) return;
 
-            // 觸控時判定半徑放大 1.4 倍
             const hitPad = isTouch ? 1.4 : 1.0;
-
-            // ===== 1. 點擊 Boss / 怪物傷害（不受冷卻限制，永遠生效） =====
             let clickedTarget = false;
 
             if (activeBoss && !activeBoss.dead) {
@@ -1137,7 +1238,6 @@
                 }
             }
 
-            // ===== 2. 發射煙火（受冷卻 + 金錢限制） =====
             const fw = FIREWORKS[fireworkState.selectedFirework];
             const totalCost = fw.cost * fireworkState.frenzyLevel;
             const onCooldown = fireworkState.cooldownTimer < fireworkState.cooldownTotal;
