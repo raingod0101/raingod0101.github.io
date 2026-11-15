@@ -85,6 +85,46 @@
         }
 
         .btn:hover { background: var(--accent-color); color: #000; border-color: var(--accent-color); }
+
+        /* 搜尋列（預設隱藏） */
+        .search-bar {
+            display: none;
+            position: absolute;
+            top: 50px;
+            right: 20px;
+            background: #1e1e1e;
+            border: 1px solid var(--accent-color);
+            padding: 8px 12px;
+            z-index: 100;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+            gap: 6px;
+            align-items: center;
+            border-radius: 4px;
+        }
+
+        .search-bar.active {
+            display: flex;
+        }
+
+        .search-bar input {
+            background: #0d0d0d;
+            border: 1px solid #444;
+            color: #fff;
+            padding: 5px 8px;
+            font-family: 'Consolas', monospace;
+            font-size: 13px;
+            width: 200px;
+            outline: none;
+        }
+
+        .search-bar input:focus {
+            border-color: var(--accent-color);
+        }
+
+        .search-bar .btn {
+            padding: 5px 10px;
+            font-size: 11px;
+        }
     </style>
 </head>
 <body>
@@ -97,13 +137,17 @@
         <div class="logo">RAINGOD_EDT</div>
         <div class="btn-group">
             <button class="btn" onclick="selectAllCode()">SELECT ALL</button>
-            <button class="btn" onclick="pasteFromClipboard()">PASTE & REPLACE</button>
-            <button class="btn" onclick="importFromUrl()">IMPORT URL</button>
             <button class="btn" onclick="copyAll()">COPY</button>
-            <button class="btn" onclick="clearCode()">CLEAR</button>
             <button class="btn" onclick="downloadCode()">SAVE .HTML</button>
-            <button class="btn" onclick="toggleFullScreen()">FULLSCREEN</button>
+            <button class="btn" onclick="toggleSearch()">SEARCH</button>
         </div>
+    </div>
+
+    <!-- 搜尋列 -->
+    <div class="search-bar" id="searchBar">
+        <input type="text" id="searchInput" placeholder="搜尋..." autocomplete="off">
+        <button class="btn" onclick="performSearch()">FIND</button>
+        <button class="btn" onclick="clearSearch()">CLOSE</button>
     </div>
 
     <div class="main-container" id="editor-main">
@@ -125,6 +169,8 @@
         const highlight = document.getElementById('code-highlight');
         const lineNumbers = document.getElementById('line-numbers');
         const preview = document.getElementById('preview-window');
+        const searchBar = document.getElementById('searchBar');
+        const searchInput = document.getElementById('searchInput');
 
         // 初始化
         const defaultCode = `<!DOCTYPE html>\n<html>\n<head>\n    <style>\n        body { background: #f0f0f0; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; font-family: sans-serif; }\n        h1 { color: #333; border-bottom: 2px solid #00ff41; }\n    </style>\n</head>\n<body>\n    <h1>Hello Raingod!</h1>\n</body>\n</html>`;
@@ -155,7 +201,7 @@
             highlight.innerHTML = code.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") + (code.endsWith('\n') ? ' ' : '');
         }
 
-        // --- 新增功能函數 ---
+        // --- 功能函數 ---
 
         // 1. 選取全部程式碼
         function selectAllCode() {
@@ -163,27 +209,7 @@
             input.select();
         }
 
-        // 2. 直接從剪貼簿讀取並覆蓋
-        async function pasteFromClipboard() {
-            try {
-                // 使用現代瀏覽器的 Clipboard API
-                const text = await navigator.clipboard.readText();
-                if (text) {
-                    input.value = text;
-                    updateEditor();
-                    
-                    // 給按鈕一個短暫的視覺回饋
-                    const btn = event.target;
-                    const originalText = btn.innerText;
-                    btn.innerText = "PASTED!";
-                    setTimeout(() => { btn.innerText = originalText; }, 1500);
-                }
-            } catch (err) {
-                alert("讀取剪貼簿失敗！可能是瀏覽器未授權，或者你可以直接在編輯器內用鍵盤快捷鍵 (Ctrl+V / Cmd+V) 貼上。");
-            }
-        }
-
-        // 3. 複製全部
+        // 2. 複製全部
         function copyAll() {
             input.select();
             document.execCommand('copy');
@@ -193,41 +219,7 @@
             setTimeout(() => { btn.innerText = originalText; }, 1500);
         }
 
-        // 4. 輸入網址導入
-        async function importFromUrl() {
-            const url = prompt("請輸入 HTML 檔案的完整網址 (需支援 CORS):", "https://example.com");
-            if (url) {
-                try {
-                    const response = await fetch(url);
-                    if (!response.ok) throw new Error("連線失敗");
-                    const text = await response.text();
-                    input.value = text;
-                    updateEditor();
-                } catch (err) {
-                    alert("導入失敗: " + err.message + "\n請確保網址正確且該網站允許跨網域存取(CORS)。");
-                }
-            }
-        }
-
-        // 5. 全螢幕切換
-        function toggleFullScreen() {
-            if (!document.fullscreenElement) {
-                document.documentElement.requestFullscreen().catch(err => {
-                    alert(`無法切換全螢幕: ${err.message}`);
-                });
-            } else {
-                document.exitFullscreen();
-            }
-        }
-
-        // 原有功能
-        function clearCode() {
-            if(confirm("確定要清空所有代碼嗎？")) {
-                input.value = "";
-                updateEditor();
-            }
-        }
-
+        // 3. 下載
         function downloadCode() {
             const blob = new Blob([input.value], {type: "text/html"});
             const a = document.createElement("a");
@@ -235,6 +227,70 @@
             a.download = "index.html";
             a.click();
         }
+
+        // 4. 搜尋功能
+        function toggleSearch() {
+            if (searchBar.classList.contains('active')) {
+                searchBar.classList.remove('active');
+                searchInput.value = '';
+                input.focus();
+            } else {
+                searchBar.classList.add('active');
+                searchInput.focus();
+            }
+        }
+
+        function performSearch() {
+            const query = searchInput.value;
+            if (!query) {
+                alert('請輸入搜尋內容');
+                return;
+            }
+
+            const text = input.value;
+            const index = text.indexOf(query, input.selectionEnd);
+            if (index !== -1) {
+                input.focus();
+                input.setSelectionRange(index, index + query.length);
+                // 滾動到可見區域
+                const lineHeight = 20;
+                const line = text.substring(0, index).split('\n').length;
+                input.scrollTop = (line - 1) * lineHeight - input.clientHeight / 2;
+                input.scrollTop = Math.max(0, input.scrollTop);
+                highlight.scrollTop = input.scrollTop;
+                lineNumbers.scrollTop = input.scrollTop;
+            } else {
+                // 從頭開始找
+                const firstIndex = text.indexOf(query);
+                if (firstIndex !== -1) {
+                    input.focus();
+                    input.setSelectionRange(firstIndex, firstIndex + query.length);
+                    const line = text.substring(0, firstIndex).split('\n').length;
+                    input.scrollTop = (line - 1) * lineHeight - input.clientHeight / 2;
+                    input.scrollTop = Math.max(0, input.scrollTop);
+                    highlight.scrollTop = input.scrollTop;
+                    lineNumbers.scrollTop = input.scrollTop;
+                } else {
+                    alert('找不到「' + query + '」');
+                }
+            }
+        }
+
+        function clearSearch() {
+            searchBar.classList.remove('active');
+            searchInput.value = '';
+            input.focus();
+        }
+
+        // 搜尋列按 Enter 執行搜尋
+        searchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                performSearch();
+            } else if (e.key === 'Escape') {
+                clearSearch();
+            }
+        });
 
         // Tab 鍵處理
         input.addEventListener('keydown', (e) => {
