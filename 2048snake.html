@@ -340,6 +340,69 @@
             border-radius: 50%;
             box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
         }
+
+        /* 手機版介面縮小調整 */
+        @media (max-width: 600px) {
+            .ui-container {
+                top: 60px;
+                left: 10px;
+                padding: 8px 12px;
+                border-radius: 8px;
+            }
+            .ui-container h1 {
+                font-size: 14px;
+                margin: 0 0 3px 0;
+            }
+            .ui-container .score-container {
+                font-size: 12px;
+            }
+            .shield-status, .magnet-status, .fire-status {
+                font-size: 11px;
+                margin-top: 2px;
+            }
+            .leaderboard-container {
+                top: 60px;
+                right: 10px;
+                padding: 8px 10px;
+                min-width: 140px;
+            }
+            .leaderboard-title {
+                font-size: 12px;
+            }
+            .toggle-btn {
+                font-size: 11px;
+                padding: 1px 4px;
+            }
+            .lb-tab {
+                font-size: 10px;
+                padding: 3px 0;
+            }
+            .leaderboard-item {
+                font-size: 11px;
+                margin-bottom: 4px;
+            }
+            .leaderboard-list {
+                max-height: 180px;
+            }
+            #minimap-container {
+                width: 100px;
+                height: 100px;
+                left: 10px;
+                bottom: 150px;
+            }
+            #joystick-base {
+                width: 100px;
+                height: 100px;
+                bottom: 30px;
+                left: 30px;
+            }
+            #joystick-stick {
+                width: 40px;
+                height: 40px;
+                top: 30px;
+                left: 30px;
+            }
+        }
     </style>
     <!-- Firebase SDK -->
     <script type="module">
@@ -382,10 +445,10 @@
         const AFK_TIMEOUT = 15000;
 
         // 同步擺動參數（所有方塊共用同一個相位）
-        const WOBBLE_AMPLITUDE = 3.5;      // 方塊呼吸擺動幅度 (像素)
-        const WOBBLE_SPEED = 2.2;          // 擺動速度
-        const WAVE_AMPLITUDE = 5.0;        // 蛇身波浪幅度 (像素)
-        const WAVE_SPEED = 3.0;            // 波浪速度
+        const WOBBLE_AMPLITUDE = 3.5;
+        const WOBBLE_SPEED = 2.2;
+        const WAVE_AMPLITUDE = 5.0;
+        const WAVE_SPEED = 3.0;
 
         const canvas = document.getElementById("gameCanvas");
         const ctx = canvas.getContext("2d");
@@ -772,9 +835,11 @@
 
         function updateAISnake(ai) {
             const head = ai.body[0];
+            const now = Date.now();
             let target = null;
             let minDist = Infinity;
 
+            // 1. 找食物
             foods.forEach(f => {
                 if (f.value <= head.value) {
                     const d = Math.hypot(head.x - f.x, head.y - f.y);
@@ -785,18 +850,64 @@
                 }
             });
 
-            let avoidAngle = null;
-            const margin = 150;
-            if (head.x < margin) avoidAngle = 0;
-            else if (head.x > MAP_SIZE - margin) avoidAngle = Math.PI;
-            else if (head.y < margin) avoidAngle = Math.PI / 2;
-            else if (head.y > MAP_SIZE - margin) avoidAngle = -Math.PI / 2;
+            // 2. 避開邊界預測與避障
+            let targetAngle = ai.angle;
+            let foundAvoid = false;
+            const margin = 250;
 
-            if (avoidAngle !== null) {
-                ai.angle = avoidAngle;
-            } else if (target) {
-                ai.angle = Math.atan2(target.y - head.y, target.x - head.x);
+            if (head.x < margin) {
+                targetAngle = 0; // 向右
+                foundAvoid = true;
+            } else if (head.x > MAP_SIZE - margin) {
+                targetAngle = Math.PI; // 向左
+                foundAvoid = true;
+            } else if (head.y < margin) {
+                targetAngle = Math.PI / 2; // 向下
+                foundAvoid = true;
+            } else if (head.y > MAP_SIZE - margin) {
+                targetAngle = -Math.PI / 2; // 向上
+                foundAvoid = true;
             }
+
+            // 3. 避開其他蛇與自己
+            if (!foundAvoid) {
+                const allSnakes = [player, ...Object.values(remotePlayers), ...aiSnakes];
+                let closestThreat = null;
+                let minThreatDist = Infinity;
+
+                allSnakes.forEach(s => {
+                    if (!s.body) return;
+                    s.body.forEach((seg, idx) => {
+                        if (s.id === ai.id && idx === 0) return; // 忽略自己的頭
+                        if (seg.value >= head.value) { // 只避開大於等於自己頭部的
+                            const d = Math.hypot(head.x - seg.x, head.y - seg.y);
+                            if (d < minThreatDist) {
+                                minThreatDist = d;
+                                closestThreat = seg;
+                            }
+                        }
+                    });
+                });
+
+                if (closestThreat && minThreatDist < BLOCK_SIZE * 3) {
+                    targetAngle = Math.atan2(head.y - closestThreat.y, head.x - closestThreat.x);
+                    foundAvoid = true;
+                }
+            }
+
+            // 4. 平滑轉向食物
+            if (!foundAvoid && target) {
+                targetAngle = Math.atan2(target.y - head.y, target.x - head.x);
+            }
+
+            // 5. 處理轉向邏輯
+            const maxTurn = 0.1;
+            let diff = targetAngle - ai.angle;
+            while (diff > Math.PI) diff -= Math.PI * 2;
+            while (diff < -Math.PI) diff += Math.PI * 2;
+            if (diff > maxTurn) diff = maxTurn;
+            if (diff < -maxTurn) diff = -maxTurn;
+            ai.angle += diff;
         }
 
         function moveSnake(snakeObj, speedMultiplier = 1) {
@@ -851,6 +962,7 @@
             let listData = [];
 
             if (currentLbTimeMode === 'live') {
+                // 即時排行榜要顯示 AI
                 const allSnakes = [player, ...Object.values(remotePlayers), ...aiSnakes];
                 listData = allSnakes.map(s => ({
                     id: s.id,
@@ -861,6 +973,7 @@
                     isCurrentPlayer: s.id === playerId
                 }));
             } else {
+                // 歷史排行榜沒有 AI
                 listData = Object.keys(historyLeaderboard).map(key => ({
                     id: key,
                     name: historyLeaderboard[key].name || '未知',
@@ -1037,7 +1150,10 @@
                                 const seg = other.body[k];
                                 if (seg.value <= aiHead.value) {
                                     if (Math.hypot(aiHead.x - seg.x, aiHead.y - seg.y) < BLOCK_SIZE * 0.75) {
-                                        showKillAnnouncement(other.name, ai.name);
+                                        // AI 擊殺 AI 不顯示播報
+                                        if (!(ai.isAI && other.isAI)) {
+                                            showKillAnnouncement(other.name, ai.name);
+                                        }
                                         if (other.id === playerId) {
                                             player.kills++;
                                             killsDisplay.innerText = player.kills;
@@ -1282,7 +1398,6 @@
                 const drawX = seg.x + perpX * offset;
                 const drawY = seg.y + perpY * offset;
                 
-                // 傳入 index 用於同步呼吸擺動（所有方塊共用相同相位，僅用 index 做微小區分？不，題目要求同步，所以不用 index 區分）
                 drawSyncWobbleBlock(drawX, drawY, seg.value, i === 0, snake.color, snake.name, isShielded, i);
             }
         }
@@ -1402,14 +1517,7 @@
                 minimapCtx.stroke();
             }
 
-            if (firePickup) {
-                const fx = firePickup.x * scale;
-                const fy = firePickup.y * scale;
-                minimapCtx.font = "10px Arial";
-                minimapCtx.fillStyle = "#ff8c00";
-                minimapCtx.textAlign = "center";
-                minimapCtx.fillText("🔥", fx, fy);
-            }
+            // 已移除小地圖上的火焰顯示
         }
 
         function gameLoop() {
