@@ -181,42 +181,45 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
   border:1px solid currentColor;background:transparent;color:inherit;font-size:12px;
   cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:4px}
 .me .bubble .file-attachment{background:rgba(255,255,255,.15)}
+
+/* ★ 已讀：沒有已讀就完全空著，不顯示「未讀」 */
 .msg-read{font-size:11px;color:var(--text-gray);margin-top:3px;padding:0 5px;cursor:pointer}
 .msg-read:hover{text-decoration:underline}
-.msg-recall-btn{display:none;margin-top:3px;font-size:11px;color:var(--text-gray);
-  background:transparent;border:0;cursor:pointer;padding:2px 5px}
-.msg-line.me .msg-recall-btn{align-self:flex-end}
-.msg-line:hover .msg-recall-btn{display:inline-block}
-@media (hover:none){.msg-line .msg-recall-btn{display:inline-block;opacity:.6}}
 
-.reply-icon-btn{display:none;width:30px;height:30px;border-radius:50%;background:#fff;
-  border:1px solid var(--border);color:#555;font-size:15px;cursor:pointer;
-  align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.12);
-  flex:0 0 auto;z-index:6}
-.msg-line.reply-active .reply-icon-btn{display:flex}
+/* ★ 點一下訊息才出現的操作列（回覆 + 垃圾桶收回） */
+.msg-actions{display:none;align-items:center;gap:4px;flex:0 0 auto;align-self:center;z-index:6}
+.msg-line.reply-active .msg-actions{display:flex}
+.msg-action-btn{width:28px;height:28px;border-radius:50%;background:#fff;border:1px solid var(--border);
+  color:#555;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  box-shadow:0 2px 6px rgba(0,0,0,.12);padding:0;line-height:1}
+.msg-action-btn:hover{background:#f2f6ff}
+.msg-action-btn.del{color:var(--danger);border-color:#ffc9c9}
 
+/* ★ 回覆引用（概念圖樣式） */
 .reply-quote{
-  display:block;margin:0 0 7px;padding:8px 10px;
-  background:#eceff3;border-radius:10px;cursor:pointer;
-  font-size:12px;line-height:1.4;color:#4a4f57;
-  word-break:break-word;overflow:hidden;
+  display:block;margin:0 0 7px;padding:8px 10px;border-radius:10px;
+  background:rgba(0,0,0,0.06);
+  font-size:12px;line-height:1.4;color:#4a4f57;cursor:pointer;
+  word-break:break-word;max-width:100%;
 }
-.reply-quote:hover{background:#e2e6ed}
-.me .reply-quote{background:rgba(255,255,255,.22);color:#fff}
-.me .reply-quote:hover{background:rgba(255,255,255,.32)}
+.me .reply-quote{background:rgba(255,255,255,.2);color:#fff}
+.reply-quote:hover{background:rgba(0,0,0,0.1)}
+.me .reply-quote:hover{background:rgba(255,255,255,.3)}
+.reply-quote .rq-label{font-size:11px;font-weight:700;margin-bottom:5px;
+  display:flex;align-items:center;gap:5px;opacity:.9}
+.reply-quote .rq-avatar{width:16px;height:16px;border-radius:50%;object-fit:cover;
+  flex:0 0 auto;border:1px solid rgba(0,0,0,.1)}
+.me .reply-quote .rq-avatar{border-color:rgba(255,255,255,.3)}
+.reply-quote .rq-text{
+  padding:5px 8px;border-radius:6px;background:rgba(255,255,255,0.6);
+  color:#333;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.me .reply-quote .rq-text{background:rgba(255,255,255,0.2);color:#fff}
 
-.rq-head{display:flex;align-items:center;gap:6px;margin-bottom:4px}
-.rq-avatar{width:20px;height:20px;border-radius:50%;object-fit:cover;flex:0 0 auto;background:#fff;border:1px solid rgba(0,0,0,.1)}
-.rq-name{font-weight:600;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.rq-original{
-  border:1px solid #c6cbd3;padding:4px 7px;border-radius:6px;margin-bottom:4px;
-  font-size:12px;max-height:40px;overflow:hidden;text-overflow:ellipsis;
-  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
-  word-break:break-word;background:rgba(255,255,255,.5);
-}
-.me .rq-original{border-color:rgba(255,255,255,.5);background:rgba(255,255,255,.15);}
-.rq-reply-hint{font-size:11px;color:#8e8e93;font-style:italic;margin-top:2px}
-.me .rq-reply-hint{color:rgba(255,255,255,.7)}
+/* ★ 訊息中的連結 */
+.bubble .msg-link{color:inherit;text-decoration:underline;text-underline-offset:2px;word-break:break-all}
+.other .bubble .msg-link{color:#0a66c2}
+.me .bubble .msg-link{color:#d6e8ff}
 
 .chat-input-wrap{flex-shrink:0;background:#fff}
 .reply-preview-bar{display:none;padding:8px 14px;background:#fff8e1;border-top:1px solid #f0e0b0;
@@ -682,6 +685,38 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     }
     var src = url || fallbackAvatar;
     return '<img class="'+(cls||'friend-avatar')+'" src="'+escapeHtml(src)+'" alt="" onerror="this.onerror=null;this.src=\''+fallbackAvatar+'\'"'+styleAttr+'>';
+  }
+
+  // ★ 取得某個 uid 的頭像資訊（優先群組成員快取 → 好友快取 → 自己）
+  function getAvatarInfo(uid){
+    if(uid===currentUid) return {avatar:currentAvatar||fallbackAvatar,loaded:true};
+    var info=currentMembersMap[uid];
+    if(info) return {avatar:info.avatar||null,loaded:info.avatarLoaded===true};
+    var f=friendsCache[uid];
+    if(f) return {avatar:f.avatar||null,loaded:f.avatarLoaded===true};
+    return {avatar:null,loaded:true};
+  }
+
+  // ★ 把純文字轉成可點擊的連結（自動辨識 http/https，並附 title）
+  function linkifyText(text){
+    var frag=document.createDocumentFragment();
+    if(!text) return frag;
+    var re=/(https?:\/\/[^\s<>"'）)】]+)/g;
+    var last=0,m;
+    while((m=re.exec(text))){
+      if(m.index>last) frag.appendChild(document.createTextNode(text.slice(last,m.index)));
+      var a=document.createElement('a');
+      a.href=m[0];
+      a.textContent=m[0];
+      a.target='_blank';
+      a.rel='noopener noreferrer';
+      a.className='msg-link';
+      a.title=m[0];
+      frag.appendChild(a);
+      last=re.lastIndex;
+    }
+    if(last<text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+    return frag;
   }
 
   function checkLoaded(){
@@ -1817,18 +1852,46 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
   }
   replyPreviewClose.addEventListener('click',clearReply);
 
-  function bindMessageRowInteractions(lineEl,msgId,msgData){
-    var btn=document.createElement('button');
-    btn.type='button'; btn.className='reply-icon-btn'; btn.innerHTML='↩'; btn.title='回覆此訊息';
-    btn.addEventListener('click',function(e){e.stopPropagation();setReplyTo(msgId,msgData);lineEl.classList.remove('reply-active');});
-    lineEl.appendChild(btn);
+  // ★ 點一下訊息才會出現「回覆 + 垃圾桶」操作列
+  function bindMessageRowInteractions(lineEl,msgId,msgData,kind,cid,isMe){
+    var actions=document.createElement('div');
+    actions.className='msg-actions';
+
+    var replyBtn=document.createElement('button');
+    replyBtn.type='button';
+    replyBtn.className='msg-action-btn reply';
+    replyBtn.innerHTML='↩';
+    replyBtn.title='回覆此訊息';
+    replyBtn.addEventListener('click',function(e){
+      e.stopPropagation();
+      setReplyTo(msgId,msgData);
+      lineEl.classList.remove('reply-active');
+    });
+    actions.appendChild(replyBtn);
+
+    if(isMe||isAdmin){
+      var delBtn=document.createElement('button');
+      delBtn.type='button';
+      delBtn.className='msg-action-btn del';
+      delBtn.innerHTML='🗑';
+      delBtn.title=isMe?'收回訊息':'刪除訊息';
+      delBtn.addEventListener('click',function(e){
+        e.stopPropagation();
+        doRecall(kind,cid,msgId,msgData,isMe);
+      });
+      actions.appendChild(delBtn);
+    }
+
+    lineEl.appendChild(actions);
+
     lineEl.addEventListener('click',function(e){
-      if(e.target.closest('button,a,.reply-quote,.msg-avatar')) return;
+      if(e.target.closest('button,a,.reply-quote,.msg-avatar,.msg-link')) return;
       var isActive=lineEl.classList.contains('reply-active');
       chatBox.querySelectorAll('.msg-line.reply-active').forEach(function(r){r.classList.remove('reply-active');});
       if(!isActive) lineEl.classList.add('reply-active');
     });
   }
+
   chatBox.addEventListener('click',function(e){
     if(e.target.closest('.msg-line')) return;
     chatBox.querySelectorAll('.msg-line.reply-active').forEach(function(r){r.classList.remove('reply-active');});
@@ -2293,6 +2356,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
         var bubble=document.createElement('div');
         bubble.className='bubble';
 
+        // ★ 回覆引用（概念圖樣式：第一行頭像+名稱，第二行底色框）
         if(m.replyTo){
           var quote=document.createElement('div');
           quote.className='reply-quote';
@@ -2303,27 +2367,12 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
           else if(m.replyTo.type==='file') rqText='📎 '+(m.replyTo.fileName||'檔案');
           else rqText=m.replyTo.text||'';
           var ai=getAvatarInfo(rqFrom);
-
-          // 第一行：頭像 + 名稱（有匿名就顯示匿名）
-          var headDiv = document.createElement('div');
-          headDiv.className = 'rq-head';
-          headDiv.innerHTML = avatarHtml(ai.loaded, ai.avatar, 'rq-avatar', '') +
-            '<span class="rq-name">' + escapeHtml(rqName) + '</span>';
-      
-          // 第二行：被回覆的訊息，用框框起來
-          var originalDiv = document.createElement('div');
-          originalDiv.className = 'rq-original';
-          originalDiv.textContent = rqText;
-        
-          // 第三行：你回覆了什麼
-          var replyHintDiv = document.createElement('div');
-          replyHintDiv.className = 'rq-reply-hint';
-          replyHintDiv.textContent = '你回覆了什麼';
-        
-          quote.appendChild(headDiv);
-          quote.appendChild(originalDiv);
-          quote.appendChild(replyHintDiv);
-        
+          quote.innerHTML =
+            '<div class="rq-label">'+
+              avatarHtml(ai.loaded, ai.avatar, 'rq-avatar', '')+
+              '<span>'+escapeHtml(rqName)+'</span>'+
+            '</div>'+
+            '<div class="rq-text">'+escapeHtml(rqText)+'</div>';
           quote.title='點擊跳至原訊息';
           quote.addEventListener('click',function(e){
             e.stopPropagation();
@@ -2345,7 +2394,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
             img.addEventListener('click',function(e){e.stopPropagation();openLightbox(src);});
             bubble.appendChild(img);
           }
-          if(m.text){var cap=document.createElement('div');cap.style.marginTop='6px';cap.textContent=m.text;bubble.appendChild(cap);}
+          if(m.text){var cap=document.createElement('div');cap.style.marginTop='6px';cap.appendChild(linkifyText(m.text));bubble.appendChild(cap);}
         }else if(m.type==='file'){
           var fnow=Date.now();
           var fexpire=m.expireAt||((m.ts||0)+IMG_TTL_MS);
@@ -2366,13 +2415,15 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
             attachDiv.appendChild(iconSpan); attachDiv.appendChild(infoDiv); attachDiv.appendChild(dlBtn);
             bubble.appendChild(attachDiv);
           }
-          if(m.text){var fcap=document.createElement('div');fcap.style.marginTop='4px';fcap.textContent=m.text;bubble.appendChild(fcap);}
+          if(m.text){var fcap=document.createElement('div');fcap.style.marginTop='4px';fcap.appendChild(linkifyText(m.text));bubble.appendChild(fcap);}
         }else{
-          bubble.textContent=m.text||'';
+          // ★ 純文字：自動把連結變成可點擊
+          if(m.text) bubble.appendChild(linkifyText(m.text));
         }
         bodyEl.appendChild(bubble);
       }
 
+      // ★ 已讀狀態：沒有已讀就完全空著
       if(isMe&&!recalled){
         if(kind==='group'){
           var readerIds=Object.keys(read).filter(function(uid){
@@ -2380,29 +2431,26 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
             var rv=read[uid]; var rts=(rv&&rv.ts)||(typeof rv==='number'?rv:0);
             return rts>=(m.ts||0);
           });
-          var rd=document.createElement('div');
-          rd.className='msg-read'; rd.textContent=readerIds.length>0?('已讀 '+readerIds.length+' 人'):'未讀';
-          rd.addEventListener('click',function(e){showReadersPop(e,readerIds,aliases);});
-          bodyEl.appendChild(rd);
+          if(readerIds.length>0){
+            var rd=document.createElement('div');
+            rd.className='msg-read'; rd.textContent='已讀 '+readerIds.length+' 人';
+            rd.addEventListener('click',function(e){e.stopPropagation();showReadersPop(e,readerIds,aliases);});
+            bodyEl.appendChild(rd);
+          }
         }else{
           var other=friendUid; var rv=read&&read[other];
           var rts=(rv&&rv.ts)||(typeof rv==='number'?rv:0);
           var isRead=rts>=(m.ts||0);
-          var rd2=document.createElement('div'); rd2.className='msg-read'; rd2.textContent=isRead?'已讀':'未讀';
-          bodyEl.appendChild(rd2);
+          if(isRead){
+            var rd2=document.createElement('div'); rd2.className='msg-read'; rd2.textContent='已讀';
+            bodyEl.appendChild(rd2);
+          }
         }
-      }
-
-      if(!recalled&&(isMe||isAdmin)){
-        var recallBtn=document.createElement('button');
-        recallBtn.type='button'; recallBtn.className='msg-recall-btn'; recallBtn.textContent=isMe?'收回':'刪除';
-        recallBtn.addEventListener('click',function(){doRecall(kind,cid,id,m,isMe);});
-        bodyEl.appendChild(recallBtn);
       }
 
       line.appendChild(avatarEl);
       line.appendChild(bodyEl);
-      if(!recalled) bindMessageRowInteractions(line,id,m);
+      if(!recalled) bindMessageRowInteractions(line,id,m,kind,cid,isMe);
       chatBox.appendChild(line);
     });
     chatBox.scrollTop=chatBox.scrollHeight;
