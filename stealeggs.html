@@ -2333,7 +2333,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
       }
     }
     // 檢查玩家是否碰到商店/合成機/擴充站/棒子店
-    checkMapInteractions();
+    checkMapInteractions(dt);
     S.camera.x+=(p.x-S.camera.x)*0.08; S.camera.y+=(p.y-100-S.camera.y)*0.08;
     safeHook(HOOKS.onUpdate, dt);
     updateUI();
@@ -2342,49 +2342,55 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
 
   // ★ 地圖互動點
   let __mapInteractCooldown = 0;
+  let __activeMapInteraction = null;
   function getShopPos() { const base = getBasePos(S.myBaseIdx); return { x: base.x - 80, y: 3050, r: 26 }; }
   function getFusionPos() { const base = getBasePos(S.myBaseIdx); return { x: base.x + 80, y: 3050, r: 26 }; }
   function getPetCapPos() { const base = getBasePos(S.myBaseIdx); return { x: base.x - 80, y: 2950, r: 26 }; }
   function getStickShopPos() { const base = getBasePos(S.myBaseIdx); return { x: base.x + 80, y: 2950, r: 26 }; }
-  function checkMapInteractions() {
-    if (__mapInteractCooldown > 0) { __mapInteractCooldown -= 1/60; return; }
+  function checkMapInteractions(dt) {
+    __mapInteractCooldown = Math.max(0, __mapInteractCooldown - dt);
     const p = S.player;
-    const shop = getShopPos();
-    if (dist(p.x, p.y, shop.x, shop.y) < 40) {
-      if (!S.trailPanelOpen) {
-        S.trailPanelOpen = true; document.getElementById('trailPanel').classList.add('open'); buildTrailUI();
-        __mapInteractCooldown = 1.5;
-        showToast('✨ 歡迎光臨軌跡商店！', '#3a8a6a', '#1a5a3a');
-      }
-      return;
+    const interactions = [
+      { id: 'trail', pos: getShopPos() },
+      { id: 'fusion', pos: getFusionPos() },
+      { id: 'petcap', pos: getPetCapPos() },
+      { id: 'stick', pos: getStickShopPos() },
+    ];
+    const current = interactions.find(({ pos }) => dist(p.x, p.y, pos.x, pos.y) < 40) || null;
+
+    if (!current) {
+      __activeMapInteraction = null;
     }
-    const fus = getFusionPos();
-    if (dist(p.x, p.y, fus.x, fus.y) < 40) {
-      if (!S.fusionPanelOpen) {
-        S.fusionPanelOpen = true; document.getElementById('fusionPanel').classList.add('open');
-        S.fusionSelection = [null, null, null];
-        buildFusionUI();
-        __mapInteractCooldown = 1.5;
-        showToast('🔮 歡迎使用融合合成機！', '#a040c0', '#6a1a8a');
-      }
-      return;
+    if (S.trailPanelOpen && (!current || current.id !== 'trail')) {
+      S.trailPanelOpen = false; document.getElementById('trailPanel').classList.remove('open');
     }
-    const cap = getPetCapPos();
-    if (dist(p.x, p.y, cap.x, cap.y) < 40) {
-      if (!S.petcapPanelOpen) {
-        openPetCapPanel();
-        __mapInteractCooldown = 1.5;
-      }
-      return;
+    if (S.fusionPanelOpen && (!current || current.id !== 'fusion')) {
+      S.fusionPanelOpen = false; document.getElementById('fusionPanel').classList.remove('open');
     }
-    const stickShop = getStickShopPos();
-    if (dist(p.x, p.y, stickShop.x, stickShop.y) < 40) {
-      if (!S.stickPanelOpen) {
-        S.stickPanelOpen = true; document.getElementById('stickPanel').classList.add('open'); buildStickUI();
-        __mapInteractCooldown = 1.5;
-        showToast('🏏 歡迎光臨棒子商店！', '#3a6a8a', '#1a3a5a');
-      }
-      return;
+    if (S.petcapPanelOpen && (!current || current.id !== 'petcap')) {
+      S.petcapPanelOpen = false; document.getElementById('petcapPanel').classList.remove('open');
+    }
+    if (S.stickPanelOpen && (!current || current.id !== 'stick')) {
+      S.stickPanelOpen = false; document.getElementById('stickPanel').classList.remove('open');
+    }
+
+    if (!current || current.id === __activeMapInteraction || __mapInteractCooldown > 0) return;
+
+    __activeMapInteraction = current.id;
+    __mapInteractCooldown = 2;
+    if (current.id === 'trail') {
+      S.trailPanelOpen = true; document.getElementById('trailPanel').classList.add('open'); buildTrailUI();
+      showToast('✨ 歡迎光臨軌跡商店！', '#3a8a6a', '#1a5a3a');
+    } else if (current.id === 'fusion') {
+      S.fusionPanelOpen = true; document.getElementById('fusionPanel').classList.add('open');
+      S.fusionSelection = [null, null, null];
+      buildFusionUI();
+      showToast('🔮 歡迎使用融合合成機！', '#a040c0', '#6a1a8a');
+    } else if (current.id === 'petcap') {
+      openPetCapPanel();
+    } else if (current.id === 'stick') {
+      S.stickPanelOpen = true; document.getElementById('stickPanel').classList.add('open'); buildStickUI();
+      showToast('🏏 歡迎光臨棒子商店！', '#3a6a8a', '#1a3a5a');
     }
   }
   function drawMapInteractables() {
