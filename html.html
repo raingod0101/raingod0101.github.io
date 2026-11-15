@@ -22,7 +22,7 @@
 
         /* 導覽列預留區 */
         #nav_bar {
-            height: 45px; /* 與工具列同高，可依需求調整 */
+            height: 45px;
             background: #050505;
             border-bottom: 1px solid var(--border-color);
             display: flex;
@@ -45,7 +45,7 @@
 
         .btn-group { display: flex; gap: 5px; flex-wrap: wrap; }
 
-        /* 主容器 - 高度扣除 nav_bar + toolbar */
+        /* 主容器 */
         .main-container {
             display: flex;
             height: calc(100vh - 45px - 45px);
@@ -96,11 +96,11 @@
 
         .btn:hover { background: var(--accent-color); color: #000; border-color: var(--accent-color); }
 
-        /* 搜尋列（預設隱藏） */
+        /* 搜尋列 */
         .search-bar {
             display: none;
             position: absolute;
-            top: 100px; /* nav_bar + toolbar 高度 */
+            top: 100px;
             right: 20px;
             background: #1e1e1e;
             border: 1px solid var(--accent-color);
@@ -135,6 +135,18 @@
             padding: 5px 10px;
             font-size: 11px;
         }
+
+        /* 儲存狀態指示 */
+        .save-status {
+            font-size: 11px;
+            color: #555;
+            margin-left: 12px;
+            transition: color 0.3s;
+        }
+
+        .save-status.saved {
+            color: var(--accent-color);
+        }
     </style>
 </head>
 <body>
@@ -149,6 +161,7 @@
             <button class="btn" onclick="selectAllCode()">SELECT ALL</button>
             <button class="btn" onclick="downloadCode()">SAVE .HTML</button>
             <button class="btn" onclick="toggleSearch()">SEARCH</button>
+            <span class="save-status" id="saveStatus">自動儲存</span>
         </div>
     </div>
 
@@ -180,45 +193,69 @@
         const preview = document.getElementById('preview-window');
         const searchBar = document.getElementById('searchBar');
         const searchInput = document.getElementById('searchInput');
+        const saveStatus = document.getElementById('saveStatus');
 
-        // 初始化
+        // ============ LocalStorage 自動儲存 ============
+        const STORAGE_KEY = 'raingod_editor_code';
+        let autoSaveTimer = null;
+
         const defaultCode = `<!DOCTYPE html>\n<html>\n<head>\n    <style>\n        body { background: #f0f0f0; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; font-family: sans-serif; }\n        h1 { color: #333; border-bottom: 2px solid #00ff41; }\n    </style>\n</head>\n<body>\n    <h1>Hello Raingod!</h1>\n</body>\n</html>`;
-        input.value = defaultCode;
+
+        // 載入：優先使用 localStorage，否則使用預設範例
+        const savedCode = localStorage.getItem(STORAGE_KEY);
+        input.value = savedCode !== null ? savedCode : defaultCode;
         updateEditor();
 
-        // 監聽
-        input.addEventListener('input', updateEditor);
+        // 監聽輸入 → 更新編輯器 + 自動儲存
+        input.addEventListener('input', () => {
+            updateEditor();
+            scheduleAutoSave();
+        });
+
         input.addEventListener('scroll', () => {
             highlight.scrollTop = input.scrollTop;
             highlight.scrollLeft = input.scrollLeft;
             lineNumbers.scrollTop = input.scrollTop;
         });
 
+        // 延遲自動儲存（500ms 防抖）
+        function scheduleAutoSave() {
+            saveStatus.textContent = '儲存中...';
+            saveStatus.classList.remove('saved');
+            clearTimeout(autoSaveTimer);
+            autoSaveTimer = setTimeout(() => {
+                try {
+                    localStorage.setItem(STORAGE_KEY, input.value);
+                    saveStatus.textContent = '✓ 已自動儲存';
+                    saveStatus.classList.add('saved');
+                } catch (e) {
+                    saveStatus.textContent = '✗ 儲存失敗';
+                    saveStatus.classList.remove('saved');
+                    console.warn('自動儲存失敗：', e);
+                }
+            }, 500);
+        }
+
+        // ============ 編輯器渲染 ============
         function updateEditor() {
             const code = input.value;
-            // 更新預覽
             const previewDoc = preview.contentDocument || preview.contentWindow.document;
             previewDoc.open();
             previewDoc.write(code);
             previewDoc.close();
 
-            // 更新行號
             const lines = code.split('\n').length;
             lineNumbers.innerHTML = Array.from({length: lines}, (_, i) => i + 1).join('<br>');
 
-            // 轉義與顯示
             highlight.innerHTML = code.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") + (code.endsWith('\n') ? ' ' : '');
         }
 
-        // --- 功能函數 ---
-
-        // 1. 選取全部程式碼
+        // ============ 其他功能 ============
         function selectAllCode() {
             input.focus();
             input.select();
         }
 
-        // 2. 下載
         function downloadCode() {
             const blob = new Blob([input.value], {type: "text/html"});
             const a = document.createElement("a");
@@ -227,7 +264,7 @@
             a.click();
         }
 
-        // 3. 搜尋功能
+        // 搜尋
         function toggleSearch() {
             if (searchBar.classList.contains('active')) {
                 searchBar.classList.remove('active');
@@ -249,30 +286,26 @@
             const text = input.value;
             const index = text.indexOf(query, input.selectionEnd);
             if (index !== -1) {
-                input.focus();
-                input.setSelectionRange(index, index + query.length);
-                // 滾動到可見區域
-                const lineHeight = 20;
-                const line = text.substring(0, index).split('\n').length;
-                input.scrollTop = (line - 1) * lineHeight - input.clientHeight / 2;
-                input.scrollTop = Math.max(0, input.scrollTop);
-                highlight.scrollTop = input.scrollTop;
-                lineNumbers.scrollTop = input.scrollTop;
+                highlightMatch(index, query.length, text);
             } else {
-                // 從頭開始找
                 const firstIndex = text.indexOf(query);
                 if (firstIndex !== -1) {
-                    input.focus();
-                    input.setSelectionRange(firstIndex, firstIndex + query.length);
-                    const line = text.substring(0, firstIndex).split('\n').length;
-                    input.scrollTop = (line - 1) * lineHeight - input.clientHeight / 2;
-                    input.scrollTop = Math.max(0, input.scrollTop);
-                    highlight.scrollTop = input.scrollTop;
-                    lineNumbers.scrollTop = input.scrollTop;
+                    highlightMatch(firstIndex, query.length, text);
                 } else {
                     alert('找不到「' + query + '」');
                 }
             }
+        }
+
+        function highlightMatch(index, len, text) {
+            input.focus();
+            input.setSelectionRange(index, index + len);
+            const lineHeight = 20;
+            const line = text.substring(0, index).split('\n').length;
+            input.scrollTop = (line - 1) * lineHeight - input.clientHeight / 2;
+            input.scrollTop = Math.max(0, input.scrollTop);
+            highlight.scrollTop = input.scrollTop;
+            lineNumbers.scrollTop = input.scrollTop;
         }
 
         function clearSearch() {
@@ -281,7 +314,6 @@
             input.focus();
         }
 
-        // 搜尋列按 Enter 執行搜尋
         searchInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
@@ -300,6 +332,7 @@
                 input.value = input.value.substring(0, start) + "    " + input.value.substring(end);
                 input.selectionStart = input.selectionEnd = start + 4;
                 updateEditor();
+                scheduleAutoSave();
             }
         });
     </script>
