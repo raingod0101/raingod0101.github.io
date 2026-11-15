@@ -116,6 +116,75 @@
             cursor: not-allowed;
             color: #dfe6e9;
         }
+        /* 排行榜與登入提示樣式 */
+        .login-hint {
+            margin-bottom: 15px;
+            font-size: 14px;
+            color: #e17055;
+            font-weight: 600;
+        }
+        .leaderboard-section {
+            width: 100%;
+            margin-top: 30px;
+            border-top: 2px solid #dfe6e9;
+            padding-top: 20px;
+        }
+        .leaderboard-section h2 {
+            font-size: 22px;
+            margin: 0 0 15px 0;
+            color: #2d3436;
+        }
+        .lb-tabs {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .lb-tab {
+            padding: 8px 20px;
+            border-radius: 20px;
+            border: 2px solid #dfe6e9;
+            background: #f1f2f6;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 14px;
+            color: #636e72;
+            transition: all 0.2s;
+        }
+        .lb-tab.active {
+            background: #0984e3;
+            border-color: #0984e3;
+            color: white;
+        }
+        .lb-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            max-height: 300px;
+            overflow-y: auto;
+            text-align: left;
+        }
+        .lb-list li {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 15px;
+            border-bottom: 1px solid #f1f2f6;
+            font-size: 15px;
+        }
+        .lb-list li:nth-child(1) { background: #ffeaa7; font-weight: bold; border-radius: 8px; }
+        .lb-list li:nth-child(2) { background: #dfe6e9; border-radius: 8px; }
+        .lb-list li:nth-child(3) { background: #fab1a0; border-radius: 8px; }
+        .lb-rank { font-weight: bold; color: #636e72; min-width: 30px; }
+        .lb-name { flex: 1; margin-left: 10px; }
+        .lb-score { font-weight: bold; color: #0984e3; font-size: 18px; }
+        .lb-empty { text-align: center; color: #b2bec3; padding: 20px; }
+        .auto-clicker-warning {
+            color: #d63031;
+            font-weight: bold;
+            font-size: 16px;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
@@ -125,6 +194,8 @@
 
     <div class="container">
         <h1 id="gameTitle">一秒極速點擊</h1>
+
+        <div class="login-hint" id="loginHint">🔒 請先登入才能參與排行榜</div>
         
         <div class="mode-select">
             <select id="modeSelector" onchange="changeMode()">
@@ -145,9 +216,23 @@
         </div>
 
         <button id="clickBtn" onclick="handleClick()">點擊開始！</button>
+        <div id="autoClickerWarning" class="auto-clicker-warning" style="display:none;"></div>
+
+        <!-- 排行榜區域 -->
+        <div class="leaderboard-section">
+            <h2>🏆 排行榜</h2>
+            <div class="lb-tabs">
+                <button class="lb-tab active" data-mode="1" onclick="switchLeaderboard(1)">1秒模式</button>
+                <button class="lb-tab" data-mode="60" onclick="switchLeaderboard(60)">60秒模式</button>
+            </div>
+            <ul id="leaderboardList" class="lb-list">
+                <li class="lb-empty">載入中...</li>
+            </ul>
+        </div>
     </div>
 
     <script>
+        // ==================== 遊戲核心變數 ====================
         let gameDuration = 1; // 預設 1 秒
         let timeLeft = 1.0;
         let score = 0;
@@ -155,15 +240,169 @@
         let isCountingDown = false;
         let timerId = null;
 
+        // 連點器偵測
+        let clickTimestamps = [];
+        let autoClickerDetected = false;
+        const AUTO_CLICKER_WARNING_TEXT = '⚠️ 偵測到異常點擊頻率，本次成績不列入排行榜！';
+        const MIN_CLICK_INTERVAL = 30; // 毫秒，低於此值視為連點器
+
+        // 目前登入者
+        let currentUser = null;
+        let currentUsername = '';
+
+        // 排行榜目前模式
+        let currentLeaderboardMode = 1;
+
+        // DOM 元素
         const timerDisplay = document.getElementById('timer');
         const scoreDisplay = document.getElementById('score');
         const clickBtn = document.getElementById('clickBtn');
         const modeSelector = document.getElementById('modeSelector');
         const gameTitle = document.getElementById('gameTitle');
+        const loginHint = document.getElementById('loginHint');
+        const autoClickerWarning = document.getElementById('autoClickerWarning');
+        const leaderboardList = document.getElementById('leaderboardList');
 
+        // ==================== Firebase 初始化 ====================
+        // 由 menu.js 的 IIFE 負責初始化 Firebase，這裡只使用其暴露的 API
+
+        // 等待 Firebase 與登入狀態就緒
+        function waitForAuth() {
+            return new Promise((resolve) => {
+                const check = () => {
+                    if (window.firebase && window.firebase.auth) {
+                        window.raingodFirebaseReady.then(() => {
+                            window.raingodAuthReady.then(() => {
+                                const user = window.firebase.auth().currentUser;
+                                resolve(user);
+                            });
+                        });
+                    } else {
+                        setTimeout(check, 100);
+                    }
+                };
+                check();
+            });
+        }
+
+        // 監聽登入狀態變化
+        waitForAuth().then((user) => {
+            updateLoginState(user);
+            // 之後持續監聽
+            if (window.firebase && window.firebase.auth) {
+                window.firebase.auth().onAuthStateChanged((u) => {
+                    updateLoginState(u);
+                });
+            }
+        });
+
+        function updateLoginState(user) {
+            currentUser = user;
+            if (user && user.email) {
+                currentUsername = user.email.split('@')[0];
+                loginHint.textContent = '✅ 已登入：' + currentUsername + '，成績將列入排行榜';
+                loginHint.style.color = '#00b894';
+            } else {
+                currentUsername = '';
+                loginHint.textContent = '🔒 請先登入才能參與排行榜';
+                loginHint.style.color = '#e17055';
+            }
+            // 更新排行榜
+            loadLeaderboard(currentLeaderboardMode);
+        }
+
+        // ==================== 排行榜邏輯 ====================
+        // 資料庫結構：leaderboard/{mode}/{username} = { score, timestamp }
+        function getLeaderboardRef(mode) {
+            return window.firebase.database().ref('leaderboard/' + mode);
+        }
+
+        function loadLeaderboard(mode) {
+            currentLeaderboardMode = mode;
+            // 更新 tab 樣式
+            document.querySelectorAll('.lb-tab').forEach(tab => {
+                tab.classList.toggle('active', parseInt(tab.dataset.mode) === mode);
+            });
+
+            leaderboardList.innerHTML = '<li class="lb-empty">載入中...</li>';
+
+            if (!window.firebase || !window.firebase.database) {
+                leaderboardList.innerHTML = '<li class="lb-empty">Firebase 未就緒</li>';
+                return;
+            }
+
+            getLeaderboardRef(mode).orderByChild('score').limitToLast(10).once('value')
+                .then(snapshot => {
+                    const entries = [];
+                    snapshot.forEach(child => {
+                        const val = child.val();
+                        if (val && typeof val.score === 'number') {
+                            entries.push({ username: child.key, score: val.score, timestamp: val.timestamp || 0 });
+                        }
+                    });
+                    // 由高到低排序
+                    entries.sort((a, b) => b.score - a.score);
+
+                    if (entries.length === 0) {
+                        leaderboardList.innerHTML = '<li class="lb-empty">暫無成績，快來挑戰！</li>';
+                        return;
+                    }
+
+                    leaderboardList.innerHTML = entries.map((e, i) => `
+                        <li>
+                            <span class="lb-rank">${i + 1}</span>
+                            <span class="lb-name">${escapeHtml(e.username)}</span>
+                            <span class="lb-score">${e.score}</span>
+                        </li>
+                    `).join('');
+                })
+                .catch(err => {
+                    console.warn('讀取排行榜失敗', err);
+                    leaderboardList.innerHTML = '<li class="lb-empty">排行榜載入失敗</li>';
+                });
+        }
+
+        function switchLeaderboard(mode) {
+            loadLeaderboard(mode);
+        }
+
+        // 提交成績到排行榜
+        async function submitScore(mode, scoreValue) {
+            if (!currentUser || !currentUsername) {
+                console.log('未登入，不提交成績');
+                return;
+            }
+            if (autoClickerDetected) {
+                console.log('偵測到連點器，不提交成績');
+                return;
+            }
+            if (!window.firebase || !window.firebase.database) return;
+
+            try {
+                const ref = getLeaderboardRef(mode).child(currentUsername);
+                // 只有比現有分數高才更新
+                const existing = await ref.once('value');
+                const oldScore = existing.val() && existing.val().score ? existing.val().score : 0;
+                if (scoreValue > oldScore) {
+                    await ref.set({
+                        score: scoreValue,
+                        timestamp: window.firebase.database.ServerValue.TIMESTAMP
+                    });
+                    console.log('成績已提交：' + scoreValue);
+                } else {
+                    console.log('分數未超越個人最佳，不更新');
+                }
+                // 重新載入排行榜
+                loadLeaderboard(currentLeaderboardMode);
+            } catch (e) {
+                console.warn('提交成績失敗', e);
+            }
+        }
+
+        // ==================== 遊戲邏輯 ====================
         function changeMode() {
-            if (isPlaying || isCountingDown) return; // 遊戲中途不能切換模式
-            
+            if (isPlaying || isCountingDown) return;
+
             gameDuration = parseInt(modeSelector.value);
             timeLeft = gameDuration;
             timerDisplay.textContent = gameDuration === 1 ? '1.0' : timeLeft;
@@ -172,14 +411,83 @@
 
             if (gameDuration === 60) {
                 gameTitle.textContent = '一分鐘點擊挑戰';
+                currentLeaderboardMode = 60;
             } else {
                 gameTitle.textContent = '一秒極速點擊';
+                currentLeaderboardMode = 1;
+            }
+            // 切換排行榜顯示
+            loadLeaderboard(currentLeaderboardMode);
+        }
+
+        function resetClickDetection() {
+            clickTimestamps = [];
+            autoClickerDetected = false;
+            autoClickerWarning.style.display = 'none';
+            autoClickerWarning.textContent = '';
+        }
+
+        function detectAutoClicker(timestamp) {
+            // 記錄點擊時間
+            clickTimestamps.push(timestamp);
+            // 只保留最近 20 次點擊
+            if (clickTimestamps.length > 20) {
+                clickTimestamps.shift();
+            }
+
+            // 至少需要 5 次點擊才能判斷
+            if (clickTimestamps.length < 5) return;
+
+            // 計算最近幾次點擊的間隔
+            const intervals = [];
+            for (let i = 1; i < clickTimestamps.length; i++) {
+                intervals.push(clickTimestamps[i] - clickTimestamps[i - 1]);
+            }
+
+            // 檢查是否有連續多次間隔過短（低於 MIN_CLICK_INTERVAL）
+            let suspiciousCount = 0;
+            for (let i = 0; i < intervals.length; i++) {
+                if (intervals[i] < MIN_CLICK_INTERVAL) {
+                    suspiciousCount++;
+                }
+            }
+
+            // 如果最近有超過 3 次間隔過短，或者平均間隔標準差極小
+            if (suspiciousCount >= 3) {
+                if (!autoClickerDetected) {
+                    autoClickerDetected = true;
+                    autoClickerWarning.textContent = AUTO_CLICKER_WARNING_TEXT;
+                    autoClickerWarning.style.display = 'block';
+                }
+                return;
+            }
+
+            // 更精確的偵測：如果連續 5 次間隔都非常接近（標準差 < 5ms）且間隔 < 80ms
+            if (intervals.length >= 5) {
+                const lastFive = intervals.slice(-5);
+                const avg = lastFive.reduce((a, b) => a + b, 0) / lastFive.length;
+                if (avg < 80) {
+                    const variance = lastFive.reduce((sum, v) => sum + Math.pow(v - avg, 2), 0) / lastFive.length;
+                    const stdDev = Math.sqrt(variance);
+                    if (stdDev < 5) {
+                        if (!autoClickerDetected) {
+                            autoClickerDetected = true;
+                            autoClickerWarning.textContent = AUTO_CLICKER_WARNING_TEXT;
+                            autoClickerWarning.style.display = 'block';
+                        }
+                    }
+                }
             }
         }
 
-        function handleClick() {
+        function handleClick(event) {
+            const now = performance.now();
+
             // 如果正在倒數或遊戲中，直接算作點擊加分
             if (isPlaying) {
+                // 連點器偵測
+                detectAutoClicker(now);
+
                 score++;
                 scoreDisplay.textContent = score;
                 return;
@@ -191,7 +499,8 @@
             isCountingDown = true;
             modeSelector.disabled = true;
             clickBtn.disabled = true;
-            
+            resetClickDetection();
+
             let count = 3;
             clickBtn.textContent = count;
 
@@ -213,14 +522,15 @@
             isPlaying = true;
             score = 0;
             timeLeft = gameDuration;
-            
+            resetClickDetection();
+
             scoreDisplay.textContent = score;
             timerDisplay.textContent = gameDuration === 1 ? '1.0' : timeLeft;
             clickBtn.disabled = false;
             clickBtn.textContent = gameDuration === 60 ? '狂點我！' : '猛按！';
 
             // 開始計時
-            const intervalTime = gameDuration === 1 ? 100 : 1000; // 一秒模式用 100ms 更新以保持流暢，60秒用 1000ms
+            const intervalTime = gameDuration === 1 ? 100 : 1000;
             const step = gameDuration === 1 ? 0.1 : 1;
 
             timerId = setInterval(() => {
@@ -239,6 +549,14 @@
             clickBtn.disabled = true;
             clickBtn.textContent = `時間到！共點擊 ${score} 下`;
 
+            // 提交成績（只有登入且未偵測到連點器才提交）
+            if (currentUser && !autoClickerDetected) {
+                submitScore(gameDuration, score);
+            } else if (autoClickerDetected) {
+                autoClickerWarning.style.display = 'block';
+                autoClickerWarning.textContent = AUTO_CLICKER_WARNING_TEXT;
+            }
+
             // 3秒後自動重置按鈕
             setTimeout(() => {
                 clickBtn.disabled = false;
@@ -247,6 +565,25 @@
                 modeSelector.disabled = false;
             }, 3000);
         }
+
+        // 輔助函數：轉義 HTML
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // 頁面載入時初始化排行榜
+        window.addEventListener('load', () => {
+            // 等待 Firebase 就緒後載入排行榜
+            const checkFirebase = setInterval(() => {
+                if (window.firebase && window.firebase.database) {
+                    clearInterval(checkFirebase);
+                    loadLeaderboard(currentLeaderboardMode);
+                }
+            }, 200);
+        });
     </script>
 </body>
 </html>
