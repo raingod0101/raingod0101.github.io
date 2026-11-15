@@ -186,11 +186,11 @@
         const ctx = canvas.getContext('2d', { alpha: false });
         const container = document.getElementById('game-container');
 
-        // ============ 場景縮放（解決手機/桌面不公平） ============
+        // ============ 場景縮放 ============
         const BASE_W = 1280, BASE_H = 720;
         let width = BASE_W, height = BASE_H;
-        let S = 1;              // 幾何縮放因子
-        let areaRatio = 1;      // 面積比（怪物/粒子數量用）
+        let S = 1;
+        let areaRatio = 1;
 
         function resizeScene() {
             width = canvas.width = container.clientWidth;
@@ -200,12 +200,12 @@
             areaRatio = (width * height) / (BASE_W * BASE_H);
         }
 
-        // ============ 怪物定義（加上 tier 用來做抗性） ============
+        // ============ 怪物定義（VOID/MAGMA 血量下調） ============
         const MOB_TYPES = {
             COMMON:   { name: 'Drone',     color: '#00f2ff', hp: 2,      reward: 15,      size: 30,  behavior: 'normal', tier: 0 },
             ELITE:    { name: 'Hunter',    color: '#ff007b', hp: 12,     reward: 120,     size: 45,  behavior: 'fast',   tier: 1 },
-            VOID:     { name: 'Void',      color: '#bc13fe', hp: 60,     reward: 750,     size: 55,  behavior: 'sine',   tier: 2 },
-            MAGMA:    { name: 'Magma',     color: '#ff6600', hp: 300,    reward: 4500,    size: 65,  behavior: 'jitter', tier: 3 },
+            VOID:     { name: 'Void',      color: '#bc13fe', hp: 40,     reward: 750,     size: 55,  behavior: 'sine',   tier: 2 },
+            MAGMA:    { name: 'Magma',     color: '#ff6600', hp: 150,    reward: 4500,    size: 65,  behavior: 'jitter', tier: 3 },
             SOLAR:    { name: 'Solar',     color: '#ffcc00', hp: 1800,   reward: 30000,   size: 85,  behavior: 'pulse',  tier: 4 },
             RAINGOD:  { name: 'RAINGOD',   color: '#00ff88', hp: 12000,  reward: 250000,  size: 140, behavior: 'chaos',  tier: 5 },
             CREATOR:  { name: '創世神',     color: '#ffeeaa', hp: 100000, reward: 2500000, size: 180, behavior: 'vortex', tier: 7 },
@@ -235,7 +235,6 @@
             { id: 19, name: "終極宇宙盛宴",cost: 500000000,unlockCost: 3000000000, unlocked: false, color: "rainbow", count: 2000,force: 40, power: 7500000, type: "nuke" }
         ];
 
-        // 每個煙火的 tier = floor(id/2)，0 → 9
         function fwTier(fw) { return Math.floor(fw.id / 2); }
 
         const OLD_SAVE_KEY = 'raingod_fusion_v3_save';
@@ -280,14 +279,10 @@
         }
 
         async function init() {
-            // 舊版存檔清理
             try { localStorage.removeItem(OLD_SAVE_KEY); } catch (e) {}
-
             resizeScene();
-
             await window.raingodFirebaseReady;
             await window.raingodAuthReady;
-
             window.raingodBindStorage('explosion-clicker', [SAVE_KEY], { [SAVE_KEY]: null }, data => {
                 gameData = createDefaultGameData();
                 loadGame(data ? data[SAVE_KEY] : null);
@@ -296,7 +291,6 @@
                 renderFireworkShop();
                 scheduleLeaderboardUpload();
             });
-
             window.raingodOnAuthStateChanged(user => {
                 const button = document.getElementById('leaderboard-btn');
                 if (!button) return;
@@ -312,17 +306,11 @@
         function saveGame() {
             if (!gameStarted) return;
             gameData.fireworks = FIREWORKS.map(f => ({ unlocked: f.unlocked }));
-            gameData.fireworkUpgrades = {
-                autoLaunchLevel: fireworkState.autoLaunchLevel,
-                frenzyLevel: fireworkState.frenzyLevel
-            };
-            try {
-                localStorage.setItem(SAVE_KEY, JSON.stringify(gameData));
-            } catch (e) { console.error(e); }
+            gameData.fireworkUpgrades = { autoLaunchLevel: fireworkState.autoLaunchLevel, frenzyLevel: fireworkState.frenzyLevel };
+            try { localStorage.setItem(SAVE_KEY, JSON.stringify(gameData)); } catch (e) { console.error(e); }
             scheduleLeaderboardUpload();
         }
 
-        // 修好：接受外部傳入的雲端資料
         function loadGame(rawData) {
             let parsed = null;
             if (rawData && typeof rawData === 'string') {
@@ -331,12 +319,10 @@
                 parsed = rawData;
             }
             if (!parsed) {
-                // 從本地讀
                 const localData = localStorage.getItem(SAVE_KEY);
                 if (localData) { try { parsed = JSON.parse(localData); } catch (e) {} }
             }
             if (!parsed) return;
-
             gameData = { ...gameData, ...parsed };
             if (!gameData.upgrades.luck) {
                 gameData.upgrades.luck = { lv: 1, cost: 200, mult: 1.8, name: "命運干涉", desc: "降低弱怪機率，大幅提升稀有與極限怪出現率" };
@@ -359,7 +345,6 @@
             return Math.floor(up.cost * Math.pow(up.mult, up.lv - 1));
         }
 
-        // ============ 轉生門檻與收益（解決"幾下就重生"） ============
         function prestigeRequirement() {
             return 1e6 * Math.pow(3, gameData.prestige - 1);
         }
@@ -371,25 +356,26 @@
             return Math.max(1, Math.floor(Math.pow(ratio, 0.6) * (1 + gameData.prestige * 0.15)));
         }
 
-        // ============ 傷害抗性：跨階懲罰 ============
+        // 抗性放寬：0.7 → 0.82
         function damageMultiplier(fw, mobTier) {
             const fT = fwTier(fw);
             if (mobTier <= fT) return 1.0;
-            return Math.max(0.01, Math.pow(0.7, mobTier - fT));
+            return Math.max(0.05, Math.pow(0.82, mobTier - fT));
         }
 
-        // ============ 煙火冷卻 ============
+        // 冷卻大幅縮短
         function cooldownFrames(fw) {
-            if (fw.cost === 0) return 45; // 免費：0.75 秒，防無腦刷
-            return Math.max(12, 40 - Math.floor(Math.log2(fw.cost + 1)) * 3);
+            if (fw.cost === 0) return 4; // 0.067 秒，幾乎無感
+            return Math.max(4, 14 - Math.floor(Math.log2(fw.cost + 1)));
         }
 
         // ============ 方塊 ============
         class Cube {
             constructor() {
                 const luckLv = gameData.upgrades.luck.lv;
+                // COMMON 權重上調，讓前期多出小怪
                 const weights = {
-                    COMMON:  Math.max(10, 600 - luckLv * 80),
+                    COMMON:  Math.max(10, 800 - luckLv * 80),
                     ELITE:   Math.max(20, 300 - luckLv * 30),
                     VOID:    150 + luckLv * 40,
                     MAGMA:   80 + luckLv * 50,
@@ -480,7 +466,6 @@
             }
         }
 
-        // ============ Boss ============
         class Boss {
             constructor() {
                 this.name = `【滅世核心·虛空主宰 MK-${bossSpawnCount + 1}】`;
@@ -570,7 +555,7 @@
                 this.fw = fwConfig;
                 const angle = Math.atan2(targetY - startY, targetX - startX);
                 const dist = Math.hypot(targetX - startX, targetY - startY);
-                const speed = Math.min(dist / 20, 22) * Math.max(S, 0.6);
+                const speed = Math.min(dist / 20, 22) * Math.max(S, 0.7);
                 this.vx = Math.cos(angle) * speed;
                 this.vy = Math.sin(angle) * speed;
                 this.dead = false;
@@ -625,7 +610,6 @@
                 if(this.y < 0 || this.y > height) this.vy *= -0.7;
 
                 if (this.damage > 0) {
-                    // Boss 不受抗性影響（永遠可打）
                     if (activeBoss && !activeBoss.dead) {
                         if (Math.hypot(this.x - activeBoss.x, this.y - activeBoss.y) < activeBoss.size/2 + this.size) {
                             const dmg = this.damage * this.comboMult;
@@ -635,7 +619,6 @@
                             return;
                         }
                     }
-                    // 怪物（套用抗性）
                     const fw = FIREWORKS[this.fwId] || FIREWORKS[0];
                     for (let i = cubes.length - 1; i >= 0; i--) {
                         const c = cubes[i];
@@ -654,7 +637,7 @@
                     }
                 }
 
-                // 效能優化：改抽樣，每 30 幀檢查一次
+                // 效能優化：抽樣
                 if (!this.checkedCombo && this.life > 0.8 && Math.random() < 0.03) {
                     this.checkedCombo = true;
                     let nearby = 0;
@@ -673,19 +656,20 @@
             const isRainbow = fw.color === "rainbow";
             const isAurora = fw.color === "aurora";
             const isGalaxy = fw.color === "galaxy";
-            const particleDamage = Math.floor(fw.power * heightBonus);
+            // 傷害用 round，避免早期 floor 掉到 0
+            const particleDamage = Math.max(1, Math.round(fw.power * heightBonus));
 
-            // 依面積縮放粒子數量（解決手機粒子噴全屏）
-            const scale = Math.min(1.2, Math.max(0.55, areaRatio));
+            // 粒子數縮放放寬：手機從 0.55 → 0.8 倍
+            const scale = Math.max(0.8, Math.min(1.0, Math.sqrt(areaRatio)));
             const count = Math.round(fw.count * scale);
 
-            // 硬上限
             const maxFrags = Math.min(4500, Math.round(2000 * Math.max(0.5, areaRatio)));
             if (fragments.length >= maxFrags) return;
 
             for(let i = 0; i < count; i++) {
                 let angle = Math.random() * Math.PI * 2;
-                let speed = (Math.random() * 0.8 + 0.2) * fw.force * Math.max(S, 0.65);
+                // 速度縮放放寬：手機從 0.65 → 0.85 倍
+                let speed = (Math.random() * 0.8 + 0.2) * fw.force * Math.max(S, 0.85);
                 let color = fw.color;
 
                 if (isRainbow) color = `hsl(${Math.random() * 360}, 100%, 65%)`;
@@ -693,34 +677,34 @@
                 else if (isGalaxy) color = `hsl(${240 + Math.random() * 80}, 100%, 70%)`;
 
                 let decay = 0.01 + Math.random() * 0.015;
-                let gravity = 0.04 * Math.max(S, 0.6);
-                let size = (Math.random() * 2 + 2) * Math.max(S, 0.7);
+                let gravity = 0.04 * Math.max(S, 0.7);
+                let size = (Math.random() * 2 + 2) * Math.max(S, 0.75);
 
                 if (fw.type === "ring") {
                     angle = (i / count) * Math.PI * 2;
-                    speed = fw.force * (0.9 + Math.random() * 0.2) * Math.max(S, 0.65);
+                    speed = fw.force * (0.9 + Math.random() * 0.2) * Math.max(S, 0.85);
                 } else if (fw.type === "heart") {
                     const t = (i / count) * Math.PI * 2;
                     const hx = 16 * Math.pow(Math.sin(t), 3);
                     const hy = -(13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t));
                     angle = Math.atan2(hy, hx);
-                    speed = Math.hypot(hx, hy) * (fw.force / 16) * Math.max(S, 0.65);
+                    speed = Math.hypot(hx, hy) * (fw.force / 16) * Math.max(S, 0.85);
                 } else if (fw.type === "cross") {
                     angle = Math.floor(Math.random() * 4) * (Math.PI / 2) + (Math.random() - 0.5) * 0.1;
                 } else if (fw.type === "cube") {
                     const side = Math.floor(Math.random() * 4);
                     angle = side * (Math.PI / 2) + (Math.random() * 0.4);
-                    speed = (0.5 + Math.random() * 0.5) * fw.force * Math.max(S, 0.65);
+                    speed = (0.5 + Math.random() * 0.5) * fw.force * Math.max(S, 0.85);
                 } else if (fw.type === "spiral") {
                     angle = i * 0.2;
-                    speed = (i / count) * fw.force * Math.max(S, 0.65);
+                    speed = (i / count) * fw.force * Math.max(S, 0.85);
                 } else if (fw.type === "blackhole") {
-                    gravity = -0.02 * Math.max(S, 0.6);
+                    gravity = -0.02 * Math.max(S, 0.7);
                     decay = 0.005;
                 } else if (fw.type === "willow") {
-                    decay = 0.006; gravity = 0.02 * Math.max(S, 0.6); size = 1.8 * Math.max(S, 0.7);
+                    decay = 0.006; gravity = 0.02 * Math.max(S, 0.7); size = 1.8 * Math.max(S, 0.75);
                 } else if (fw.type === "supernova" || fw.type === "nuke") {
-                    size = (Math.random() * 4 + 3) * Math.max(S, 0.7); decay = 0.006;
+                    size = (Math.random() * 4 + 3) * Math.max(S, 0.75); decay = 0.006;
                 }
 
                 fragments.push(new Fragment(
@@ -747,7 +731,6 @@
             }, 900);
         }
 
-        // ============ 金錢與 UI ============
         function addMoney(amount) {
             gameData.money += amount;
             if (amount > 0) gameData.totalEarned += amount;
@@ -756,7 +739,6 @@
         }
 
         function checkRescue() {
-            // 破產救濟只在「擊殺怪物後」判定，避免買東西時被誤觸發
             if (gameData.money < 10 && fragments.length === 0 && rockets.length === 0) {
                 gameData.money += 20;
                 const toast = document.getElementById('rescue-toast');
@@ -798,7 +780,6 @@
             floaters.push({ x, y, txt, color, size, life:1.2, vy:-1.5*S });
         }
 
-        // ============ 商店與天賦 ============
         function toggleModal(id) {
             const el = document.getElementById(id);
             el.style.display = el.style.display === 'block' ? 'none' : 'block';
@@ -857,26 +838,22 @@
             const tpEarned = calcPrestigeTP();
             gameData.tp += tpEarned;
             gameData.prestige++;
-            // 重置：金錢、總收入、煙火解鎖、自動升級
             gameData.money = 5000 * Math.pow(2, gameData.prestige - 2);
             gameData.totalEarned = 0;
             bossSpawnCount = 0;
             for (let k in gameData.upgrades) gameData.upgrades[k].lv = 1;
-            // 煙火全部重置，只留仙女棒
             FIREWORKS.forEach((f, i) => { f.unlocked = (i === 0); });
             fireworkState.selectedFirework = 0;
             fireworkState.autoLaunchLevel = 0;
             fireworkState.frenzyLevel = 1;
             fireworkState.cooldownTimer = 0;
             fireworkState.cooldownTotal = 0;
-
             spawnText(width/2, height/2, `ASCEND! +${tpEarned} TP`, '#ffcc00', 36);
             refreshUI();
             renderFireworkShop();
             saveGame();
         }
 
-        // ============ 煙火商店 ============
         function renderFireworkShop() {
             const panel = document.getElementById('firework-panel');
             panel.innerHTML = '';
@@ -968,7 +945,6 @@
             document.querySelectorAll('.firework-card').forEach((card, idx) => {
                 const fw = FIREWORKS[idx];
                 if (!fw) return;
-                // 冷卻視覺
                 if (fireworkState.selectedFirework === fw.id && cooling) {
                     card.classList.add('cooling');
                 } else {
@@ -981,7 +957,6 @@
             });
         }
 
-        // ============ 排行榜 ============
         window.toggleLeaderboard = async () => {
             if (!await window.raingodRequireAuth('排行榜')) return;
             const modal = document.getElementById('leaderboard-window');
@@ -1058,13 +1033,12 @@
             }
         }
 
-        // ============ 主迴圈 ============
         function loop() {
             ctx.fillStyle = 'rgba(2, 2, 5, 0.25)';
             ctx.fillRect(0, 0, width, height);
 
-            // 怪物數量依面積（解決手機擠成一團）
-            const maxCubes = Math.min(25, Math.max(8, Math.round(15 * areaRatio)));
+            // 怪物數量：手機下限 12
+            const maxCubes = Math.min(25, Math.max(12, Math.round(15 * Math.sqrt(Math.max(0.5, areaRatio)))));
             while (cubes.length < maxCubes) cubes.push(new Cube());
             cubes = cubes.filter(c => !c.dead);
             cubes.forEach(c => { c.update(); c.draw(); });
@@ -1086,12 +1060,10 @@
             });
             ctx.globalAlpha = 1;
 
-            // 冷卻計時
             if (fireworkState.cooldownTimer < fireworkState.cooldownTotal) {
                 fireworkState.cooldownTimer++;
             }
 
-            // 自動發射
             if (fireworkState.autoLaunchLevel > 0) {
                 fireworkState.autoLaunchTimer++;
                 const interval = Math.max(5, 60 - fireworkState.autoLaunchLevel * 6);
@@ -1107,14 +1079,12 @@
                 }
             }
 
-            // 火箭
             for(let i = rockets.length - 1; i >= 0; i--) {
                 rockets[i].update();
                 rockets[i].draw();
                 if(rockets[i].dead) rockets.splice(i, 1);
             }
 
-            // 碎片
             ctx.globalCompositeOperation = 'lighter';
             const nextFragments = [];
             for (let i = 0; i < fragments.length; i++) {
@@ -1135,24 +1105,22 @@
             requestAnimationFrame(loop);
         }
 
-        // ============ 點擊發射 ============
-        function handleAction(ex, ey) {
+        // ============ 點擊處理（核心修復：點擊傷害不受冷卻影響） ============
+        function handleAction(ex, ey, isTouch = false) {
             const rect = canvas.getBoundingClientRect();
             const mouseX = ex - rect.left;
             const mouseY = ey - rect.top;
 
             if (mouseY > height - 100) return;
 
-            const fw = FIREWORKS[fireworkState.selectedFirework];
+            // 觸控時判定半徑放大 1.4 倍
+            const hitPad = isTouch ? 1.4 : 1.0;
 
-            // 冷卻中不能發射
-            if (fireworkState.cooldownTimer < fireworkState.cooldownTotal) return;
-
-            const totalCost = fw.cost * fireworkState.frenzyLevel;
+            // ===== 1. 點擊 Boss / 怪物傷害（不受冷卻限制，永遠生效） =====
             let clickedTarget = false;
 
             if (activeBoss && !activeBoss.dead) {
-                if (Math.hypot(mouseX - activeBoss.x, mouseY - activeBoss.y) < activeBoss.size / 1.2) {
+                if (Math.hypot(mouseX - activeBoss.x, mouseY - activeBoss.y) < activeBoss.size / 1.2 * hitPad) {
                     activeBoss.takeDamage(getAtkPower());
                     clickedTarget = true;
                 }
@@ -1161,7 +1129,7 @@
             if (!clickedTarget) {
                 for (let i = cubes.length - 1; i >= 0; i--) {
                     const c = cubes[i];
-                    if (!c.dead && Math.hypot(mouseX - c.x, mouseY - c.y) < (c.size/1.5) + 30*S) {
+                    if (!c.dead && Math.hypot(mouseX - c.x, mouseY - c.y) < ((c.size / 1.2) + 40 * S) * hitPad) {
                         c.takeDamage(getAtkPower());
                         clickedTarget = true;
                         break;
@@ -1169,10 +1137,13 @@
                 }
             }
 
-            if (gameData.money >= totalCost) {
-                if (totalCost > 0) addMoney(-totalCost);
+            // ===== 2. 發射煙火（受冷卻 + 金錢限制） =====
+            const fw = FIREWORKS[fireworkState.selectedFirework];
+            const totalCost = fw.cost * fireworkState.frenzyLevel;
+            const onCooldown = fireworkState.cooldownTimer < fireworkState.cooldownTotal;
 
-                // 扣錢成功才設冷卻
+            if (!onCooldown && gameData.money >= totalCost) {
+                if (totalCost > 0) addMoney(-totalCost);
                 fireworkState.cooldownTotal = cooldownFrames(fw);
                 fireworkState.cooldownTimer = 0;
 
@@ -1187,11 +1158,11 @@
             refreshUI();
         }
 
-        canvas.addEventListener('mousedown', (e) => handleAction(e.clientX, e.clientY));
+        canvas.addEventListener('mousedown', (e) => handleAction(e.clientX, e.clientY, false));
         canvas.addEventListener('touchstart', (e) => {
             e.preventDefault();
             const touch = e.touches[0];
-            handleAction(touch.clientX, touch.clientY);
+            handleAction(touch.clientX, touch.clientY, true);
         }, { passive: false });
 
         window.addEventListener('resize', resizeScene);
