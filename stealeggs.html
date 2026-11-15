@@ -1219,12 +1219,15 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
   }
 
   // ---------- 合成機 UI ----------
+  function findFusionPet(id) {
+    return S.pets.find(p => p.id === id) || S.bag.find(p => p.id === id);
+  }
   function buildFusionUI() {
     const slots = document.querySelectorAll('#fusionSlots .fusion-slot');
     const sel = S.fusionSelection;
     for (let i = 0; i < 3; i++) {
       const slot = slots[i]; if (!slot) continue;
-      const pet = sel[i] ? S.pets.find(p => p.id === sel[i]) : null;
+      const pet = sel[i] ? findFusionPet(sel[i]) : null;
       slot.innerHTML = '';
       if (pet) {
         slot.classList.add('filled');
@@ -1240,11 +1243,14 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
       }
     }
     const list = document.getElementById('fusionPetList'); if (!list) return; list.innerHTML = '';
-    const farmPets = S.pets.filter(p => p.state === 'farm');
-    if (farmPets.length === 0) {
-      list.innerHTML = '<div style="color:#fff; grid-column:1/-1; text-align:center; padding:16px; font-size:.8rem;">農場中沒有寵物可以融合</div>';
+    const fusionPets = [
+      ...S.pets.filter(p => p.state === 'farm').map(pet => ({ pet, source: '農場' })),
+      ...S.bag.map(pet => ({ pet, source: '背包' })),
+    ];
+    if (fusionPets.length === 0) {
+      list.innerHTML = '<div style="color:#fff; grid-column:1/-1; text-align:center; padding:16px; font-size:.8rem;">農場和背包中都沒有寵物可以融合</div>';
     } else {
-      farmPets.forEach(pet => {
+      fusionPets.forEach(({ pet, source }) => {
         const card = document.createElement('div'); card.className = 'fusion-pet-card';
         const selectedCount = sel.filter(id => id === pet.id).length;
         if (selectedCount > 0) card.classList.add('selected');
@@ -1254,7 +1260,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
         cv.style.width = '38px'; cv.style.height = '38px';
         card.appendChild(cv);
         const nm = document.createElement('div'); nm.className = 'fp-name'; nm.textContent = pet.name; card.appendChild(nm);
-        const inc = document.createElement('div'); inc.className = 'fp-inc'; inc.textContent = '$' + fmt(pet.inc * getCashMultiplier()) + '/s'; card.appendChild(inc);
+        const inc = document.createElement('div'); inc.className = 'fp-inc'; inc.textContent = `${source} · $${fmt(pet.inc * getCashMultiplier())}/s`; card.appendChild(inc);
         card.onclick = () => {
           const idx = sel.indexOf(pet.id);
           if (idx !== -1) { sel[idx] = null; }
@@ -1276,7 +1282,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
     const sel = S.fusionSelection;
     const filled = sel.filter(Boolean).length;
     if (filled < 3) { btn.disabled = true; btn.textContent = `🔮 開始融合 (${filled}/3)`; return; }
-    const pets = sel.map(id => S.pets.find(p => p.id === id));
+    const pets = sel.map(findFusionPet);
     const first = pets[0];
     const same = pets.every(p => p && first && p.biomeIdx === first.biomeIdx && p.petIdx === first.petIdx);
     if (!same) { btn.disabled = true; btn.textContent = '⚠️ 需要 3 隻相同寵物'; return; }
@@ -1286,7 +1292,7 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
   function doFusion() {
     const sel = S.fusionSelection;
     if (sel.filter(Boolean).length < 3) return;
-    const pets = sel.map(id => S.pets.find(p => p.id === id));
+    const pets = sel.map(findFusionPet);
     const first = pets[0];
     if (!pets.every(p => p && first && p.biomeIdx === first.biomeIdx && p.petIdx === first.petIdx)) {
       showToast('⚠️ 需要 3 隻相同寵物才能融合', '#8a2a2a', '#5a0a0a'); return;
@@ -1306,7 +1312,14 @@ window.__FB = { db, ref, set, onValue, onDisconnect, serverTimestamp, remove, ru
       slot: -1,
       x: 0, y: 0, wanderTargetX: 0, wanderTargetY: 0, wanderTimer: 0, selected: false,
     };
-    pets.forEach(p => { const idx = S.pets.indexOf(p); if (idx >= 0) S.pets.splice(idx, 1); });
+    pets.forEach(p => {
+      const farmIdx = S.pets.indexOf(p);
+      if (farmIdx >= 0) S.pets.splice(farmIdx, 1);
+      else {
+        const bagIdx = S.bag.indexOf(p);
+        if (bagIdx >= 0) S.bag.splice(bagIdx, 1);
+      }
+    });
     const usedSlots = new Set(S.pets.map(p => p.slot));
     let slot = -1; for (let j = 0; j < FARM_OFFSETS.length; j++) { if (!usedSlots.has(j)) { slot = j; break; } }
     if (slot === -1) { S.bag.push(newPet); showToast('🐾 農場已滿，融合寵物已放入背包', '#8a5a2a', '#5a3a0a'); }
