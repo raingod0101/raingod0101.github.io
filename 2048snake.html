@@ -245,6 +245,14 @@
             font-size: 14px;
             outline: none;
         }
+        
+        /* 禁用狀態的輸入框樣式 */
+        .input-group input[type="text"]:disabled {
+            background: #111;
+            color: #888;
+            border-color: #333;
+            cursor: not-allowed;
+        }
 
         .color-picker-container {
             display: flex;
@@ -569,24 +577,34 @@
         const colorInput = document.getElementById("player-color-input");
         const startBtn = document.getElementById("start-game-btn");
 
+        // 初始訪客名稱設定
         const savedName = localStorage.getItem("snake_player_name");
         if (savedName) {
             nameInput.value = savedName;
         } else {
             nameInput.value = '玩家_' + Math.floor(1000 + Math.random() * 9000);
         }
+        
         window.raingodBindStorage('2048-snake', ['snake_player_name'], { snake_player_name: '' }, data => {
-            if (data.snake_player_name) nameInput.value = data.snake_player_name;
+            // 注意：如果使用者已登入，下方的 onAuthStateChanged 會覆蓋並鎖定名稱
+            if (data.snake_player_name && !nameInput.disabled) {
+                nameInput.value = data.snake_player_name;
+            }
         });
 
+        // 處理點擊開始遊戲
         startBtn.addEventListener("click", () => {
             const enteredName = nameInput.value.trim() || '無名蛇';
+            
+            // 如果未被禁用（代表未登入），才允許將自訂名稱存入 LocalStorage
+            if (!nameInput.disabled) {
+                localStorage.setItem("snake_player_name", enteredName);
+            }
+
             player.name = enteredName;
             player.color = colorInput.value;
             player.shieldUntil = Date.now() + SHIELD_DURATION;
             player.lastMoved = Date.now();
-
-            localStorage.setItem("snake_player_name", enteredName);
 
             playerRef = ref(db, 'snakes/' + playerId);
             onDisconnect(playerRef).remove();
@@ -615,8 +633,35 @@
 
         const historyRef = ref(db, 'historyLeaderboard');
         let stopHistoryListener = null;
+        
         window.raingodOnAuthStateChanged(user => {
             rankingAuthorized = Boolean(user);
+            
+            // ★ 帳號名稱鎖定邏輯
+            if (user && user.email) {
+                const accountName = user.email.split('@')[0];
+                nameInput.value = accountName;
+                nameInput.disabled = true;
+                
+                // 加上提示文字
+                if (!document.getElementById('name-locked-msg')) {
+                    const msg = document.createElement('div');
+                    msg.id = 'name-locked-msg';
+                    msg.style.cssText = 'font-size:12px; color:#ff6b6b; margin-top:4px;';
+                    msg.textContent = '已登入帳號，暱稱已鎖定';
+                    nameInput.parentNode.appendChild(msg);
+                }
+            } else {
+                nameInput.disabled = false;
+                const msg = document.getElementById('name-locked-msg');
+                if (msg) msg.remove();
+                
+                // 若登出，重新載入本地儲存的名稱
+                const localSaved = localStorage.getItem("snake_player_name");
+                if (localSaved) nameInput.value = localSaved;
+                else nameInput.value = '玩家_' + Math.floor(1000 + Math.random() * 9000);
+            }
+
             if (rankingAuthorized && !stopHistoryListener) {
                 stopHistoryListener = onValue(historyRef, (snapshot) => {
                     historyLeaderboard = snapshot.val() || {};
