@@ -196,17 +196,27 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
 .msg-line.reply-active .reply-icon-btn{display:flex}
 
 .reply-quote{
-  display:block;margin:0 0 6px;padding:6px 9px;
-  border-left:3px solid #8e8e93;background:#eceff3;border-radius:6px;
-  font-size:12px;line-height:1.4;color:#4a4f57;cursor:pointer;
-  max-height:44px;overflow:hidden;text-overflow:ellipsis;
-  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word;
+  display:block;margin:0 0 7px;padding:8px 10px;
+  background:#eceff3;border-radius:10px;cursor:pointer;
+  font-size:12px;line-height:1.4;color:#4a4f57;
+  word-break:break-word;overflow:hidden;
 }
 .reply-quote:hover{background:#e2e6ed}
-.me .reply-quote{border-left-color:#ffffffaa;background:rgba(255,255,255,.22);color:#fff}
+.me .reply-quote{background:rgba(255,255,255,.22);color:#fff}
 .me .reply-quote:hover{background:rgba(255,255,255,.32)}
-.reply-quote .rq-name{font-weight:700;margin-right:5px;color:#1d1d1f}
-.me .reply-quote .rq-name{color:#fff}
+
+.rq-head{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+.rq-avatar{width:20px;height:20px;border-radius:50%;object-fit:cover;flex:0 0 auto;background:#fff;border:1px solid rgba(0,0,0,.1)}
+.rq-name{font-weight:600;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rq-original{
+  border:1px solid #c6cbd3;padding:4px 7px;border-radius:6px;margin-bottom:4px;
+  font-size:12px;max-height:40px;overflow:hidden;text-overflow:ellipsis;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+  word-break:break-word;background:rgba(255,255,255,.5);
+}
+.me .rq-original{border-color:rgba(255,255,255,.5);background:rgba(255,255,255,.15);}
+.rq-reply-hint{font-size:11px;color:#8e8e93;font-style:italic;margin-top:2px}
+.me .rq-reply-hint{color:rgba(255,255,255,.7)}
 
 .chat-input-wrap{flex-shrink:0;background:#fff}
 .reply-preview-bar{display:none;padding:8px 14px;background:#fff8e1;border-top:1px solid #f0e0b0;
@@ -2286,12 +2296,34 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
         if(m.replyTo){
           var quote=document.createElement('div');
           quote.className='reply-quote';
-          var rqName=aliases[m.replyTo.from]||m.replyTo.name||'某人';
+          var rqFrom=m.replyTo.from;
+          var rqName=aliases[rqFrom]||m.replyTo.name||'某人';
           var rqText='';
           if(m.replyTo.type==='image') rqText='📷 圖片';
           else if(m.replyTo.type==='file') rqText='📎 '+(m.replyTo.fileName||'檔案');
           else rqText=m.replyTo.text||'';
-          quote.innerHTML='<span class="rq-name">'+escapeHtml(rqName)+'</span>'+escapeHtml(rqText);
+          var ai=getAvatarInfo(rqFrom);
+
+          // 第一行：頭像 + 名稱（有匿名就顯示匿名）
+          var headDiv = document.createElement('div');
+          headDiv.className = 'rq-head';
+          headDiv.innerHTML = avatarHtml(ai.loaded, ai.avatar, 'rq-avatar', '') +
+            '<span class="rq-name">' + escapeHtml(rqName) + '</span>';
+      
+          // 第二行：被回覆的訊息，用框框起來
+          var originalDiv = document.createElement('div');
+          originalDiv.className = 'rq-original';
+          originalDiv.textContent = rqText;
+        
+          // 第三行：你回覆了什麼
+          var replyHintDiv = document.createElement('div');
+          replyHintDiv.className = 'rq-reply-hint';
+          replyHintDiv.textContent = '你回覆了什麼';
+        
+          quote.appendChild(headDiv);
+          quote.appendChild(originalDiv);
+          quote.appendChild(replyHintDiv);
+        
           quote.title='點擊跳至原訊息';
           quote.addEventListener('click',function(e){
             e.stopPropagation();
