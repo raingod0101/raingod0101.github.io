@@ -1002,6 +1002,31 @@
         }
     };
 
+    window.raingodShowStorageLoadError = function(error) {
+        console.error('存檔載入失敗：', error);
+
+        const screen = document.createElement('div');
+        screen.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;box-sizing:border-box;color:#fff;background:#222;font-size:16px;text-align:center;padding:20px;';
+
+        const title = document.createElement('div');
+        title.textContent = '存檔載入失敗';
+        screen.appendChild(title);
+
+        const message = document.createElement('div');
+        message.style.cssText = 'margin-top:8px;color:#aaa;font-size:14px;';
+        message.textContent = error && error.message ? error.message : '請檢查網路連線';
+        screen.appendChild(message);
+
+        const reloadButton = document.createElement('button');
+        reloadButton.type = 'button';
+        reloadButton.textContent = '重新整理';
+        reloadButton.style.cssText = 'margin-top:20px;padding:10px 24px;border-radius:8px;border:none;background:#ff5722;color:#fff;font-size:15px;cursor:pointer;';
+        reloadButton.addEventListener('click', () => window.location.reload());
+        screen.appendChild(reloadButton);
+
+        document.body.replaceChildren(screen);
+    };
+
     // ★★★ 修改：raingodBindStorage 遇到載入錯誤時觸發錯誤回呼 ★★★
     window.raingodBindStorage = function(gameId, keys, defaults, onLoaded, legacyCloudSave) {
         const storageKeys = Array.from(new Set(keys));
