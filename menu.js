@@ -24,6 +24,7 @@
         return firebase.database().ref(`${USER_DATA_ROOT}/${username}${suffix}`);
     }
 
+    // ★ 聊天室頁面實際使用的 users/{username}/... 路徑
     function chatUserDataRef(username, path = '') {
         const suffix = path ? `/${path}` : '';
         return firebase.database().ref(`users/${username}${suffix}`);
@@ -351,59 +352,30 @@
         }, 400);
     }
 
-    // ★★★ 修改：syncAccountData 回傳狀態物件，方便上層判斷成功/失敗 ★★★
     async function syncAccountData(user) {
         if (!canWriteRaingodDb()) {
             accountDataCloudLoaded = false;
             window.raingodAccountDataCloudLoaded = false;
-            return { ok: false, reason: 'db-disabled' };
+            return;
         }
         const uid = user.uid;
         const localData = readAccountData();
-
-        let snapshot;
-        try {
-            snapshot = await accountDataRef(uid).once('value');
-        } catch (err) {
-            console.error('[syncAccountData] 讀取雲端帳號資料失敗：', err);
-            accountDataCloudLoaded = false;
-            window.raingodAccountDataCloudLoaded = false;
-            return { ok: false, reason: 'network', error: err };
-        }
-
-        if (firebase.auth().currentUser?.uid !== uid) {
-            return { ok: false, reason: 'auth-changed' };
-        }
+        const snapshot = await accountDataRef(uid).once('value');
+        if (firebase.auth().currentUser?.uid !== uid) return;
 
         if (!snapshot.exists()) {
-            if (!localData.length) {
-                accountDataCloudLoaded = true;
-                window.raingodAccountDataCloudLoaded = true;
-                return { ok: true, empty: true };
-            }
+            if (!localData.length) return;
             accountDataCloudLoaded = false;
             window.raingodAccountDataCloudLoaded = false;
-            try {
-                await accountDataRef(uid).set({
-                    data: localData,
-                    updated_at: firebase.database.ServerValue.TIMESTAMP
-                });
-                accountDataCloudLoaded = true;
-                window.raingodAccountDataCloudLoaded = true;
-                return { ok: true, created: true };
-            } catch (err) {
-                console.error('[syncAccountData] 建立雲端帳號資料失敗：', err);
-                return { ok: false, reason: 'network', error: err };
-            }
+            await accountDataRef(uid).set({
+                data: localData,
+                updated_at: firebase.database.ServerValue.TIMESTAMP
+            });
+            return;
         }
 
         const cloudData = snapshot.val().data;
-        if (!Array.isArray(cloudData)) {
-            console.error('[syncAccountData] 雲端帳號資料格式無效');
-            accountDataCloudLoaded = false;
-            window.raingodAccountDataCloudLoaded = false;
-            return { ok: false, reason: 'invalid-data' };
-        }
+        if (!Array.isArray(cloudData)) throw new Error('雲端帳號資料格式無效');
         const cloudKeys = new Set();
         if (cloudData.some(entry => {
             if (!entry || typeof entry.key !== 'string'
@@ -412,12 +384,7 @@
                 || cloudKeys.has(entry.key)) return true;
             cloudKeys.add(entry.key);
             return false;
-        })) {
-            console.error('[syncAccountData] 雲端帳號資料內容無效');
-            accountDataCloudLoaded = false;
-            window.raingodAccountDataCloudLoaded = false;
-            return { ok: false, reason: 'invalid-data' };
-        }
+        })) throw new Error('雲端帳號資料內容無效');
 
         accountDataCloudLoaded = true;
         window.raingodAccountDataCloudLoaded = true;
@@ -425,18 +392,17 @@
         const localDiffers = accountDataSignature(localData) !== accountDataSignature(cloudData);
         if (!localData.length || !localDiffers) {
             replaceLocalAccountData(cloudData);
-            return { ok: true };
+            return;
         }
 
         if (isLocalSaveEffectivelyEmpty()) {
             console.warn('[syncAccountData] 本機存檔為空狀態，自動使用雲端資料');
             replaceLocalAccountData(cloudData);
-            return { ok: true };
+            return;
         }
 
         try { sessionStorage.setItem(saveChoiceKey(user.email ? user.email.split('@')[0] : uid), 'cloud'); } catch (err) {}
         replaceLocalAccountData(cloudData);
-        return { ok: true };
     }
 
     window.raingodWaitForAccountData = async function(uid) {
@@ -764,68 +730,6 @@
         } catch (e) {}
     }
 
-    // =============================================================
-    // ★★★ 全螢幕載入遮罩 ★★★
-    // =============================================================
-    function showFullScreenLoading(message = '載入中，請稍候...') {
-        if (!document.body) {
-            document.addEventListener('DOMContentLoaded', () => showFullScreenLoading(message), { once: true });
-            return;
-        }
-        let el = document.getElementById('raingod-global-loading');
-        if (el) {
-            const msgEl = el.querySelector('.raingod-loading-msg');
-            if (msgEl) msgEl.textContent = message;
-            return;
-        }
-        el = document.createElement('div');
-        el.id = 'raingod-global-loading';
-        el.innerHTML = `
-            <div style="text-align:center;color:#fff;font-size:16px;font-family:inherit;">
-                <div style="width:40px;height:40px;border:4px solid rgba(255,255,255,.3);
-                    border-top-color:#fff;border-radius:50%;margin:0 auto 16px;
-                    animation:raingod-spin 1s linear infinite;"></div>
-                <div class="raingod-loading-msg">${message}</div>
-                <div class="raingod-loading-retry" style="margin-top:16px;display:none;">
-                    <button type="button" style="padding:8px 20px;border-radius:8px;border:none;
-                        background:#ff5722;color:#fff;font-size:14px;cursor:pointer;">
-                        重新整理
-                    </button>
-                </div>
-            </div>
-            <style>@keyframes raingod-spin{to{transform:rotate(360deg)}}</style>
-        `;
-        el.style.cssText = [
-            'position:fixed','inset:0','z-index:2147483646',
-            'background:rgba(0,0,0,.75)',
-            'display:flex','align-items:center','justify-content:center',
-            'backdrop-filter:blur(2px)'
-        ].join(';');
-        document.body.appendChild(el);
-        const retryBtn = el.querySelector('.raingod-loading-retry button');
-        if (retryBtn) retryBtn.onclick = () => window.location.reload();
-    }
-
-    function updateFullScreenLoading(message, options = {}) {
-        const el = document.getElementById('raingod-global-loading');
-        if (!el) {
-            showFullScreenLoading(message);
-            return;
-        }
-        const msgEl = el.querySelector('.raingod-loading-msg');
-        if (msgEl) msgEl.textContent = message;
-        const retryEl = el.querySelector('.raingod-loading-retry');
-        if (retryEl) retryEl.style.display = options.showRetry ? 'block' : 'none';
-    }
-
-    function hideFullScreenLoading() {
-        const el = document.getElementById('raingod-global-loading');
-        if (el) el.remove();
-    }
-
-    window.raingodShowLoading = showFullScreenLoading;
-    window.raingodHideLoading = hideFullScreenLoading;
-
     // --- 自動加載資源 ---
     async function loadResources() {
         const resources = [
@@ -852,7 +756,6 @@
         return firebase.auth().onAuthStateChanged(callback);
     };
 
-    // ★★★ 修改：raingodSave 加入「雲端資料尚未載入前不寫入」的保護 ★★★
     window.raingodSave = async function(gameId, gameData) {
         if (!gameId) {
             console.error("raingodSave 錯誤：必須指定 gameId");
@@ -880,13 +783,6 @@
         await window.raingodFirebaseReady;
         await window.raingodAuthReady;
         const user = firebase.auth().currentUser;
-
-        // ★ 已登入但雲端資料尚未確認載入完成 → 拒絕寫入，避免空資料覆蓋
-        if (user && !window.raingodAccountDataCloudLoaded) {
-            console.warn('雲端帳號資料尚未確認載入，拒絕儲存以免覆蓋');
-            return false;
-        }
-
         if (user && user.email) {
             try {
                 const gameRef = userGameSaveRef(user.uid, gameId);
@@ -908,7 +804,6 @@
         return false;
     };
 
-    // ★★★ 修改：raingodInitGame 讀取失敗時不再 fallback 到本機 ★★★
     window.raingodInitGame = async function(gameId, defaultLocalData, onComplete) {
         if (!gameId) {
             console.error("raingodInitGame 錯誤：必須指定 gameId");
@@ -952,15 +847,6 @@
             return complete(finalData, { source: 'local', syncEnabled: false, cloudDisabled: true });
         }
 
-        // ★ 已登入但雲端資料尚未確認載入 → 直接失敗，不要用本機資料啟動
-        if (!window.raingodAccountDataCloudLoaded) {
-            const err = new Error('帳號雲端資料尚未載入完成，無法啟動遊戲');
-            err.code = 'CLOUD_NOT_LOADED';
-            try { lock.release(); } catch (e) {}
-            activeGameLocks.delete(gameId);
-            throw err;
-        }
-
         const gameRef = userGameSaveRef(user.uid, gameId);
 
         try {
@@ -991,18 +877,13 @@
             });
             return complete(initialData, { source: 'local', syncEnabled: true, created: true });
         } catch (err) {
-            // ★ 讀取失敗 → 釋放鎖並 throw，不 fallback 到本機
             console.error("讀取雲端存檔失敗：", err);
-            try { lock.release(); } catch (e) {}
-            activeGameLocks.delete(gameId);
-            const wrapped = new Error('雲端存檔讀取失敗，請檢查網路後重新整理');
-            wrapped.code = 'CLOUD_READ_FAILED';
-            wrapped.original = err;
-            throw wrapped;
+            const localSave = localStorage.getItem(saveKey);
+            const fallbackData = localSave ? JSON.parse(localSave) : defaultLocalData;
+            return complete(fallbackData, { source: 'local', syncEnabled: false, error: err });
         }
     };
 
-    // ★★★ 修改：raingodBindStorage 遇到載入錯誤時觸發錯誤回呼 ★★★
     window.raingodBindStorage = function(gameId, keys, defaults, onLoaded, legacyCloudSave) {
         const storageKeys = Array.from(new Set(keys));
         const readValues = () => storageKeys.reduce((values, key) => {
@@ -1028,7 +909,7 @@
         storageKeys.forEach(key => storageBindings.set(key, binding));
         installStorageSync();
 
-        return new Promise((resolve, reject) => {
+        return new Promise(resolve => {
             let initialState = true;
             window.raingodFirebaseReady.then(() => {
                 window.raingodOnAuthStateChanged(async user => {
@@ -1104,12 +985,7 @@
                         if (onLoaded) onLoaded(details.conflict || details.error ? localData : selected, details);
                     } catch (err) {
                         console.error("帳號存檔載入失敗：", err);
-                        // ★ 不再默默用本機資料啟動，改為 reject 讓呼叫方處理
-                        if (initialState) {
-                            initialState = false;
-                            reject(err);
-                            return;
-                        }
+                        if (onLoaded) onLoaded(readValues(), { source: 'local', syncEnabled: false, error: err });
                     } finally {
                         if (initialState) { initialState = false; resolve(); }
                     }
@@ -1204,40 +1080,19 @@
                     return;
                 }
 
-                // ★★★ 關鍵：顯示遮罩 + 重試載入雲端資料 ★★★
-                showFullScreenLoading('正在從雲端載入您的存檔...');
+                accountDataSync = syncAccountData(user).catch(err => {
+                    console.error('載入帳號資料失敗：', err);
+                });
+                await accountDataSync;
 
-                let syncResult = null;
-                const maxAttempts = 3;
-                for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-                    if (firebase.auth().currentUser?.uid !== user.uid) break;
-                    syncResult = await syncAccountData(user);
-                    if (syncResult && syncResult.ok) break;
-                    if (syncResult && syncResult.reason === 'db-disabled') break;
-                    if (syncResult && syncResult.reason === 'auth-changed') break;
-                    if (attempt < maxAttempts) {
-                        updateFullScreenLoading(`網路不穩定，正在重試載入 (${attempt}/${maxAttempts})...`);
-                        await new Promise(r => setTimeout(r, 1000 * attempt));
+                if (firebase.auth().currentUser?.uid !== user.uid) {
+                    if (!authReadyResolved) {
+                        authReadyResolved = true;
+                        markAuthReady(user);
+                        markAccountDataReady();
                     }
-                }
-
-                // 三次都失敗 → 不標記 accountDataReady，讓遊戲頁面繼續被遮罩擋住
-                if (!syncResult || (!syncResult.ok && syncResult.reason !== 'db-disabled')) {
-                    updateFullScreenLoading(
-                        '無法載入雲端存檔，請檢查網路連線後重新整理。',
-                        { showRetry: true }
-                    );
-                    // 注意：這裡不呼叫 markAccountDataReady()
-                    // 遊戲頁的 await raingodAccountDataReady 會一直 pending
-                    // 遮罩會一直顯示，使用者只能重新整理
                     return;
                 }
-
-                accountDataSync = Promise.resolve();
-                hideFullScreenLoading();
-            } else {
-                // 未登入 → 不需要等雲端，直接解除遮罩
-                hideFullScreenLoading();
             }
 
             if (!authReadyResolved) {
@@ -1276,6 +1131,7 @@
             return navBadge;
         }
 
+        // ★ 依 user-avatar 的實際位置，把 badge 定位到其右上角
         function positionNavBadge() {
             if (!navBadge) return;
             if (navBadge.style.display === 'none') return;
@@ -1287,6 +1143,7 @@
                 if (rect.width === 0 || rect.height === 0) rect = null;
             }
             if (!rect) {
+                // 找不到錨點，放畫面右上角
                 navBadge.style.top = '8px';
                 navBadge.style.left = (window.innerWidth - 30) + 'px';
                 return;
@@ -1323,6 +1180,7 @@
             navCurrentUsername = username;
             const epoch = ++navUnreadEpoch;
 
+            // ★ 好友申請：改用 users/{username}/friend_requests
             const reqRef = chatUserDataRef(username, 'friend_requests');
             const reqHandler = snap => {
                 if (epoch !== navUnreadEpoch) return;
@@ -1334,6 +1192,7 @@
             reqRef.on('value', reqHandler, reqErr);
             navListeners.push(() => reqRef.off('value', reqHandler));
 
+            // ★ 好友私訊未讀：改用 users/{username}/friends
             navCounts.unread = {};
             const friendsRef = chatUserDataRef(username, 'friends');
             const friendsHandler = snap => {
@@ -1375,6 +1234,7 @@
             friendsRef.on('value', friendsHandler, friendsErr);
             navListeners.push(() => friendsRef.off('value', friendsHandler));
 
+            // ★ 群組未讀：改用 users/{username}/groups
             const groupsRef = chatUserDataRef(username, 'groups');
             const groupsHandler = snap => {
                 if (epoch !== navUnreadEpoch) return;
@@ -1502,6 +1362,7 @@
                     if (username) {
                         listenNavCounts(username, user.uid);
                     }
+                    // 等 DOM 完成後再定位一次
                     setTimeout(positionNavBadge, 50);
                     setTimeout(positionNavBadge, 300);
                     syncData(user);
@@ -1546,8 +1407,10 @@
                 }
             });
 
+            // ★ resize / scroll 時重新定位 badge
             window.addEventListener('resize', positionNavBadge);
             window.addEventListener('scroll', positionNavBadge, { passive: true });
+            // 行動版網址列縮放也可能影響位置
             if (window.visualViewport) {
                 window.visualViewport.addEventListener('resize', positionNavBadge);
                 window.visualViewport.addEventListener('scroll', positionNavBadge);
