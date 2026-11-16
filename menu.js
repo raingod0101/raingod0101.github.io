@@ -27,12 +27,68 @@
 
         const panel = document.createElement('div');
         panel.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:14px;max-width:420px';
-        const spinner = document.createElement('div');
-        spinner.setAttribute('aria-hidden', 'true');
-        spinner.style.cssText = 'width:42px;height:42px;border:4px solid #ffffff35;border-top-color:#fff;border-radius:50%;animation:raingod-data-spin .8s linear infinite';
+        const animation = document.createElement('div');
+        animation.setAttribute('aria-hidden', 'true');
+        animation.style.cssText = 'position:relative;width:min(280px,88vw);height:190px;overflow:hidden';
         const style = document.createElement('style');
-        style.textContent = '@keyframes raingod-data-spin{to{transform:rotate(360deg)}}';
+        style.textContent = `
+            #raingod-loading-ground {
+                position:absolute;bottom:10px;width:100%;height:34px;
+                background:linear-gradient(#173c35,#102820);
+                border-top:5px solid #285346;border-radius:3px 3px 0 0;
+            }
+            #raingod-loading-ground::after {
+                content:"";position:absolute;top:8px;width:100%;height:5px;
+                background:repeating-linear-gradient(90deg,transparent 0 20px,#56816a 20px 30px);
+                opacity:.65;
+            }
+            #raingod-loading-monster {
+                position:absolute;left:0;bottom:35px;width:min(180px,64vw);height:auto;
+                transform-origin:center bottom;will-change:left,transform;
+            }
+            #raingod-loading-monster svg {display:block;width:100%;height:auto;overflow:visible}
+            .raingod-loading-creature {
+                fill:#24ed32;stroke:#000;stroke-width:1.1;
+                stroke-linejoin:round;stroke-linecap:round;
+            }
+            #raingod-loading-leg1 {transform-box:view-box;transform-origin:126px 245px;animation:raingod-load-step-a .28s ease-in-out infinite alternate}
+            #raingod-loading-leg2 {transform-box:view-box;transform-origin:155px 253px;animation:raingod-load-step-b .28s ease-in-out infinite alternate}
+            #raingod-loading-leg3 {transform-box:view-box;transform-origin:191px 251px;animation:raingod-load-step-a .28s ease-in-out infinite alternate}
+            #raingod-loading-leg4 {transform-box:view-box;transform-origin:220px 244px;animation:raingod-load-step-b .28s ease-in-out infinite alternate}
+            #raingod-loading-body {transform-box:view-box;transform-origin:190px 220px;animation:raingod-load-body .28s ease-in-out infinite alternate}
+            #raingod-loading-tail {transform-box:view-box;transform-origin:130px 188px;animation:raingod-load-tail .28s ease-in-out infinite alternate}
+            @keyframes raingod-load-step-a {from{transform:rotate(-20deg)}to{transform:rotate(20deg) translateY(-4px)}}
+            @keyframes raingod-load-step-b {from{transform:rotate(20deg) translateY(-4px)}to{transform:rotate(-20deg)}}
+            @keyframes raingod-load-body {from{transform:translateY(1px) rotate(-1deg)}to{transform:translateY(-4px) rotate(1deg)}}
+            @keyframes raingod-load-tail {from{transform:rotate(-12deg)}to{transform:rotate(12deg)}}
+            @media (prefers-reduced-motion:reduce) {
+                #raingod-loading-leg1,#raingod-loading-leg2,#raingod-loading-leg3,
+                #raingod-loading-leg4,#raingod-loading-body,#raingod-loading-tail {
+                    animation-duration:1.2s;
+                }
+            }
+        `;
         document.head.appendChild(style);
+        animation.innerHTML = `
+            <div id="raingod-loading-ground"></div>
+            <div id="raingod-loading-monster">
+                <svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg">
+                    <path id="raingod-loading-tail" class="raingod-loading-creature" d="M 122,219 Q 116,207 118,186 L 121,136 Q 121,122 134,106 L 168,73 L 193,52 Q 200,46 207,52 Q 214,57 206,65 L 173,96 Q 156,111 148,124 Q 142,135 142,149 L 141,190 Z"/>
+                    <path id="raingod-loading-leg1" class="raingod-loading-creature" d="M 115,238 C 108,247 106,259 110,268 C 115,278 126,279 132,266 L 139,245 Z"/>
+                    <path id="raingod-loading-leg2" class="raingod-loading-creature" d="M 145,250 C 139,262 141,276 150,283 C 158,288 167,280 169,265 L 168,248 Z"/>
+                    <path id="raingod-loading-leg3" class="raingod-loading-creature" d="M 180,251 C 174,264 179,278 188,283 C 198,287 204,275 203,259 L 199,246 Z"/>
+                    <path id="raingod-loading-leg4" class="raingod-loading-creature" d="M 211,243 C 205,255 205,268 213,277 C 222,284 233,274 234,259 L 230,238 Z"/>
+                    <g id="raingod-loading-body">
+                        <ellipse class="raingod-loading-creature" cx="170" cy="221" rx="67" ry="44" transform="rotate(-5 170 221)"/>
+                    </g>
+                    <path class="raingod-loading-creature" d="M 207,137 L 214,91 L 233,125 Z"/>
+                    <path class="raingod-loading-creature" d="M 250,124 L 278,92 L 282,140 Z"/>
+                    <circle class="raingod-loading-creature" cx="241.5" cy="177" r="55"/>
+                    <circle cx="251.5" cy="168.5" r="6" fill="#000"/>
+                    <path d="M 247,194 L 257,201 L 264,195 L 273,201 L 280,195 L 286,199" fill="none" stroke="#000" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </div>
+        `;
 
         const message = document.createElement('div');
         message.textContent = '正在載入遊戲資料，請稍候…';
@@ -41,10 +97,34 @@
         retry.textContent = '重新載入';
         retry.style.cssText = 'display:none;padding:10px 18px;border:0;border-radius:8px;background:#fff;color:#111;font:700 15px system-ui,sans-serif;cursor:pointer';
         retry.addEventListener('click', () => window.location.reload());
-        panel.append(spinner, message, retry);
+        panel.append(animation, message, retry);
         overlay.appendChild(panel);
         (document.body || document.documentElement).appendChild(overlay);
-        gameDataGate = { overlay, spinner, message, retry, failed: false, readyFrame: 0 };
+        const loadingMonster = animation.querySelector('#raingod-loading-monster');
+        gameDataGate = { overlay, animation, loadingMonster, message, retry, failed: false, readyFrame: 0, animationFrame: 0 };
+
+        let x = 0;
+        let direction = 1;
+        let lastTime = performance.now();
+        function animateLoadingMonster(now) {
+            if (!gameDataGate || gameDataGate.failed) return;
+            const dt = Math.min((now - lastTime) / 1000, 0.033);
+            lastTime = now;
+            const maxX = Math.max(0, animation.clientWidth - loadingMonster.offsetWidth);
+            x += direction * 120 * dt;
+            if (x >= maxX) {
+                x = maxX;
+                direction = -1;
+                loadingMonster.style.transform = 'scaleX(-1)';
+            } else if (x <= 0) {
+                x = 0;
+                direction = 1;
+                loadingMonster.style.transform = 'scaleX(1)';
+            }
+            loadingMonster.style.left = `${x}px`;
+            gameDataGate.animationFrame = requestAnimationFrame(animateLoadingMonster);
+        }
+        gameDataGate.animationFrame = requestAnimationFrame(animateLoadingMonster);
 
         ['keydown', 'keyup'].forEach(type => {
             window.addEventListener(type, event => {
@@ -57,6 +137,7 @@
         if (!gameDataGate || gameDataGate.failed || gameDataGate.readyFrame) return;
         gameDataGate.readyFrame = requestAnimationFrame(() => {
             if (!gameDataGate || gameDataGate.failed) return;
+            cancelAnimationFrame(gameDataGate.animationFrame);
             gameDataGate.overlay.remove();
             gameDataGate = null;
         });
@@ -67,7 +148,8 @@
         if (gameDataGate.readyFrame) cancelAnimationFrame(gameDataGate.readyFrame);
         gameDataGate.readyFrame = 0;
         gameDataGate.failed = true;
-        gameDataGate.spinner.style.display = 'none';
+        cancelAnimationFrame(gameDataGate.animationFrame);
+        gameDataGate.animation.style.display = 'none';
         const detail = error && error.message ? ` (${error.message})` : '';
         gameDataGate.message.textContent = `遊戲資料載入失敗${detail}。請確認網路連線後重新載入；載入完成前不會進入遊戲或覆蓋存檔。`;
         gameDataGate.retry.style.display = 'inline-block';
