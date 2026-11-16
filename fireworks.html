@@ -240,7 +240,7 @@
                     goldMult: { lv: 0, max: 10, cost: 1, name: "點金術", desc: "所有金幣收益增加 +20% / 級" }
                 },
                 fireworks: FIREWORKS.map(f => ({ unlocked: f.unlocked })),
-                fireworkUpgrades: { autoLaunchLevel: 0, frenzyLevel: 1 }
+                fireworkUpgrades: { autoLaunchLevel: 0, frenzyLevel: 1, selectedFirework: 0 }
             };
         }
 
@@ -272,20 +272,20 @@
             if (!gameStarted) return;
             gameData.fireworks = FIREWORKS.map(f => ({ unlocked: f.unlocked }));
             gameData.fireworkUpgrades = {
-                selectedFirework: fireworkState.selectedFirework,
+                ...gameData.fireworkUpgrades,
                 autoLaunchLevel: fireworkState.autoLaunchLevel,
-                autoLaunchTimer: fireworkState.autoLaunchTimer,
-                frenzyLevel: fireworkState.frenzyLevel
+                frenzyLevel: fireworkState.frenzyLevel,
+                selectedFirework: fireworkState.selectedFirework
             };
             localStorage.setItem(SAVE_KEY, JSON.stringify(gameData));
             scheduleLeaderboardUpload();
         }
 
-        function loadGame(savedData) {
-            try {
-                const localData = savedData || localStorage.getItem(SAVE_KEY);
-                const parsed = typeof localData === 'string' ? JSON.parse(localData) : localData;
-                if (parsed && typeof parsed === 'object') {
+        function loadGame() {
+            const localData = localStorage.getItem(SAVE_KEY);
+            if (localData) {
+                try {
+                    const parsed = JSON.parse(localData);
                     gameData = { ...gameData, ...parsed };
                     if (!gameData.upgrades.luck) {
                         gameData.upgrades.luck = { lv: 1, cost: 200, mult: 1.8, name: "命運干涉", desc: "降低弱怪機率，大幅提升稀有與極限怪出現率" };
@@ -294,18 +294,17 @@
                         gameData.fireworks.forEach((fw, i) => { if (FIREWORKS[i]) FIREWORKS[i].unlocked = fw.unlocked; });
                     }
                     if (gameData.fireworkUpgrades) {
-                        const selectedFirework = Number(gameData.fireworkUpgrades.selectedFirework);
-                        if (Number.isInteger(selectedFirework) && FIREWORKS[selectedFirework]?.unlocked) {
+                        fireworkState.autoLaunchLevel = gameData.fireworkUpgrades.autoLaunchLevel || 0;
+                        fireworkState.frenzyLevel = gameData.fireworkUpgrades.frenzyLevel || 1;
+                        const selectedFirework = gameData.fireworkUpgrades.selectedFirework;
+                        if (Number.isInteger(selectedFirework)
+                            && FIREWORKS[selectedFirework]
+                            && FIREWORKS[selectedFirework].unlocked) {
                             fireworkState.selectedFirework = selectedFirework;
                         }
-                        fireworkState.autoLaunchLevel = gameData.fireworkUpgrades.autoLaunchLevel || 0;
-                        fireworkState.autoLaunchTimer = Number.isFinite(Number(gameData.fireworkUpgrades.autoLaunchTimer))
-                            ? Math.max(0, Number(gameData.fireworkUpgrades.autoLaunchTimer))
-                            : 0;
-                        fireworkState.frenzyLevel = gameData.fireworkUpgrades.frenzyLevel || 1;
                     }
-                }
-            } catch(e) { console.error(e); }
+                } catch(e) { console.error(e); }
+            }
         }
 
         // 點擊基礎傷害（很低，主要靠煙火）
