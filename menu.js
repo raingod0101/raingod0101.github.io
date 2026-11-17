@@ -12,8 +12,6 @@
     ]);
     const currentPage = (window.location.pathname || '').split('/').pop().toLowerCase();
     let gameDataGate = null;
-    const GAME_DATA_LOAD_TIMEOUT_MS = 30000;
-    const FIREBASE_CONNECTION_TIMEOUT_MS = 15000;
 
     if (gameDataGatePages.has(currentPage)) {
         const overlay = document.createElement('div');
@@ -22,16 +20,16 @@
         overlay.setAttribute('aria-busy', 'true');
         overlay.style.cssText = [
             'position:fixed','inset:0','z-index:2147483647','display:flex',
-            'align-items:center','justify-content:center','padding:0',
+            'align-items:center','justify-content:center','padding:24px',
             'background:#080c10','color:#fff','font:600 16px/1.6 system-ui,sans-serif',
             'text-align:center','pointer-events:auto'
         ].join(';');
 
         const panel = document.createElement('div');
-        panel.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:14px;width:100vw;max-width:none';
+        panel.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:14px;max-width:420px';
         const animation = document.createElement('div');
         animation.setAttribute('aria-hidden', 'true');
-        animation.style.cssText = 'position:relative;width:100vw;height:230px;overflow:hidden';
+        animation.style.cssText = 'position:relative;width:min(280px,88vw);height:190px;overflow:hidden';
         const style = document.createElement('style');
         style.textContent = `
             #raingod-loading-ground {
@@ -45,7 +43,7 @@
                 opacity:.65;
             }
             #raingod-loading-monster {
-                position:absolute;left:0;bottom:35px;width:min(150px,64vw);height:auto;
+                position:absolute;left:0;bottom:35px;width:min(180px,64vw);height:auto;
                 transform-origin:center bottom;will-change:left,transform;
             }
             #raingod-loading-monster svg {display:block;width:100%;height:auto;overflow:visible}
@@ -74,7 +72,7 @@
         animation.innerHTML = `
             <div id="raingod-loading-ground"></div>
             <div id="raingod-loading-monster">
-                <svg viewBox="90 40 220 260" xmlns="http://www.w3.org/2000/svg">
+                <svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg">
                     <path id="raingod-loading-tail" class="raingod-loading-creature" d="M 122,219 Q 116,207 118,186 L 121,136 Q 121,122 134,106 L 168,73 L 193,52 Q 200,46 207,52 Q 214,57 206,65 L 173,96 Q 156,111 148,124 Q 142,135 142,149 L 141,190 Z"/>
                     <path id="raingod-loading-leg1" class="raingod-loading-creature" d="M 115,238 C 108,247 106,259 110,268 C 115,278 126,279 132,266 L 139,245 Z"/>
                     <path id="raingod-loading-leg2" class="raingod-loading-creature" d="M 145,250 C 139,262 141,276 150,283 C 158,288 167,280 169,265 L 168,248 Z"/>
@@ -103,15 +101,7 @@
         overlay.appendChild(panel);
         (document.body || document.documentElement).appendChild(overlay);
         const loadingMonster = animation.querySelector('#raingod-loading-monster');
-        gameDataGate = {
-            overlay, animation, loadingMonster, message, retry,
-            failed: false, recoverableFailure: false, readyFrame: 0, animationFrame: 0, loadTimeout: 0
-        };
-        gameDataGate.loadTimeout = setTimeout(() => {
-            const error = new Error('遊戲資料載入逾時');
-            error.code = 'GAME_DATA_TIMEOUT';
-            window.raingodMarkGameDataLoadFailed(error);
-        }, GAME_DATA_LOAD_TIMEOUT_MS);
+        gameDataGate = { overlay, animation, loadingMonster, message, retry, failed: false, readyFrame: 0, animationFrame: 0 };
 
         let x = 0;
         let direction = 1;
@@ -121,7 +111,7 @@
             const dt = Math.min((now - lastTime) / 1000, 0.033);
             lastTime = now;
             const maxX = Math.max(0, animation.clientWidth - loadingMonster.offsetWidth);
-            x += direction * 150 * dt;
+            x += direction * 120 * dt;
             if (x >= maxX) {
                 x = maxX;
                 direction = -1;
@@ -144,13 +134,9 @@
     }
 
     window.raingodMarkGameDataReady = function() {
-        if (!gameDataGate || gameDataGate.readyFrame) return;
-        if (gameDataGate.failed && !gameDataGate.recoverableFailure) return;
-        gameDataGate.failed = false;
-        gameDataGate.recoverableFailure = false;
-        clearTimeout(gameDataGate.loadTimeout);
+        if (!gameDataGate || gameDataGate.failed || gameDataGate.readyFrame) return;
         gameDataGate.readyFrame = requestAnimationFrame(() => {
-            if (!gameDataGate) return;
+            if (!gameDataGate || gameDataGate.failed) return;
             cancelAnimationFrame(gameDataGate.animationFrame);
             gameDataGate.overlay.remove();
             gameDataGate = null;
@@ -162,12 +148,10 @@
         if (gameDataGate.readyFrame) cancelAnimationFrame(gameDataGate.readyFrame);
         gameDataGate.readyFrame = 0;
         gameDataGate.failed = true;
-        gameDataGate.recoverableFailure = !!(error && error.code === 'GAME_DATA_TIMEOUT');
-        clearTimeout(gameDataGate.loadTimeout);
         cancelAnimationFrame(gameDataGate.animationFrame);
         gameDataGate.animation.style.display = 'none';
         const detail = error && error.message ? ` (${error.message})` : '';
-        gameDataGate.message.textContent = `遊戲資料載入失敗${detail}。請重新載入；若問題持續，請檢查雲端存檔或服務狀態。載入完成前不會進入遊戲或覆蓋存檔。`;
+        gameDataGate.message.textContent = `遊戲資料載入失敗${detail}。請確認網路連線後重新載入；載入完成前不會進入遊戲或覆蓋存檔。`;
         gameDataGate.retry.style.display = 'inline-block';
         if (error) console.error('[game data] 載入失敗', error);
     };
@@ -212,34 +196,20 @@
         return firebase.database().ref(`${LOCK_ROOT}/${uid}/${gameId}`);
     }
 
-    function waitForFirebaseConnection() {
-        const connectionRef = firebase.database().ref('.info/connected');
-        return new Promise((resolve, reject) => {
-            let timeoutId;
-            const cleanup = () => {
-                clearTimeout(timeoutId);
-                connectionRef.off('value', handler);
-            };
-            const handler = snapshot => {
-                if (snapshot.val() !== true) return;
-                cleanup();
-                resolve();
-            };
-            timeoutId = setTimeout(() => {
-                cleanup();
-                reject(new Error('等待雲端資料庫連線逾時'));
-            }, FIREBASE_CONNECTION_TIMEOUT_MS);
-            connectionRef.on('value', handler, error => {
-                cleanup();
-                reject(error);
-            });
-        });
-    }
-
     async function readServerValue(ref) {
         const connectionRef = firebase.database().ref('.info/connected');
         while (true) {
-            await waitForFirebaseConnection();
+            await new Promise((resolve, reject) => {
+                const handler = snapshot => {
+                    if (snapshot.val() !== true) return;
+                    connectionRef.off('value', handler);
+                    resolve();
+                };
+                connectionRef.on('value', handler, error => {
+                    connectionRef.off('value', handler);
+                    reject(error);
+                });
+            });
 
             const snapshot = await ref.once('value');
             const connection = await connectionRef.once('value');
@@ -678,17 +648,6 @@
         return false;
     }
 
-    function isRecoverableLocalGameSave(gameId, data) {
-        if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
-        if (gameId === 'steal_egg_v17') return data.version === 17;
-        if (gameId === 'raingod-wars') {
-            return Array.isArray(data.owned)
-                && Array.isArray(data.deck)
-                && Number.isFinite(Number(data.xp));
-        }
-        return false;
-    }
-
     function parseStorageValue(raw) {
         try { return JSON.parse(raw); } catch (e) { return raw; }
     }
@@ -999,10 +958,6 @@
             console.error("raingodSave 錯誤：必須指定 gameId");
             return false;
         }
-        if (!gameData || typeof gameData !== 'object' || Array.isArray(gameData)) {
-            console.error(`raingodSave 錯誤：${gameId} 的存檔必須是物件，已停止寫入`);
-            return false;
-        }
 
         const lock = activeGameLocks.get(gameId);
         if (lock) {
@@ -1098,37 +1053,11 @@
 
             if (snapshot.exists()) {
                 const cloudSave = snapshot.val();
-                if (!cloudSave || typeof cloudSave !== 'object' || Array.isArray(cloudSave)) {
-                    const receivedType = cloudSave === null ? 'null' : Array.isArray(cloudSave) ? 'array' : typeof cloudSave;
-                    throw new Error(`雲端遊戲存檔格式無效（${gameId}；收到 ${receivedType}）`);
+                if (!cloudSave || typeof cloudSave !== 'object'
+                    || !Object.prototype.hasOwnProperty.call(cloudSave, 'data')) {
+                    throw new Error('雲端遊戲存檔格式無效');
                 }
-                const hasWrappedData = Object.prototype.hasOwnProperty.call(cloudSave, 'data');
-                const isLegacyEggSave = gameId === 'steal_egg_v17' && cloudSave.version === 17;
-                const isLegacyWarsSave = gameId === 'raingod-wars'
-                    && Array.isArray(cloudSave.owned)
-                    && Array.isArray(cloudSave.deck)
-                    && Number.isFinite(Number(cloudSave.xp));
-                const cloudKeys = Object.keys(cloudSave);
-                const metadataOnly = !hasWrappedData
-                    && cloudKeys.length > 0
-                    && cloudKeys.every(key => ['updated_at', 'ts', 'timestamp'].includes(key));
-                if (metadataOnly) {
-                    const localSave = localStorage.getItem(saveKey);
-                    const localData = localSave === null ? null : JSON.parse(localSave);
-                    if (!isRecoverableLocalGameSave(gameId, localData)) {
-                        throw new Error(`雲端僅有更新時間，且沒有可驗證的本機進度可復原（${gameId}）；為避免覆蓋存檔已停止載入`);
-                    }
-                    await gameRef.set({
-                        data: localData,
-                        updated_at: firebase.database.ServerValue.TIMESTAMP
-                    });
-                    return complete(localData, { source: 'local', syncEnabled: true, repaired: true });
-                }
-                if (!hasWrappedData && !isLegacyEggSave && !isLegacyWarsSave) {
-                    const keys = cloudKeys.slice(0, 12).join(', ') || '沒有欄位';
-                    throw new Error(`雲端遊戲存檔格式無效（${gameId}；欄位：${keys}）`);
-                }
-                const cloudData = hasWrappedData ? cloudSave.data : cloudSave;
+                const cloudData = cloudSave.data;
                 const localSave = localStorage.getItem(saveKey);
                 const localData = localSave ? JSON.parse(localSave) : null;
                 if (isEmptySaveData(cloudData)
