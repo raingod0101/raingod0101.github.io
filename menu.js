@@ -20,16 +20,16 @@
         overlay.setAttribute('aria-busy', 'true');
         overlay.style.cssText = [
             'position:fixed','inset:0','z-index:2147483647','display:flex',
-            'align-items:center','justify-content:center','padding:24px',
+            'align-items:center','justify-content:center','padding:0',
             'background:#080c10','color:#fff','font:600 16px/1.6 system-ui,sans-serif',
             'text-align:center','pointer-events:auto'
         ].join(';');
 
         const panel = document.createElement('div');
-        panel.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:14px;max-width:420px';
+        panel.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:14px;width:100vw;max-width:none';
         const animation = document.createElement('div');
         animation.setAttribute('aria-hidden', 'true');
-        animation.style.cssText = 'position:relative;width:min(280px,88vw);height:190px;overflow:hidden';
+        animation.style.cssText = 'position:relative;width:100vw;height:230px;overflow:hidden';
         const style = document.createElement('style');
         style.textContent = `
             #raingod-loading-ground {
@@ -43,7 +43,7 @@
                 opacity:.65;
             }
             #raingod-loading-monster {
-                position:absolute;left:0;bottom:35px;width:min(180px,64vw);height:auto;
+                position:absolute;left:0;bottom:35px;width:min(150px,64vw);height:auto;
                 transform-origin:center bottom;will-change:left,transform;
             }
             #raingod-loading-monster svg {display:block;width:100%;height:auto;overflow:visible}
@@ -72,7 +72,7 @@
         animation.innerHTML = `
             <div id="raingod-loading-ground"></div>
             <div id="raingod-loading-monster">
-                <svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg">
+                <svg viewBox="90 40 220 260" xmlns="http://www.w3.org/2000/svg">
                     <path id="raingod-loading-tail" class="raingod-loading-creature" d="M 122,219 Q 116,207 118,186 L 121,136 Q 121,122 134,106 L 168,73 L 193,52 Q 200,46 207,52 Q 214,57 206,65 L 173,96 Q 156,111 148,124 Q 142,135 142,149 L 141,190 Z"/>
                     <path id="raingod-loading-leg1" class="raingod-loading-creature" d="M 115,238 C 108,247 106,259 110,268 C 115,278 126,279 132,266 L 139,245 Z"/>
                     <path id="raingod-loading-leg2" class="raingod-loading-creature" d="M 145,250 C 139,262 141,276 150,283 C 158,288 167,280 169,265 L 168,248 Z"/>
@@ -111,7 +111,7 @@
             const dt = Math.min((now - lastTime) / 1000, 0.033);
             lastTime = now;
             const maxX = Math.max(0, animation.clientWidth - loadingMonster.offsetWidth);
-            x += direction * 120 * dt;
+            x += direction * 150 * dt;
             if (x >= maxX) {
                 x = maxX;
                 direction = -1;
