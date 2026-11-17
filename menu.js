@@ -1,7 +1,6 @@
 (function() {
     const baseUrl = "https://raingod0101.github.io/";
     const v = new Date().getTime();
-    let currentIp = "Unknown_IP";
     const gameDataGatePages = new Set([
         'stealeggs.html',
         'raingod-agent.html',
@@ -160,7 +159,6 @@
     const USER_DATA_ROOT = 'raingod_users';
     const SESSION_ROOT = 'raingod_sessions';
     const LOCK_ROOT = 'raingod_locks';
-    const IP_LOG_ROOT = 'raingod_ip_logs';
     const AUTH_BACKUP_ROOT = 'raingod_auth_backup';
     const DEVICE_REGISTRY_ROOT = 'raingod_device_registry';
 
@@ -388,6 +386,7 @@
         if (!key) return true;
         const normalizedKey = normalizeStorageKey(key);
         if (normalizedKey === 'raingod_device_id') return true;
+        if (normalizedKey === 'raingod_device_pending_count') return true;
         if (normalizedKey === 'raingod_session_id') return true;
         if (normalizedKey.startsWith('raingod_save_')) return true;
         if (normalizedKey.startsWith('raingod_game_lock_')) return true;
@@ -403,7 +402,7 @@
 
     function getAccountScopedKey(key, uid = activeAccountUid) {
         if (typeof key !== 'string' || !key) return key;
-        if (key === 'raingod_device_id' || key === 'raingod_session_id') return key;
+        if (key === 'raingod_device_id' || key === 'raingod_device_pending_count' || key === 'raingod_session_id') return key;
         if (key.startsWith(ACCOUNT_STORAGE_PREFIX) && key.includes(ACCOUNT_STORAGE_DELIM)) return key;
         if (!uid) return key;
         return `${ACCOUNT_STORAGE_PREFIX}${uid}${ACCOUNT_STORAGE_DELIM}${key}`;
@@ -681,7 +680,7 @@
         Storage.prototype.setItem = function(key, value) {
             const keyStr = String(key);
             if (this !== localStorage) return originalSetItem.call(this, keyStr, value);
-            if (keyStr === 'raingod_device_id' || keyStr === 'raingod_session_id') {
+            if (keyStr === 'raingod_device_id' || keyStr === 'raingod_device_pending_count' || keyStr === 'raingod_session_id') {
                 return originalSetItem.call(this, keyStr, value);
             }
             const scopedKey = getAccountScopedKey(keyStr, activeAccountUid || firebase.auth().currentUser?.uid);
@@ -699,7 +698,7 @@
         Storage.prototype.removeItem = function(key) {
             const keyStr = String(key);
             if (this !== localStorage) return originalRemoveItem.call(this, keyStr);
-            if (keyStr === 'raingod_device_id' || keyStr === 'raingod_session_id') {
+            if (keyStr === 'raingod_device_id' || keyStr === 'raingod_device_pending_count' || keyStr === 'raingod_session_id') {
                 return originalRemoveItem.call(this, keyStr);
             }
             const scopedKey = getAccountScopedKey(keyStr, activeAccountUid || firebase.auth().currentUser?.uid);
@@ -723,6 +722,7 @@
         if (!deviceId) {
             deviceId = 'dev_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
             localStorage.setItem('raingod_device_id', deviceId);
+            localStorage.setItem('raingod_device_pending_count', '1');
         }
         return deviceId;
     }
@@ -1201,36 +1201,6 @@
         });
     };
 
-    async function syncData(user = null) {
-        if (!canWriteRaingodDb()) return;
-        let ip = "Unknown";
-        let location = "Unknown";
-        let device = navigator.userAgent;
-        try {
-            const res = await fetch('https://ipapi.co/json/');
-            const data = await res.json();
-            ip = data.ip;
-            currentIp = ip;
-            location = `${data.city}, ${data.region}, ${data.country_name}`;
-        } catch (e) { console.warn("Location fetch failed"); }
-
-        const safeIp = ip.replace(/[\.\$\#\[\]\/]/g, '_');
-        const now = Date.now();
-        const path = user ? `${IP_LOG_ROOT}/${safeIp}` : `guests/${safeIp}`;
-        const ref = firebase.database().ref(path);
-        ref.once('value', (snapshot) => {
-            const oldData = snapshot.val() || {};
-            const firstSeen = oldData.first_seen || now;
-            ref.update({
-                ip, device, location,
-                last_active: now,
-                first_seen: firstSeen,
-                total_time_ms: now - firstSeen,
-                url: window.location.href
-            });
-        }).catch(err => console.warn("Database sync restricted:", err));
-    }
-
     function handleCustomAuth() {
         window.raingodGoToLoginPage();
     }
@@ -1572,8 +1542,6 @@
                     // 等 DOM 完成後再定位一次
                     setTimeout(positionNavBadge, 50);
                     setTimeout(positionNavBadge, 300);
-                    syncData(user);
-
                     const isAdmin = username.toLowerCase() === ADMIN_USERNAME;
                     let adminBtn = document.getElementById('raingod-admin-btn');
                     if (isAdmin) {
@@ -1607,8 +1575,6 @@
                     if (userInfo) userInfo.style.setProperty('display', 'none', 'important');
                     stopAvatarWatch();
                     clearNavListeners();
-                    syncData(null);
-
                     const adminBtn = document.getElementById('raingod-admin-btn');
                     if (adminBtn) adminBtn.style.display = 'none';
                 }
