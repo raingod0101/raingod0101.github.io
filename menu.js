@@ -1084,7 +1084,8 @@
             if (snapshot.exists()) {
                 const cloudSave = snapshot.val();
                 if (!cloudSave || typeof cloudSave !== 'object' || Array.isArray(cloudSave)) {
-                    throw new Error('雲端遊戲存檔格式無效');
+                    const receivedType = cloudSave === null ? 'null' : Array.isArray(cloudSave) ? 'array' : typeof cloudSave;
+                    throw new Error(`雲端遊戲存檔格式無效（${gameId}；收到 ${receivedType}）`);
                 }
                 const hasWrappedData = Object.prototype.hasOwnProperty.call(cloudSave, 'data');
                 const isLegacyEggSave = gameId === 'steal_egg_v17' && cloudSave.version === 17;
@@ -1093,7 +1094,8 @@
                     && Array.isArray(cloudSave.deck)
                     && Number.isFinite(Number(cloudSave.xp));
                 if (!hasWrappedData && !isLegacyEggSave && !isLegacyWarsSave) {
-                    throw new Error('雲端遊戲存檔格式無效');
+                    const keys = Object.keys(cloudSave).slice(0, 12).join(', ') || '沒有欄位';
+                    throw new Error(`雲端遊戲存檔格式無效（${gameId}；欄位：${keys}）`);
                 }
                 const cloudData = hasWrappedData ? cloudSave.data : cloudSave;
                 const localSave = localStorage.getItem(saveKey);
