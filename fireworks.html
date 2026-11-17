@@ -589,118 +589,128 @@
         }
 
         // ============ Boss（每幀總傷害上限 2.5% + 溫和血量成長） ============
-        class Boss {
-            constructor(config) {
-                this.config = config;
-                this.name = `${config.name} ${config.mark}（${bossKillsThisRun + 1}/${BOSSES.length}）`;
-                this.x = width / 2;
-                this.y = height / 3;
-                this.size = config.size * S;
+// ============ Boss（單次命中上限 1.5% + 每秒總傷害上限 8%） ============
+class Boss {
+    constructor(config) {
+        this.config = config;
+        this.name = `${config.name} ${config.mark}（${bossKillsThisRun + 1}/${BOSSES.length}）`;
+        this.x = width / 2;
+        this.y = height / 3;
+        this.size = config.size * S;
 
-                const prestige = Math.max(1, gameData.prestige);
-                const exponentialScale = Math.pow(1.08, prestige - 1);
-                const linearScale = 1 + (prestige - 1) * 0.3;
-                const bossHpScale = exponentialScale * linearScale;
+        const prestige = Math.max(1, gameData.prestige);
+        const exponentialScale = Math.pow(1.08, prestige - 1);
+        const linearScale = 1 + (prestige - 1) * 0.3;
+        const bossHpScale = exponentialScale * linearScale;
 
-                this.maxHp = Math.floor(config.baseHp * bossHpScale);
-                this.hp = this.maxHp;
-                this.color = config.color;
-                this.accent = config.accent;
-                this.dead = false;
+        this.maxHp = Math.floor(config.baseHp * bossHpScale);
+        this.hp = this.maxHp;
+        this.color = config.color;
+        this.accent = config.accent;
+        this.dead = false;
 
-                this.maxDamagePerFrame = Math.max(1, Math.floor(this.maxHp * 0.025));
-                this.frameDamageAccum = 0;
-                this.frameId = 0;
+        // ===== 雙重傷害上限 =====
+        // 單次命中上限：任何一顆碎片／一次點擊，最多打掉最大血量的 1.5%
+        this.maxDamagePerHit = Math.max(1, Math.floor(this.maxHp * 0.015));
+        // 每秒總傷害上限：BOSS 每秒最多承受最大血量的 8%
+        this.maxDamagePerSecond = Math.max(1, Math.floor(this.maxHp * 0.08));
+        this.secondDamageAccum = 0;   // 本秒已累積傷害
+        this.secondId = 0;            // 當前秒編號
 
-                document.getElementById('boss-hud').style.display = 'flex';
-                document.getElementById('boss-name').innerText = this.name;
-                document.getElementById('boss-name').style.color = config.color;
-                document.getElementById('boss-name').style.textShadow = `0 0 10px ${config.color}`;
-                document.getElementById('boss-bar-wrap').style.borderColor = config.color;
-                this.updateBar();
-            }
-            updateBar() {
-                const pct = Math.max(0, (this.hp / this.maxHp) * 100);
-                const fill = document.getElementById('boss-bar-fill');
-                fill.style.width = `${pct}%`;
-                fill.style.background = `linear-gradient(90deg, ${this.color}, ${this.accent})`;
-            }
-            update() {
-                this.x += Math.sin(Date.now() * 0.002) * 3 * S;
-                this.y += Math.cos(Date.now() * 0.001) * 1.5 * S;
-                const currentFrame = Math.floor(performance.now() / 16);
-                if (currentFrame !== this.frameId) {
-                    this.frameId = currentFrame;
-                    this.frameDamageAccum = 0;
-                }
-            }
-            draw() {
-                ctx.save();
-                ctx.translate(this.x, this.y);
-                ctx.strokeStyle = this.color;
-                ctx.lineWidth = 6 * S;
-                ctx.shadowBlur = 25 * S; ctx.shadowColor = this.color;
-                ctx.strokeRect(-this.size/2, -this.size/2, this.size, this.size);
-
-                ctx.rotate(Date.now() * 0.001);
-                ctx.strokeStyle = this.accent;
-                ctx.lineWidth = 2 * S;
-                ctx.shadowColor = this.accent;
-                ctx.strokeRect(-this.size/4, -this.size/4, this.size/2, this.size/2);
-
-                if (this.config.mark !== 'MARK-I') {
-                    ctx.rotate(-Date.now() * 0.002);
-                    ctx.strokeStyle = this.color;
-                    ctx.lineWidth = 1.5 * S;
-                    ctx.strokeRect(-this.size/1.5, -this.size/1.5, this.size/0.75, this.size/0.75);
-                }
-                ctx.restore();
-            }
-            takeDamage(dmg) {
-                if (this.dead) return;
-
-                const currentFrame = Math.floor(performance.now() / 16);
-                if (currentFrame !== this.frameId) {
-                    this.frameId = currentFrame;
-                    this.frameDamageAccum = 0;
-                }
-                const remainingThisFrame = this.maxDamagePerFrame - this.frameDamageAccum;
-                if (remainingThisFrame <= 0) return;
-
-                const actualDmg = Math.min(dmg, remainingThisFrame);
-                this.frameDamageAccum += actualDmg;
-
-                this.hp -= actualDmg;
-                this.updateBar();
-                spawnEffect(this.x + (Math.random()-0.5)*100*S, this.y + (Math.random()-0.5)*100*S, this.color);
-                if (this.hp <= 0) { this.dead = true; this.onDefeat(); }
-                else scheduleGameSave();
-            }
-            onDefeat() {
-                document.getElementById('boss-hud').style.display = 'none';
-                activeBoss = null;
-
-                const rewardMoney = this.maxHp * 1.2;
-                gameData.money += rewardMoney;
-
-                bossKillsThisRun++;
-                gameData.bossKillsThisRun = bossKillsThisRun;
-
-                spawnText(width/2, height/2 - 40*S, `${this.config.mark} CLEAR!`, this.color, 28);
-                spawnText(width/2, height/2, `+$${Math.floor(rewardMoney).toLocaleString()}`, '#ffcc00', 20);
-
-                updateBossProgressUI();
-                updateBossBtn();
-
-                if (bossKillsThisRun >= BOSSES.length) {
-                    spawnText(width/2, height/2 + 60*S, '全部 BOSS 已擊殺！可進行轉生', '#ffcc00', 22);
-                } else {
-                    startBossCooldown(15);
-                }
-                refreshUI();
-                saveGame();
-            }
+        document.getElementById('boss-hud').style.display = 'flex';
+        document.getElementById('boss-name').innerText = this.name;
+        document.getElementById('boss-name').style.color = config.color;
+        document.getElementById('boss-name').style.textShadow = `0 0 10px ${config.color}`;
+        document.getElementById('boss-bar-wrap').style.borderColor = config.color;
+        this.updateBar();
+    }
+    updateBar() {
+        const pct = Math.max(0, (this.hp / this.maxHp) * 100);
+        const fill = document.getElementById('boss-bar-fill');
+        fill.style.width = `${pct}%`;
+        fill.style.background = `linear-gradient(90deg, ${this.color}, ${this.accent})`;
+    }
+    update() {
+        this.x += Math.sin(Date.now() * 0.002) * 3 * S;
+        this.y += Math.cos(Date.now() * 0.001) * 1.5 * S;
+        // 每秒重置累積傷害
+        const currentSecond = Math.floor(performance.now() / 1000);
+        if (currentSecond !== this.secondId) {
+            this.secondId = currentSecond;
+            this.secondDamageAccum = 0;
         }
+    }
+    draw() {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = 6 * S;
+        ctx.shadowBlur = 25 * S; ctx.shadowColor = this.color;
+        ctx.strokeRect(-this.size/2, -this.size/2, this.size, this.size);
+
+        ctx.rotate(Date.now() * 0.001);
+        ctx.strokeStyle = this.accent;
+        ctx.lineWidth = 2 * S;
+        ctx.shadowColor = this.accent;
+        ctx.strokeRect(-this.size/4, -this.size/4, this.size/2, this.size/2);
+
+        if (this.config.mark !== 'MARK-I') {
+            ctx.rotate(-Date.now() * 0.002);
+            ctx.strokeStyle = this.color;
+            ctx.lineWidth = 1.5 * S;
+            ctx.strokeRect(-this.size/1.5, -this.size/1.5, this.size/0.75, this.size/0.75);
+        }
+        ctx.restore();
+    }
+    takeDamage(dmg) {
+        if (this.dead) return;
+
+        // ===== 1. 單次命中上限 =====
+        let actualDmg = Math.min(dmg, this.maxDamagePerHit);
+
+        // ===== 2. 每秒總傷害上限 =====
+        const currentSecond = Math.floor(performance.now() / 1000);
+        if (currentSecond !== this.secondId) {
+            this.secondId = currentSecond;
+            this.secondDamageAccum = 0;
+        }
+        const remainingThisSecond = this.maxDamagePerSecond - this.secondDamageAccum;
+        if (remainingThisSecond <= 0) return;   // 本秒額度用完，這顆碎片不造成傷害
+
+        actualDmg = Math.min(actualDmg, remainingThisSecond);
+        this.secondDamageAccum += actualDmg;
+
+        this.hp -= actualDmg;
+        this.updateBar();
+        spawnEffect(this.x + (Math.random()-0.5)*100*S, this.y + (Math.random()-0.5)*100*S, this.color);
+        if (this.hp <= 0) { this.dead = true; this.onDefeat(); }
+        else scheduleGameSave();
+    }
+    onDefeat() {
+        document.getElementById('boss-hud').style.display = 'none';
+        activeBoss = null;
+
+        const rewardMoney = this.maxHp * 1.2;
+        gameData.money += rewardMoney;
+
+        bossKillsThisRun++;
+        gameData.bossKillsThisRun = bossKillsThisRun;
+
+        spawnText(width/2, height/2 - 40*S, `${this.config.mark} CLEAR!`, this.color, 28);
+        spawnText(width/2, height/2, `+$${Math.floor(rewardMoney).toLocaleString()}`, '#ffcc00', 20);
+
+        updateBossProgressUI();
+        updateBossBtn();
+
+        if (bossKillsThisRun >= BOSSES.length) {
+            spawnText(width/2, height/2 + 60*S, '全部 BOSS 已擊殺！可進行轉生', '#ffcc00', 22);
+        } else {
+            startBossCooldown(15);
+        }
+        refreshUI();
+        saveGame();
+    }
+}
 
         function startBossCooldown(seconds) {
             bossCooldownTime = seconds;
