@@ -245,7 +245,7 @@
                 name: '【滅世核心·虛空主宰】',
                 color: '#ff007b',
                 accent: '#00f2ff',
-                baseHp: 20000,
+                baseHp: 2000,
                 size: 180
             },
             {
@@ -253,7 +253,7 @@
                 name: '【星海吞噬者·深淵皇帝】',
                 color: '#ff6600',
                 accent: '#ffee00',
-                baseHp: 250000,
+                baseHp: 25000,
                 size: 200
             },
             {
@@ -261,7 +261,7 @@
                 name: '【終焉寂滅神·零之終章】',
                 color: '#ffffff',
                 accent: '#ff0066',
-                baseHp: 4000000,
+                baseHp: 400000,
                 size: 220
             }
         ];
@@ -560,7 +560,7 @@
             }
         }
 
-        // ============ Boss ============
+        // ============ Boss（方案 A：指數成長血量；方案 B：單次傷害上限 15%） ============
         class Boss {
             constructor(config) {
                 this.config = config;
@@ -568,12 +568,22 @@
                 this.x = width / 2;
                 this.y = height / 3;
                 this.size = config.size * S;
-                // 指數成長 + 線性補正，讓高轉生 BOSS 血量跟得上煙火傷害 const bossHpScale = Math.pow(1.35, gameData.prestige - 1) * (1 + (gameData.prestige - 1) * 0.6);
+
+                // ===== 方案 A：BOSS 血量改為「指數成長 + 線性加成」 =====
+                const prestige = Math.max(1, gameData.prestige);
+                const exponentialScale = Math.pow(1.15, prestige - 1);
+                const linearScale = 1 + (prestige - 1) * 0.5;
+                const bossHpScale = exponentialScale * linearScale;
+
                 this.maxHp = Math.floor(config.baseHp * bossHpScale);
                 this.hp = this.maxHp;
                 this.color = config.color;
                 this.accent = config.accent;
                 this.dead = false;
+
+                // ===== 方案 B：單次傷害上限（最大血量的 15%） =====
+                this.maxDamagePerHit = Math.max(1, Math.floor(this.maxHp * 0.15));
+
                 document.getElementById('boss-hud').style.display = 'flex';
                 document.getElementById('boss-name').innerText = this.name;
                 document.getElementById('boss-name').style.color = config.color;
@@ -614,17 +624,15 @@
                 ctx.restore();
             }
             takeDamage(dmg) {
-                if(this.dead) return;
+                if (this.dead) return;
 
-                // ===== 方案 B：單次傷害上限 =====
-                // 單次最多打掉最大血量的 12%，避免高階煙火一擊秒殺
-                const maxSingleHit = this.maxHp * 0.12;
-                dmg = Math.min(dmg, maxSingleHit);
+                // ===== 方案 B：單次傷害上限，防止一擊秒殺 =====
+                const cappedDmg = Math.min(dmg, this.maxDamagePerHit);
 
-                this.hp -= dmg;
+                this.hp -= cappedDmg;
                 this.updateBar();
                 spawnEffect(this.x + (Math.random()-0.5)*100*S, this.y + (Math.random()-0.5)*100*S, this.color);
-                if(this.hp <= 0) { this.dead = true; this.onDefeat(); }
+                if (this.hp <= 0) { this.dead = true; this.onDefeat(); }
                 else scheduleGameSave();
             }
             onDefeat() {
@@ -959,6 +967,7 @@
             }
         }
 
+        // ============ 重生：先清粒子，再歸零金錢 ============
         function doPrestige() {
             if (!canPrestige()) return;
 
@@ -967,27 +976,26 @@
             fragments = [];
             particles = [];
             floaters = [];
-            // 如果你也想把方塊一起清掉（讓畫面乾淨），取消下面這行註解：
+            // 若想連場上方塊一起清掉，取消下面這行註解：
             // cubes = [];
 
-            // ===== 2. 再歸零金錢 =====
+            // ===== 2. 再歸零金錢與重置進度 =====
             gameData.prestige++;
             gameData.money = 0;
             gameData.totalEarned = 0;
             bossKillsThisRun = 0;
             gameData.bossKillsThisRun = 0;
-
             for (let k in gameData.upgrades) gameData.upgrades[k].lv = 1;
-        
+
             FIREWORKS.forEach(fw => {
                 if (fwUnlockPrestige(fw.id) > gameData.prestige) fw.unlocked = fw.id === 0;
             });
-        
+
             fireworkState.autoLaunchLevel = 0;
             fireworkState.frenzyLevel = 1;
+            fireworkState.autoLaunchTimer = 0;
             fireworkState.cooldownTimer = 0;
             fireworkState.cooldownTotal = 0;
-            fireworkState.autoLaunchTimer = 0;
             bossCooldownUntil = 0;
 
             const currentFw = FIREWORKS[fireworkState.selectedFirework];
