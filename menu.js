@@ -12,6 +12,8 @@
     ]);
     const currentPage = (window.location.pathname || '').split('/').pop().toLowerCase();
     let gameDataGate = null;
+    const GAME_DATA_LOAD_TIMEOUT_MS = 30000;
+    const FIREBASE_CONNECTION_TIMEOUT_MS = 15000;
 
     if (gameDataGatePages.has(currentPage)) {
         const overlay = document.createElement('div');
@@ -101,7 +103,15 @@
         overlay.appendChild(panel);
         (document.body || document.documentElement).appendChild(overlay);
         const loadingMonster = animation.querySelector('#raingod-loading-monster');
-        gameDataGate = { overlay, animation, loadingMonster, message, retry, failed: false, readyFrame: 0, animationFrame: 0 };
+        gameDataGate = {
+            overlay, animation, loadingMonster, message, retry,
+            failed: false, recoverableFailure: false, readyFrame: 0, animationFrame: 0, loadTimeout: 0
+        };
+        gameDataGate.loadTimeout = setTimeout(() => {
+            const error = new Error('遊戲資料載入逾時');
+            error.code = 'GAME_DATA_TIMEOUT';
+            window.raingodMarkGameDataLoadFailed(error);
+        }, GAME_DATA_LOAD_TIMEOUT_MS);
 
         let x = 0;
         let direction = 1;
@@ -134,9 +144,13 @@
     }
 
     window.raingodMarkGameDataReady = function() {
-        if (!gameDataGate || gameDataGate.failed || gameDataGate.readyFrame) return;
+        if (!gameDataGate || gameDataGate.readyFrame) return;
+        if (gameDataGate.failed && !gameDataGate.recoverableFailure) return;
+        gameDataGate.failed = false;
+        gameDataGate.recoverableFailure = false;
+        clearTimeout(gameDataGate.loadTimeout);
         gameDataGate.readyFrame = requestAnimationFrame(() => {
-            if (!gameDataGate || gameDataGate.failed) return;
+            if (!gameDataGate) return;
             cancelAnimationFrame(gameDataGate.animationFrame);
             gameDataGate.overlay.remove();
             gameDataGate = null;
@@ -148,10 +162,12 @@
         if (gameDataGate.readyFrame) cancelAnimationFrame(gameDataGate.readyFrame);
         gameDataGate.readyFrame = 0;
         gameDataGate.failed = true;
+        gameDataGate.recoverableFailure = !!(error && error.code === 'GAME_DATA_TIMEOUT');
+        clearTimeout(gameDataGate.loadTimeout);
         cancelAnimationFrame(gameDataGate.animationFrame);
         gameDataGate.animation.style.display = 'none';
         const detail = error && error.message ? ` (${error.message})` : '';
-        gameDataGate.message.textContent = `遊戲資料載入失敗${detail}。請確認網路連線後重新載入；載入完成前不會進入遊戲或覆蓋存檔。`;
+        gameDataGate.message.textContent = `遊戲資料載入失敗${detail}。請重新載入；若問題持續，請檢查雲端存檔或服務狀態。載入完成前不會進入遊戲或覆蓋存檔。`;
         gameDataGate.retry.style.display = 'inline-block';
         if (error) console.error('[game data] 載入失敗', error);
     };
@@ -196,20 +212,34 @@
         return firebase.database().ref(`${LOCK_ROOT}/${uid}/${gameId}`);
     }
 
+    function waitForFirebaseConnection() {
+        const connectionRef = firebase.database().ref('.info/connected');
+        return new Promise((resolve, reject) => {
+            let timeoutId;
+            const cleanup = () => {
+                clearTimeout(timeoutId);
+                connectionRef.off('value', handler);
+            };
+            const handler = snapshot => {
+                if (snapshot.val() !== true) return;
+                cleanup();
+                resolve();
+            };
+            timeoutId = setTimeout(() => {
+                cleanup();
+                reject(new Error('等待雲端資料庫連線逾時'));
+            }, FIREBASE_CONNECTION_TIMEOUT_MS);
+            connectionRef.on('value', handler, error => {
+                cleanup();
+                reject(error);
+            });
+        });
+    }
+
     async function readServerValue(ref) {
         const connectionRef = firebase.database().ref('.info/connected');
         while (true) {
-            await new Promise((resolve, reject) => {
-                const handler = snapshot => {
-                    if (snapshot.val() !== true) return;
-                    connectionRef.off('value', handler);
-                    resolve();
-                };
-                connectionRef.on('value', handler, error => {
-                    connectionRef.off('value', handler);
-                    reject(error);
-                });
-            });
+            await waitForFirebaseConnection();
 
             const snapshot = await ref.once('value');
             const connection = await connectionRef.once('value');
@@ -1053,11 +1083,19 @@
 
             if (snapshot.exists()) {
                 const cloudSave = snapshot.val();
-                if (!cloudSave || typeof cloudSave !== 'object'
-                    || !Object.prototype.hasOwnProperty.call(cloudSave, 'data')) {
+                if (!cloudSave || typeof cloudSave !== 'object' || Array.isArray(cloudSave)) {
                     throw new Error('雲端遊戲存檔格式無效');
                 }
-                const cloudData = cloudSave.data;
+                const hasWrappedData = Object.prototype.hasOwnProperty.call(cloudSave, 'data');
+                const isLegacyEggSave = gameId === 'steal_egg_v17' && cloudSave.version === 17;
+                const isLegacyWarsSave = gameId === 'raingod-wars'
+                    && Array.isArray(cloudSave.owned)
+                    && Array.isArray(cloudSave.deck)
+                    && Number.isFinite(Number(cloudSave.xp));
+                if (!hasWrappedData && !isLegacyEggSave && !isLegacyWarsSave) {
+                    throw new Error('雲端遊戲存檔格式無效');
+                }
+                const cloudData = hasWrappedData ? cloudSave.data : cloudSave;
                 const localSave = localStorage.getItem(saveKey);
                 const localData = localSave ? JSON.parse(localSave) : null;
                 if (isEmptySaveData(cloudData)
