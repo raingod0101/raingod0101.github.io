@@ -678,6 +678,17 @@
         return false;
     }
 
+    function isRecoverableLocalGameSave(gameId, data) {
+        if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
+        if (gameId === 'steal_egg_v17') return data.version === 17;
+        if (gameId === 'raingod-wars') {
+            return Array.isArray(data.owned)
+                && Array.isArray(data.deck)
+                && Number.isFinite(Number(data.xp));
+        }
+        return false;
+    }
+
     function parseStorageValue(raw) {
         try { return JSON.parse(raw); } catch (e) { return raw; }
     }
@@ -988,6 +999,10 @@
             console.error("raingodSave 錯誤：必須指定 gameId");
             return false;
         }
+        if (!gameData || typeof gameData !== 'object' || Array.isArray(gameData)) {
+            console.error(`raingodSave 錯誤：${gameId} 的存檔必須是物件，已停止寫入`);
+            return false;
+        }
 
         const lock = activeGameLocks.get(gameId);
         if (lock) {
@@ -1093,8 +1108,24 @@
                     && Array.isArray(cloudSave.owned)
                     && Array.isArray(cloudSave.deck)
                     && Number.isFinite(Number(cloudSave.xp));
+                const cloudKeys = Object.keys(cloudSave);
+                const metadataOnly = !hasWrappedData
+                    && cloudKeys.length > 0
+                    && cloudKeys.every(key => ['updated_at', 'ts', 'timestamp'].includes(key));
+                if (metadataOnly) {
+                    const localSave = localStorage.getItem(saveKey);
+                    const localData = localSave === null ? null : JSON.parse(localSave);
+                    if (!isRecoverableLocalGameSave(gameId, localData)) {
+                        throw new Error(`雲端僅有更新時間，且沒有可驗證的本機進度可復原（${gameId}）；為避免覆蓋存檔已停止載入`);
+                    }
+                    await gameRef.set({
+                        data: localData,
+                        updated_at: firebase.database.ServerValue.TIMESTAMP
+                    });
+                    return complete(localData, { source: 'local', syncEnabled: true, repaired: true });
+                }
                 if (!hasWrappedData && !isLegacyEggSave && !isLegacyWarsSave) {
-                    const keys = Object.keys(cloudSave).slice(0, 12).join(', ') || '沒有欄位';
+                    const keys = cloudKeys.slice(0, 12).join(', ') || '沒有欄位';
                     throw new Error(`雲端遊戲存檔格式無效（${gameId}；欄位：${keys}）`);
                 }
                 const cloudData = hasWrappedData ? cloudSave.data : cloudSave;
