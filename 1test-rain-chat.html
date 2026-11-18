@@ -1055,36 +1055,55 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     cropModal.classList.add('hidden');
     cropCallback = null;
   });
-  cropConfirm.addEventListener('click',function(){
+  cropConfirm.addEventListener('click', function(){
     if(!cropState.img) return;
-    var size=320; var canvas=document.createElement('canvas'); canvas.width=size; canvas.height=size;
-    var ctx=canvas.getContext('2d'); ctx.fillStyle='#fff'; ctx.fillRect(0,0,size,size);
-    var st=cropState.stageSize,s=cropState.baseScale*cropState.scale;
-    var sx=Math.max(0,(-cropState.x)/s),sy=Math.max(0,(-cropState.y)/s);
-    var sw=st/s,sh=st/s;
-    if(sx+sw>cropState.img.naturalWidth) sw=cropState.img.naturalWidth-sx;
-    if(sy+sh>cropState.img.naturalHeight) sh=cropState.img.naturalHeight-sy;
-    ctx.drawImage(cropState.img,sx,sy,sw,sh,0,0,size,size);
-    var dataUrl=canvas.toDataURL('image/jpeg',0.85);
+    var size = 320; 
+    var canvas = document.createElement('canvas'); 
+    canvas.width = size; 
+    canvas.height = size;
+    var ctx = canvas.getContext('2d'); 
+    ctx.fillStyle = '#fff'; 
+    ctx.fillRect(0, 0, size, size);
+    var st = cropState.stageSize, s = cropState.baseScale * cropState.scale;
+    var sx = Math.max(0, (-cropState.x) / s), sy = Math.max(0, (-cropState.y) / s);
+    var sw = st / s, sh = st / s;
+    if (sx + sw > cropState.img.naturalWidth) sw = cropState.img.naturalWidth - sx;
+    if (sy + sh > cropState.img.naturalHeight) sh = cropState.img.naturalHeight - sy;
+    ctx.drawImage(cropState.img, sx, sy, sw, sh, 0, 0, size, size);
+    
+    // 把品質降到 0.7，確保 Base64 夠小，ImgBB 絕對吃得下
+    var dataUrl = canvas.toDataURL('image/jpeg', 0.7);
     cropModal.classList.add('hidden');
-    if(cropCallback){
-      var cb = cropCallback; cropCallback = null;
+    
+    if (cropCallback) {
+      var cb = cropCallback; 
+      cropCallback = null;
       cb(dataUrl);
       return;
     }
+    
     // ★ 頭像上傳到 ImgBB
-    setStatus('avatar-status','正在上傳頭像到 ImgBB…');
+    setStatus('avatar-status', '正在上傳頭像到 ImgBB…');
+    
+    // 先印出長度，方便 F12 除錯
+    console.log('準備上傳的 base64 長度:', dataUrl.length); 
+    
     uploadToImgBB(dataUrl, 'avatar_' + currentUsername + '_' + Date.now())
       .then(function(imgbbUrl) {
-        return db().ref('users/'+currentUsername+'/profile/avatar').set(imgbbUrl);
+        console.log('ImgBB 回傳的頭像網址:', imgbbUrl); // 成功的話會印出網址
+        return db().ref('users/' + currentUsername + '/profile/avatar').set(imgbbUrl);
       })
       .then(function() {
-        avatarImg.src=dataUrl; currentAvatar=dataUrl;
-        setStatus('avatar-status','頭像已更新並儲存。','ok');
-        refreshFriendsUI(); updateMyMessageAvatars();
+        avatarImg.src = dataUrl; 
+        currentAvatar = dataUrl;
+        setStatus('avatar-status', '頭像已更新並儲存。', 'ok');
+        refreshFriendsUI(); 
+        updateMyMessageAvatars();
       })
       .catch(function(err) {
-        setStatus('avatar-status','頭像儲存失敗：'+errorMessage(err),'error');
+        // 如果有錯誤，會在這裡顯示出來
+        console.error('頭像上傳失敗:', err);
+        setStatus('avatar-status', '頭像儲存失敗：' + errorMessage(err), 'error');
       });
   });
   avatarEditBtn.addEventListener('click',function(){avatarFileInput.click();});
