@@ -2115,7 +2115,6 @@ body.admin-view .chat-input-wrap{display:none!important}
     closeActiveChat();
   });
 
-  // ★ 已讀監聽：私訊監聽對方 read、群組監聽所有成員 read 取最小值
   function loadChatMessages(path, kind, id) {
     clearChatListeners();
     removeAllRows();
@@ -2123,17 +2122,25 @@ body.admin-view .chat-input-wrap{display:none!important}
     var state = { msgs: {}, peerReadTs: 0 };
     var messagesRef = db().ref(path);
     var cid = (kind === 'friend') ? chatIdFor(currentUid, id) : id;
-
-    var stop = listenRecentMessages(messagesRef, state, function() {
-      renderMessages(state.msgs, kind, cid, state.peerReadTs);
-    });
-    chatListeners.push(stop);
-
+    
+    // 取得寫入已讀的路徑
     var myReadPath = (kind === 'friend')
       ? 'private_chats/' + chatIdFor(currentUid, id) + '/read/' + currentUid
       : 'groups/' + id + '/read/' + currentUid;
+
+    // ★ 修改這裡：在 render 的同時，只要聊天室開著，就持續更新自己的已讀時間
+    var stop = listenRecentMessages(messagesRef, state, function() {
+      renderMessages(state.msgs, kind, cid, state.peerReadTs);
+      
+      // 每次收到新訊息就更新已讀時間
+      db().ref(myReadPath).set(window.firebase.database.ServerValue.TIMESTAMP).catch(function(){});
+    });
+    chatListeners.push(stop);
+
+    // 進入聊天室時，先標記一次已讀
     db().ref(myReadPath).set(window.firebase.database.ServerValue.TIMESTAMP).catch(function(){});
 
+    // 監聽對方的已讀時間戳
     if (kind === 'friend') {
       var peerReadRef = db().ref('private_chats/' + chatIdFor(currentUid, id) + '/read/' + id);
       var peerHandler = function(snap) {
