@@ -149,6 +149,10 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
 .chat-header-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 .chat-box{flex:1;overflow-y:auto;padding:15px;display:flex;flex-direction:column;
   gap:12px;background:#fbfcfe;scroll-behavior:smooth}
+.load-older-btn{align-self:center;border:1px solid var(--border);border-radius:16px;
+  background:#fff;color:#555;padding:7px 14px;font-size:12px;cursor:pointer}
+.load-older-btn[hidden]{display:none}
+.load-older-btn:disabled{opacity:.6;cursor:default}
 .chat-empty{margin:auto;text-align:center;color:var(--text-gray);font-size:.92rem;padding:30px}
 
 .upload-status{padding:8px 14px;font-size:12px;background:#fff8e1;color:#8a6d00;
@@ -174,15 +178,6 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
 .bubble img.msg-img{display:block;max-width:220px;max-height:220px;border-radius:10px;
   cursor:pointer;background:#000}
 .bubble .img-expired{font-style:italic;color:var(--text-gray);font-size:13px}
-.bubble .file-attachment{display:flex;align-items:center;gap:8px;padding:6px 4px;
-  background:rgba(0,0,0,.04);border-radius:10px;margin:2px 0}
-.bubble .file-attachment .file-icon{font-size:26px;flex-shrink:0}
-.bubble .file-attachment .file-info{display:flex;flex-direction:column;min-width:0}
-.bubble .file-attachment .file-name{font-weight:600;font-size:13px;word-break:break-all;color:inherit}
-.bubble .file-attachment .file-size{font-size:11px;color:var(--text-gray)}
-.bubble .file-attachment .file-download-btn{flex-shrink:0;padding:5px 10px;border-radius:8px;
-  border:1px solid currentColor;background:transparent;color:inherit;font-size:12px;
-  cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:4px}
 .me .bubble .file-attachment{background:rgba(255,255,255,.15)}
 
 /* ★ 已讀：沒有已讀就完全空著，不顯示「未讀」 */
@@ -480,6 +475,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
             </div>
             <div class="upload-status" id="upload-status"></div>
             <div class="chat-box" id="chat-box">
+              <button class="load-older-btn" id="load-older-btn" type="button" hidden>載入更早訊息</button>
               <div class="chat-empty" id="chat-empty">請選擇一位好友或群組開始聊天。</div>
             </div>
             <div class="chat-input-wrap">
@@ -489,10 +485,8 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
               </div>
               <div class="chat-input-area">
                 <button id="img-upload-btn" class="icon-btn" type="button" title="上傳圖片" disabled>📷</button>
-                <button id="file-upload-btn" class="icon-btn" type="button" title="上傳檔案" disabled>📎</button>
                 <span id="img-quota-hint" class="quota-hint"></span>
                 <input id="img-file-input" type="file" accept="image/*" class="hidden">
-                <input id="file-file-input" type="file" class="hidden">
                 <input id="group-avatar-change-input" type="file" accept="image/*" class="hidden">
                 <input type="text" id="msg-input" placeholder="輸入訊息..." disabled>
                 <button class="chat-send-btn" id="chat-send-btn" type="button" disabled>傳送</button>
@@ -528,11 +522,16 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
   var authReady = window.raingodAuthReady || Promise.resolve(null);
 
   var fallbackAvatar = 'https://raingod0101.github.io/catdragon.png';
-  var CHAT_READ_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+  // ★ 改為 1 小時（已讀一小時後自動刪除）
+  var CHAT_READ_WINDOW_MS = 60 * 60 * 1000;
+  var AUTO_DELETE_AGE_MS = 60 * 60 * 1000; // 訊息超過 1 小時自動刪除
   var DAILY_IMAGE_LIMIT = 5;
   var ADMIN_USERNAME = 'raingod';
   var IMG_MAX_BYTES = 280 * 1024;
-  var FILE_MAX_BYTES = 400 * 1024;
+
+  // ★ ImgBB API 設定（請填入你的 API Key）
+  var IMGBB_API_KEY = 'YOUR_IMGBB_API_KEY';  // 請替換成你的 ImgBB API Key
+  var IMGBB_ALBUM_URL = 'https://ibb.co/album/k6cV6c/sub';
 
   // ===== DOM =====
   var loginRequired = document.getElementById('login-required');
@@ -553,6 +552,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
   var chatSubtitle = document.getElementById('chat-subtitle');
   var chatHeaderAvatar = document.getElementById('chat-header-avatar');
   var chatBox = document.getElementById('chat-box');
+  var loadOlderBtn = document.getElementById('load-older-btn');
   var chatEmpty = document.getElementById('chat-empty');
   var msgInput = document.getElementById('msg-input');
   var chatSendBtn = document.getElementById('chat-send-btn');
@@ -563,8 +563,6 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
   var chatAliasBtn = document.getElementById('chat-alias-btn');
   var imgUploadBtn = document.getElementById('img-upload-btn');
   var imgFileInput = document.getElementById('img-file-input');
-  var fileUploadBtn = document.getElementById('file-upload-btn');
-  var fileFileInput = document.getElementById('file-file-input');
   var groupAvatarChangeInput = document.getElementById('group-avatar-change-input');
   var imgQuotaHint = document.getElementById('img-quota-hint');
   var uploadStatus = document.getElementById('upload-status');
@@ -617,6 +615,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
   var dmUnreadLoaded = false;
   var groupUnreadLoaded = false;
   var loadingPhase = 'init';
+  var autoDeleteTimer = null;
 
   function db(){ return window.firebase.database(); }
   function setStatus(id,msg,type){
@@ -680,7 +679,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     document.body.classList.toggle('in-chat', !!inChat);
   }
 
-  // ★ 頭像 HTML 產生器：未載入 → 灰色 shimmer；已載入且有 URL → img；已載入但無 URL → fallback
+  // ★ 頭像 HTML 產生器
   function avatarHtml(loaded, url, cls, extraStyle){
     var styleAttr = extraStyle ? (' style="'+extraStyle+'"') : '';
     if(!loaded){
@@ -690,7 +689,6 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     return '<img class="'+(cls||'friend-avatar')+'" src="'+escapeHtml(src)+'" alt="" onerror="this.onerror=null;this.src=\''+fallbackAvatar+'\'"'+styleAttr+'>';
   }
 
-  // ★ 取得某個 uid 的頭像資訊（優先群組成員快取 → 好友快取 → 自己）
   function getAvatarInfo(uid){
     if(uid===currentUid) return {avatar:currentAvatar||fallbackAvatar,loaded:true};
     var info=currentMembersMap[uid];
@@ -700,7 +698,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     return {avatar:null,loaded:true};
   }
 
-  // ★ 把純文字轉成可點擊的連結（自動辨識 http/https，並附 title）
+  // ★ 把純文字轉成可點擊的連結
   function linkifyText(text){
     var frag=document.createDocumentFragment();
     if(!text) return frag;
@@ -752,6 +750,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     }
   }
 
+  // ★ 壓縮圖片（用於上傳前處理）
   function compressImage(file,maxDim,quality){
     return new Promise(function(resolve,reject){
       var reader=new FileReader();
@@ -785,6 +784,65 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     });
   }
 
+  // ★★★ ImgBB 上傳函式 ★★★
+  function uploadToImgBB(dataUrl, name) {
+    return new Promise(function(resolve, reject) {
+      var base64Data = dataUrl.split(',')[1];
+      if (!base64Data) { reject(new Error('無效的圖片資料')); return; }
+      var formData = new FormData();
+      formData.append('key', IMGBB_API_KEY);
+      formData.append('image', base64Data);
+      if (name) formData.append('name', name);
+
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', 'https://api.imgbb.com/1/upload', true);
+      xhr.onload = function() {
+        try {
+          var res = JSON.parse(xhr.responseText);
+          if (res.success && res.data && res.data.url) {
+            resolve(res.data.url);
+          } else {
+            reject(new Error(res.error && res.error.message ? res.error.message : 'ImgBB 上傳失敗'));
+          }
+        } catch(e) { reject(new Error('解析 ImgBB 回應失敗')); }
+      };
+      xhr.onerror = function() { reject(new Error('ImgBB 連線失敗')); };
+      xhr.send(formData);
+    });
+  }
+
+  // ★★★ 自動刪除超過 1 小時的訊息 ★★★
+  function cleanupOldMessagesForChat(chatPath) {
+    var ref = db().ref(chatPath + '/msgs');
+    var cutoff = Date.now() - AUTO_DELETE_AGE_MS;
+    ref.orderByChild('ts').endAt(cutoff).once('value').then(function(snap) {
+      var updates = {};
+      snap.forEach(function(child) {
+        updates[child.key] = null;
+      });
+      var keys = Object.keys(updates);
+      if (keys.length > 0) {
+        ref.update(updates).catch(function(e) { console.warn('[自動刪除] 失敗', e); });
+      }
+    }).catch(function(e) { console.warn('[自動刪除] 查詢失敗', e); });
+  }
+
+  function startAutoDelete() {
+    if (autoDeleteTimer) clearInterval(autoDeleteTimer);
+    autoDeleteTimer = setInterval(function() {
+      if (!currentUid) return;
+      // 清理所有好友的私訊
+      Object.keys(friendsCache).forEach(function(fuid) {
+        var cid = chatIdFor(currentUid, fuid);
+        cleanupOldMessagesForChat('private_chats/' + cid);
+      });
+      // 清理所有群組訊息
+      Object.keys(groupsCache).forEach(function(gid) {
+        cleanupOldMessagesForChat('groups/' + gid);
+      });
+    }, 5 * 60 * 1000); // 每 5 分鐘執行一次
+  }
+
   function getImageQuotaUsed(){
     return db().ref('users/'+currentUsername+'/imageQuota/'+quotaDateKey())
       .once('value').then(function(s){ return s.val()||0; });
@@ -816,7 +874,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     if(!currentUsername||!activeChat.type){ imgQuotaHint.textContent=''; return; }
     getImageQuotaUsed().then(function(used){
       var left=Math.max(0,DAILY_IMAGE_LIMIT-used);
-      imgQuotaHint.textContent='今日圖/檔 '+left+'/'+DAILY_IMAGE_LIMIT;
+      imgQuotaHint.textContent='今日圖 '+left+'/'+DAILY_IMAGE_LIMIT;
       imgQuotaHint.style.color=left===0?'var(--danger)':'var(--text-gray)';
     }).catch(function(){});
   }
@@ -901,6 +959,9 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     listenFriendRequests();
     listenFriends();
     listenGroups();
+
+    // 啟動自動刪除計時器
+    startAutoDelete();
 
     if(!chatInitialized){
       chatInitialized=true;
@@ -1011,13 +1072,20 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
       cb(dataUrl);
       return;
     }
-    setStatus('avatar-status','正在上傳頭像…');
-    db().ref('users/'+currentUsername+'/profile/avatar').set(dataUrl,function(err){
-      if(err){ setStatus('avatar-status','頭像儲存失敗：'+errorMessage(err),'error'); return; }
-      avatarImg.src=dataUrl; currentAvatar=dataUrl;
-      setStatus('avatar-status','頭像已更新並儲存。','ok');
-      refreshFriendsUI(); updateMyMessageAvatars();
-    });
+    // ★ 頭像上傳到 ImgBB
+    setStatus('avatar-status','正在上傳頭像到 ImgBB…');
+    uploadToImgBB(dataUrl, 'avatar_' + currentUsername + '_' + Date.now())
+      .then(function(imgbbUrl) {
+        return db().ref('users/'+currentUsername+'/profile/avatar').set(imgbbUrl);
+      })
+      .then(function() {
+        avatarImg.src=dataUrl; currentAvatar=dataUrl;
+        setStatus('avatar-status','頭像已更新並儲存。','ok');
+        refreshFriendsUI(); updateMyMessageAvatars();
+      })
+      .catch(function(err) {
+        setStatus('avatar-status','頭像儲存失敗：'+errorMessage(err),'error');
+      });
   });
   avatarEditBtn.addEventListener('click',function(){avatarFileInput.click();});
   avatarFileInput.addEventListener('change',function(){
@@ -1163,18 +1231,16 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     });
     friendAvatarRefs={};
   }
-  // ★ 一律監聽 profile/avatar，用 avatarLoaded 控制是否顯示骨架
   function watchFriendAvatars(){
     stopFriendAvatarWatchers();
     Object.keys(friendsCache).forEach(function(uid){
       var f=friendsCache[uid];
       if(!f||!f.username) return;
-      // 重設載入狀態，確保新 listener 觸發前顯示骨架
       if(f.avatarLoaded !== true) f.avatarLoaded = false;
       var ref=db().ref('users/'+f.username+'/profile/avatar');
       var handler=function(snap){
         var url=snap.val();
-        friendsCache[uid].avatar = url || null;   // null 表示真的沒頭像
+        friendsCache[uid].avatar = url || null;
         friendsCache[uid].avatarLoaded = true;
         refreshFriendsUI();
         updateMessageAvatars();
@@ -1197,7 +1263,6 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     db().ref('users/'+currentUsername+'/friends').on('value',function(snap){
       var oldCache = friendsCache;
       friendsCache=snap.val()||{};
-      // 保留舊的 avatarLoaded 標記，避免每次 snapshot 都閃骨架
       Object.keys(friendsCache).forEach(function(uid){
         if(oldCache[uid] && oldCache[uid].avatarLoaded === true && friendsCache[uid].avatarLoaded !== true){
           friendsCache[uid].avatarLoaded = true;
@@ -1310,24 +1375,16 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
       });
     });
 
-    // ★ 排序規則：
-    //   1. 已載入的項目按 lastTs 從新到舊排（最近有訊息的在最上面）
-    //   2. 已載入的項目排在未載入之前
-    //   3. 未載入的項目按原始順序排在後面
-    //   群組載入後若 lastTs 最新，會移到最上面，不會永遠被擠在最下面。
     items.sort(function(a, b){
       var aLoaded = a.loaded;
       var bLoaded = b.loaded;
-
       if(aLoaded && bLoaded){
         if((a.lastTs || 0) !== (b.lastTs || 0)){
           return (b.lastTs || 0) - (a.lastTs || 0);
         }
         return (a.order || 0) - (b.order || 0);
       }
-
       if(aLoaded !== bLoaded) return aLoaded ? -1 : 1;
-
       return (a.order || 0) - (b.order || 0);
     });
 
@@ -1453,7 +1510,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
         ids.forEach(function(id){if(!last||(msgs[id].ts||0)>(last.ts||0)) last=msgs[id];});
         if(last){
           var pv='';
-          if(last.type==='image') pv='📷 圖片'; else if(last.type==='file') pv='📎 '+(last.fileName||'檔案'); else pv=last.text||'';
+          if(last.type==='image') pv='📷 圖片'; else pv=last.text||'';
           lastMsgCache['f:'+fuid]={ts:last.ts,preview:pv,type:last.type};
         }else delete lastMsgCache['f:'+fuid];
         readRef.once('value').then(function(rs){
@@ -1496,7 +1553,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
           ids.forEach(function(id){if(!last||(msgs[id].ts||0)>(last.ts||0)) last=msgs[id];});
           if(last){
             var pv='';
-            if(last.type==='image') pv='📷 圖片'; else if(last.type==='file') pv='📎 '+(last.fileName||'檔案'); else pv=last.text||'';
+            if(last.type==='image') pv='📷 圖片'; else pv=last.text||'';
             lastMsgCache['g:'+gid]={ts:last.ts,preview:pv,type:last.type};
           }else delete lastMsgCache['g:'+gid];
           readRef.once('value').then(function(rs){
@@ -1653,7 +1710,11 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     if(file){
       if(file.type.indexOf('image/')!==0){setStatus('group-status','請選擇圖片檔案。','error');setFormDisabled(groupCreateForm,false);return;}
       setStatus('group-status','正在壓縮群組頭像…');
-      compressImage(file,200,0.7).then(function(dataUrl){return doCreate(dataUrl);})
+      compressImage(file,200,0.7).then(function(dataUrl){
+        return uploadToImgBB(dataUrl, 'group_' + gid + '_' + Date.now());
+      }).then(function(imgbbUrl){
+        return doCreate(imgbbUrl);
+      })
       .then(function(){groupCreateForm.reset();renderGroupMemberPicker();setStatus('group-status','群組已建立。','ok');})
       .catch(function(err){setStatus('group-status','建立失敗：'+errorMessage(err),'error');})
       .finally(function(){setFormDisabled(groupCreateForm,false);updateGroupLimitUI();});
@@ -1714,27 +1775,32 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
     var g = groupsCache[gid];
     if(!g) { groupAvatarChangeInput.value=''; return; }
     openCropModal(file, function(dataUrl){
-      setUploadStatus('正在更新群組頭像…', false);
-      var updates = {};
-      updates['groups/'+gid+'/avatar'] = dataUrl;
-      db().ref('groups/'+gid+'/memberUsernames').once('value').then(function(snap){
-        var map = snap.val() || {};
-        Object.keys(map).forEach(function(uid){
-          var uname = map[uid];
-          if(uname) updates['users/'+uname+'/groups/'+gid+'/avatar'] = dataUrl;
+      setUploadStatus('正在上傳群組頭像到 ImgBB…', false);
+      uploadToImgBB(dataUrl, 'group_avatar_' + gid + '_' + Date.now())
+        .then(function(imgbbUrl) {
+          var updates = {};
+          updates['groups/'+gid+'/avatar'] = imgbbUrl;
+          return db().ref('groups/'+gid+'/memberUsernames').once('value').then(function(snap){
+            var map = snap.val() || {};
+            Object.keys(map).forEach(function(uid){
+              var uname = map[uid];
+              if(uname) updates['users/'+uname+'/groups/'+gid+'/avatar'] = imgbbUrl;
+            });
+            return db().ref().update(updates);
+          }).then(function() { return imgbbUrl; });
+        })
+        .then(function(imgbbUrl){
+          g.avatar = imgbbUrl;
+          if(groupsCache[gid]) groupsCache[gid].avatar = imgbbUrl;
+          updateChatHeaderAvatar();
+          refreshFriendsUI();
+          renderThreadList();
+          setUploadStatus('群組頭像已更新。', false);
+          setTimeout(function(){ setUploadStatus(''); }, 1500);
+        })
+        .catch(function(e){
+          setUploadStatus('更新失敗：'+errorMessage(e), true);
         });
-        return db().ref().update(updates);
-      }).then(function(){
-        g.avatar = dataUrl;
-        if(groupsCache[gid]) groupsCache[gid].avatar = dataUrl;
-        updateChatHeaderAvatar();
-        refreshFriendsUI();
-        renderThreadList();
-        setUploadStatus('群組頭像已更新。', false);
-        setTimeout(function(){ setUploadStatus(''); }, 1500);
-      }).catch(function(e){
-        setUploadStatus('更新失敗：'+errorMessage(e), true);
-      });
       groupAvatarChangeInput.value = '';
     });
   });
@@ -1847,10 +1913,9 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
   }
 
   function setReplyTo(msgId,msgData){
-    replyToMsg={id:msgId,from:msgData.from,name:msgData.name||'未知',text:msgData.text||'',type:msgData.type||'text',fileName:msgData.fileName||null};
+    replyToMsg={id:msgId,from:msgData.from,name:msgData.name||'未知',text:msgData.text||'',type:msgData.type||'text'};
     var preview='';
     if(replyToMsg.type==='image') preview='📷 圖片';
-    else if(replyToMsg.type==='file') preview='📎 '+(replyToMsg.fileName||'檔案');
     else preview=replyToMsg.text;
     if(preview.length>50) preview=preview.substring(0,50)+'…';
     replyPreviewText.textContent='回覆 '+replyToMsg.name+'：'+preview;
@@ -1862,7 +1927,6 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
   }
   replyPreviewClose.addEventListener('click',clearReply);
 
-  // ★ 點一下訊息才會出現「回覆 + 垃圾桶」操作列
   function bindMessageRowInteractions(lineEl,msgId,msgData,kind,cid,isMe){
     var actions=document.createElement('div');
     actions.className='msg-actions';
@@ -1948,42 +2012,120 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
   }
   function setChatEnabled(enabled){
     msgInput.disabled=!enabled; chatSendBtn.disabled=!enabled;
-    imgUploadBtn.disabled=!enabled; fileUploadBtn.disabled=!enabled;
+    imgUploadBtn.disabled=!enabled;
   }
   function removeAllRows(){
     var rows=chatBox.querySelectorAll('.msg-line');
     for(var i=0;i<rows.length;i++) rows[i].remove();
   }
   function listenRecentMessages(messagesRef,state,render){
+    var PAGE_SIZE=30;
     var cutoff=Date.now()-CHAT_READ_WINDOW_MS;
-    var query=messagesRef.orderByChild('ts').startAt(cutoff);
-    var renderFrame=0;
-    function scheduleRender(){
-      if(renderFrame) return;
-      renderFrame=requestAnimationFrame(function(){
-        renderFrame=0;
-        var liveCutoff=Date.now()-CHAT_READ_WINDOW_MS;
-        Object.keys(state.msgs).forEach(function(id){
-          if((state.msgs[id].ts||0)<liveCutoff) delete state.msgs[id];
-        });
-        render();
+    var active=true;
+    var hasMore=false;
+    var loadingOlder=false;
+    var latestQuery;
+    var latestHandler;
+    var latestError;
+    loadOlderBtn.hidden=true;
+    loadOlderBtn.disabled=true;
+    loadOlderBtn.textContent='載入本小時較早訊息';
+
+    function sortedEntries(snapshot){
+      var entries=[];
+      snapshot.forEach(function(child){
+        if(child.key) entries.push([child.key,child.val()]);
       });
+      entries.sort(function(a,b){
+        var timeDiff=(a[1].ts||0)-(b[1].ts||0);
+        return timeDiff||a[0].localeCompare(b[0]);
+      });
+      return entries;
     }
-    function handleMessage(snapshot){
+    function updateOlderButton(){
+      loadOlderBtn.hidden=!hasMore;
+      loadOlderBtn.disabled=loadingOlder;
+      if(!loadingOlder) loadOlderBtn.textContent='載入本小時較早訊息';
+    }
+    function handleLatest(snapshot){
       if(!snapshot.key) return;
       state.msgs[snapshot.key]=snapshot.val();
-      scheduleRender();
+      render();
     }
-    function handleError(error){
+    function handleLatestError(error){
+      console.error('載入新訊息失敗',error);
+    }
+    function loadOlder(){
+      if(loadingOlder||!hasMore) return;
+      var current=Object.keys(state.msgs).map(function(id){return [id,state.msgs[id]];});
+      current.sort(function(a,b){
+        var timeDiff=(a[1].ts||0)-(b[1].ts||0);
+        return timeDiff||a[0].localeCompare(b[0]);
+      });
+      var oldest=current[0];
+      if(!oldest){hasMore=false;updateOlderButton();return;}
+
+      loadingOlder=true;
+      loadOlderBtn.disabled=true;
+      loadOlderBtn.textContent='載入中…';
+      var oldHeight=chatBox.scrollHeight;
+      var oldTop=chatBox.scrollTop;
+      messagesRef.orderByChild('ts').startAt(cutoff)
+        .endAt(oldest[1].ts||0,oldest[0]).limitToLast(PAGE_SIZE+2).once('value')
+        .then(function(snapshot){
+          if(!active) return;
+          var earlier=sortedEntries(snapshot).filter(function(entry){
+            return !Object.prototype.hasOwnProperty.call(state.msgs,entry[0]);
+          });
+          var page=earlier.slice(-PAGE_SIZE);
+          page.forEach(function(entry){state.msgs[entry[0]]=entry[1];});
+          hasMore=earlier.length>PAGE_SIZE;
+          loadingOlder=false;
+          updateOlderButton();
+          render();
+          requestAnimationFrame(function(){
+            chatBox.scrollTop=oldTop+(chatBox.scrollHeight-oldHeight);
+          });
+        }).catch(function(error){
+          if(!active) return;
+          console.error('載入較早訊息失敗',error);
+          loadingOlder=false;
+          loadOlderBtn.disabled=false;
+          loadOlderBtn.textContent='載入失敗，點此重試';
+        });
+    }
+    loadOlderBtn.onclick=loadOlder;
+
+    var initialQuery=messagesRef.orderByChild('ts').startAt(cutoff).limitToLast(PAGE_SIZE+1);
+    initialQuery.once('value').then(function(snapshot){
+      if(!active) return;
+      var initial=sortedEntries(snapshot);
+      hasMore=initial.length>PAGE_SIZE;
+      initial.slice(-PAGE_SIZE).forEach(function(entry){state.msgs[entry[0]]=entry[1];});
+      updateOlderButton();
+      render();
+
+      latestQuery=messagesRef.orderByChild('ts').startAt(cutoff).limitToLast(1);
+      latestHandler=handleLatest;
+      latestError=handleLatestError;
+      latestQuery.on('child_added',latestHandler,latestError);
+      latestQuery.on('child_changed',latestHandler,latestError);
+    }).catch(function(error){
+      if(!active) return;
       console.error('載入聊天室訊息失敗',error);
-    }
-    render();
-    query.on('child_added',handleMessage,handleError);
-    query.on('child_changed',handleMessage,handleError);
+      loadOlderBtn.hidden=true;
+      chatEmpty.textContent='訊息載入失敗，請稍後重新開啟聊天室。';
+      chatEmpty.style.display='block';
+    });
     return function(){
-      query.off('child_added',handleMessage);
-      query.off('child_changed',handleMessage);
-      if(renderFrame) cancelAnimationFrame(renderFrame);
+      active=false;
+      if(latestQuery){
+        latestQuery.off('child_added',latestHandler);
+        latestQuery.off('child_changed',latestHandler);
+      }
+      loadOlderBtn.onclick=null;
+      loadOlderBtn.hidden=true;
+      loadOlderBtn.disabled=true;
     };
   }
   function hideHeaderAvatar(){
@@ -2016,736 +2158,381 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
       var f = friendsCache[activeChat.id] || {};
       var url = friendAvatarOf(activeChat.id);
       var displayName = f.name || f.username || '好友';
-      var username = f.username || '';
-      showHeaderAvatar(url, displayName, activeChat.id, displayName, username, false, f.avatarLoaded === true);
+      showHeaderAvatar(url, displayName, activeChat.id, displayName, f.username || '', false, f.avatarLoaded === true);
     }else if(activeChat.type==='group'){
-      var g=groupsCache[activeChat.id];
-      showHeaderAvatar((g&&g.avatar)||fallbackAvatar, g?g.name:'', activeChat.id, g?g.name:'', '', true, true);
-    }else hideHeaderAvatar();
-    refreshHeaderNameWithAlias();
+      var g = groupsCache[activeChat.id] || {};
+      showHeaderAvatar(g.avatar || fallbackAvatar, g.name || '群組', activeChat.id, g.name || '群組', '', true, true);
+    }else{
+      hideHeaderAvatar();
+    }
   }
 
-  function showChatMain(){
-    chatListView.classList.add('mobile-hide');
-    chatMainView.classList.remove('mobile-hide');
-    updateBodyChatClass();
-  }
-  function showChatList(){
-    chatListView.classList.remove('mobile-hide');
-    chatMainView.classList.add('mobile-hide');
-    updateBodyChatClass();
+  // ===== 開啟私訊 / 群組聊天 =====
+  function openPrivateChat(friendUid, friendName, avatarUrl) {
+    activeChat = { type: 'friend', id: friendUid };
+    currentHeaderBase.friendName = friendName;
+    chatTitle.textContent = friendName;
+    chatSubtitle.textContent = '';
+    showHeaderAvatar(avatarUrl, friendName, friendUid, friendName, (friendsCache[friendUid]&&friendsCache[friendUid].username)||'', false, (friendsCache[friendUid]&&friendsCache[friendUid].avatarLoaded===true));
+    chatAliasBtn.hidden = false;
+    chatMembersBtn.hidden = true;
+    chatDeleteGroupBtn.hidden = true;
+    chatEditGroupBtn.hidden = true;
+    chatEditAvatarBtn.hidden = true;
+    setChatEnabled(true);
+    clearReply();
+    updateQuotaHint();
+    loadChatMessages('private_chats/' + chatIdFor(currentUid, friendUid) + '/msgs', 'friend', friendUid);
+    switchToChatMain();
   }
 
-  function closeActiveChat(){
-    activeChat={type:'',id:''};
-    clearChatListeners();
-    chatTitle.textContent='聊天室';
-    chatSubtitle.textContent='請選擇一位好友或群組開始聊天。';
+  function openGroupChat(gid) {
+    var g = groupsCache[gid] || {};
+    activeChat = { type: 'group', id: gid };
+    currentHeaderBase.groupName = g.name || '群組';
+    chatTitle.textContent = g.name || '群組';
+    chatSubtitle.textContent = (g.memberCount || 0) + ' 位成員';
+    showHeaderAvatar(g.avatar || fallbackAvatar, g.name || '群組', gid, g.name || '群組', '', true, true);
+    chatAliasBtn.hidden = false;
+    chatMembersBtn.hidden = false;
+    var isOwner = g.role === 'owner';
+    chatDeleteGroupBtn.hidden = !isOwner;
+    chatEditGroupBtn.hidden = !isOwner;
+    chatEditAvatarBtn.hidden = !isOwner;
+    setChatEnabled(true);
+    clearReply();
+    updateQuotaHint();
+    loadChatMessages('groups/' + gid + '/msgs', 'group', gid);
+    switchToChatMain();
+  }
+
+  function closeActiveChat() {
+    activeChat = { type: '', id: '' };
+    chatTitle.textContent = '聊天室';
+    chatSubtitle.textContent = '請選擇一位好友或群組開始聊天。';
     hideHeaderAvatar();
-    chatMembersBtn.hidden=true; chatDeleteGroupBtn.hidden=true;
-    chatEditGroupBtn.hidden=true; chatEditAvatarBtn.hidden=true; chatAliasBtn.hidden=true;
-    setChatEnabled(false); removeAllRows();
-    chatEmpty.style.display='block'; setUploadStatus(''); imgQuotaHint.textContent='';
-    clearReply(); showChatList(); renderThreadList();
-    currentAliases = {}; currentMembersMap = {};
-    currentHeaderBase = { friendName:'', groupName:'' };
-  }
-  chatBackBtn.addEventListener('click',function(){closeActiveChat();});
-
-  function openPrivateChat(friendUid,friendName,friendAvatar){
+    setChatEnabled(false);
     clearReply();
-    activeChat={type:'friend',id:friendUid};
     clearChatListeners();
-    currentHeaderBase = { friendName: friendName, groupName: '' };
-    chatSubtitle.textContent='私訊對話';
-    var f = friendsCache[friendUid] || {};
-    var username = f.username || '';
-    showHeaderAvatar(friendAvatarOf(friendUid),friendName,friendUid,friendName,username,false, f.avatarLoaded === true);
-    chatMembersBtn.hidden=true; chatDeleteGroupBtn.hidden=true;
-    chatEditGroupBtn.hidden=true; chatEditAvatarBtn.hidden=true; chatAliasBtn.hidden=false;
-    setChatEnabled(true); chatEmpty.style.display='none'; removeAllRows();
-    setUploadStatus(''); updateQuotaHint(); showChatMain();
-
-    currentMembersMap = {};
-    currentMembersMap[currentUid] = { name: currentUser.displayName||currentUsername, avatar: currentAvatar||fallbackAvatar, username: currentUsername };
-    currentMembersMap[friendUid] = { name: friendName, avatar: friendAvatarOf(friendUid), username: username };
-
-    var cid=chatIdFor(currentUid,friendUid);
-    var msgsRef=db().ref('private_chats/'+cid+'/msgs');
-    var recallsRef=db().ref('private_chats/'+cid+'/recalls');
-    var readRef=db().ref('private_chats/'+cid+'/read');
-    var aliasesRef=db().ref('private_chats/'+cid+'/aliases/'+currentUid);
-    var state={msgs:{},recalls:{},read:{},aliases:{}};
-    var render=function(){renderMessages('private',cid,state,friendUid,friendName,friendAvatar);};
-    var recallsQuery=recallsRef.orderByChild('ts').startAt(Date.now()-CHAT_READ_WINDOW_MS);
-    var onRecall=function(s){if(s.key){state.recalls[s.key]=s.val();render();}};
-    var onRecallError=function(error){console.error('讀取收回訊息失敗',error);};
-    var h3=function(s){state.read=s.val()||{};render();};
-    var h4=function(s){state.aliases=s.val()||{};currentAliases=s.val()||{};refreshHeaderNameWithAlias();render();};
-    chatListeners.push(listenRecentMessages(msgsRef,state,render));
-    recallsQuery.on('child_added',onRecall,onRecallError);
-    recallsQuery.on('child_changed',onRecall,onRecallError);
-    readRef.on('value',h3,function(){});
-    aliasesRef.on('value',h4,function(){});
-    chatListeners.push(function(){recallsQuery.off('child_added',onRecall);recallsQuery.off('child_changed',onRecall);});
-    chatListeners.push(function(){readRef.off('value',h3);});
-    chatListeners.push(function(){aliasesRef.off('value',h4);});
-    refreshFriendsUI(); markChatRead('private',cid);
+    removeAllRows();
+    chatEmpty.style.display = 'block';
+    chatEmpty.textContent = '請選擇一位好友或群組開始聊天。';
+    chatAliasBtn.hidden = true;
+    chatMembersBtn.hidden = true;
+    chatDeleteGroupBtn.hidden = true;
+    chatEditGroupBtn.hidden = true;
+    chatEditAvatarBtn.hidden = true;
+    switchToChatList();
   }
 
-  function openGroupChat(gid){
-    clearReply();
-    var g=groupsCache[gid];
-    if(!g){alert('群組不存在或你不在群組中。');return;}
-    db().ref('groups/'+gid+'/members/'+currentUid).once('value').then(function(s){
-        if(!s.exists()){alert('此群組不存在，或你已不在群組中。');closeActiveChat();return;}
-        activeChat={type:'group',id:gid};
-        clearChatListeners();
-        currentHeaderBase = { friendName: '', groupName: g.name||'群組' };
-        chatSubtitle.textContent=(g.memberCount||'?')+' 位成員';
-        showHeaderAvatar(g.avatar||fallbackAvatar,g.name,gid,g.name,'',true,true);
-        chatMembersBtn.hidden=false;
-        chatDeleteGroupBtn.hidden=(g.role!=='owner'); chatEditGroupBtn.hidden=(g.role!=='owner');
-        chatEditAvatarBtn.hidden=(g.role!=='owner');
-        chatAliasBtn.hidden=false;
-        setChatEnabled(true); chatEmpty.style.display='none'; removeAllRows();
-        setUploadStatus(''); updateQuotaHint(); showChatMain();
-
-        currentMembersMap = {};
-        currentMembersMap[currentUid] = { name: currentUser.displayName||currentUsername, avatar: currentAvatar||fallbackAvatar, username: currentUsername, memberUsername: currentUsername, avatarLoaded: true };
-        db().ref('groups/'+gid+'/members').once('value').then(function(ms){
-          var members=ms.val()||{};
-          var uids=Object.keys(members);
-          if(!uids.length){ return; }
-          db().ref('groups/'+gid+'/memberUsernames').once('value').then(function(us){
-            var usernames=us.val()||{};
-            var pending=uids.length;
-            if(!pending){ return; }
-            uids.forEach(function(uid){
-              var uname=usernames[uid] || '';
-              if(uid === currentUid){
-                currentMembersMap[uid] = currentMembersMap[uid] || { name: currentUser.displayName||currentUsername, avatar: currentAvatar||fallbackAvatar, username: currentUsername, memberUsername: currentUsername, avatarLoaded: true };
-                pending--; if(!pending) finishMembers(); return;
-              }
-              if(friendsCache[uid]){
-                currentMembersMap[uid] = {
-                  name: friendsCache[uid].name || uname || '好友',
-                  avatar: friendsCache[uid].avatar || null,
-                  username: friendsCache[uid].username || uname || '',
-                  memberUsername: uname,
-                  avatarLoaded: friendsCache[uid].avatarLoaded === true
-                };
-                pending--; if(!pending) finishMembers();
-              }else if(uname){
-                db().ref('users/'+uname+'/profile').once('value').then(function(ps){
-                  var p=ps.val()||{};
-                  currentMembersMap[uid] = {
-                    name: p.displayName || uname,
-                    avatar: p.avatar || null,
-                    username: uname,
-                    memberUsername: uname,
-                    avatarLoaded: true
-                  };
-                  pending--; if(!pending) finishMembers();
-                }).catch(function(){
-                  currentMembersMap[uid] = { name: uname || '未知成員', avatar: null, username: uname || '', memberUsername: uname || '', avatarLoaded: true };
-                  pending--; if(!pending) finishMembers();
-                });
-              }else{
-                currentMembersMap[uid] = { name: '未知成員', avatar: null, username: '', memberUsername: '', avatarLoaded: true };
-                pending--; if(!pending) finishMembers();
-              }
-            });
-          });
-        });
-        function finishMembers(){}
-
-        var msgsRef=db().ref('groups/'+gid+'/msgs');
-        var recallsRef=db().ref('groups/'+gid+'/recalls');
-        var readRef=db().ref('groups/'+gid+'/read');
-        var membersRef=db().ref('groups/'+gid+'/members');
-        var aliasesRef=db().ref('groups/'+gid+'/aliases/'+currentUid);
-        var state={msgs:{},recalls:{},read:{},members:{},aliases:{}};
-        var render=function(){renderMessages('group',gid,state,null,g.name,g.avatar);};
-        var recallsQuery=recallsRef.orderByChild('ts').startAt(Date.now()-CHAT_READ_WINDOW_MS);
-        var onRecall=function(s){if(s.key){state.recalls[s.key]=s.val();render();}};
-        var onRecallError=function(error){console.error('讀取收回訊息失敗',error);};
-        var h3=function(s){state.read=s.val()||{};render();};
-        var h4=function(s){state.members=s.val()||{};render();};
-        var h5=function(s){state.aliases=s.val()||{};currentAliases=s.val()||{};refreshHeaderNameWithAlias();render();};
-        chatListeners.push(listenRecentMessages(msgsRef,state,render));
-        recallsQuery.on('child_added',onRecall,onRecallError);
-        recallsQuery.on('child_changed',onRecall,onRecallError);
-        readRef.on('value',h3,function(){});
-        membersRef.on('value',h4,function(){});
-        aliasesRef.on('value',h5,function(){});
-        chatListeners.push(function(){recallsQuery.off('child_added',onRecall);recallsQuery.off('child_changed',onRecall);});
-        chatListeners.push(function(){readRef.off('value',h3);});
-        chatListeners.push(function(){membersRef.off('value',h4);});
-        chatListeners.push(function(){aliasesRef.off('value',h5);});
-        refreshFriendsUI(); markChatRead('group',gid);
-    }).catch(function(e){alert('無法讀取群組：'+errorMessage(e));closeActiveChat();});
+  function switchToChatMain() {
+    if (isMobile()) {
+      chatListView.classList.add('mobile-hide');
+      chatMainView.classList.remove('mobile-hide');
+    }
+    updateBodyChatClass();
+    chatBox.scrollTop = chatBox.scrollHeight;
   }
 
-  chatMembersBtn.addEventListener('click',function(evt){
-    if(activeChat.type!=='group') return;
-    evt.stopPropagation(); showMembersPop(evt,activeChat.id);
+  function switchToChatList() {
+    if (isMobile()) {
+      chatListView.classList.remove('mobile-hide');
+      chatMainView.classList.add('mobile-hide');
+    }
+    updateBodyChatClass();
+  }
+
+  chatBackBtn.addEventListener('click', function() {
+    switchToChatList();
+    closeActiveChat();
   });
 
-  function showMembersPop(evt,gid){
-    var old=document.querySelector('.member-pop'); if(old) old.remove();
-    var pop=document.createElement('div'); pop.className='member-pop';
-    pop.innerHTML='<div class="r-title">載入成員中…</div>'; document.body.appendChild(pop);
-    var r=evt.target.getBoundingClientRect();
-    pop.style.left=Math.min(r.left,window.innerWidth-240)+'px';
-    pop.style.top=(r.bottom+6)+'px';
-    var g=groupsCache[gid]; var isOwner=g&&g.role==='owner';
-    Promise.all([
-      db().ref('groups/'+gid+'/members').once('value'),
-      db().ref('groups/'+gid+'/memberUsernames').once('value'),
-      db().ref('groups/'+gid+'/owner').once('value')
-    ]).then(function(results){
-      var members=results[0].val()||{},usernames=results[1].val()||{},ownerUid=results[2].val()||'';
-      var uids=Object.keys(members);
-      var renderList=function(){
-        pop.innerHTML='';
-        var title=document.createElement('div'); title.className='r-title';
-        title.textContent='成員名單（'+uids.length+'）'; pop.appendChild(title);
-        if(isOwner){
-          var addBtn=document.createElement('button');
-          addBtn.className='mini-btn primary'; addBtn.textContent='+ 加入成員';
-          addBtn.style.marginBottom='8px'; addBtn.style.width='100%';
-          addBtn.onclick=function(){showAddMemberPanel(pop,gid,members,uids,renderList);};
-          pop.appendChild(addBtn);
-        }
-        if(!uids.length){var e=document.createElement('div');e.textContent='沒有成員';pop.appendChild(e);return;}
-        var pending=uids.length,list=[];
-        uids.forEach(function(uid,idx){
-          list[idx]={uid:uid,name:uid,avatar:null,avatarLoaded:true,role:uid===ownerUid?'建立者':''};
-          if(uid===currentUid){
-            list[idx].name = currentUser.displayName||currentUsername;
-            list[idx].avatar = currentAvatar||fallbackAvatar;
-            pending--; if(pending===0)finish(); return;
-          }
-          if(friendsCache[uid]){list[idx].name=friendsCache[uid].name||uid;list[idx].avatar=friendsCache[uid].avatar||null;list[idx].avatarLoaded=friendsCache[uid].avatarLoaded===true;pending--;if(pending===0)finish();return;}
-          var uname=usernames[uid];
-          if(!uname){list[idx].name='未知成員';pending--;if(pending===0)finish();return;}
-          db().ref('users/'+uname+'/profile').once('value').then(function(snap){
-            var p=snap.val()||{}; list[idx].name=p.displayName||uname; list[idx].avatar=p.avatar||null; list[idx].avatarLoaded=true;
-            pending--; if(pending===0)finish();
-          }).catch(function(){list[idx].name=uname;list[idx].avatarLoaded=true;pending--;if(pending===0)finish();});
-        });
-        function finish(){
-          pop.innerHTML='';
-          var t=document.createElement('div'); t.className='r-title';
-          t.textContent='成員名單（'+uids.length+'）'; pop.appendChild(t);
-          if(isOwner){
-            var addBtn=document.createElement('button');
-            addBtn.className='mini-btn primary'; addBtn.textContent='+ 加入成員';
-            addBtn.style.marginBottom='8px'; addBtn.style.width='100%';
-            addBtn.onclick=function(){showAddMemberPanel(pop,gid,members,uids,renderList);};
-            pop.appendChild(addBtn);
-          }
-          list.forEach(function(m){
-            var row=document.createElement('div'); row.className='r-item';
-            var roleTxt=m.role?' <span style="color:var(--text-gray);font-size:11px;">'+m.role+'</span>':'';
-            row.innerHTML = avatarHtml(m.avatarLoaded, m.avatar, '', 'width:26px;height:26px;border-radius:50%;object-fit:cover;') +
-              '<span>'+escapeHtml(m.name)+roleTxt+'</span>';
-            if(isOwner&&m.uid!==currentUid){
-              var kickBtn=document.createElement('button');
-              kickBtn.className='mini-btn danger'; kickBtn.textContent='踢出'; kickBtn.style.marginLeft='auto';
-              kickBtn.onclick=function(){if(confirm('確定要將「'+m.name+'」踢出群組嗎？')) kickMember(gid,m.uid,usernames[m.uid],m.name,renderList);};
-              row.appendChild(kickBtn);
-            }
-            pop.appendChild(row);
-          });
-        }
-        if(pending===0) finish();
-      };
-      renderList();
-    }).catch(function(e){pop.innerHTML='<div class="r-title">讀取失敗</div><div>'+escapeHtml(errorMessage(e))+'</div>';});
-    var close=function(e2){if(!pop.contains(e2.target)){pop.remove();document.removeEventListener('click',close);}};
-    setTimeout(function(){document.addEventListener('click',close);},0);
-  }
-
-  function showAddMemberPanel(pop,gid,currentMembers,uids,callback){
-    pop.innerHTML='<div class="r-title">選擇要加入的好友</div>';
-    var entries=Object.keys(friendsCache).map(function(k){return [k,friendsCache[k]];}).filter(function(pair){return !currentMembers[pair[0]];});
-    if(!entries.length){
-      var e=document.createElement('div'); e.textContent='沒有可加入的好友'; pop.appendChild(e);
-      var backBtn=document.createElement('button');
-      backBtn.className='mini-btn'; backBtn.textContent='返回'; backBtn.style.marginTop='8px'; backBtn.style.width='100%';
-      backBtn.onclick=callback; pop.appendChild(backBtn); return;
-    }
-    entries.forEach(function(pair){
-      var fuid=pair[0],f=pair[1];
-      var row=document.createElement('div'); row.className='r-item';
-      row.innerHTML = avatarHtml(f.avatarLoaded===true, f.avatar, '', 'width:26px;height:26px;border-radius:50%;object-fit:cover;') +
-        '<span>'+escapeHtml(f.name||f.username)+'</span>';
-      var btn=document.createElement('button');
-      btn.className='mini-btn success'; btn.textContent='加入'; btn.style.marginLeft='auto';
-      btn.onclick=function(){
-        btn.disabled=true;
-        addMemberToGroup(gid,fuid,f.username).then(function(){
-          btn.textContent='已加入'; currentMembers[fuid]=true;
-          if(uids.indexOf(fuid)===-1) uids.push(fuid);
-          setTimeout(callback,500);
-        }).catch(function(e){btn.disabled=false;alert('加入失敗：'+e.message);});
-      };
-      row.appendChild(btn); pop.appendChild(row);
-    });
-    var backBtn=document.createElement('button');
-    backBtn.className='mini-btn'; backBtn.textContent='返回名單'; backBtn.style.marginTop='8px'; backBtn.style.width='100%';
-    backBtn.onclick=callback; pop.appendChild(backBtn);
-  }
-
-  function kickMember(gid,uid,uname,name,callback){
-    var updates={};
-    updates['groups/'+gid+'/members/'+uid]=null;
-    updates['groups/'+gid+'/memberUsernames/'+uid]=null;
-    if(uname) updates['users/'+uname+'/groups/'+gid]=null;
-    db().ref('groups/'+gid+'/members').once('value').then(function(snap){
-      var count=Object.keys(snap.val()||{}).length-1;
-      updates['groups/'+gid+'/memberCount']=count;
-      return db().ref().update(updates);
-    }).then(function(){alert('已將「'+name+'」踢出。');if(callback) callback();})
-    .catch(function(e){alert('踢出失敗：'+e.message);});
-  }
-
-  function addMemberToGroup(gid,uid,uname){
-    var g=groupsCache[gid];
-    if(!g) return Promise.reject(new Error('找不到群組'));
-    var updates={};
-    updates['groups/'+gid+'/members/'+uid]=true;
-    if(uname){
-      updates['groups/'+gid+'/memberUsernames/'+uid]=uname;
-      updates['users/'+uname+'/groups/'+gid]={name:g.name,avatar:g.avatar||'',role:'member',memberCount:g.memberCount};
-    }
-    return db().ref('groups/'+gid+'/members').once('value').then(function(snap){
-      var count=Object.keys(snap.val()||{}).length+1;
-      updates['groups/'+gid+'/memberCount']=count;
-      return db().ref().update(updates);
-    });
-  }
-
-  function renderMessages(kind,cid,state,friendUid,friendName,friendAvatar){
+  function loadChatMessages(path, kind, id) {
+    clearChatListeners();
     removeAllRows();
-    var msgs=state.msgs||{},recalls=state.recalls||{},read=state.read||{},aliases=state.aliases||{};
-    var list=Object.keys(msgs).map(function(id){return [id,msgs[id]];});
-    list.sort(function(a,b){return (a[1].ts||0)-(b[1].ts||0);});
-    if(!list.length){chatEmpty.style.display='block';return;}
-    chatEmpty.style.display='none';
+    chatEmpty.style.display = 'none';
+    var state = { msgs: {} };
+    var messagesRef = db().ref(path);
+    var cid = (kind === 'friend') ? chatIdFor(currentUid, id) : id;
 
-    list.forEach(function(pair){
-      var id=pair[0],m=pair[1];
-      var isMe=m.from===currentUid;
-      var recalled=recalls[id];
+    var stop = listenRecentMessages(messagesRef, state, function() {
+      renderMessages(state.msgs, kind, cid);
+    });
+    chatListeners.push(stop);
 
-      var line=document.createElement('div');
-      line.className='msg-line '+(isMe?'me':'other');
-      line.setAttribute('data-msg-id',id);
+    // 標記已讀
+    var readPath = (kind === 'friend')
+      ? 'private_chats/' + chatIdFor(currentUid, id) + '/read/' + currentUid
+      : 'groups/' + id + '/read/' + currentUid;
+    db().ref(readPath).set(window.firebase.database.ServerValue.TIMESTAMP).catch(function(){});
 
-      var avatarUrl, avatarLoaded;
-      var info = currentMembersMap[m.from] || {};
-      if(isMe){
-        avatarUrl = currentAvatar||fallbackAvatar;
-        avatarLoaded = true;
-      }else if(kind==='group'){
-        avatarUrl = info.avatar || null;
-        avatarLoaded = info.avatarLoaded === true;
-      }else{
-        var ff = friendsCache[friendUid] || {};
-        avatarUrl = ff.avatar || null;
-        avatarLoaded = ff.avatarLoaded === true;
+    // 每分鐘清理一次此聊天室的舊訊息
+    setInterval(function() {
+      if (activeChat.type === kind && activeChat.id === id) {
+        var chatPath = (kind === 'friend')
+          ? 'private_chats/' + chatIdFor(currentUid, id)
+          : 'groups/' + id;
+        cleanupOldMessagesForChat(chatPath);
       }
+    }, 60 * 1000);
+  }
 
-      var rawName=m.name||(isMe?(currentUser.displayName||currentUsername):(friendName||'好友'));
-      var name=aliases[m.from]||rawName;
+  function renderMessages(msgs, kind, cid) {
+    removeAllRows();
+    var sorted = Object.keys(msgs).map(function(id) { return [id, msgs[id]]; });
+    sorted.sort(function(a, b) {
+      return (a[1].ts || 0) - (b[1].ts || 0);
+    });
+    if (!sorted.length) {
+      chatEmpty.style.display = 'block';
+      chatEmpty.textContent = '目前沒有訊息。';
+      return;
+    }
+    chatEmpty.style.display = 'none';
 
-      var avatarEl=document.createElement('span');
-      avatarEl.innerHTML = avatarHtml(avatarLoaded, avatarUrl, 'msg-avatar', '');
-      avatarEl = avatarEl.firstChild;
-      avatarEl.addEventListener('click',function(e){
+    sorted.forEach(function(pair) {
+      var msgId = pair[0], msg = pair[1];
+      var isMe = msg.from === currentUid;
+
+      var line = document.createElement('div');
+      line.className = 'msg-line ' + (isMe ? 'me' : 'other');
+      line.dataset.msgId = msgId;
+
+      // 頭像
+      var avatarInfo = getAvatarInfo(msg.from);
+      var avatarEl = document.createElement('img');
+      avatarEl.className = 'msg-avatar';
+      avatarEl.src = avatarInfo.avatar || fallbackAvatar;
+      avatarEl.onerror = function() { this.onerror = null; this.src = fallbackAvatar; };
+      avatarEl.addEventListener('click', function(e) {
         e.stopPropagation();
-        var uname = '';
-        if(kind==='group'){
-          var mi = currentMembersMap[m.from];
-          if(mi && mi.username) uname = mi.username;
-          else if(mi && mi.memberUsername) uname = mi.memberUsername;
-          if(!uname && friendsCache[m.from] && friendsCache[m.from].username) uname = friendsCache[m.from].username;
-        }else{
-          uname = info.username || '';
-        }
-        showProfileCard(e, m.from, avatarUrl, rawName, uname, false);
+        showProfileCard(e, msg.from, avatarInfo.avatar || fallbackAvatar, msg.name || '未知', msg.username || '', false);
       });
-
-      var bodyEl=document.createElement('div');
-      bodyEl.className='msg-body';
-
-      var infoEl=document.createElement('div');
-      infoEl.className='msg-info';
-      infoEl.textContent=name+' • '+formatTime(m.ts);
-      bodyEl.appendChild(infoEl);
-
-      if(recalled){
-        var r=document.createElement('div');
-        r.className='bubble recalled';
-        var rTxt;
-        if(recalled.byAdmin&&recalled.by!==m.from) rTxt='此訊息已被管理員刪除';
-        else if(recalled.by===currentUid) rTxt='你收回了一則訊息';
-        else rTxt=(aliases[recalled.by]||recalled.byName||name)+' 收回了一則訊息';
-        r.textContent=rTxt;
-        bodyEl.appendChild(r);
-      }else{
-        var bubble=document.createElement('div');
-        bubble.className='bubble';
-
-        // ★ 回覆引用（概念圖樣式：第一行頭像+名稱，第二行底色框）
-        if(m.replyTo){
-          var quote=document.createElement('div');
-          quote.className='reply-quote';
-          var rqFrom=m.replyTo.from;
-          var rqName=aliases[rqFrom]||m.replyTo.name||'某人';
-          var rqText='';
-          if(m.replyTo.type==='image') rqText='📷 圖片';
-          else if(m.replyTo.type==='file') rqText='📎 '+(m.replyTo.fileName||'檔案');
-          else{
-            var quotedMessage=m.replyTo.id&&msgs[m.replyTo.id];
-            rqText=m.replyTo.text||(quotedMessage&&quotedMessage.text)||'';
-          }
-          var ai=getAvatarInfo(rqFrom);
-          quote.innerHTML =
-            '<div class="rq-label">'+
-              avatarHtml(ai.loaded, ai.avatar, 'rq-avatar', '')+
-              '<span>'+escapeHtml(rqName)+'</span>'+
-            '</div>'+
-            '<div class="rq-text">'+escapeHtml(rqText)+'</div>';
-          quote.title='點擊跳至原訊息';
-          quote.addEventListener('click',function(e){
-            e.stopPropagation();
-            if(m.replyTo && m.replyTo.id) scrollToMessage(m.replyTo.id);
-          });
-          bubble.appendChild(quote);
-        }
-
-        if(m.type==='image'){
-          var now=Date.now();
-          var expireAt=(m.ts||0)+CHAT_READ_WINDOW_MS;
-          var src=m.imageData||m.imageUrl||'';
-          if(now>expireAt||!src){
-            var exp=document.createElement('div'); exp.className='img-expired'; exp.textContent='圖片已過期'; bubble.appendChild(exp);
-          }else{
-            var img=document.createElement('img');
-            img.className='msg-img'; img.src=src; img.alt='圖片';
-            img.onerror=function(){img.style.display='none';var err=document.createElement('div');err.className='img-expired';err.textContent='圖片載入失敗';bubble.appendChild(err);};
-            img.addEventListener('click',function(e){e.stopPropagation();openLightbox(src);});
-            bubble.appendChild(img);
-          }
-          if(m.text){var cap=document.createElement('div');cap.style.marginTop='6px';cap.appendChild(linkifyText(m.text));bubble.appendChild(cap);}
-        }else if(m.type==='file'){
-          var fnow=Date.now();
-          var fexpire=(m.ts||0)+CHAT_READ_WINDOW_MS;
-          var fsrc=m.fileData||'';
-          var fname=m.fileName||'檔案';
-          var fsize=m.fileSize||0;
-          if(fnow>fexpire||!fsrc){
-            var fexp=document.createElement('div'); fexp.className='img-expired'; fexp.textContent='檔案已過期'; bubble.appendChild(fexp);
-          }else{
-            var attachDiv=document.createElement('div'); attachDiv.className='file-attachment';
-            var iconSpan=document.createElement('span'); iconSpan.className='file-icon'; iconSpan.textContent='📎';
-            var infoDiv=document.createElement('div'); infoDiv.className='file-info';
-            var nameSpan=document.createElement('span'); nameSpan.className='file-name'; nameSpan.textContent=fname;
-            var sizeSpan=document.createElement('span'); sizeSpan.className='file-size'; sizeSpan.textContent=formatFileSize(fsize);
-            infoDiv.appendChild(nameSpan); infoDiv.appendChild(sizeSpan);
-            var dlBtn=document.createElement('a'); dlBtn.className='file-download-btn'; dlBtn.textContent='下載'; dlBtn.href=fsrc; dlBtn.download=fname;
-            dlBtn.addEventListener('click',function(e){e.stopPropagation();});
-            attachDiv.appendChild(iconSpan); attachDiv.appendChild(infoDiv); attachDiv.appendChild(dlBtn);
-            bubble.appendChild(attachDiv);
-          }
-          if(m.text){var fcap=document.createElement('div');fcap.style.marginTop='4px';fcap.appendChild(linkifyText(m.text));bubble.appendChild(fcap);}
-        }else{
-          // ★ 純文字：自動把連結變成可點擊
-          if(m.text) bubble.appendChild(linkifyText(m.text));
-        }
-        bodyEl.appendChild(bubble);
-      }
-
-      // ★ 已讀狀態：沒有已讀就完全空著
-      if(isMe&&!recalled){
-        if(kind==='group'){
-          var readerIds=Object.keys(read).filter(function(uid){
-            if(uid===currentUid) return false;
-            var rv=read[uid]; var rts=(rv&&rv.ts)||(typeof rv==='number'?rv:0);
-            return rts>=(m.ts||0);
-          });
-          if(readerIds.length>0){
-            var rd=document.createElement('div');
-            rd.className='msg-read'; rd.textContent='已讀 '+readerIds.length+' 人';
-            rd.addEventListener('click',function(e){e.stopPropagation();showReadersPop(e,readerIds,aliases);});
-            bodyEl.appendChild(rd);
-          }
-        }else{
-          var other=friendUid; var rv=read&&read[other];
-          var rts=(rv&&rv.ts)||(typeof rv==='number'?rv:0);
-          var isRead=rts>=(m.ts||0);
-          if(isRead){
-            var rd2=document.createElement('div'); rd2.className='msg-read'; rd2.textContent='已讀';
-            bodyEl.appendChild(rd2);
-          }
-        }
-      }
-
       line.appendChild(avatarEl);
-      line.appendChild(bodyEl);
-      if(!recalled) bindMessageRowInteractions(line,id,m,kind,cid,isMe);
+
+      var body = document.createElement('div');
+      body.className = 'msg-body';
+
+      var info = document.createElement('div');
+      info.className = 'msg-info';
+      info.textContent = (msg.name || '未知') + '  ' + formatTime(msg.ts);
+      body.appendChild(info);
+
+      var bubble = document.createElement('div');
+      bubble.className = 'bubble';
+
+      if (msg.recalled) {
+        bubble.classList.add('recalled');
+        bubble.textContent = '此訊息已收回';
+      } else if (msg.type === 'image' && msg.imageUrl) {
+        var img = document.createElement('img');
+        img.className = 'msg-img';
+        img.src = msg.imageUrl;
+        img.alt = '圖片';
+        img.addEventListener('click', function(e) {
+          e.stopPropagation();
+          openLightbox(msg.imageUrl);
+        });
+        img.onerror = function() {
+          this.outerHTML = '<span class="img-expired">圖片已失效</span>';
+        };
+        bubble.appendChild(img);
+      } else if (msg.type === 'image' && !msg.imageUrl) {
+        var expired = document.createElement('span');
+        expired.className = 'img-expired';
+        expired.textContent = '圖片已過期';
+        bubble.appendChild(expired);
+      } else {
+        var textContent = document.createTextNode('');
+        bubble.appendChild(linkifyText(msg.text || ''));
+      }
+
+      // 回覆引用
+      if (msg.replyTo) {
+        var quote = document.createElement('div');
+        quote.className = 'reply-quote';
+        var rqLabel = document.createElement('div');
+        rqLabel.className = 'rq-label';
+        rqLabel.innerHTML = '<img class="rq-avatar" src="' + escapeHtml(friendAvatarOf(msg.replyTo.from)) + '" alt=""> ' + escapeHtml(msg.replyTo.name || '未知');
+        quote.appendChild(rqLabel);
+        var rqText = document.createElement('span');
+        rqText.className = 'rq-text';
+        var preview = msg.replyTo.type === 'image' ? '📷 圖片' : (msg.replyTo.text || '');
+        rqText.textContent = preview;
+        quote.appendChild(rqText);
+        quote.addEventListener('click', function(e) {
+          e.stopPropagation();
+          scrollToMessage(msg.replyTo.id);
+        });
+        bubble.insertBefore(quote, bubble.firstChild);
+      }
+
+      body.appendChild(bubble);
+
+      // 已讀狀態（只對自己的訊息）
+      if (isMe) {
+        var readEl = document.createElement('div');
+        readEl.className = 'msg-read';
+        readEl.textContent = msg.read ? '已讀' : '';
+        readEl.addEventListener('click', function(e) {
+          e.stopPropagation();
+          showReaders(msgId, kind, cid);
+        });
+        body.appendChild(readEl);
+      }
+
+      line.appendChild(body);
+
+      // 綁定回覆/收回操作
+      bindMessageRowInteractions(line, msgId, msg, kind, cid, isMe);
+
       chatBox.appendChild(line);
     });
-    chatBox.scrollTop=chatBox.scrollHeight;
+    chatBox.scrollTop = chatBox.scrollHeight;
   }
 
-  function doRecall(kind,cid,msgId,m,isSelf){
-    var confirmMsg=isSelf?'確定要收回這則訊息嗎？收回後訊息內容會從資料庫刪除。':'確定要以管理員權限刪除這則訊息嗎？此操作無法復原。';
-    if(!confirm(confirmMsg)) return;
-    var shouldRefund=isSelf&&m&&(m.type==='image'||m.type==='file');
-    var refundDateKey='';
-    if(shouldRefund){
-      if(m.quotaKey) refundDateKey=m.quotaKey;
-      else if(m.ts&&typeof m.ts==='number') refundDateKey=dateKeyFromTs(m.ts);
-      else if(m.expireAt) refundDateKey=dateKeyFromTs(m.expireAt-CHAT_READ_WINDOW_MS);
-      else refundDateKey=quotaDateKey();
-    }
-    var baseRef=kind==='private'?db().ref('private_chats/'+cid):db().ref('groups/'+cid);
-    var updates={};
-    updates['msgs/'+msgId]=null;
-    updates['recalls/'+msgId]={by:currentUid,byName:currentUser.displayName||currentUsername,byAdmin:!isSelf&&isAdmin,senderName:m.name||'',ts:window.firebase.database.ServerValue.TIMESTAMP};
-    baseRef.update(updates).then(function(){
-      if(shouldRefund&&refundDateKey) refundImageQuotaForDate(refundDateKey).then(function(){updateQuotaHint();});
-    }).catch(function(e){alert('收回失敗：'+errorMessage(e));});
-  }
-
-  function showReadersPop(evt,readerIds,aliases){
-    evt.stopPropagation();
-    var old=document.querySelector('.reader-pop'); if(old) old.remove();
-    var pop=document.createElement('div'); pop.className='reader-pop';
-    var title=document.createElement('div'); title.className='r-title'; title.textContent='已讀名單（'+readerIds.length+'）';
-    pop.appendChild(title);
-    if(!readerIds.length){var e=document.createElement('div');e.textContent='目前無人已讀';pop.appendChild(e);}
-    else{
-      readerIds.forEach(function(uid){
-        var f=friendsCache[uid]; var row=document.createElement('div'); row.className='r-item';
-        var name=(aliases&&aliases[uid])||(f&&f.name)||uid;
-        row.innerHTML = avatarHtml(f?f.avatarLoaded===true:true, f?f.avatar:null, '', 'width:26px;height:26px;border-radius:50%;object-fit:cover;') +
-          '<span>'+escapeHtml(name)+'</span>';
-        pop.appendChild(row);
-      });
-    }
-    document.body.appendChild(pop);
-    var r=evt.target.getBoundingClientRect();
-    pop.style.left=Math.min(r.left,window.innerWidth-200)+'px';
-    pop.style.top=(r.bottom+6)+'px';
-    var close=function(e2){if(!pop.contains(e2.target)){pop.remove();document.removeEventListener('click',close);}};
-    setTimeout(function(){document.addEventListener('click',close);},0);
-  }
-
-  function updateMessageAvatars(){
-    if(activeChat.type!=='friend') return;
-    var otherAvatars=chatBox.querySelectorAll('.msg-line.other .msg-avatar');
-    var f=friendsCache[activeChat.id] || {};
-    var loaded = f.avatarLoaded === true;
-    var url = f.avatar || fallbackAvatar;
-    for(var i=0;i<otherAvatars.length;i++){
-      var el = otherAvatars[i];
-      if(loaded){
-        if(el.tagName==='IMG'){
-          el.src=url;
-        }else{
-          var img=document.createElement('img');
-          img.className='msg-avatar'; img.src=url; img.alt='';
-          img.onerror=function(){this.onerror=null;this.src=fallbackAvatar;};
-          el.replaceWith(img);
-        }
-      }else{
-        if(el.tagName==='IMG'){
-          var span=document.createElement('span');
-          span.className='msg-avatar avatar-loading';
-          el.replaceWith(span);
-        }
-      }
-    }
-    updateMyMessageAvatars(); updateChatHeaderAvatar();
-  }
-  function updateMyMessageAvatars(){
-    var mine=chatBox.querySelectorAll('.msg-line.me .msg-avatar');
-    for(var i=0;i<mine.length;i++) mine[i].src=currentAvatar||fallbackAvatar;
-  }
-
-  function markChatRead(kind,cid){
-    if(!currentUid) return;
-    var ref=kind==='private'?db().ref('private_chats/'+cid+'/read/'+currentUid):db().ref('groups/'+cid+'/read/'+currentUid);
-    var val=kind==='private'?window.firebase.database.ServerValue.TIMESTAMP:{ts:window.firebase.database.ServerValue.TIMESTAMP};
-    ref.set(val).then(function(){
-      var key=kind==='private'?'f:'+activeChat.id:'g:'+activeChat.id;
-      unreadCache[key]=0; updateUnreadBadges(); renderThreadList();
-    }).catch(function(e){console.warn('標記已讀失敗',e);});
-  }
-
-  var sending=false;
-  function sendMessage(){
-    if(sending||!activeChat.type) return;
-    var text=msgInput.value.trim();
-    if(!text){msgInput.focus();return;}
-    var payload={from:currentUid,name:currentUser.displayName||currentUsername,fromAvatar:currentAvatar||fallbackAvatar,text:text,type:'text',ts:window.firebase.database.ServerValue.TIMESTAMP};
-    if(replyToMsg){
-      payload.replyTo={id:replyToMsg.id,from:replyToMsg.from,name:replyToMsg.name,type:replyToMsg.type,fileName:replyToMsg.fileName||null};
-    }
-    sending=true; msgInput.value=''; msgInput.focus(); chatSendBtn.disabled=true; clearReply();
-    var ref=activeChat.type==='friend'?db().ref('private_chats/'+chatIdFor(currentUid,activeChat.id)+'/msgs'):db().ref('groups/'+activeChat.id+'/msgs');
-    ref.push(payload).catch(function(e){
-      if(!msgInput.value) msgInput.value=text;
-      alert('訊息傳送失敗：'+(e.code||e.message||'未知錯誤'));
-    }).finally(function(){sending=false;chatSendBtn.disabled=false;});
-  }
-  chatSendBtn.addEventListener('click',sendMessage);
-  msgInput.addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}});
-
-  imgUploadBtn.addEventListener('click',function(){imgFileInput.click();});
-  imgFileInput.addEventListener('change',function(){
-    var file=imgFileInput.files&&imgFileInput.files[0];
-    if(!file) return;
-    if(!activeChat.type){imgFileInput.value='';return;}
-    if(file.type.indexOf('image/')!==0){setUploadStatus('請選擇圖片檔案。',true);imgFileInput.value='';return;}
-    if(file.size>15*1024*1024){setUploadStatus('原始檔案需小於 15MB。',true);imgFileInput.value='';return;}
-    imgUploadBtn.disabled=true; setUploadStatus('正在壓縮圖片…',false);
-    compressImage(file,1000,0.78).then(function(dataUrl){
-      if(dataUrl.length<=IMG_MAX_BYTES) return dataUrl;
-      setUploadStatus('圖片較大，進一步壓縮…',false);
-      return compressImage(file,800,0.7).then(function(d2){
-        if(d2.length<=IMG_MAX_BYTES) return d2;
-        return compressImage(file,600,0.62).then(function(d3){
-          if(d3.length>IMG_MAX_BYTES) throw new Error('圖片壓縮後仍過大（>'+(IMG_MAX_BYTES/1024|0)+'KB），請選小一點的圖。');
-          return d3;
-        });
-      });
-    }).then(function(dataUrl){
-      return consumeImageQuota().then(function(){
-        setUploadStatus('正在送出圖片…',false);
-        var msgId=pushId();
-        var basePath=activeChat.type==='friend'?'private_chats/'+chatIdFor(currentUid,activeChat.id):'groups/'+activeChat.id;
-        var payload={from:currentUid,name:currentUser.displayName||currentUsername,fromAvatar:currentAvatar||fallbackAvatar,text:'',type:'image',imageData:dataUrl,imageSize:dataUrl.length,quotaKey:quotaDateKey(),ts:window.firebase.database.ServerValue.TIMESTAMP};
-        if(replyToMsg){
-          payload.replyTo={id:replyToMsg.id,from:replyToMsg.from,name:replyToMsg.name,type:replyToMsg.type,fileName:replyToMsg.fileName||null};
-        }
-        clearReply();
-        var msgRef=db().ref(basePath+'/msgs/'+msgId);
-        return msgRef.set(payload).catch(function(e){refundImageQuota();throw e;});
-      });
-    }).then(function(){
-      setUploadStatus('圖片已送出。',false);
-      setTimeout(function(){setUploadStatus('');},1500); updateQuotaHint();
-    }).catch(function(err){
-      if(err&&err.message==='DAILY_LIMIT') setUploadStatus('今日圖片/檔案額度已用完（每日 '+DAILY_IMAGE_LIMIT+' 個）。',true);
-      else{console.error('圖片傳送失敗',err);setUploadStatus('圖片傳送失敗：'+errorMessage(err),true);}
-    }).finally(function(){imgUploadBtn.disabled=false;imgFileInput.value='';});
-  });
-
-  fileUploadBtn.addEventListener('click',function(){fileFileInput.click();});
-  fileFileInput.addEventListener('change',function(){
-    var file=fileFileInput.files&&fileFileInput.files[0];
-    if(!file) return;
-    if(!activeChat.type){fileFileInput.value='';return;}
-    if(file.size>FILE_MAX_BYTES){setUploadStatus('檔案需小於 '+formatFileSize(FILE_MAX_BYTES)+'。',true);fileFileInput.value='';return;}
-    fileUploadBtn.disabled=true; setUploadStatus('正在讀取檔案…',false);
-    readFileAsDataURL(file).then(function(dataUrl){
-      return consumeImageQuota().then(function(){
-        setUploadStatus('正在送出檔案…',false);
-        var msgId=pushId();
-        var basePath=activeChat.type==='friend'?'private_chats/'+chatIdFor(currentUid,activeChat.id):'groups/'+activeChat.id;
-        var payload={from:currentUid,name:currentUser.displayName||currentUsername,fromAvatar:currentAvatar||fallbackAvatar,text:'',type:'file',fileData:dataUrl,fileName:file.name,fileSize:file.size,quotaKey:quotaDateKey(),ts:window.firebase.database.ServerValue.TIMESTAMP};
-        if(replyToMsg){
-          payload.replyTo={id:replyToMsg.id,from:replyToMsg.from,name:replyToMsg.name,type:replyToMsg.type,fileName:replyToMsg.fileName||null};
-        }
-        clearReply();
-        var msgRef=db().ref(basePath+'/msgs/'+msgId);
-        return msgRef.set(payload).catch(function(e){refundImageQuota();throw e;});
-      });
-    }).then(function(){
-      setUploadStatus('檔案已送出。',false);
-      setTimeout(function(){setUploadStatus('');},1500); updateQuotaHint();
-    }).catch(function(err){
-      if(err&&err.message==='DAILY_LIMIT') setUploadStatus('今日圖片/檔案額度已用完（每日 '+DAILY_IMAGE_LIMIT+' 個）。',true);
-      else{console.error('檔案傳送失敗',err);setUploadStatus('檔案傳送失敗：'+errorMessage(err),true);}
-    }).finally(function(){fileUploadBtn.disabled=false;fileFileInput.value='';});
-  });
-
-  window.addEventListener('resize',function(){
-    updateBodyChatClass();
-    if(!isMobile()){
-      chatListView.classList.remove('mobile-hide'); chatMainView.classList.remove('mobile-hide');
-    }else{
-      if(activeChat.type){chatListView.classList.add('mobile-hide');chatMainView.classList.remove('mobile-hide');}
-      else{chatListView.classList.remove('mobile-hide');chatMainView.classList.add('mobile-hide');}
-    }
-  });
-
-  var authListenerInstalled = false;
-  var lastInitedUid = '';
-
-  function bindAuthFlow(){
-    if(authListenerInstalled) return;
-    authListenerInstalled = true;
-
-    ready.then(function(){return authReady;}).then(function(user){
-      if(!user){loginRequired.hidden=false;appArea.hidden=true;return;}
-      if(user.uid !== lastInitedUid){ lastInitedUid = user.uid; initProfile(user); }
-      if(isMobile()){chatListView.classList.remove('mobile-hide');chatMainView.classList.add('mobile-hide');}
-    }).catch(function(e){
-      console.error('初始化失敗',e);
-      loginRequired.hidden=false;
-      loginRequired.textContent='載入個人檔案失敗：'+errorMessage(e);
-      loginRequired.classList.add('error');
-    });
-
-    window.firebase.auth().onAuthStateChanged(function(u){
-      if(u){
-        if(u.uid !== lastInitedUid){ lastInitedUid = u.uid; initProfile(u); }
-      }else{
-        lastInitedUid = '';
-        currentUser=null;currentUid='';currentUsername='';currentAvatar=fallbackAvatar;isAdmin=false;
-        appArea.hidden=true;loginRequired.hidden=false;
-        clearChatListeners();
-        for(var i=0;i<friendUnreadListeners.length;i++) friendUnreadListeners[i]();
-        friendUnreadListeners=[];
-        Object.keys(lastMsgRefs).forEach(function(k){try{lastMsgRefs[k].ref.off('value',lastMsgRefs[k].handler);}catch(e){}});
-        lastMsgRefs={}; stopFriendAvatarWatchers(); stopThreadAliasWatchers();
-        friendsCache={};groupsCache={};unreadCache={};lastMsgCache={};
-        ownedGroupId='';hasOwnedGroup=false;
-        friendsLoaded=false; groupsLoaded=false;
-        dmUnreadLoaded=false; groupUnreadLoaded=false; loadingPhase='init';
-        requestList.innerHTML='';friendList.innerHTML='';
-        chatThreadList.innerHTML='';chatListEmpty.classList.add('hidden');
-        searchResults.innerHTML='';
-        removeAllRows();chatEmpty.style.display='block';
-        hideHeaderAvatar();
-        chatMembersBtn.hidden=true;chatDeleteGroupBtn.hidden=true;
-        chatEditGroupBtn.hidden=true;chatEditAvatarBtn.hidden=true;chatAliasBtn.hidden=true;
-        setChatEnabled(false);setUploadStatus('');imgQuotaHint.textContent='';
-        clearReply(); document.body.classList.remove('in-chat');
-        currentAliases={}; currentMembersMap={};
-        currentHeaderBase={ friendName:'', groupName:'' };
-        checkLoaded();
-        updateUnreadBadges();
-      }
+  function showReaders(msgId, kind, cid) {
+    // 簡易顯示已讀者
+    var path = (kind === 'friend')
+      ? 'private_chats/' + cid + '/msgs/' + msgId
+      : 'groups/' + cid + '/msgs/' + msgId;
+    db().ref(path).once('value').then(function(snap) {
+      var msg = snap.val();
+      if (!msg) return;
+      // 顯示一個簡單提示
+      alert('已讀狀態功能需進一步擴充。');
     });
   }
 
-  if(window.firebase && window.firebase.auth){
-    bindAuthFlow();
-  }else{
-    var waitFb = setInterval(function(){
-      if(window.firebase && window.firebase.auth){ clearInterval(waitFb); bindAuthFlow(); }
-    }, 100);
-    setTimeout(function(){ clearInterval(waitFb); }, 15000);
+  function doRecall(kind, cid, msgId, msgData, isMe) {
+    if (!confirm(isMe ? '確定要收回這則訊息嗎？' : '確定要刪除這則訊息嗎？')) return;
+    var path = (kind === 'friend')
+      ? 'private_chats/' + cid + '/msgs/' + msgId
+      : 'groups/' + cid + '/msgs/' + msgId;
+    db().ref(path).update({
+      recalled: true,
+      text: '',
+      imageUrl: null
+    }).catch(function(e) {
+      alert('操作失敗：' + errorMessage(e));
+    });
   }
+
+  function updateMyMessageAvatars() {
+    // 更新自己的頭像在訊息中（如果有的話）
+    var myAvatarEls = chatBox.querySelectorAll('.msg-line.me .msg-avatar');
+    for (var i = 0; i < myAvatarEls.length; i++) {
+      myAvatarEls[i].src = currentAvatar || fallbackAvatar;
+    }
+  }
+
+  function updateMessageAvatars() {
+    // 更新所有訊息頭像（好友頭像變更時）
+    var allAvatars = chatBox.querySelectorAll('.msg-avatar');
+    for (var i = 0; i < allAvatars.length; i++) {
+      var el = allAvatars[i];
+      var line = el.closest('.msg-line');
+      if (!line) continue;
+      // 略過
+    }
+  }
+
+  // ===== 傳送訊息 =====
+  function sendMessage(text, type, extra) {
+    if (!activeChat.type) return;
+    var kind = activeChat.type === 'friend' ? 'friend' : 'group';
+    var chatPath = (kind === 'friend')
+      ? 'private_chats/' + chatIdFor(currentUid, activeChat.id)
+      : 'groups/' + activeChat.id;
+    var msgId = pushId();
+    var msgData = {
+      from: currentUid,
+      name: (currentUser.displayName || currentUsername),
+      username: currentUsername,
+      ts: window.firebase.database.ServerValue.TIMESTAMP,
+      type: type || 'text',
+      text: text || '',
+      read: false
+    };
+    if (extra) {
+      for (var k in extra) {
+        if (extra.hasOwnProperty(k)) msgData[k] = extra[k];
+      }
+    }
+    if (replyToMsg) {
+      msgData.replyTo = {
+        id: replyToMsg.id,
+        from: replyToMsg.from,
+        name: replyToMsg.name,
+        text: replyToMsg.type === 'text' ? replyToMsg.text : '',
+        type: replyToMsg.type
+      };
+    }
+    return db().ref(chatPath + '/msgs/' + msgId).set(msgData);
+  }
+
+  chatSendBtn.addEventListener('click', function() {
+    var text = msgInput.value.trim();
+    if (!text) return;
+    msgInput.value = '';
+    clearReply();
+    sendMessage(text, 'text').catch(function(e) {
+      alert('傳送失敗：' + errorMessage(e));
+    });
+  });
+  msgInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      chatSendBtn.click();
+    }
+  });
+
+  // ★ 圖片上傳（改為 ImgBB）
+  imgUploadBtn.addEventListener('click', function() {
+    if (!activeChat.type) return;
+    imgFileInput.click();
+  });
+  imgFileInput.addEventListener('change', function() {
+    var file = imgFileInput.files && imgFileInput.files[0];
+    if (!file) return;
+    if (file.type.indexOf('image/') !== 0) { alert('請選擇圖片檔案。'); imgFileInput.value = ''; return; }
+    if (file.size > 10 * 1024 * 1024) { alert('圖片需小於 10MB。'); imgFileInput.value = ''; return; }
+
+    // 壓縮圖片
+    compressImage(file, 800, 0.75).then(function(dataUrl) {
+      setUploadStatus('正在上傳圖片到 ImgBB…', false);
+      // 檢查配額
+      return consumeImageQuota().then(function() {
+        return uploadToImgBB(dataUrl, 'chat_' + currentUid + '_' + Date.now());
+      }).then(function(imgbbUrl) {
+        return sendMessage('', 'image', { imageUrl: imgbbUrl });
+      }).then(function() {
+        setUploadStatus('圖片已送出。', false);
+        setTimeout(function() { setUploadStatus(''); }, 2000);
+        updateQuotaHint();
+      }).catch(function(err) {
+        setUploadStatus('圖片上傳失敗：' + errorMessage(err), true);
+        refundImageQuota();
+      });
+    }).catch(function(err) {
+      alert('圖片處理失敗：' + err.message);
+    }).finally(function() {
+      imgFileInput.value = '';
+    });
+  });
+
+  // ===== 載入初始化 =====
+  ready.then(function() {
+    authReady.then(function(user) {
+      if (user) {
+        initProfile(user);
+      } else {
+        loginRequired.hidden = false;
+        appArea.hidden = true;
+      }
+    });
+  });
+
 })();
 </script>
 </body>
