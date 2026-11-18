@@ -951,10 +951,25 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
       }
     });
 
-    db().ref('users/'+currentUsername+'/profile/avatar').on('value',function(s){
-      var url=s.val(); currentAvatar=url||fallbackAvatar;
-      avatarImg.src=currentAvatar; updateMyMessageAvatars();
-    },function(){ /* 忽略頭像讀取錯誤 */ });
+// 在 initProfile 裡面，找到這段：
+db().ref('users/'+currentUsername+'/profile/avatar').on('value',function(s){
+  var url=s.val(); currentAvatar=url||fallbackAvatar;
+  avatarImg.src=currentAvatar; updateMyMessageAvatars();
+  
+  // ★ 自動遷移邏輯：如果發現是 base64 開頭，就自動幫他傳到 ImgBB
+  if (url && url.indexOf('data:image/') === 0) {
+    console.log('發現舊版 Base64 頭像，正在自動遷移到 ImgBB...');
+    uploadToImgBB(url, 'migrate_' + currentUsername + '_' + Date.now())
+      .then(function(imgbbUrl) {
+        // 上傳成功，更新 Firebase 裡的網址
+        db().ref('users/'+currentUsername+'/profile/avatar').set(imgbbUrl);
+        console.log('自動遷移成功！新網址：', imgbbUrl);
+      })
+      .catch(function(err) {
+        console.warn('自動遷移失敗，保留舊 Base64', err);
+      });
+  }
+}, function(){ /* 忽略頭像讀取錯誤 */ });
 
     listenFriendRequests();
     listenFriends();
