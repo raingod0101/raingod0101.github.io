@@ -158,7 +158,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
 .bubble img.msg-img{display:block;max-width:220px;max-height:220px;border-radius:10px;
   cursor:pointer;background:#000}
 .bubble .img-expired{font-style:italic;color:var(--text-gray);font-size:13px}
-.msg-read{font-size:11px;color:var(--text-gray);margin-top:3px;padding:0 5px;cursor:pointer}
+.msg-read{font-size:11px;color:var(--text-gray);margin-top:3px;padding:0 5px;cursor:pointer;min-height:14px}
 .msg-read:hover{text-decoration:underline}
 .msg-actions{display:none;align-items:center;gap:4px;flex:0 0 auto;align-self:center;z-index:6}
 .msg-line.reply-active .msg-actions{display:flex}
@@ -1145,7 +1145,6 @@ body.admin-view .chat-input-wrap{display:none!important}
         });
       });
     },function(err){
-      console.warn('[friend_requests] 讀取失敗',err);
       requestList.innerHTML='<li class="profile-help">好友申請載入失敗。</li>';
       requestsCount=0; updateTabBadges();
     });
@@ -1399,7 +1398,7 @@ body.admin-view .chat-input-wrap{display:none!important}
     });
   }
 
-  // ★ 訊息永久保留：cutoff 改為 0，不再限制 1 小時
+  // ★ 訊息永久保留：cutoff=0
   function listenAllUnread(){
     for(var i=0;i<friendUnreadListeners.length;i++) friendUnreadListeners[i]();
     friendUnreadListeners=[]; unreadCache={};
@@ -2116,24 +2115,55 @@ body.admin-view .chat-input-wrap{display:none!important}
     closeActiveChat();
   });
 
+  // ★ 已讀監聽：私訊監聽對方 read、群組監聽所有成員 read 取最小值
   function loadChatMessages(path, kind, id) {
     clearChatListeners();
     removeAllRows();
     chatEmpty.style.display = 'none';
-    var state = { msgs: {} };
+    var state = { msgs: {}, peerReadTs: 0 };
     var messagesRef = db().ref(path);
     var cid = (kind === 'friend') ? chatIdFor(currentUid, id) : id;
+
     var stop = listenRecentMessages(messagesRef, state, function() {
-      renderMessages(state.msgs, kind, cid);
+      renderMessages(state.msgs, kind, cid, state.peerReadTs);
     });
     chatListeners.push(stop);
-    var readPath = (kind === 'friend')
+
+    var myReadPath = (kind === 'friend')
       ? 'private_chats/' + chatIdFor(currentUid, id) + '/read/' + currentUid
       : 'groups/' + id + '/read/' + currentUid;
-    db().ref(readPath).set(window.firebase.database.ServerValue.TIMESTAMP).catch(function(){});
+    db().ref(myReadPath).set(window.firebase.database.ServerValue.TIMESTAMP).catch(function(){});
+
+    if (kind === 'friend') {
+      var peerReadRef = db().ref('private_chats/' + chatIdFor(currentUid, id) + '/read/' + id);
+      var peerHandler = function(snap) {
+        state.peerReadTs = snap.val() || 0;
+        renderMessages(state.msgs, kind, cid, state.peerReadTs);
+      };
+      peerReadRef.on('value', peerHandler);
+      chatListeners.push(function() { peerReadRef.off('value', peerHandler); });
+    } else {
+      var groupReadRef = db().ref('groups/' + id + '/read');
+      var groupHandler = function(snap) {
+        var reads = snap.val() || {};
+        var minTs = Infinity;
+        var count = 0;
+        Object.keys(reads).forEach(function(uid) {
+          if (uid === currentUid) return;
+          var t = (typeof reads[uid] === 'number') ? reads[uid] : 0;
+          if (t < minTs) minTs = t;
+          count++;
+        });
+        state.peerReadTs = (count > 0 && minTs !== Infinity) ? minTs : 0;
+        renderMessages(state.msgs, kind, cid, state.peerReadTs);
+      };
+      groupReadRef.on('value', groupHandler);
+      chatListeners.push(function() { groupReadRef.off('value', groupHandler); });
+    }
   }
 
-  function renderMessages(msgs, kind, cid) {
+  // ★ renderMessages 加 peerReadTs 參數
+  function renderMessages(msgs, kind, cid, peerReadTs) {
     removeAllRows();
     var sorted = Object.keys(msgs).map(function(id) { return [id, msgs[id]]; });
     sorted.sort(function(a, b) { return (a[1].ts || 0) - (b[1].ts || 0); });
@@ -2208,7 +2238,8 @@ body.admin-view .chat-input-wrap{display:none!important}
       if (isMe) {
         var readEl = document.createElement('div');
         readEl.className = 'msg-read';
-        readEl.textContent = msg.read ? '已讀' : '';
+        var tsVal = (typeof msg.ts === 'number') ? msg.ts : 0;
+        readEl.textContent = (peerReadTs && tsVal && tsVal <= peerReadTs) ? '已讀' : '';
         readEl.addEventListener('click', function(e) {
           e.stopPropagation();
           showReaders(msgId, kind, cid);
@@ -2223,14 +2254,8 @@ body.admin-view .chat-input-wrap{display:none!important}
   }
 
   function showReaders(msgId, kind, cid) {
-    var path = (kind === 'friend')
-      ? 'private_chats/' + cid + '/msgs/' + msgId
-      : 'groups/' + cid + '/msgs/' + msgId;
-    db().ref(path).once('value').then(function(snap) {
-      var msg = snap.val();
-      if (!msg) return;
-      alert('已讀狀態功能需進一步擴充。');
-    });
+    // 簡易提示，可擴充為列出讀者
+    alert('已讀狀態會即時顯示在訊息下方。');
   }
 
   // ★ 收回：真刪除 + 退額度
@@ -2261,9 +2286,7 @@ body.admin-view .chat-input-wrap{display:none!important}
       myAvatarEls[i].src = currentAvatar || fallbackAvatar;
     }
   }
-  function updateMessageAvatars() {
-    // 保留空實作（原本即為空）
-  }
+  function updateMessageAvatars() {}
 
   function sendMessage(text, type, extra) {
     if (!activeChat.type) return;
@@ -2278,8 +2301,7 @@ body.admin-view .chat-input-wrap{display:none!important}
       username: currentUsername,
       ts: window.firebase.database.ServerValue.TIMESTAMP,
       type: type || 'text',
-      text: text || '',
-      read: false
+      text: text || ''
     };
     if (extra) { for (var k in extra) { if (extra.hasOwnProperty(k)) msgData[k] = extra[k]; } }
     if (replyToMsg) {
@@ -2467,7 +2489,7 @@ body.admin-view .chat-input-wrap{display:none!important}
     var state = { msgs: {} };
     var messagesRef = db().ref(path);
     var stop = listenRecentMessages(messagesRef, state, function () {
-      renderMessages(state.msgs, kind, cid);
+      renderMessages(state.msgs, kind, cid, 0);
     });
     chatListeners.push(stop);
     ADMIN_VIEW.stopFn = function () {
@@ -2500,7 +2522,6 @@ body.admin-view .chat-input-wrap{display:none!important}
     var dbRef = db();
     var totalDeleted = 0;
     var tasks = [];
-
     tasks.push(dbRef.ref('private_chats').once('value').then(function (snap) {
       var chats = snap.val() || {};
       var cids = Object.keys(chats);
@@ -2521,7 +2542,6 @@ body.admin-view .chat-input-wrap{display:none!important}
       });
       return chain;
     }).catch(function (e) { console.warn('private_chats 讀取失敗', e); }));
-
     tasks.push(dbRef.ref('groups').once('value').then(function (snap) {
       var groups = snap.val() || {};
       var gids = Object.keys(groups);
@@ -2542,7 +2562,6 @@ body.admin-view .chat-input-wrap{display:none!important}
       });
       return chain;
     }).catch(function (e) { console.warn('groups 讀取失敗', e); }));
-
     return Promise.all(tasks).then(function () { return totalDeleted; });
   }
 
@@ -2551,14 +2570,12 @@ body.admin-view .chat-input-wrap{display:none!important}
     var totalDeleted = 0;
     var tasks = [];
     var paths = [];
-
     tasks.push(dbRef.ref('private_chats').once('value').then(function (snap) {
       Object.keys(snap.val() || {}).forEach(function (cid) { paths.push('private_chats/' + cid + '/msgs'); });
     }).catch(function (e) {}));
     tasks.push(dbRef.ref('groups').once('value').then(function (snap) {
       Object.keys(snap.val() || {}).forEach(function (gid) { paths.push('groups/' + gid + '/msgs'); });
     }).catch(function (e) {}));
-
     return Promise.all(tasks).then(function () {
       var chain = Promise.resolve();
       paths.forEach(function (p) {
@@ -2593,7 +2610,6 @@ body.admin-view .chat-input-wrap{display:none!important}
       }).finally(function () { adminPurgeAllBtn.disabled = false; });
     });
   }
-
   if (adminPurgeRecalledBtn) {
     adminPurgeRecalledBtn.addEventListener('click', function () {
       if (!isAdmin) return;
