@@ -339,7 +339,7 @@ body.admin-view .chat-input-wrap{display:none!important}
         <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px;">
           <button id="admin-purge-all" class="profile-button danger" type="button">刪除所有聊天訊息（全部清空）</button>
           <button id="admin-purge-recalled" class="profile-button secondary" type="button">清除「已收回」殘留訊息</button>
-          <button id="admin-purge-reads" class="profile-button danger" type="button">刪除所有已讀紀錄（重置已讀狀態）</button>
+          <button id="admin-purge-read-msgs" class="profile-button danger" type="button">刪除所有「已讀」的訊息</button>
         </div>
         <p id="admin-cleanup-status" class="profile-status" role="status"></p>
       </section>
@@ -504,7 +504,7 @@ body.admin-view .chat-input-wrap{display:none!important}
 
 <script src="menu.js"></script>
 <script>
-  (function(){
+(function(){
   var ready = window.raingodFirebaseReady || Promise.resolve();
   var authReady = window.raingodAuthReady || Promise.resolve(null);
 
@@ -571,9 +571,7 @@ body.admin-view .chat-input-wrap{display:none!important}
   var adminCleanupCard = document.getElementById('admin-cleanup-card');
   var adminPurgeAllBtn = document.getElementById('admin-purge-all');
   var adminPurgeRecalledBtn = document.getElementById('admin-purge-recalled');
-  var adminPurgeRecalledBtn = document.getElementById('admin-purge-recalled');
-  // ★ 新增這行
-  var adminPurgeReadsBtn = document.getElementById('admin-purge-reads');
+  var adminPurgeReadMsgsBtn = document.getElementById('admin-purge-read-msgs');
   var tabBtnAdmin = document.getElementById('tab-btn-admin');
   var adminDmList = document.getElementById('admin-dm-list');
   var adminGroupList = document.getElementById('admin-group-list');
@@ -1282,7 +1280,7 @@ body.admin-view .chat-input-wrap{display:none!important}
     renderThreadList();
     updateUnreadBadges();
   }
-      function renderThreadList(){
+  function renderThreadList(){
     var items = [];
     var orderIdx = 0;
     Object.keys(friendsCache).forEach(function(uid){
@@ -1402,7 +1400,6 @@ body.admin-view .chat-input-wrap{display:none!important}
     });
   }
 
-  // ★ 訊息永久保留：cutoff=0
   function listenAllUnread(){
     for(var i=0;i<friendUnreadListeners.length;i++) friendUnreadListeners[i]();
     friendUnreadListeners=[]; unreadCache={};
@@ -1895,7 +1892,6 @@ body.admin-view .chat-input-wrap{display:none!important}
     var rows=chatBox.querySelectorAll('.msg-line');
     for(var i=0;i<rows.length;i++) rows[i].remove();
   }
-  // ★ 訊息永久保留：cutoff=0
   function listenRecentMessages(messagesRef,state,render){
     var PAGE_SIZE=30;
     var cutoff=0;
@@ -2127,24 +2123,18 @@ body.admin-view .chat-input-wrap{display:none!important}
     var messagesRef = db().ref(path);
     var cid = (kind === 'friend') ? chatIdFor(currentUid, id) : id;
     
-    // 取得寫入已讀的路徑
     var myReadPath = (kind === 'friend')
       ? 'private_chats/' + chatIdFor(currentUid, id) + '/read/' + currentUid
       : 'groups/' + id + '/read/' + currentUid;
 
-    // ★ 修改這裡：在 render 的同時，只要聊天室開著，就持續更新自己的已讀時間
     var stop = listenRecentMessages(messagesRef, state, function() {
       renderMessages(state.msgs, kind, cid, state.peerReadTs);
-      
-      // 每次收到新訊息就更新已讀時間
       db().ref(myReadPath).set(window.firebase.database.ServerValue.TIMESTAMP).catch(function(){});
     });
     chatListeners.push(stop);
 
-    // 進入聊天室時，先標記一次已讀
     db().ref(myReadPath).set(window.firebase.database.ServerValue.TIMESTAMP).catch(function(){});
 
-    // 監聽對方的已讀時間戳
     if (kind === 'friend') {
       var peerReadRef = db().ref('private_chats/' + chatIdFor(currentUid, id) + '/read/' + id);
       var peerHandler = function(snap) {
@@ -2173,7 +2163,6 @@ body.admin-view .chat-input-wrap{display:none!important}
     }
   }
 
-  // ★ renderMessages 加 peerReadTs 參數
   function renderMessages(msgs, kind, cid, peerReadTs) {
     removeAllRows();
     var sorted = Object.keys(msgs).map(function(id) { return [id, msgs[id]]; });
@@ -2265,11 +2254,9 @@ body.admin-view .chat-input-wrap{display:none!important}
   }
 
   function showReaders(msgId, kind, cid) {
-    // 簡易提示，可擴充為列出讀者
     alert('已讀狀態會即時顯示在訊息下方。');
   }
 
-  // ★ 收回：真刪除 + 退額度
   function doRecall(kind, cid, msgId, msgData, isMe) {
     if (!confirm(isMe ? '確定要收回這則訊息嗎？' : '確定要刪除這則訊息嗎？')) return;
     var path = (kind === 'friend')
@@ -2371,7 +2358,6 @@ body.admin-view .chat-input-wrap{display:none!important}
     });
   });
 
-  // ===== 管理員檢視（唯讀） =====
   function loadAdminOverview() {
     if (!isAdmin) return;
     adminLoading.hidden = false;
@@ -2520,7 +2506,6 @@ body.admin-view .chat-input-wrap{display:none!important}
     });
   }
 
-  // ===== 管理員清理工具 =====
   function setAdminStatus(msg, type) {
     var el = document.getElementById('admin-cleanup-status');
     if (!el) return;
@@ -2606,44 +2591,92 @@ body.admin-view .chat-input-wrap{display:none!important}
       return chain;
     }).then(function () { return totalDeleted; });
   }
-    function purgeAllReads() {
+
+  // ★ 刪除所有「已讀」的訊息
+  function purgeReadMessages() {
     var dbRef = db();
     var totalDeleted = 0;
     var tasks = [];
 
-    // 清私訊的已讀
+    // 處理私訊
     tasks.push(dbRef.ref('private_chats').once('value').then(function (snap) {
       var chats = snap.val() || {};
       var cids = Object.keys(chats);
       var chain = Promise.resolve();
+      
       cids.forEach(function (cid) {
         chain = chain.then(function () {
-          return dbRef.ref('private_chats/' + cid + '/read').once('value')
-            .then(function (readSnap) {
-              if (readSnap.exists()) {
-                totalDeleted += Object.keys(readSnap.val()).length;
-                return dbRef.ref('private_chats/' + cid + '/read').remove();
+          var parts = cid.split('__');
+          var uidA = parts[0], uidB = parts[1];
+          
+          return Promise.all([
+            dbRef.ref('private_chats/' + cid + '/msgs').once('value'),
+            dbRef.ref('private_chats/' + cid + '/read').once('value')
+          ]).then(function (results) {
+            var msgs = results[0].val() || {};
+            var reads = results[1].val() || {};
+            
+            var updates = {};
+            Object.keys(msgs).forEach(function (msgId) {
+              var msg = msgs[msgId];
+              var receiverUid = (msg.from === uidA) ? uidB : uidA;
+              var peerReadTs = reads[receiverUid] || 0;
+              
+              if (msg.ts && peerReadTs && msg.ts <= peerReadTs) {
+                updates[msgId] = null;
               }
-            }).catch(function (e) { console.warn('私訊已讀清理失敗', cid, e); });
+            });
+            
+            var n = Object.keys(updates).length;
+            if (n > 0) {
+              totalDeleted += n;
+              return dbRef.ref('private_chats/' + cid + '/msgs').update(updates);
+            }
+          }).catch(function (e) { console.warn('私訊已讀清除失敗', cid, e); });
         });
       });
       return chain;
     }).catch(function (e) { console.warn('private_chats 讀取失敗', e); }));
 
-    // 清群組的已讀
+    // 處理群組
     tasks.push(dbRef.ref('groups').once('value').then(function (snap) {
       var groups = snap.val() || {};
       var gids = Object.keys(groups);
       var chain = Promise.resolve();
+      
       gids.forEach(function (gid) {
         chain = chain.then(function () {
-          return dbRef.ref('groups/' + gid + '/read').once('value')
-            .then(function (readSnap) {
-              if (readSnap.exists()) {
-                totalDeleted += Object.keys(readSnap.val()).length;
-                return dbRef.ref('groups/' + gid + '/read').remove();
+          return Promise.all([
+            dbRef.ref('groups/' + gid + '/msgs').once('value'),
+            dbRef.ref('groups/' + gid + '/read').once('value')
+          ]).then(function (results) {
+            var msgs = results[0].val() || {};
+            var reads = results[1].val() || {};
+            
+            var minTs = Infinity;
+            var hasOther = false;
+            Object.keys(reads).forEach(function(uid) {
+              var t = (typeof reads[uid] === 'number') ? reads[uid] : 0;
+              if (t < minTs) minTs = t;
+              hasOther = true;
+            });
+            
+            if (!hasOther || minTs === Infinity) return;
+            
+            var updates = {};
+            Object.keys(msgs).forEach(function (msgId) {
+              var msg = msgs[msgId];
+              if (msg.ts && minTs && msg.ts <= minTs) {
+                updates[msgId] = null;
               }
-            }).catch(function (e) { console.warn('群組已讀清理失敗', gid, e); });
+            });
+            
+            var n = Object.keys(updates).length;
+            if (n > 0) {
+              totalDeleted += n;
+              return dbRef.ref('groups/' + gid + '/msgs').update(updates);
+            }
+          }).catch(function (e) { console.warn('群組已讀清除失敗', gid, e); });
         });
       });
       return chain;
@@ -2651,6 +2684,7 @@ body.admin-view .chat-input-wrap{display:none!important}
 
     return Promise.all(tasks).then(function () { return totalDeleted; });
   }
+
   if (adminPurgeAllBtn) {
     adminPurgeAllBtn.addEventListener('click', function () {
       if (!isAdmin) return;
@@ -2678,27 +2712,29 @@ body.admin-view .chat-input-wrap{display:none!important}
       }).finally(function () { adminPurgeRecalledBtn.disabled = false; });
     });
   }
-    if (adminPurgeReadsBtn) {
-    adminPurgeReadsBtn.addEventListener('click', function () {
+  if (adminPurgeReadMsgsBtn) {
+    adminPurgeReadMsgsBtn.addEventListener('click', function () {
       if (!isAdmin) return;
-      if (!confirm('⚠️ 確定要清除所有「已讀紀錄」嗎？\n這會讓所有人的聊天室都變成「未讀」狀態，此操作無法復原。')) return;
-      adminPurgeReadsBtn.disabled = true;
-      setAdminStatus('正在清除所有已讀紀錄…');
-      purgeAllReads().then(function (n) {
-        setAdminStatus('✅ 已清除 ' + n + ' 筆已讀紀錄。', 'ok');
-        // 如果管理員目前正在看某個聊天室，清除後可以直接重繪（可選）
+      if (!confirm('⚠️ 確定要刪除所有「已被讀取」的訊息嗎？\n這會把雙方都看過的聊天記錄清空，此操作無法復原。')) return;
+      adminPurgeReadMsgsBtn.disabled = true;
+      setAdminStatus('正在刪除已讀訊息…');
+      
+      purgeReadMessages().then(function (n) {
+        setAdminStatus('✅ 已刪除 ' + n + ' 筆已讀訊息。', 'ok');
         if (activeChat.type) {
-          // 重新載入當前聊天室以刷新已讀狀態
           setTimeout(function() {
             if (activeChat.type === 'friend') openPrivateChat(activeChat.id, chatTitle.textContent, friendAvatarOf(activeChat.id));
             else if (activeChat.type === 'group') openGroupChat(activeChat.id);
           }, 500);
         }
       }).catch(function (e) {
-        setAdminStatus('清除失敗：' + errorMessage(e), 'error');
-      }).finally(function () { adminPurgeReadsBtn.disabled = false; });
+        setAdminStatus('刪除失敗：' + errorMessage(e), 'error');
+      }).finally(function () { 
+        adminPurgeReadMsgsBtn.disabled = false; 
+      });
     });
   }
+
   // ===== 載入初始化 =====
   ready.then(function() {
     authReady.then(function(user) {
