@@ -250,6 +250,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
 .crop-mask::after{content:'';position:absolute;left:50%;top:50%;width:82%;height:82%;transform:translate(-50%,-50%);border:2px dashed rgba(255,255,255,.9);border-radius:50%}
 .crop-actions{display:flex;gap:10px;justify-content:flex-end}
 #admin-cleanup-card{border-color:#ffc9c9;background:#fffafa}
+.admin-scroll-list{max-height:460px;overflow-y:auto;padding-right:6px;overscroll-behavior:contain}
 .admin-readonly-bar{padding:8px 14px;font-size:12px;background:#fff3cd;color:#8a6d00;
   border-bottom:1px solid #f0e0b0;text-align:center}
 body.admin-view .chat-input-wrap{display:none!important}
@@ -472,6 +473,11 @@ body.admin-view .chat-input-wrap{display:none!important}
         <div>載入所有對話中…</div>
       </div>
       <section class="card">
+        <h2>所有已建立個人檔案的用戶</h2>
+        <p class="profile-help">顯示 users 資料庫中已建立資料的帳號（不等同 Firebase Authentication 全部帳號）。</p>
+        <ul id="admin-users-list" class="friend-list admin-scroll-list"><li class="profile-help">按「重新整理」載入。</li></ul>
+      </section>
+      <section class="card">
         <h2>所有私訊對話</h2>
         <ul id="admin-dm-list" class="friend-list">
           <li class="profile-help">按「重新整理」載入。</li>
@@ -575,6 +581,7 @@ body.admin-view .chat-input-wrap{display:none!important}
   var tabBtnAdmin = document.getElementById('tab-btn-admin');
   var adminDmList = document.getElementById('admin-dm-list');
   var adminGroupList = document.getElementById('admin-group-list');
+  var adminUsersList = document.getElementById('admin-users-list');
   var adminLoading = document.getElementById('admin-loading');
   var adminRefreshBtn = document.getElementById('admin-refresh-btn');
 
@@ -1377,7 +1384,7 @@ body.admin-view .chat-input-wrap{display:none!important}
     stopThreadAliasWatchers();
     Object.keys(friendsCache).forEach(function(uid){
       var cid = chatIdFor(currentUid, uid);
-      var ref = db().ref('private_chats/'+cid+'/aliases/'+currentUid);
+      var ref = db().ref('private_chats/'+cid+'/aliases');
       var handler = (function(u){
         return function(snap){
           threadAliasCache['f:'+u] = snap.val() || {};
@@ -1388,7 +1395,7 @@ body.admin-view .chat-input-wrap{display:none!important}
       threadAliasRefs['f:'+uid] = { ref: ref, handler: handler };
     });
     Object.keys(groupsCache).forEach(function(gid){
-      var ref = db().ref('groups/'+gid+'/aliases/'+currentUid);
+      var ref = db().ref('groups/'+gid+'/aliases');
       var handler = (function(g){
         return function(snap){
           threadAliasCache['g:'+g] = snap.val() || {};
@@ -1734,11 +1741,11 @@ body.admin-view .chat-input-wrap{display:none!important}
       memberUids = [currentUid, gid];
     }
     var aliasRef = isGroup
-      ? db().ref('groups/'+gid+'/aliases/'+currentUid)
-      : db().ref('private_chats/'+cid+'/aliases/'+currentUid);
+      ? db().ref('groups/'+gid+'/aliases')
+      : db().ref('private_chats/'+cid+'/aliases');
     aliasRef.once('value').then(function(snap){
       var myAliases = snap.val() || {};
-      pop.innerHTML = '<div class="ap-title">設定匿名（只有自己看得到）</div>';
+      pop.innerHTML = '<div class="ap-title">設定所有人都會看到的匿名</div>';
       memberUids.forEach(function(uid){
         if(uid === currentUid) return;
         var info = currentMembersMap[uid] || friendsCache[uid] || {};
@@ -1759,7 +1766,7 @@ body.admin-view .chat-input-wrap{display:none!important}
           var updates={};
           if(v==='') updates[uid]=null;
           else updates[uid]=v;
-          aliasRef.update(updates).then(function(){ openAliasPop(evt); }).catch(function(e){alert('設定失敗：'+e.message);});
+          aliasRef.update((function(){var x={};x[uid]=v||null;return x;})()).then(function(){ openAliasPop(evt); }).catch(function(e){alert('設定失敗：'+e.message);});
         };
         row.appendChild(btn);
         pop.appendChild(row);
@@ -2038,6 +2045,7 @@ body.admin-view .chat-input-wrap{display:none!important}
   function openPrivateChat(friendUid, friendName, avatarUrl) {
     exitAdminViewIfActive();
     activeChat = { type: 'friend', id: friendUid };
+    var pf=friendsCache[friendUid]||{};currentMembersMap={};currentMembersMap[currentUid]={name:currentUser.displayName||currentUsername,username:currentUsername,avatar:currentAvatar,avatarLoaded:true};currentMembersMap[friendUid]={name:pf.name||friendName,username:pf.username||'',avatar:pf.avatar||avatarUrl,avatarLoaded:true};
     currentHeaderBase.friendName = friendName;
     chatTitle.textContent = friendName;
     chatSubtitle.textContent = '';
@@ -2054,9 +2062,75 @@ body.admin-view .chat-input-wrap{display:none!important}
     switchToChatMain();
   }
 
+  function loadGroupMemberProfiles(gid){
+    var oldGroup=groupsCache[gid]||{};
+    return db().ref('groups/'+gid).once('value').then(function(groupSnap){
+    var fullGroup=groupSnap.val()||{};fullGroup.role=oldGroup.role||((fullGroup.owner===currentUid)?'owner':'member');groupsCache[gid]=fullGroup;
+    var g=fullGroup;
+    var usernames=g.memberUsernames||{};
+    var uids=Object.keys(g.members||{});
+    currentMembersMap={};
+    var jobs=uids.map(function(uid){
+      var uname=usernames[uid];
+      if(uid===currentUid){currentMembersMap[uid]={name:currentUser.displayName||currentUsername,username:currentUsername,avatar:currentAvatar,avatarLoaded:true};return Promise.resolve();}
+      if(!uname){currentMembersMap[uid]={name:'未知用戶',username:'',avatar:fallbackAvatar,avatarLoaded:true};return Promise.resolve();}
+      return db().ref('users/'+uname).once('value').then(function(s){
+        var v=s.val()||{},profile=v.profile||{};
+        currentMembersMap[uid]={name:profile.displayName||uname,username:uname,avatar:profile.avatar||fallbackAvatar,avatarLoaded:true};
+      }).catch(function(){currentMembersMap[uid]={name:uname,username:uname,avatar:fallbackAvatar,avatarLoaded:true};});
+    });
+    return Promise.all(jobs);
+    });
+  }
+  function openGroupMembers(){
+    if(activeChat.type!=='group')return;
+    var gid=activeChat.id,g=groupsCache[gid]||{};
+    var old=document.getElementById('group-members-pop');if(old)old.remove();
+    var pop=document.createElement('div');pop.id='group-members-pop';pop.className='alias-pop';
+    pop.style.left='50%';pop.style.top='50%';pop.style.transform='translate(-50%,-50%)';pop.style.width='min(420px,92vw)';pop.style.maxHeight='75vh';pop.style.overflowY='auto';
+    pop.innerHTML='<div class="ap-title">群組成員（'+Object.keys(g.members||{}).length+' 人）</div><div class="loading-block">載入成員資料…</div>';
+    document.body.appendChild(pop);
+    loadGroupMemberProfiles(gid).then(function(){
+      g=groupsCache[gid]||g;
+      if(!pop.isConnected)return;
+      pop.innerHTML='<div class="ap-title">群組成員</div>';
+      Object.keys(g.members||{}).forEach(function(uid){
+        var m=currentMembersMap[uid]||{},row=document.createElement('div');row.className='ap-item';
+        row.innerHTML=avatarHtml(true,m.avatar,'','width:32px;height:32px;border-radius:50%;object-fit:cover;')+'<div class="ap-name">'+escapeHtml(m.name||m.username||uid)+(uid===g.owner?'（建立者）':'')+'</div>';
+        if(g.owner===currentUid&&uid!==currentUid){var kick=document.createElement('button');kick.className='mini-btn danger';kick.textContent='移除';kick.onclick=function(){if(!confirm('確定將 '+(m.name||m.username||uid)+' 移出群組？'))return;removeGroupMember(gid,uid,m.username);};row.appendChild(kick);}
+        pop.appendChild(row);
+      });
+      if(g.owner===currentUid){var add=document.createElement('button');add.className='mini-btn primary';add.style.width='100%';add.textContent='＋ 新增好友';add.onclick=function(){addGroupMember(gid);};pop.appendChild(add);}
+      var close=document.createElement('button');close.className='mini-btn ap-close';close.textContent='關閉';close.onclick=function(){pop.remove();};pop.appendChild(close);
+    }).catch(function(e){pop.innerHTML='<div>載入失敗：'+escapeHtml(errorMessage(e))+'</div>';});
+  }
+  function removeGroupMember(gid,uid,username){
+    var g=groupsCache[gid]||{};if(g.owner!==currentUid||uid===g.owner)return;
+    var updates={};updates['groups/'+gid+'/members/'+uid]=null;updates['groups/'+gid+'/memberUsernames/'+uid]=null;
+    updates['users/'+(username||'')+'/groups/'+gid]=null;
+    var count=Math.max(1,Object.keys(g.members||{}).length-1);updates['groups/'+gid+'/memberCount']=count;
+    Object.keys(g.memberUsernames||{}).forEach(function(u){var n=g.memberUsernames[u];if(n)updates['users/'+n+'/groups/'+gid+'/memberCount']=count;});
+    db().ref().update(updates).then(function(){alert('已移除群組成員。');openGroupMembers();}).catch(function(e){alert('移除失敗：'+errorMessage(e));});
+  }
+  function addGroupMember(gid){
+    var g=groupsCache[gid]||{};if(g.owner!==currentUid)return;
+    var candidates=Object.keys(friendsCache).filter(function(uid){return !(g.members||{})[uid];});
+    if(!candidates.length){alert('沒有可新增的好友，請先到好友頁新增好友。');return;}
+    var options=candidates.map(function(uid,i){var f=friendsCache[uid]||{};return (i+1)+'. '+(f.name||f.username||uid);}).join('\n');
+    var answer=prompt('輸入要新增的好友編號：\n'+options);if(answer===null)return;
+    var index=Number(answer)-1;if(!Number.isInteger(index)||index<0||index>=candidates.length){alert('編號無效。');return;}
+    var uid=candidates[index],f=friendsCache[uid]||{},uname=f.username||'';if(!uname){alert('找不到此好友的帳號名稱。');return;}
+    var count=Object.keys(g.members||{}).length+1,updates={};updates['groups/'+gid+'/members/'+uid]=true;updates['groups/'+gid+'/memberUsernames/'+uid]=uname;updates['groups/'+gid+'/memberCount']=count;
+    updates['users/'+uname+'/groups/'+gid]={name:g.name||'群組',avatar:g.avatar||'',role:'member',memberCount:count};
+    Object.keys(g.memberUsernames||{}).forEach(function(u){var n=g.memberUsernames[u];if(n)updates['users/'+n+'/groups/'+gid+'/memberCount']=count;});
+    db().ref().update(updates).then(function(){alert('已新增成員。');}).catch(function(e){alert('新增失敗：'+errorMessage(e));});
+  }
+  if(chatMembersBtn)chatMembersBtn.addEventListener('click',openGroupMembers);
+
   function openGroupChat(gid) {
     exitAdminViewIfActive();
     var g = groupsCache[gid] || {};
+    loadGroupMemberProfiles(gid);
     activeChat = { type: 'group', id: gid };
     currentHeaderBase.groupName = g.name || '群組';
     chatTitle.textContent = g.name || '群組';
@@ -2361,6 +2435,7 @@ body.admin-view .chat-input-wrap{display:none!important}
   function loadAdminOverview() {
     if (!isAdmin) return;
     adminLoading.hidden = false;
+    if(adminUsersList){adminUsersList.innerHTML='<li class="profile-help">正在載入用戶…</li>';db().ref('users').once('value').then(function(snap){var users=snap.val()||{},names=Object.keys(users).sort();adminUsersList.innerHTML='';if(!names.length){adminUsersList.innerHTML='<li class="profile-help">沒有用戶資料。</li>';return;}names.forEach(function(uname){var u=users[uname]||{},pr=u.profile||{},li=document.createElement('li');li.className='friend-item';li.innerHTML=avatarHtml(true,pr.avatar||fallbackAvatar,'friend-avatar','')+'<div class="friend-name"><div>'+escapeHtml(pr.displayName||uname)+'</div><small style="color:var(--text-gray);font-weight:400;">@'+escapeHtml(uname)+'</small></div>';adminUsersList.appendChild(li);});}).catch(function(e){adminUsersList.innerHTML='<li class="profile-help">載入失敗：'+escapeHtml(errorMessage(e))+'</li>';});}
     adminDmList.innerHTML = '';
     adminGroupList.innerHTML = '';
 
