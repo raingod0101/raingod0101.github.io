@@ -254,7 +254,7 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
   border-bottom:1px solid #f0e0b0;text-align:center}
 body.admin-view .chat-input-wrap{display:none!important}
 
-/* 新增的彈出視窗樣式 */
+/* 新增的彈出視窗樣式（已修正滾動問題） */
 #member-pop, #all-users-pop {
   position: fixed; z-index: 150; top: 50%; left: 50%; transform: translate(-50%, -50%);
   background: #fff; border: 1px solid var(--border); border-radius: 12px;
@@ -263,10 +263,12 @@ body.admin-view .chat-input-wrap{display:none!important}
 }
 #member-pop .pop-header, #all-users-pop .pop-header {
   padding: 12px 15px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between;
-  align-items: center; background: #f8f9fa;
+  align-items: center; background: #f8f9fa; flex-shrink: 0;
 }
-#member-pop .pop-body, #all-users-pop .pop-body { padding: 10px 15px; overflow-y: auto; flex: 1; }
-#member-pop .pop-footer { padding: 12px 15px; border-top: 1px solid #eee; background: #fff; }
+#member-pop .pop-body, #all-users-pop .pop-body {
+  padding: 10px 15px; overflow-y: auto; flex: 1;
+}
+#member-pop .pop-footer { padding: 12px 15px; border-top: 1px solid #eee; background: #fff; flex-shrink: 0; }
 
 @media (max-width:640px){
   body.in-chat .tab-bar,
@@ -616,7 +618,6 @@ body.admin-view .chat-input-wrap{display:none!important}
   var adminLoading = document.getElementById('admin-loading');
   var adminRefreshBtn = document.getElementById('admin-refresh-btn');
   
-  // 新加入的 DOM
   var memberPop = document.getElementById('member-pop');
   var memberPopList = document.getElementById('member-pop-list');
   var memberPopClose = document.getElementById('member-pop-close');
@@ -1850,14 +1851,21 @@ body.admin-view .chat-input-wrap{display:none!important}
     }).catch(function(e) { alert('新增失敗：' + e.message); });
   });
 
+  chatAliasBtn.addEventListener('click',function(evt){
+    evt.stopPropagation();
+    if(!activeChat.type) return;
+    openAliasPop(evt);
+  });
+
   function openAliasPop(evt) {
     var old=document.querySelector('.alias-pop'); if(old) old.remove();
     var pop=document.createElement('div');
     pop.className='alias-pop';
     document.body.appendChild(pop);
     var r=evt.target.getBoundingClientRect();
-    pop.style.left=Math.min(r.left,window.innerWidth-300)+'px';
+    pop.style.left=Math.min(r.left, window.innerWidth - 320)+'px';
     pop.style.top=(r.bottom+6)+'px';
+    
     var isGroup = activeChat.type==='group';
     var gid = activeChat.id;
     var cid = isGroup ? gid : chatIdFor(currentUid, gid);
@@ -1907,8 +1915,8 @@ body.admin-view .chat-input-wrap{display:none!important}
           else updates[uid]=v;
           
           var targetRef = isGroup
-            ? db().ref('groups/'+gid+'/aliases/'+currentUid)
-            : db().ref('private_chats/'+cid+'/aliases/'+currentUid);
+            ? db().ref('groups/'+gid+'/aliases/'+uid)
+            : db().ref('private_chats/'+cid+'/aliases/'+uid);
             
           targetRef.update(updates).then(function(){ openAliasPop(evt); }).catch(function(e){alert('設定失敗：'+e.message);});
         };
@@ -1938,28 +1946,40 @@ body.admin-view .chat-input-wrap{display:none!important}
         var users = snap.val() || {};
         allUsersList.innerHTML = '';
         var count = 0;
+        var userList = [];
+        
         Object.keys(users).forEach(function(uname) {
           var u = users[uname];
           if (!u || !u.profile) return;
-          count++;
           var profile = u.profile || {};
-          var displayName = profile.displayName || uname;
-          var avatar = profile.avatar || fallbackAvatar;
-          
+          userList.push({
+            username: uname,
+            displayName: profile.displayName || uname,
+            avatar: profile.avatar || fallbackAvatar
+          });
+        });
+        
+        userList.sort(function(a,b) { return a.displayName.localeCompare(b.displayName); });
+        
+        userList.forEach(function(user) {
+          count++;
           var div = document.createElement('div');
           div.style.display = 'flex';
           div.style.alignItems = 'center';
           div.style.gap = '10px';
-          div.style.padding = '8px 0';
+          div.style.padding = '10px 0';
           div.style.borderBottom = '1px solid #f0f0f0';
-          div.innerHTML = '<img src="' + escapeHtml(avatar) + '" style="width:36px; height:36px; border-radius:50%; object-fit:cover;">' +
+          div.innerHTML = '<img src="' + escapeHtml(user.avatar) + '" style="width:36px; height:36px; border-radius:50%; object-fit:cover;" onerror="this.onerror=null;this.src=\'' + fallbackAvatar + '\'">' +
             '<div style="flex:1;">' +
-              '<div style="font-weight:600; font-size:14px;">' + escapeHtml(displayName) + '</div>' +
-              '<div style="font-size:12px; color:#888;">@' + escapeHtml(uname) + '</div>' +
+              '<div style="font-weight:600; font-size:14px;">' + escapeHtml(user.displayName) + '</div>' +
+              '<div style="font-size:12px; color:#888;">@' + escapeHtml(user.username) + '</div>' +
             '</div>';
           allUsersList.appendChild(div);
         });
-        if (count === 0) allUsersList.innerHTML = '<div style="text-align:center; color:#888; padding:20px;">目前沒有註冊用戶。</div>';
+        
+        if (count === 0) {
+          allUsersList.innerHTML = '<div style="text-align:center; color:#888; padding:20px;">目前沒有註冊用戶。</div>';
+        }
       }).catch(function(e) {
         allUsersList.innerHTML = '<div style="text-align:center; color:red; padding:20px;">讀取失敗：' + e.message + '</div>';
       });
