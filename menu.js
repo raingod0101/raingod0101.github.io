@@ -299,8 +299,18 @@
         if (theme) document.body.classList.add(theme);
     })();
 
-    function setFavicon() {
-        const iconUrl = `${baseUrl}catdragon.png`;
+    // ★ favicon 可依未讀狀態切換：有未讀 catdragonmsg.png，沒未讀 catdragon.png
+    let currentFaviconState = null; // 'msg' | 'normal'
+
+    function setFavicon(hasUnread = false) {
+        const state = hasUnread ? 'msg' : 'normal';
+        if (currentFaviconState === state) return;
+        currentFaviconState = state;
+
+        const iconUrl = hasUnread
+            ? `${baseUrl}catdragonmsg.png`
+            : `${baseUrl}catdragon.png`;
+
         document.querySelectorAll("link[rel*='icon']").forEach(el => el.remove());
         const favicon = document.createElement('link');
         favicon.rel = 'icon';
@@ -308,8 +318,8 @@
         favicon.href = `${iconUrl}?v=${v}`;
         (document.head || document.documentElement).appendChild(favicon);
     }
-    if (document.head) setFavicon();
-    else document.addEventListener('DOMContentLoaded', setFavicon);
+    if (document.head) setFavicon(false);
+    else document.addEventListener('DOMContentLoaded', () => setFavicon(false));
 
     let markFirebaseReady, markAuthReady, markAccountDataReady;
     window.raingodFirebaseReady = new Promise(r => { markFirebaseReady = r; });
@@ -1329,8 +1339,11 @@
             navBadge.style.left = Math.min(window.innerWidth - 26, rect.right - 10) + 'px';
         }
 
+        // ★ 更新 badge 數字，同時依未讀狀態切換 favicon
         function updateNavBadge(count) {
             navTotalCount = count;
+            setFavicon(count > 0);
+
             if (!navBadge) return;
             navBadge.textContent = count > 99 ? '99+' : String(count);
             navBadge.style.display = count > 0 ? 'inline-block' : 'none';
