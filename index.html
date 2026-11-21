@@ -778,7 +778,7 @@
                 <button id="skillWater" type="button">💧 尾巴水砲</button>
                 <button id="skillStorm" type="button">⚡ 雲端雷擊</button>
                 <button id="skillTsunami" type="button">🌊 海嘯攻擊</button>
-                <button id="skillFlame" type="button">🔥 雨神火焰衝擊</button>
+                <!-- 已刪除：雨神火焰衝擊 -->
                 <button id="newButterfly" type="button">🦋 生成蝴蝶</button>
             </div>
             <div>
@@ -1674,24 +1674,103 @@
         78% { opacity: 1; }
         100% { opacity: 0; }
     }
-    .tsunamiWave { position: absolute; z-index: 22; font-size: 90px; left: -130px; top: 0; animation: tsunamiRun 1.05s linear forwards; }
-    @keyframes tsunamiRun {
-        from { transform: translateX(0) scale(1); }
-        to { transform: translateX(var(--wave-distance)) scale(1.5); }
+
+    /* ===== 全新海嘯 ===== */
+    .tsunamiOverlay {
+        position: absolute;
+        inset: 0;
+        z-index: 21;
+        pointer-events: none;
+        overflow: hidden;
     }
-    @keyframes fireRush {
-        0% { transform: scaleX(-1) translateX(0); }
-        50% { transform: scaleX(-1) translateX(-65px) scale(1.08); }
-        100% { transform: scaleX(-1) translateX(0); }
+    .tsunamiWaveNew {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        height: 85%;
+        transform: translateX(-105%);
+        animation: tsunamiSweep 1.8s cubic-bezier(.25, .8, .4, 1) forwards;
+        filter: drop-shadow(0 0 20px #0a4c7a88);
     }
-    #fireGod.rushing { animation: fireRush .55s ease-in-out; }
+    .tsunamiWaveNew svg {
+        width: 100%;
+        height: 100%;
+        display: block;
+    }
+    @keyframes tsunamiSweep {
+        0% { transform: translateX(-105%) scaleY(.9); opacity: .4; }
+        8% { opacity: 1; }
+        60% { transform: translateX(10%) scaleY(1); }
+        100% { transform: translateX(105%) scaleY(.95); opacity: .9; }
+    }
+    .tsunamiFoam {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        width: 200%;
+        height: 30%;
+        background:
+            radial-gradient(ellipse at 20% 100%, #ffffffcc 0 12%, transparent 13%),
+            radial-gradient(ellipse at 40% 100%, #ffffffaa 0 10%, transparent 11%),
+            radial-gradient(ellipse at 60% 100%, #ffffffdd 0 14%, transparent 15%),
+            radial-gradient(ellipse at 80% 100%, #ffffff99 0 9%, transparent 10%),
+            radial-gradient(ellipse at 10% 100%, #ffffffbb 0 11%, transparent 12%),
+            radial-gradient(ellipse at 30% 100%, #ffffffcc 0 13%, transparent 14%),
+            radial-gradient(ellipse at 50% 100%, #ffffffaa 0 10%, transparent 11%),
+            radial-gradient(ellipse at 70% 100%, #ffffffdd 0 12%, transparent 13%),
+            radial-gradient(ellipse at 90% 100%, #ffffffbb 0 9%, transparent 10%);
+        background-size: 200px 100%;
+        animation: foamScroll 1.8s linear forwards;
+        opacity: 0;
+    }
+    @keyframes foamScroll {
+        0% { opacity: 0; transform: translateX(-60%); }
+        20% { opacity: 1; }
+        100% { opacity: 0; transform: translateX(40%); }
+    }
+    .tsunamiSplash {
+        position: absolute;
+        bottom: 10%;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        opacity: 0;
+        animation: splashFade 1.8s ease-out forwards;
+    }
+    @keyframes splashFade {
+        0%, 15% { opacity: 0; }
+        25% { opacity: .8; }
+        100% { opacity: 0; }
+    }
+    .tsunamiSplash .splashDot {
+        position: absolute;
+        border-radius: 50%;
+        background: #e8f6ff;
+        box-shadow: 0 0 12px #b3e4ff;
+    }
+    /* 畫面震動 */
+    @keyframes screenShake {
+        0%, 100% { transform: translate(0, 0); }
+        10% { transform: translate(-6px, 4px); }
+        20% { transform: translate(5px, -5px); }
+        30% { transform: translate(-4px, -3px); }
+        40% { transform: translate(6px, 2px); }
+        50% { transform: translate(-5px, 5px); }
+        60% { transform: translate(4px, -4px); }
+        70% { transform: translate(-3px, 3px); }
+        80% { transform: translate(5px, -2px); }
+        90% { transform: translate(-2px, 1px); }
+    }
+    #game.shake { animation: screenShake .45s ease-in-out; }
+
     @media(max-width:600px) {
         #battleUI { top: 5px; width: 98vw; }
         #battleUI button { padding: 5px 7px; font-size: 10px; }
         #battleUI .hpbox { min-width: 95px; font-size: 11px; }
         #battleMessage { font-size: 10px; }
         #fireGod { width: 160px; height: 120px; right: 2%; bottom: 65px; }
-        .tsunamiWave { font-size: 65px; }
     }
 </style>
 
@@ -1765,7 +1844,7 @@
         let fireSummoned = false;
         let rainRecoverTimer = null;
         let fireAutoTimer = null;
-        let fireRemovalTimer = null;   // 新增：火神死亡後消失計時器
+        let fireRemovalTimer = null;
 
         const message = document.getElementById('battleMessage');
         let messageHideTimer = null;
@@ -1847,7 +1926,6 @@
                 fire.classList.add('lost');
                 say('火神被打敗了！3 秒後消失，可重新召喚。');
                 if (fireAutoTimer) { clearInterval(fireAutoTimer); fireAutoTimer = null; }
-                // 新增：3 秒後自動消失並重置召喚狀態
                 if (fireRemovalTimer) clearTimeout(fireRemovalTimer);
                 fireRemovalTimer = setTimeout(() => {
                     fireSummoned = false;
@@ -1887,21 +1965,151 @@
                 else say(attackName + '命中雨神！-' + amount + ' HP');
             }
         }
-        function emojiProjectile(from, to, emoji, amount, target, name, originTail = false) {
-            if ((target === 'fire' && (!fireSummoned || fireHP <= 0)) || (target === 'rain' && rainHP <= 0)) return;
-            const a = rect(from);
-            const b = rect(to);
+
+        /* ===== 修正後的尾巴水砲：從尾巴尖端發射水柱粒子 ===== */
+        function tailWaterCannon() {
+            if (!fireSummoned || fireHP <= 0) { say('請先召喚還有生命值的火神！'); return; }
+            const petRect = rect(pet);
+            const fireRect = rect(fire);
             const sr = rect(stage);
-            const p = document.createElement('div');
-            p.className = 'battleProjectile';
-            p.textContent = emoji;
-            p.style.left = ((originTail ? a.left + a.width * .12 : a.left + a.width * .55) - sr.left) + 'px';
-            p.style.top = (a.top + a.height * .48 - sr.top) + 'px';
-            p.style.setProperty('--dx', (b.left + b.width * .45 - a.left - a.width * .45) + 'px');
-            p.style.setProperty('--dy', (b.top + b.height * .45 - a.top - a.height * .45) + 'px');
-            effects.appendChild(p);
-            setTimeout(() => { p.remove(); damage(target, amount, name + '：'); }, 560);
+
+            // 尾巴尖端位置（寵物 SVG 中尾巴大概在左側偏上，需依 facing 鏡像）
+            const isFlipped = pet.style.transform.includes('scaleX(-1)');
+            const tailLocalX = isFlipped ? 0.78 : 0.22;
+            const tailLocalY = 0.35; // 從頂部算下來的相對位置
+            const startX = petRect.left + petRect.width * tailLocalX - sr.left;
+            const startY = petRect.top + petRect.height * tailLocalY - sr.top;
+
+            // 發射方向：朝向火神
+            const targetX = fireRect.left + fireRect.width * 0.5 - sr.left;
+            const targetY = fireRect.top + fireRect.height * 0.45 - sr.top;
+            const dx = targetX - startX;
+            const dy = targetY - startY;
+            const angle = Math.atan2(dy, dx);
+
+            const beam = document.createElement('div');
+            beam.className = 'waterBeam';
+            beam.style.left = startX + 'px';
+            beam.style.top = startY + 'px';
+            beam.style.setProperty('--beam-angle', angle + 'rad');
+            beam.style.setProperty('--beam-dist', Math.hypot(dx, dy) + 'px');
+            effects.appendChild(beam);
+
+            // 產生大量水滴粒子
+            const dropletCount = 28;
+            for (let i = 0; i < dropletCount; i++) {
+                const drop = document.createElement('div');
+                drop.className = 'waterDroplet';
+                const spread = (Math.random() - 0.5) * 0.35;
+                const dist = Math.hypot(dx, dy) * (0.3 + Math.random() * 0.7);
+                drop.style.left = startX + 'px';
+                drop.style.top = startY + 'px';
+                drop.style.setProperty('--drop-angle', (angle + spread) + 'rad');
+                drop.style.setProperty('--drop-dist', dist + 'px');
+                drop.style.animationDelay = (Math.random() * 0.08) + 's';
+                drop.style.width = (4 + Math.random() * 8) + 'px';
+                drop.style.height = (4 + Math.random() * 8) + 'px';
+                effects.appendChild(drop);
+                setTimeout(() => drop.remove(), 700);
+            }
+
+            setTimeout(() => beam.remove(), 600);
+            say('雨神從尾巴發射強力水砲！');
+            setTimeout(() => damage('fire', 12, '尾巴水砲'), 480);
         }
+
+        /* ===== 全新海嘯：超大波浪衝過去 ===== */
+        function tsunami() {
+            if (!fireSummoned || fireHP <= 0) { say('請先召喚還有生命值的火神！'); return; }
+
+            const overlay = document.createElement('div');
+            overlay.className = 'tsunamiOverlay';
+
+            const wave = document.createElement('div');
+            wave.className = 'tsunamiWaveNew';
+            wave.innerHTML = `
+                <svg viewBox="0 0 800 600" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                        <linearGradient id="waveGrad1" x1="0" y1="0" x2="1" y2="0">
+                            <stop offset="0%" stop-color="#0a3d62"/>
+                            <stop offset="40%" stop-color="#1a6a9e"/>
+                            <stop offset="70%" stop-color="#2d8bc4"/>
+                            <stop offset="100%" stop-color="#4fa8d8"/>
+                        </linearGradient>
+                        <linearGradient id="waveGrad2" x1="0" y1="0" x2="1" y2="0">
+                            <stop offset="0%" stop-color="#0c4a6e"/>
+                            <stop offset="50%" stop-color="#1e6f9f"/>
+                            <stop offset="100%" stop-color="#3a9cc9"/>
+                        </linearGradient>
+                        <linearGradient id="foamGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stop-color="#ffffff" stop-opacity="0.95"/>
+                            <stop offset="100%" stop-color="#d4eefc" stop-opacity="0.6"/>
+                        </linearGradient>
+                    </defs>
+                    <!-- 後層浪 -->
+                    <path d="M0,280 C80,200 150,380 240,300 C330,220 400,360 500,290 C600,220 680,340 800,270 L800,600 L0,600 Z" fill="url(#waveGrad2)" opacity="0.7"/>
+                    <!-- 主浪 -->
+                    <path d="M0,240 C70,140 160,330 260,240 C360,150 440,320 540,240 C640,160 720,300 800,230 L800,600 L0,600 Z" fill="url(#waveGrad1)"/>
+                    <!-- 浪頭泡沫 -->
+                    <path d="M0,240 C70,140 160,330 260,240 C360,150 440,320 540,240 C640,160 720,300 800,230 L800,290 C720,360 640,220 540,300 C440,380 360,210 260,300 C160,390 70,200 0,300 Z" fill="url(#foamGrad)" opacity="0.9"/>
+                    <!-- 浪花細節 -->
+                    <path d="M40,200 Q80,160 120,200 Q160,240 200,200" stroke="#ffffff" stroke-width="6" fill="none" opacity="0.6" stroke-linecap="round"/>
+                    <path d="M340,180 Q380,140 420,180 Q460,220 500,180" stroke="#ffffff" stroke-width="5" fill="none" opacity="0.5" stroke-linecap="round"/>
+                    <path d="M620,170 Q660,130 700,170 Q740,210 780,170" stroke="#ffffff" stroke-width="4" fill="none" opacity="0.4" stroke-linecap="round"/>
+                </svg>
+            `;
+
+            const foam = document.createElement('div');
+            foam.className = 'tsunamiFoam';
+
+            overlay.appendChild(wave);
+            overlay.appendChild(foam);
+            stage.appendChild(overlay);
+
+            // 畫面震動
+            stage.classList.remove('shake');
+            void stage.offsetWidth;
+            stage.classList.add('shake');
+            setTimeout(() => stage.classList.remove('shake'), 500);
+
+            // 水花
+            const splash = document.createElement('div');
+            splash.className = 'tsunamiSplash';
+            for (let i = 0; i < 20; i++) {
+                const dot = document.createElement('div');
+                dot.className = 'splashDot';
+                dot.style.left = (10 + Math.random() * 80) + '%';
+                dot.style.bottom = (5 + Math.random() * 30) + '%';
+                dot.style.width = (6 + Math.random() * 18) + 'px';
+                dot.style.height = (6 + Math.random() * 18) + 'px';
+                dot.style.animation = `splashRise${i % 2} ${0.8 + Math.random() * 0.6}s ease-out forwards`;
+                dot.style.animationDelay = (Math.random() * 0.3) + 's';
+                splash.appendChild(dot);
+            }
+            overlay.appendChild(splash);
+
+            // 動態注入 splashRise keyframes
+            if (!document.getElementById('splashRiseStyle')) {
+                const style = document.createElement('style');
+                style.id = 'splashRiseStyle';
+                style.textContent = `
+                    @keyframes splashRise0 { 0%{opacity:0;transform:translateY(0) scale(.5);} 30%{opacity:1;} 100%{opacity:0;transform:translateY(-180px) scale(1.4);} }
+                    @keyframes splashRise1 { 0%{opacity:0;transform:translateY(0) scale(.6);} 40%{opacity:1;} 100%{opacity:0;transform:translateY(-240px) scale(1.2);} }
+                `;
+                document.head.appendChild(style);
+            }
+
+            say('超巨大海嘯來襲！🌊🌊🌊');
+
+            setTimeout(() => {
+                damage('fire', 28, '海嘯攻擊');
+            }, 900);
+
+            setTimeout(() => {
+                overlay.remove();
+            }, 2000);
+        }
+
         function summon() {
             if (fireSummoned) { say('火神已經在場上了！'); return; }
             fireSummoned = true;
@@ -1926,6 +2134,23 @@
                 } else emojiProjectile(fire, pet, '👊🔥', 25, 'rain', '火神打雨神', true);
             }, 2600);
         }
+
+        function emojiProjectile(from, to, emoji, amount, target, name, originTail = false) {
+            if ((target === 'fire' && (!fireSummoned || fireHP <= 0)) || (target === 'rain' && rainHP <= 0)) return;
+            const a = rect(from);
+            const b = rect(to);
+            const sr = rect(stage);
+            const p = document.createElement('div');
+            p.className = 'battleProjectile';
+            p.textContent = emoji;
+            p.style.left = ((originTail ? a.left + a.width * .12 : a.left + a.width * .55) - sr.left) + 'px';
+            p.style.top = (a.top + a.height * .48 - sr.top) + 'px';
+            p.style.setProperty('--dx', (b.left + b.width * .45 - a.left - a.width * .45) + 'px');
+            p.style.setProperty('--dy', (b.top + b.height * .45 - a.top - a.height * .45) + 'px');
+            effects.appendChild(p);
+            setTimeout(() => { p.remove(); damage(target, amount, name + '：'); }, 560);
+        }
+
         function cloudLightning() {
             if (flying()) { say('雨神正在騎雲飛行，不能使用雲端雷擊！請先降落。'); return false; }
             if (!fireSummoned || fireHP <= 0) { say('請先召喚還有生命值的火神，再使用雲端雷擊！'); return false; }
@@ -1961,20 +2186,7 @@
             }, 760);
             return true;
         }
-        function tsunami() {
-            if (!fireSummoned) summon();
-            if (!fireSummoned || fireHP <= 0) return;
-            const sr = rect(stage);
-            const tr = rect(fire);
-            const wave = document.createElement('div');
-            wave.className = 'tsunamiWave';
-            wave.textContent = '🌊';
-            wave.style.top = Math.max(100, tr.top - sr.top + tr.height * .25) + 'px';
-            wave.style.setProperty('--wave-distance', (tr.left - sr.left + tr.width * .5 + 150) + 'px');
-            effects.appendChild(wave);
-            say('巨大海嘯！');
-            setTimeout(() => { wave.remove(); damage('fire', 28, '海嘯攻擊'); }, 1050);
-        }
+
         function resetFire() {
             fireSummoned = false;
             fire.style.display = 'none';
@@ -2015,25 +2227,28 @@
                 update();
             });
         }
-        withCooldown('skillWater', 2.5, () => {
+
+        // 尾巴水砲（已修改為從尾巴發射，並使用水柱粒子）
+        withCooldown('skillWater', 2.5, tailWaterCannon, () => {
             if (!fireSummoned || fireHP <= 0) { say('請先召喚還有生命值的火神！'); return false; }
-            emojiProjectile(pet, fire, '💧', 12, 'fire', '尾巴水砲', true);
-            say('雨神發射水砲！');
+            return true;
         });
+
+        // 雲端雷擊
         withCooldown('skillStorm', 6, cloudLightning, () => {
             if (flying()) { say('雨神正在騎雲飛行，不能使用雲端雷擊！請先降落。'); return false; }
             if (!fireSummoned || fireHP <= 0) { say('請先召喚還有生命值的火神！'); return false; }
             return true;
         });
-        withCooldown('skillTsunami', 8, () => {
+
+        // 海嘯攻擊（已改為全新大海嘯）
+        withCooldown('skillTsunami', 8, tsunami, () => {
             if (!fireSummoned || fireHP <= 0) { say('請先召喚還有生命值的火神！'); return false; }
-            tsunami();
+            return true;
         });
-        withCooldown('skillFlame', 4, () => {
-            if (!fireSummoned || fireHP <= 0) { say('請先召喚還有生命值的火神！'); return false; }
-            emojiProjectile(pet, fire, '🔥', 15, 'fire', '雨神火焰衝擊', true);
-            say('雨神發動火焰衝擊！');
-        });
+
+        // 已刪除雨神火焰衝擊的 withCooldown
+
         setInterval(() => { if (butterflies.length < 5) spawnButterfly(); }, 6500);
         spawnButterfly();
         spawnButterfly();
@@ -2041,6 +2256,48 @@
         requestAnimationFrame(tickButterflies);
     });
 </script>
+
+<style>
+    /* 尾巴水砲的水柱粒子樣式 */
+    .waterBeam {
+        position: absolute;
+        width: var(--beam-dist, 300px);
+        height: 14px;
+        border-radius: 8px;
+        background: linear-gradient(90deg, #a3e4ff, #4fc3f7, #0288d1, #01579b);
+        box-shadow: 0 0 18px 4px #4fc3f7aa, 0 0 40px 10px #4fc3f755;
+        transform-origin: 0 50%;
+        transform: rotate(var(--beam-angle, 0rad));
+        animation: beamShoot .5s ease-out forwards;
+        opacity: 0;
+        z-index: 22;
+    }
+    @keyframes beamShoot {
+        0% { opacity: 0; transform: rotate(var(--beam-angle, 0rad)) scaleX(.1); }
+        20% { opacity: 1; }
+        100% { opacity: 0; transform: rotate(var(--beam-angle, 0rad)) scaleX(1); }
+    }
+    .waterDroplet {
+        position: absolute;
+        border-radius: 50%;
+        background: radial-gradient(circle at 35% 30%, #ffffff, #7dd3fc 40%, #0288d1 100%);
+        box-shadow: 0 0 8px 2px #4fc3f7bb;
+        z-index: 21;
+        animation: dropletFly .6s cubic-bezier(.15, .8, .4, 1) forwards;
+        opacity: 0;
+    }
+    @keyframes dropletFly {
+        0% { opacity: 0; transform: translate(0, 0) scale(.4); }
+        15% { opacity: 1; }
+        100% {
+            opacity: 0;
+            transform: translate(
+                calc(cos(var(--drop-angle, 0rad)) * var(--drop-dist, 200px)),
+                calc(sin(var(--drop-angle, 0rad)) * var(--drop-dist, 200px))
+            ) scale(1.2);
+        }
+    }
+</style>
 
 <script id="raingod-intro-splash-script">
     (() => {
@@ -2056,7 +2313,7 @@
         if (!button) return;
 
         const CLASSES = ["hide-links", "hide-skills", "hide-controls"];
-        const STORAGE_KEY = "raingod_hide_stage";   // localStorage 的 key
+        const STORAGE_KEY = "raingod_hide_stage";
 
         const STAGES = [
             { classes: [], label: "隱藏", aria: "隱藏資訊欄" },
@@ -2065,7 +2322,6 @@
             { classes: ["hide-links", "hide-skills", "hide-controls"], label: "顯示", aria: "顯示全部" }
         ];
 
-        // 讀取上次記住的段數（失敗就回 0）
         function readStage() {
             try {
                 const raw = localStorage.getItem(STORAGE_KEY);
@@ -2078,7 +2334,6 @@
             return 0;
         }
 
-        // 寫入目前段數
         function saveStage(n) {
             try {
                 localStorage.setItem(STORAGE_KEY, String(n));
@@ -2095,7 +2350,6 @@
             current.classes.forEach(c => document.body.classList.add(c));
 
             button.textContent = current.label;
-            // 原本用 label === "顯示" 判斷，繁簡不一致會永遠 false，改用段數判斷
             button.setAttribute("aria-pressed", String(stage === STAGES.length - 1));
             button.setAttribute("aria-label", current.aria);
             button.title = current.aria;
@@ -2103,11 +2357,11 @@
 
         button.addEventListener("click", () => {
             stage = (stage + 1) % STAGES.length;
-            saveStage(stage);   // 每次切換就存一次
+            saveStage(stage);
             render();
         });
 
-        render();   // 頁面載入時直接還原上次狀態
+        render();
     })();
 </script>
 </body>
