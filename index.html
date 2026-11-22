@@ -1890,14 +1890,32 @@
             stage.appendChild(b);
             butterflies.push({ el: b, dx: (Math.random() - .5) * 1.1, dy: (Math.random() - .5) * .8 });
         }
+
+        // ===== 修改：吃蝴蝶可以回 10 滴血 =====
         function bite(monster, label) {
             if (monster.classList.contains('lost')) return;
             monster.classList.remove('eating');
             void monster.offsetWidth;
             monster.classList.add('eating');
-            say('咔嚓！' + label + '吃掉蝴蝶！🦋');
+
+            // 只有雨神吃蝴蝶才回血
+            if (monster === pet) {
+                if (rainHP < 100) {
+                    const heal = Math.min(10, 100 - rainHP);
+                    rainHP += heal;
+                    hpUI('rain');
+                    say('咔嚓！' + label + '吃掉蝴蝶！🦋 +' + heal + ' HP');
+                } else {
+                    say('咔嚓！' + label + '吃掉蝴蝶！🦋（血量已滿）');
+                }
+            } else {
+                say('咔嚓！' + label + '吃掉蝴蝶！🦋');
+            }
+
             setTimeout(() => monster.classList.remove('eating'), 450);
         }
+        // =====================================
+
         function tickButterflies() {
             updateOverheadHP();
             const pr = rect(pet);
@@ -1973,14 +1991,12 @@
             const fireRect = rect(fire);
             const sr = rect(stage);
 
-            // 尾巴尖端位置（寵物 SVG 中尾巴大概在左側偏上，需依 facing 鏡像）
             const isFlipped = pet.style.transform.includes('scaleX(-1)');
             const tailLocalX = isFlipped ? 0.78 : 0.22;
-            const tailLocalY = 0.35; // 從頂部算下來的相對位置
+            const tailLocalY = 0.35;
             const startX = petRect.left + petRect.width * tailLocalX - sr.left;
             const startY = petRect.top + petRect.height * tailLocalY - sr.top;
 
-            // 發射方向：朝向火神
             const targetX = fireRect.left + fireRect.width * 0.5 - sr.left;
             const targetY = fireRect.top + fireRect.height * 0.45 - sr.top;
             const dx = targetX - startX;
@@ -1995,7 +2011,6 @@
             beam.style.setProperty('--beam-dist', Math.hypot(dx, dy) + 'px');
             effects.appendChild(beam);
 
-            // 產生大量水滴粒子
             const dropletCount = 28;
             for (let i = 0; i < dropletCount; i++) {
                 const drop = document.createElement('div');
@@ -2046,13 +2061,9 @@
                             <stop offset="100%" stop-color="#d4eefc" stop-opacity="0.6"/>
                         </linearGradient>
                     </defs>
-                    <!-- 後層浪 -->
                     <path d="M0,280 C80,200 150,380 240,300 C330,220 400,360 500,290 C600,220 680,340 800,270 L800,600 L0,600 Z" fill="url(#waveGrad2)" opacity="0.7"/>
-                    <!-- 主浪 -->
                     <path d="M0,240 C70,140 160,330 260,240 C360,150 440,320 540,240 C640,160 720,300 800,230 L800,600 L0,600 Z" fill="url(#waveGrad1)"/>
-                    <!-- 浪頭泡沫 -->
                     <path d="M0,240 C70,140 160,330 260,240 C360,150 440,320 540,240 C640,160 720,300 800,230 L800,290 C720,360 640,220 540,300 C440,380 360,210 260,300 C160,390 70,200 0,300 Z" fill="url(#foamGrad)" opacity="0.9"/>
-                    <!-- 浪花細節 -->
                     <path d="M40,200 Q80,160 120,200 Q160,240 200,200" stroke="#ffffff" stroke-width="6" fill="none" opacity="0.6" stroke-linecap="round"/>
                     <path d="M340,180 Q380,140 420,180 Q460,220 500,180" stroke="#ffffff" stroke-width="5" fill="none" opacity="0.5" stroke-linecap="round"/>
                     <path d="M620,170 Q660,130 700,170 Q740,210 780,170" stroke="#ffffff" stroke-width="4" fill="none" opacity="0.4" stroke-linecap="round"/>
@@ -2066,13 +2077,11 @@
             overlay.appendChild(foam);
             stage.appendChild(overlay);
 
-            // 畫面震動
             stage.classList.remove('shake');
             void stage.offsetWidth;
             stage.classList.add('shake');
             setTimeout(() => stage.classList.remove('shake'), 500);
 
-            // 水花
             const splash = document.createElement('div');
             splash.className = 'tsunamiSplash';
             for (let i = 0; i < 20; i++) {
@@ -2088,7 +2097,6 @@
             }
             overlay.appendChild(splash);
 
-            // 動態注入 splashRise keyframes
             if (!document.getElementById('splashRiseStyle')) {
                 const style = document.createElement('style');
                 style.id = 'splashRiseStyle';
@@ -2228,26 +2236,21 @@
             });
         }
 
-        // 尾巴水砲（已修改為從尾巴發射，並使用水柱粒子）
         withCooldown('skillWater', 2.5, tailWaterCannon, () => {
             if (!fireSummoned || fireHP <= 0) { say('請先召喚還有生命值的火神！'); return false; }
             return true;
         });
 
-        // 雲端雷擊
         withCooldown('skillStorm', 6, cloudLightning, () => {
             if (flying()) { say('雨神正在騎雲飛行，不能使用雲端雷擊！請先降落。'); return false; }
             if (!fireSummoned || fireHP <= 0) { say('請先召喚還有生命值的火神！'); return false; }
             return true;
         });
 
-        // 海嘯攻擊（已改為全新大海嘯）
         withCooldown('skillTsunami', 8, tsunami, () => {
             if (!fireSummoned || fireHP <= 0) { say('請先召喚還有生命值的火神！'); return false; }
             return true;
         });
-
-        // 已刪除雨神火焰衝擊的 withCooldown
 
         setInterval(() => { if (butterflies.length < 5) spawnButterfly(); }, 6500);
         spawnButterfly();
@@ -2258,7 +2261,6 @@
 </script>
 
 <style>
-    /* 尾巴水砲的水柱粒子樣式 */
     .waterBeam {
         position: absolute;
         width: var(--beam-dist, 300px);
