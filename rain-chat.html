@@ -2391,9 +2391,14 @@ body.admin-view .chat-input-wrap{display:none!important}
   chatSendBtn.addEventListener('click', function() {
     var text = msgInput.value.trim();
     if (!text) return;
-    msgInput.value = '';
-    clearReply();
-    sendMessage(text, 'text').catch(function(e) { alert('傳送失敗：' + errorMessage(e)); });
+    // 先呼叫 sendMessage，讓它把目前的 replyToMsg 一起寫入資料庫；
+    // 只有成功送出後才清除回覆狀態。
+    sendMessage(text, 'text').then(function() {
+      msgInput.value = '';
+      clearReply();
+    }).catch(function(e) {
+      alert('傳送失敗：' + errorMessage(e));
+    });
   });
   msgInput.addEventListener('keydown', function(e) {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -2420,6 +2425,7 @@ body.admin-view .chat-input-wrap{display:none!important}
       }).then(function() {
         setUploadStatus('圖片已送出。', false);
         setTimeout(function() { setUploadStatus(''); }, 2000);
+        clearReply();
         updateQuotaHint();
       }).catch(function(err) {
         setUploadStatus('圖片上傳失敗：' + errorMessage(err), true);
