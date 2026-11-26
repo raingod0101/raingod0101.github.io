@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>聊天室 | 雨神</title>
+<title>聊天室 | Raingod</title>
 <link rel="stylesheet" href="menu.css">
 <style>
 :root{
@@ -185,6 +185,9 @@ body{margin:0;min-height:100vh;background:#f3f5f8;color:#1d1d1f;
 .other .bubble .msg-link{color:#0a66c2}
 .me .bubble .msg-link{color:#d6e8ff}
 .chat-input-wrap{flex-shrink:0;background:#fff}
+.typing-indicator{display:none;padding:5px 14px 2px;font-size:12px;color:#7b8492;background:#fff;min-height:0}
+.typing-indicator.show{display:block}
+.typing-indicator:before{content:"";display:inline-block;width:6px;height:6px;margin-right:7px;border-radius:50%;background:#34c759;vertical-align:middle}
 .reply-preview-bar{display:none;padding:8px 14px;background:#fff8e1;border-top:1px solid #f0e0b0;
   font-size:12px;color:#8a6d00;align-items:center;gap:10px}
 .reply-preview-bar.show{display:flex}
@@ -445,6 +448,7 @@ body.admin-view .chat-input-wrap{display:none!important}
               <div class="chat-empty" id="chat-empty">請選擇一位好友或群組開始聊天。</div>
             </div>
             <div class="chat-input-wrap">
+              <div class="typing-indicator" id="typing-indicator" aria-live="polite"></div>
               <div class="reply-preview-bar" id="reply-preview-bar">
                 <span class="rp-text" id="reply-preview-text"></span>
                 <button class="rp-close" id="reply-preview-close" type="button">✕</button>
@@ -566,6 +570,7 @@ body.admin-view .chat-input-wrap{display:none!important}
   var groupLoading = document.getElementById('group-loading');
   var groupContent = document.getElementById('group-content');
   var replyPreviewBar = document.getElementById('reply-preview-bar');
+  var typingIndicator = document.getElementById('typing-indicator');
   var replyPreviewText = document.getElementById('reply-preview-text');
   var replyPreviewClose = document.getElementById('reply-preview-close');
   var chatListView = document.getElementById('chat-list-view');
@@ -601,6 +606,11 @@ body.admin-view .chat-input-wrap{display:none!important}
   var hasOwnedGroup=false;
   var ownedGroupId='';
   var replyToMsg = null;
+  var typingActive = false;
+  var typingTimer = null;
+  var myTypingRef = null;
+  var typingWatchRef = null;
+  var typingWatchHandler = null;
   var lastMsgRefs = {};
   var currentAliases = {};
   var currentMembersMap = {};
@@ -614,6 +624,9 @@ body.admin-view .chat-input-wrap{display:none!important}
   var loadingPhase = 'init';
   var adminLoadedOnce = false;
   var ADMIN_VIEW = { active:false, kind:'', cid:'', stopFn:null };
+  var activeGroupReadReceipts = {};
+  var activeGroupMembers = {};
+  var activeGroupReceiptCache = {};
 
   function db(){ return window.firebase.database(); }
   function setStatus(id,msg,type){
@@ -897,6 +910,7 @@ body.admin-view .chat-input-wrap{display:none!important}
     }
     loginRequired.hidden=true;
     appArea.hidden=false;
+    document.title = '聊天室 | Raingod';
     avatarImg.src=user.photoURL||fallbackAvatar;
     displayNameInput.value=user.displayName||currentUsername;
 
@@ -1512,6 +1526,7 @@ body.admin-view .chat-input-wrap{display:none!important}
     });
     tabBadgeUnread.textContent=total>99?'99+':String(total);
     tabBadgeUnread.classList.toggle('show',total>0);
+    document.title = total > 0 ? '(' + total + ') 聊天室 | Raingod' : '聊天室 | Raingod';
     updateTabBadges();
   }
   function updateTabBadges(){
@@ -1887,6 +1902,71 @@ body.admin-view .chat-input-wrap{display:none!important}
     setTimeout(function(){ document.addEventListener('click',close); },0);
   }
 
+  // ===== 正在輸入中：每次連續輸入只寫入 true 一次，停止 2 秒才寫入 false =====
+  function typingPathForActiveChat(){
+    if(!activeChat.type) return '';
+    if(activeChat.type==='friend') return 'private_chats/'+chatIdFor(currentUid,activeChat.id)+'/typing';
+    return 'groups/'+activeChat.id+'/typing';
+  }
+  function stopTyping(){
+    if(typingTimer){clearTimeout(typingTimer);typingTimer=null;}
+    if(typingActive && myTypingRef){
+      var oldRef=myTypingRef;
+      typingActive=false;
+      oldRef.remove().catch(function(){});
+      oldRef.onDisconnect().cancel().catch(function(){});
+    }else{
+      typingActive=false;
+    }
+  }
+  function scheduleTypingStop(){
+    if(typingTimer) clearTimeout(typingTimer);
+    typingTimer=setTimeout(function(){stopTyping();},2000);
+  }
+  function handleTypingInput(){
+    if(!activeChat.type || msgInput.disabled) return;
+    if(!msgInput.value.trim()) { stopTyping(); return; }
+    if(!typingActive){
+      var basePath=typingPathForActiveChat();
+      if(!basePath) return;
+      myTypingRef=db().ref(basePath+'/'+currentUid);
+      typingActive=true;
+      myTypingRef.onDisconnect().remove().catch(function(){});
+      myTypingRef.set({name:(currentUser.displayName||currentUsername),username:currentUsername,ts:Date.now()})
+        .catch(function(){typingActive=false;});
+    }
+    scheduleTypingStop();
+  }
+  function watchTypingForActiveChat(){
+    var basePath=typingPathForActiveChat();
+    if(!basePath) return;
+    typingWatchRef=db().ref(basePath);
+    typingWatchHandler=function(snap){
+      var users=snap.val()||{},names=[];
+      Object.keys(users).forEach(function(uid){
+        if(uid===currentUid) return;
+        var item=users[uid]||{};
+        names.push(item.name||item.username||'有人');
+      });
+      if(names.length){
+        var shown=names.slice(0,3).join('、');
+        if(names.length>3) shown+=' 等 '+names.length+' 人';
+        typingIndicator.textContent=shown+' 正在輸入…';
+        typingIndicator.classList.add('show');
+      }else{
+        typingIndicator.textContent='';
+        typingIndicator.classList.remove('show');
+      }
+    };
+    typingWatchRef.on('value',typingWatchHandler);
+    chatListeners.push(function(){
+      if(typingWatchRef && typingWatchHandler) typingWatchRef.off('value',typingWatchHandler);
+      typingWatchRef=null; typingWatchHandler=null;
+      typingIndicator.textContent=''; typingIndicator.classList.remove('show');
+    });
+  }
+  msgInput.addEventListener('input',handleTypingInput);
+
   function clearChatListeners(){
     for(var i=0;i<chatListeners.length;i++) chatListeners[i]();
     chatListeners=[];
@@ -2043,6 +2123,7 @@ body.admin-view .chat-input-wrap{display:none!important}
   }
 
   function openPrivateChat(friendUid, friendName, avatarUrl) {
+    stopTyping();
     exitAdminViewIfActive();
     activeChat = { type: 'friend', id: friendUid };
     var pf=friendsCache[friendUid]||{};currentMembersMap={};currentMembersMap[currentUid]={name:currentUser.displayName||currentUsername,username:currentUsername,avatar:currentAvatar,avatarLoaded:true};currentMembersMap[friendUid]={name:pf.name||friendName,username:pf.username||'',avatar:pf.avatar||avatarUrl,avatarLoaded:true};
@@ -2128,6 +2209,9 @@ body.admin-view .chat-input-wrap{display:none!important}
   if(chatMembersBtn)chatMembersBtn.addEventListener('click',openGroupMembers);
 
   function openGroupChat(gid) {
+    stopTyping();
+    activeGroupMembers = (groupsCache[gid] && groupsCache[gid].members) || {};
+    activeGroupReceiptCache = {};
     exitAdminViewIfActive();
     var g = groupsCache[gid] || {};
     loadGroupMemberProfiles(gid);
@@ -2150,6 +2234,7 @@ body.admin-view .chat-input-wrap{display:none!important}
   }
 
   function closeActiveChat() {
+    stopTyping();
     exitAdminViewIfActive();
     activeChat = { type: '', id: '' };
     chatTitle.textContent = '聊天室';
@@ -2190,7 +2275,9 @@ body.admin-view .chat-input-wrap{display:none!important}
   });
 
   function loadChatMessages(path, kind, id) {
+    stopTyping();
     clearChatListeners();
+    watchTypingForActiveChat();
     removeAllRows();
     chatEmpty.style.display = 'none';
     var state = { msgs: {}, peerReadTs: 0 };
@@ -2202,8 +2289,9 @@ body.admin-view .chat-input-wrap{display:none!important}
       : 'groups/' + id + '/read/' + currentUid;
 
     var stop = listenRecentMessages(messagesRef, state, function() {
-      renderMessages(state.msgs, kind, cid, state.peerReadTs);
+      renderMessages(state.msgs, kind, cid, state.peerReadTs, state.groupReads);
       db().ref(myReadPath).set(window.firebase.database.ServerValue.TIMESTAMP).catch(function(){});
+      if (kind === 'group') markGroupMessagesRead(state.msgs, id, state.groupReads || {});
     });
     chatListeners.push(stop);
 
@@ -2225,19 +2313,50 @@ body.admin-view .chat-input-wrap{display:none!important}
         var count = 0;
         Object.keys(reads).forEach(function(uid) {
           if (uid === currentUid) return;
-          var t = (typeof reads[uid] === 'number') ? reads[uid] : 0;
+          var raw = reads[uid];
+          var t = (typeof raw === 'number') ? raw : ((raw && raw.ts) || 0);
           if (t < minTs) minTs = t;
           count++;
         });
         state.peerReadTs = (count > 0 && minTs !== Infinity) ? minTs : 0;
-        renderMessages(state.msgs, kind, cid, state.peerReadTs);
+        renderMessages(state.msgs, kind, cid, state.peerReadTs, state.groupReads);
       };
       groupReadRef.on('value', groupHandler);
       chatListeners.push(function() { groupReadRef.off('value', groupHandler); });
+
+      var membersRef = db().ref('groups/' + id + '/members');
+      var membersHandler = function(snap) {
+        activeGroupMembers = snap.val() || {};
+        renderMessages(state.msgs, kind, cid, state.peerReadTs, state.groupReads);
+      };
+      membersRef.on('value', membersHandler);
+      chatListeners.push(function() { membersRef.off('value', membersHandler); });
+
+      var receiptsRef = db().ref('groups/' + id + '/messageReads');
+      var receiptsHandler = function(snap) {
+        state.groupReads = snap.val() || {};
+        activeGroupReceiptCache = state.groupReads;
+        renderMessages(state.msgs, kind, cid, state.peerReadTs, state.groupReads);
+        markGroupMessagesRead(state.msgs, id, state.groupReads);
+      };
+      receiptsRef.on('value', receiptsHandler);
+      chatListeners.push(function() { receiptsRef.off('value', receiptsHandler); });
     }
   }
 
-  function renderMessages(msgs, kind, cid, peerReadTs) {
+  function markGroupMessagesRead(msgs, gid, receipts) {
+    if (activeChat.type !== 'group' || activeChat.id !== gid || !currentUid) return;
+    var updates = {};
+    Object.keys(msgs || {}).forEach(function(msgId) {
+      var msg = msgs[msgId] || {};
+      if (msg.from === currentUid) return;
+      if (receipts && receipts[msgId] && receipts[msgId][currentUid]) return;
+      updates['groups/' + gid + '/messageReads/' + msgId + '/' + currentUid] = window.firebase.database.ServerValue.TIMESTAMP;
+    });
+    if (Object.keys(updates).length) db().ref().update(updates).catch(function(e) { console.warn('群組訊息已讀回報失敗', e); });
+  }
+
+  function renderMessages(msgs, kind, cid, peerReadTs, groupReads) {
     removeAllRows();
     var sorted = Object.keys(msgs).map(function(id) { return [id, msgs[id]]; });
     sorted.sort(function(a, b) { return (a[1].ts || 0) - (b[1].ts || 0); });
@@ -2312,8 +2431,20 @@ body.admin-view .chat-input-wrap{display:none!important}
       if (isMe) {
         var readEl = document.createElement('div');
         readEl.className = 'msg-read';
-        var tsVal = (typeof msg.ts === 'number') ? msg.ts : 0;
-        readEl.textContent = (peerReadTs && tsVal && tsVal <= peerReadTs) ? '已讀' : '';
+        if (kind === 'group') {
+          var receipts = (groupReads && groupReads[msgId]) || {};
+          var totalReaders = 0, readCount = 0;
+          Object.keys(activeGroupMembers || {}).forEach(function(uid) {
+            if (uid === msg.from) return;
+            totalReaders++;
+            if (receipts[uid]) readCount++;
+          });
+          readEl.textContent = totalReaders > 0 && readCount > 0 ? ('已讀 ' + readCount + '/' + totalReaders) : '';
+          readEl.dataset.readCount = String(readCount);
+        } else {
+          var tsVal = (typeof msg.ts === 'number') ? msg.ts : 0;
+          readEl.textContent = (peerReadTs && tsVal && tsVal <= peerReadTs) ? '已讀' : '';
+        }
         readEl.addEventListener('click', function(e) {
           e.stopPropagation();
           showReaders(msgId, kind, cid);
@@ -2328,7 +2459,35 @@ body.admin-view .chat-input-wrap{display:none!important}
   }
 
   function showReaders(msgId, kind, cid) {
-    alert('已讀狀態會即時顯示在訊息下方。');
+    if (kind !== 'group') {
+      alert('私訊已讀狀態會即時顯示在訊息下方。');
+      return;
+    }
+    var old = document.getElementById('message-readers-pop');
+    if (old) old.remove();
+    var receipts = activeGroupReceiptCache[msgId] || {};
+    var memberIds = Object.keys(activeGroupMembers || {}).filter(function(uid) { return uid !== currentUid; });
+    var readIds = memberIds.filter(function(uid) { return !!receipts[uid]; });
+    var pop = document.createElement('div');
+    pop.id = 'message-readers-pop';
+    pop.className = 'reader-pop';
+    pop.style.left = '50%'; pop.style.top = '50%'; pop.style.transform = 'translate(-50%,-50%)';
+    var title = document.createElement('div'); title.className = 'r-title';
+    title.textContent = '已讀成員（' + readIds.length + '/' + memberIds.length + '）';
+    pop.appendChild(title);
+    if (!readIds.length) {
+      var none = document.createElement('div'); none.textContent = '目前還沒有人讀取這則訊息。'; pop.appendChild(none);
+    } else {
+      readIds.forEach(function(uid) {
+        var m = currentMembersMap[uid] || {};
+        var row = document.createElement('div'); row.className = 'r-item';
+        var img = document.createElement('img'); img.src = m.avatar || fallbackAvatar; img.onerror = function(){this.onerror=null;this.src=fallbackAvatar;};
+        var name = document.createElement('span'); name.textContent = m.name || m.username || uid;
+        row.appendChild(img); row.appendChild(name); pop.appendChild(row);
+      });
+    }
+    var close = document.createElement('button'); close.className = 'mini-btn ap-close'; close.textContent = '關閉'; close.onclick = function(){pop.remove();};
+    pop.appendChild(close); document.body.appendChild(pop);
   }
 
   function doRecall(kind, cid, msgId, msgData, isMe) {
@@ -2391,9 +2550,15 @@ body.admin-view .chat-input-wrap{display:none!important}
   chatSendBtn.addEventListener('click', function() {
     var text = msgInput.value.trim();
     if (!text) return;
-    msgInput.value = '';
-    clearReply();
-    sendMessage(text, 'text').catch(function(e) { alert('傳送失敗：' + errorMessage(e)); });
+    // 先呼叫 sendMessage，讓它把目前的 replyToMsg 一起寫入資料庫；
+    // 只有成功送出後才清除回覆狀態。
+    sendMessage(text, 'text').then(function() {
+      msgInput.value = '';
+      stopTyping();
+      clearReply();
+    }).catch(function(e) {
+      alert('傳送失敗：' + errorMessage(e));
+    });
   });
   msgInput.addEventListener('keydown', function(e) {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -2420,6 +2585,7 @@ body.admin-view .chat-input-wrap{display:none!important}
       }).then(function() {
         setUploadStatus('圖片已送出。', false);
         setTimeout(function() { setUploadStatus(''); }, 2000);
+        clearReply();
         updateQuotaHint();
       }).catch(function(err) {
         setUploadStatus('圖片上傳失敗：' + errorMessage(err), true);
