@@ -627,6 +627,9 @@ body.admin-view .chat-input-wrap{display:none!important}
   var activeGroupReadReceipts = {};
   var activeGroupMembers = {};
   var activeGroupReceiptCache = {};
+  var activeMessageState = null;
+  var sendingMessage = false;
+  var uploadingChatImage = false;
 
   function db(){ return window.firebase.database(); }
   function setStatus(id,msg,type){
@@ -1988,6 +1991,15 @@ body.admin-view .chat-input-wrap{display:none!important}
     var latestQuery;
     var latestHandler;
     var latestError;
+    var removedHandler = function(snapshot) {
+      if (!active || !snapshot.key) return;
+      if (Object.prototype.hasOwnProperty.call(state.msgs, snapshot.key)) {
+        delete state.msgs[snapshot.key];
+        render();
+      }
+    };
+    // 收回/刪除較舊訊息時也要同步快取，避免其他事件觸發 render 後又顯示舊訊息。
+    messagesRef.on('child_removed', removedHandler);
     loadOlderBtn.hidden=true;
     loadOlderBtn.disabled=true;
     loadOlderBtn.textContent='載入更早訊息';
@@ -2076,6 +2088,7 @@ body.admin-view .chat-input-wrap{display:none!important}
         latestQuery.off('child_added',latestHandler);
         latestQuery.off('child_changed',latestHandler);
       }
+      messagesRef.off('child_removed', removedHandler);
       loadOlderBtn.onclick=null;
       loadOlderBtn.hidden=true;
       loadOlderBtn.disabled=true;
@@ -2280,7 +2293,8 @@ body.admin-view .chat-input-wrap{display:none!important}
     watchTypingForActiveChat();
     removeAllRows();
     chatEmpty.style.display = 'none';
-    var state = { msgs: {}, peerReadTs: 0 };
+    var state = { msgs: {}, peerReadTs: 0, groupReads: {} };
+    activeMessageState = state;
     var messagesRef = db().ref(path);
     var cid = (kind === 'friend') ? chatIdFor(currentUid, id) : id;
     
@@ -2332,15 +2346,28 @@ body.admin-view .chat-input-wrap{display:none!important}
       membersRef.on('value', membersHandler);
       chatListeners.push(function() { membersRef.off('value', membersHandler); });
 
+      // 使用 child 事件：有人讀取一則訊息時，只接收該則訊息的收據，
+      // 不再因為每次更新而重新下載整個 messageReads 資料樹。
       var receiptsRef = db().ref('groups/' + id + '/messageReads');
-      var receiptsHandler = function(snap) {
-        state.groupReads = snap.val() || {};
+      // 只載入最近 60 則訊息的已讀收據，避免每次開群組都抓取整個歷史收據資料樹。
+      var receiptsQuery = receiptsRef.limitToLast(60);
+      function applyReceiptChild(snap, remove) {
+        if (!snap.key) return;
+        if (remove) delete state.groupReads[snap.key];
+        else state.groupReads[snap.key] = snap.val() || {};
         activeGroupReceiptCache = state.groupReads;
         renderMessages(state.msgs, kind, cid, state.peerReadTs, state.groupReads);
-        markGroupMessagesRead(state.msgs, id, state.groupReads);
-      };
-      receiptsRef.on('value', receiptsHandler);
-      chatListeners.push(function() { receiptsRef.off('value', receiptsHandler); });
+      }
+      var receiptAdded = function(snap) { applyReceiptChild(snap, false); };
+      var receiptChanged = function(snap) { applyReceiptChild(snap, false); };
+      var receiptRemoved = function(snap) { applyReceiptChild(snap, true); };
+      receiptsQuery.on('child_added', receiptAdded);
+      receiptsQuery.on('child_changed', receiptChanged);
+      // 不監聽 child_removed：limitToLast 視窗移動時也會觸發移出事件，不能把已讀狀態誤當成真的被刪除。
+      chatListeners.push(function() {
+        receiptsQuery.off('child_added', receiptAdded);
+        receiptsQuery.off('child_changed', receiptChanged);
+      });
     }
   }
 
@@ -2495,6 +2522,12 @@ body.admin-view .chat-input-wrap{display:none!important}
     var path = (kind === 'friend')
       ? 'private_chats/' + cid + '/msgs/' + msgId
       : 'groups/' + cid + '/msgs/' + msgId;
+    // 先從目前聊天室的記憶體快取移除，避免已讀更新或其他 render 把舊訊息畫回來。
+    var activeCid = activeChat.type === 'friend' ? chatIdFor(currentUid, activeChat.id) : activeChat.id;
+    if (activeMessageState && activeCid === cid) {
+      delete activeMessageState.msgs[msgId];
+      renderMessages(activeMessageState.msgs, kind, cid, activeMessageState.peerReadTs, activeMessageState.groupReads || {});
+    }
     var refundPromise = Promise.resolve();
     if (isMe && msgData && msgData.type === 'image' && msgData.ts) {
       refundPromise = refundImageQuotaForDate(dateKeyFromTs(msgData.ts));
@@ -2508,7 +2541,14 @@ body.admin-view .chat-input-wrap{display:none!important}
         chatEmpty.textContent = '目前沒有訊息。';
       }
       updateQuotaHint();
-    }).catch(function (e) { alert('操作失敗：' + errorMessage(e)); });
+    }).catch(function (e) {
+      // Firebase 刪除失敗時還原本機快取，避免訊息只在畫面消失、重新整理又出現。
+      if (activeMessageState && activeCid === cid) {
+        activeMessageState.msgs[msgId] = msgData;
+        renderMessages(activeMessageState.msgs, kind, cid, activeMessageState.peerReadTs, activeMessageState.groupReads || {});
+      }
+      alert('操作失敗：' + errorMessage(e));
+    });
   }
 
   function updateMyMessageAvatars() {
@@ -2548,16 +2588,24 @@ body.admin-view .chat-input-wrap{display:none!important}
   }
 
   chatSendBtn.addEventListener('click', function() {
+    if (sendingMessage || !activeChat.type) return;
     var text = msgInput.value.trim();
     if (!text) return;
-    // 先呼叫 sendMessage，讓它把目前的 replyToMsg 一起寫入資料庫；
-    // 只有成功送出後才清除回覆狀態。
-    sendMessage(text, 'text').then(function() {
-      msgInput.value = '';
-      stopTyping();
-      clearReply();
+    sendingMessage = true;
+    chatSendBtn.disabled = true;
+    // 先同步清空並鎖定按鈕，避免網路回應較慢時連按造成重複訊息。
+    msgInput.value = '';
+    stopTyping();
+    var sendPromise = sendMessage(text, 'text');
+    clearReply();
+    sendPromise.then(function() {
+      // 已成功送出，不需再處理輸入框。
     }).catch(function(e) {
+      if (!msgInput.value.trim()) msgInput.value = text;
       alert('傳送失敗：' + errorMessage(e));
+    }).finally(function() {
+      sendingMessage = false;
+      chatSendBtn.disabled = !activeChat.type;
     });
   });
   msgInput.addEventListener('keydown', function(e) {
@@ -2575,8 +2623,11 @@ body.admin-view .chat-input-wrap{display:none!important}
     var file = imgFileInput.files && imgFileInput.files[0];
     if (!file) return;
     if (file.type.indexOf('image/') !== 0) { alert('請選擇圖片檔案。'); imgFileInput.value = ''; return; }
-    if (file.size > 10 * 1024 * 1024) { alert('圖片需小於 10MB。'); imgFileInput.value = ''; return; }
-    compressImage(file, 800, 0.75).then(function(dataUrl) {
+    if (uploadingChatImage) { imgFileInput.value = ''; return; }
+    if (file.size > 20 * 1024 * 1024) { alert('圖片需小於 20MB。'); imgFileInput.value = ''; return; }
+    uploadingChatImage = true;
+    imgUploadBtn.disabled = true;
+    compressImage(file, 1600, 0.82).then(function(dataUrl) {
       setUploadStatus('正在上傳圖片到 ImgBB…', false);
       return consumeImageQuota().then(function() {
         return uploadToImgBB(dataUrl, 'chat_' + currentUid + '_' + Date.now());
@@ -2595,6 +2646,8 @@ body.admin-view .chat-input-wrap{display:none!important}
       alert('圖片處理失敗：' + err.message);
     }).finally(function() {
       imgFileInput.value = '';
+      uploadingChatImage = false;
+      imgUploadBtn.disabled = !activeChat.type;
     });
   });
 
