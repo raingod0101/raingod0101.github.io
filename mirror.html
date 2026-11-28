@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>高解析度光學成像模擬器 (物體正立/實像倒立)</title>
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --panel-bg: rgba(17, 24, 39, 0.75);
+            --border-color: rgba(255, 255, 255, 0.1);
+            --text-main: #f3f4f6;
+            --text-secondary: #9ca3af;
+            --accent: #38bdf8;
+            --accent-gradient: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
+        }
+
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        h1 {
+            font-size: 1.4rem;
+            font-weight: 600;
+            margin-bottom: 12px;
+            letter-spacing: 1px;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .container {
+            background: var(--panel-bg);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--border-color);
+            padding: 20px;
+            border-radius: 16px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+            max-width: 940px;
+            width: 100%;
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+            gap: 14px;
+            margin-bottom: 16px;
+            padding: 14px;
+            background: rgba(3, 7, 18, 0.4);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            align-items: center;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        label {
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+
+        select, input[type="range"] {
+            background: #030712;
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+            padding: 7px 10px;
+            border-radius: 8px;
+            font-size: 13px;
+            outline: none;
+            transition: all 0.2s;
+        }
+
+        select:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+        }
+
+        input[type="range"] {
+            padding: 0;
+            height: 5px;
+            accent-color: var(--accent);
+            cursor: pointer;
+        }
+
+        .canvas-wrapper {
+            position: relative;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+            background: #030712;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: auto;
+            cursor: grab;
+        }
+
+        canvas:active {
+            cursor: grabbing;
+        }
+
+        .info {
+            margin-top: 14px;
+            padding: 12px 16px;
+            background: rgba(3, 7, 18, 0.4);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            font-size: 13px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 10px;
+        }
+
+        .info-item span {
+            color: var(--accent);
+            font-weight: 600;
+            font-family: monospace;
+            font-size: 13px;
+        }
+
+        .instructions {
+            margin-top: 10px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-align: center;
+        }
+
+        .highlight {
+            color: #38bdf8;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>OPTICS LAB // 專業光學成像模擬器</h1>
+    <div class="container">
+        <div class="controls">
+            <div class="control-group">
+                <label for="deviceType">光學元件種類</label>
+                <select id="deviceType">
+                    <option value="convex_lens">凸透鏡 (Convex Lens)</option>
+                    <option value="concave_lens">凹透鏡 (Concave Lens)</option>
+                    <option value="concave_mirror">凹面鏡 (Concave Mirror)</option>
+                    <option value="convex_mirror">凸面鏡 (Convex Mirror)</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label for="objectType">物體樣式</label>
+                <select id="objectType">
+                    <option value="candle">🕯️ 蠟燭 (Candle)</option>
+                    <option value="arrow">⬆️ 箭頭 (Arrow)</option>
+                    <option value="person">🧍 人偶 (Person)</option>
+                    <option value="tree">🌲 樹木 (Tree)</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label for="focalLength">焦距 ($f$)：<span id="fValue" class="highlight">100</span> px</label>
+                <input type="range" id="focalLength" min="60" max="180" value="100">
+            </div>
+            <div class="control-group">
+                <label for="objHeight">物體高度：<span id="hValue" class="highlight">70</span> px</label>
+                <input type="range" id="objHeight" min="30" max="110" value="70">
+            </div>
+        </div>
+
+        <div class="canvas-wrapper">
+            <canvas id="opticsCanvas"></canvas>
+        </div>
+        
+        <div class="info" id="infoBox">
+            <div class="info-item">物距 ($u$): <span id="uDist">--</span></div>
+            <div class="info-item">像距 ($v$): <span id="vDist">--</span></div>
+            <div class="info-item">放大倍率 ($m$): <span id="mag">--</span></div>
+            <div class="info-item">像的性質: <span id="imgNature" style="color: #34d399;">--</span></div>
+        </div>
+        
+        <div class="instructions">
+            ✨ 操作提示：用滑鼠直接在畫布中**左右拖曳物體**即可即時觀察動態成像。
+        </div>
+    </div>
+
+<script>
+const canvas = document.getElementById('opticsCanvas');
+const ctx = canvas.getContext('2d');
+
+// 解決模糊問題：啟用 Retina 雙倍高解析度繪圖
+const dpr = window.devicePixelRatio || 1;
+const logicalWidth = 900;
+const logicalHeight = 460;
+
+canvas.width = logicalWidth * dpr;
+canvas.height = logicalHeight * dpr;
+ctx.scale(dpr, dpr);
+
+const originX = logicalWidth / 2;
+const originY = logicalHeight / 2;
+
+const deviceTypeSelect = document.getElementById('deviceType');
+const objectTypeSelect = document.getElementById('objectType');
+const focalLengthInput = document.getElementById('focalLength');
+const objHeightInput = document.getElementById('objHeight');
+
+const fValueSpan = document.getElementById('fValue');
+const hValueSpan = document.getElementById('hValue');
+const uDistSpan = document.getElementById('uDist');
+const vDistSpan = document.getElementById('vDist');
+const magSpan = document.getElementById('mag');
+const imgNatureSpan = document.getElementById('imgNature');
+
+let deviceType = deviceTypeSelect.value;
+let objectType = objectTypeSelect.value;
+let f = parseInt(focalLengthInput.value);
+let objH = parseInt(objHeightInput.value);
+let objX = -200; 
+let isDragging = false;
+
+deviceTypeSelect.addEventListener('change', (e) => { deviceType = e.target.value; draw(); });
+objectTypeSelect.addEventListener('change', (e) => { objectType = e.target.value; draw(); });
+focalLengthInput.addEventListener('input', (e) => { f = parseInt(e.target.value); fValueSpan.textContent = f; draw(); });
+objHeightInput.addEventListener('input', (e) => { objH = parseInt(e.target.value); hValueSpan.textContent = objH; draw(); });
+
+// 滑鼠互動
+canvas.addEventListener('mousedown', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = (e.clientX - rect.left) * (logicalWidth / rect.width);
+    const mouseY = (e.clientY - rect.top) * (logicalHeight / rect.height);
+    
+    const currentObjScreenX = originX + objX;
+    // 點擊區域調整為包圍正立物體的範圍
+    if (Math.abs(mouseX - currentObjScreenX) < 40 && mouseY >= originY - objH - 30 && mouseY <= originY + 20) {
+        isDragging = true;
+    }
+});
+
+window.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = (e.clientX - rect.left) * (logicalWidth / rect.width);
+    let newObjX = mouseX - originX;
+    
+    if (newObjX >= -30) newObjX = -30;
+    if (newObjX < -originX + 40) newObjX = -originX + 40;
+    
+    objX = newObjX;
+    draw();
+});
+
+window.addEventListener('mouseup', () => { isDragging = false; });
+
+// 畫箭頭
+function drawArrowHead(x, y, angle, color = '#fff', size = 7) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(-size, -size/2.2);
+    ctx.lineTo(-size, size/2.2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+}
+
+// 畫光線
+function drawRay(x1, y1, x2, y2, color, style = 'solid', showArrow = true) {
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    if (style === 'dashed') ctx.setLineDash([4, 4]);
+    
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+
+    if (showArrow && style === 'solid') {
+        const midX = (x1 * 0.45 + x2 * 0.55);
+        const midY = (y1 * 0.45 + y2 * 0.55);
+        const angle = Math.atan2(y2 - y1, x2 - x1);
+        drawArrowHead(midX, midY, angle, color, 6);
+    }
+    ctx.restore();
+}
+
+// 繪製格線背景
+function drawBackgroundGrid() {
+    ctx.clearRect(0, 0, logicalWidth, logicalHeight);
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.025)';
+    ctx.lineWidth = 1;
+    const gridSize = 30;
+    
+    for (let x = 0; x < logicalWidth; x += gridSize) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, logicalHeight); ctx.stroke();
+    }
+    for (let y = 0; y < logicalHeight; y += gridSize) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(logicalWidth, y); ctx.stroke();
+    }
+
+    // 主光軸
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(0, originY);
+    ctx.lineTo(logicalWidth, originY);
+    ctx.stroke();
+
+    // 焦點標記
+    const isMirror = deviceType.includes('mirror');
+    const fEff = (deviceType === 'concave_lens' || deviceType === 'convex_mirror') ? -f : f;
+
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '11px system-ui';
+
+    if (isMirror) {
+        drawFocusDot(originX - fEff, originY, 'F');
+        drawFocusDot(originX - 2 * fEff, originY, 'C');
+    } else {
+        drawFocusDot(originX - f, originY, 'F');
+        drawFocusDot(originX + f, originY, "F'");
+        drawFocusDot(originX - 2 * f, originY, '2F');
+        drawFocusDot(originX + 2 * f, originY, "2F'");
+    }
+}
+
+function drawFocusDot(x, y, label) {
+    ctx.save();
+    ctx.fillStyle = '#38bdf8';
+    ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillText(label, x - 4, originY + 18);
+    ctx.restore();
+}
+
+// 繪製光學鏡片
+function drawDevice() {
+    ctx.save();
+    const h = 150;
+
+    if (deviceType === 'convex_lens') {
+        ctx.beginPath();
+        ctx.moveTo(originX, originY - h);
+        ctx.bezierCurveTo(originX - 16, originY - h/2, originX - 16, originY + h/2, originX, originY + h);
+        ctx.bezierCurveTo(originX + 16, originY + h/2, originX + 16, originY - h/2, originX, originY - h);
+        
+        let grad = ctx.createLinearGradient(originX - 15, 0, originX + 15, 0);
+        grad.addColorStop(0, 'rgba(56, 189, 248, 0.1)');
+        grad.addColorStop(0.5, 'rgba(129, 140, 248, 0.3)');
+        grad.addColorStop(1, 'rgba(56, 189, 248, 0.1)');
+        ctx.fillStyle = grad;
+        ctx.fill();
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    } else if (deviceType === 'concave_lens') {
+        ctx.beginPath();
+        ctx.moveTo(originX - 8, originY - h);
+        ctx.bezierCurveTo(originX + 12, originY - h/2, originX + 12, originY + h/2, originX - 8, originY + h);
+        ctx.lineTo(originX + 8, originY + h);
+        ctx.bezierCurveTo(originX - 12, originY + h/2, originX - 12, originY - h/2, originX + 8, originY - h);
+        ctx.closePath();
+
+        let grad = ctx.createLinearGradient(originX - 12, 0, originX + 12, 0);
+        grad.addColorStop(0, 'rgba(56, 189, 248, 0.1)');
+        grad.addColorStop(0.5, 'rgba(129, 140, 248, 0.3)');
+        grad.addColorStop(1, 'rgba(56, 189, 248, 0.1)');
+        ctx.fillStyle = grad;
+        ctx.fill();
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    } else if (deviceType === 'concave_mirror') {
+        ctx.beginPath();
+        ctx.arc(originX + 130, originY, 140, Math.PI - 0.52, Math.PI + 0.52, false);
+        ctx.lineWidth = 3.5;
+        ctx.strokeStyle = '#818cf8';
+        ctx.stroke();
+        drawMirrorHatching(originX, originY, 'concave');
+    } else if (deviceType === 'convex_mirror') {
+        ctx.beginPath();
+        ctx.arc(originX - 130, originY, 140, -0.52, 0.52, false);
+        ctx.lineWidth = 3.5;
+        ctx.strokeStyle = '#818cf8';
+        ctx.stroke();
+        drawMirrorHatching(originX, originY, 'convex');
+    }
+    ctx.restore();
+}
+
+function drawMirrorHatching(x, y, type) {
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.35)';
+    ctx.lineWidth = 1;
+    for (let i = -70; i <= 70; i += 12) {
+        let py = originY + i;
+        ctx.beginPath();
+        ctx.moveTo(x, py);
+        ctx.lineTo(type === 'concave' ? x + 7 : x - 7, py + 4);
+        ctx.stroke();
+    }
+}
+
+// 核心渲染邏輯：正確處理物體正立與像的倒立/正立
+function renderObjectOrImage(x, y, h, type, isImage = false) {
+    ctx.save();
+    ctx.translate(x, y);
+    
+    // 關鍵修改：決定是否上下翻轉
+    // 如果 isImage 為 true 且 h < 0 (實像)，則翻轉
+    // 如果 !isImage (物體)，永遠不翻轉
+    const scaleY = (isImage && h < 0) ? -1 : 1;
+    ctx.scale(1, scaleY);
+    
+    // 使用絕對值來繪製圖形，避免內部座標為負
+    const absH = Math.abs(h);
+
+    const baseColor = isImage ? '#34d399' : '#f43f5e';
+    ctx.strokeStyle = baseColor;
+    ctx.fillStyle = baseColor;
+    ctx.lineWidth = 2;
+
+    if (type === 'arrow') {
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(0, -absH);
+        ctx.stroke();
+        drawArrowHead(0, -absH, -Math.PI/2, baseColor, 8);
+    } 
+    else if (type === 'candle') {
+        const candleW = absH * 0.25;
+        const candleH = absH * 0.75;
+        ctx.fillRect(-candleW/2, -candleH, candleW, candleH);
+        
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(0, -candleH);
+        ctx.lineTo(0, -candleH - 6);
+        ctx.stroke();
+
+        ctx.fillStyle = isImage ? 'rgba(52, 211, 153, 0.85)' : 'rgba(251, 191, 36, 0.85)';
+        ctx.beginPath();
+        ctx.ellipse(0, -candleH - 14, absH * 0.12, absH * 0.2, 0, 0, Math.PI * 2);
+        ctx.fill();
+    } 
+    else if (type === 'person') {
+        const headR = absH * 0.18;
+        ctx.beginPath();
+        ctx.arc(0, -absH + headR, headR, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(0, -absH + headR * 2);
+        ctx.lineTo(0, -absH * 0.3);
+        ctx.moveTo(-headR * 1.2, -absH * 0.6);
+        ctx.lineTo(headR * 1.2, -absH * 0.6);
+        ctx.moveTo(0, -absH * 0.3);
+        ctx.lineTo(-headR, 0);
+        ctx.moveTo(0, -absH * 0.3);
+        ctx.lineTo(headR, 0);
+        ctx.stroke();
+    } 
+    else if (type === 'tree') {
+        const trunkW = absH * 0.15;
+        const trunkH = absH * 0.3;
+        ctx.fillStyle = '#b45309';
+        ctx.fillRect(-trunkW/2, -trunkH, trunkW, trunkH);
+        ctx.fillStyle = isImage ? '#059669' : '#10b981';
+        ctx.beginPath();
+        ctx.arc(0, -trunkH - absH * 0.35, absH * 0.38, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    ctx.restore();
+}
+
+function draw() {
+    drawBackgroundGrid();
+    drawDevice();
+
+    const u = -objX; 
+    // 在原物理座標系中，物體高度 h1 向上為正。但在這裡繪圖是向下為正(Y軸朝下)
+    // 所以物體頂端的 Y 座標應該是 originY - objH。
+    // 在成像公式中，習慣設定「正立」為正，「倒立」為負。
+    // 我們讓 h1 = objH (正值，代表正立)。這樣 m = h2/h1，如果 h2 為負就是倒立。
+    const h1 = objH; 
+    
+    let fEff = f;
+    if (deviceType === 'concave_lens' || deviceType === 'convex_mirror') {
+        fEff = -f;
+    }
+
+    let v, m;
+    let isVirtualImage = false;
+
+    if (Math.abs(u - fEff) < 0.1 && fEff > 0) {
+        v = Infinity;
+    } else {
+        v = 1 / (1/fEff - 1/u);
+    }
+
+    // m = -v/u 是標準的高斯透鏡公式放大率。
+    // 若 v > 0 (實像)，則 m 為負 (倒立)。
+    m = -v / u;
+    const h2 = h1 * m; // h2 為負代表倒立
+    isVirtualImage = v < 0;
+
+    // 1. 繪製物體 (永遠正立)
+    const objScreenX = originX + objX;
+    const objTipY = originY - h1; // 頂端 Y 座標 (向上)
+    
+    // 傳入 h1 (正值)，isImage = false，它會畫出正立的物體
+    renderObjectOrImage(objScreenX, originY, h1, objectType, false);
+    
+    ctx.fillStyle = '#f43f5e';
+    ctx.font = 'bold 11px system-ui';
+    ctx.fillText('OBJECT', objScreenX - 22, originY + 20);
+
+    // 2. 計算與繪製成像
+    let imgScreenX, imgTipY;
+    if (Math.abs(v) === Infinity) {
+        vDistSpan.textContent = "無限遠 (Inf)";
+        magSpan.textContent = "--";
+        imgNatureSpan.textContent = "不成像 (平行光)";
+        uDistSpan.textContent = u.toFixed(1) + " px";
+        return;
+    } else {
+        imgScreenX = deviceType.includes('lens') ? originX + v : originX - v;
+        imgTipY = originY - h2; // 像的頂端 Y 座標。若 h2 < 0 (倒立)，會跑到下方
+    }
+
+    ctx.save();
+    if (isVirtualImage) ctx.globalAlpha = 0.65; // 虛像半透明
+    
+    // 傳入 h2 (可能為負)，isImage = true，它會根據 h2 的正負決定是否翻轉繪製
+    renderObjectOrImage(imgScreenX, originY, h2, objectType, true);
+    ctx.restore();
+
+    ctx.fillStyle = '#34d399';
+    // 根據 h2 決定標籤位置
+    ctx.fillText('IMAGE', imgScreenX - 18, originY + (h2 < 0 ? -h2 + 20 : 20));
+
+    // 3. 更新面板資訊
+    uDistSpan.textContent = u.toFixed(1) + " px";
+    vDistSpan.textContent = Math.abs(v).toFixed(1) + " px (" + (v > 0 ? (deviceType.includes('lens') ? '右側實像' : '前方實像') : (deviceType.includes('lens') ? '左側虛像' : '後方虛像')) + ")";
+    magSpan.textContent = m.toFixed(2) + "x";
+    
+    let natureStr = "";
+    if (Math.abs(m) > 1) natureStr += "放大 ";
+    else if (Math.abs(m) < 1) natureStr += "縮小 ";
+    else natureStr += "等大 ";
+
+    natureStr += (m > 0) ? "正立 " : "倒立 ";
+    natureStr += isVirtualImage ? "虛像" : "實像";
+    imgNatureSpan.textContent = natureStr;
+
+    // ==================== 繪製光線 (Ray Tracing) ====================
+    // 物體頂端座標
+    const tipScreenY = originY - h1; 
+
+    // 光線 1：平行光
+    if (deviceType === 'convex_lens') {
+        drawRay(objScreenX, tipScreenY, originX, tipScreenY, 'rgba(244, 63, 94, 0.75)', 'solid');
+        if (!isVirtualImage) {
+            drawRay(originX, tipScreenY, imgScreenX, imgTipY, 'rgba(52, 211, 153, 0.75)', 'solid');
+            // 延伸線
+            drawRay(imgScreenX, imgTipY, logicalWidth, imgTipY + (logicalWidth - imgScreenX) * (imgTipY - tipScreenY)/(imgScreenX - originX), 'rgba(52, 211, 153, 0.15)', 'solid', false);
+        } else {
+            drawRay(originX, tipScreenY, logicalWidth, tipScreenY + (logicalWidth - originX) * (tipScreenY - originY)/f, 'rgba(52, 211, 153, 0.75)', 'solid');
+            drawRay(originX, tipScreenY, imgScreenX, imgTipY, 'rgba(52, 211, 153, 0.5)', 'dashed', false);
+        }
+    } else if (deviceType === 'concave_lens') {
+        drawRay(objScreenX, tipScreenY, originX, tipScreenY, 'rgba(244, 63, 94, 0.75)', 'solid');
+        let endX = logicalWidth;
+        let endY = tipScreenY + (endX - originX) * (tipScreenY - originY) / f; 
+        drawRay(originX, tipScreenY, endX, endY, 'rgba(52, 211, 153, 0.75)', 'solid');
+        drawRay(originX, tipScreenY, originX - f, originY, 'rgba(52, 211, 153, 0.5)', 'dashed', false);
+    } else if (deviceType === 'concave_mirror') {
+        drawRay(objScreenX, tipScreenY, originX, tipScreenY, 'rgba(244, 63, 94, 0.75)', 'solid');
+        if (v > 0) {
+            drawRay(originX, tipScreenY, imgScreenX, imgTipY, 'rgba(52, 211, 153, 0.75)', 'solid');
+        } else {
+            drawRay(originX, tipScreenY, 0, tipScreenY + (originX) * (tipScreenY - originY)/f, 'rgba(52, 211, 153, 0.75)', 'solid');
+            drawRay(originX, tipScreenY, imgScreenX, imgTipY, 'rgba(52, 211, 153, 0.5)', 'dashed', false);
+        }
+    } else if (deviceType === 'convex_mirror') {
+        drawRay(objScreenX, tipScreenY, originX, tipScreenY, 'rgba(244, 63, 94, 0.75)', 'solid');
+        drawRay(originX, tipScreenY, 0, tipScreenY - 90, 'rgba(52, 211, 153, 0.75)', 'solid');
+        drawRay(originX, tipScreenY, originX + f, originY, 'rgba(52, 211, 153, 0.5)', 'dashed', false);
+    }
+
+    // 光線 2：通過光心或鏡頂
+    if (deviceType.includes('lens')) {
+        if (!isVirtualImage) {
+            drawRay(objScreenX, tipScreenY, imgScreenX, imgTipY, 'rgba(129, 140, 248, 0.75)', 'solid');
+            drawRay(imgScreenX, imgTipY, logicalWidth, imgTipY + (logicalWidth - imgScreenX)*(imgTipY-tipScreenY)/(imgScreenX-objScreenX), 'rgba(129, 140, 248, 0.15)', 'solid', false);
+        } else {
+            drawRay(objScreenX, tipScreenY, logicalWidth, originY + (logicalWidth - objScreenX)*(tipScreenY-originY)/(originX - objScreenX), 'rgba(129, 140, 248, 0.75)', 'solid');
+            drawRay(objScreenX, tipScreenY, imgScreenX, imgTipY, 'rgba(129, 140, 248, 0.5)', 'dashed', false);
+        }
+    } else {
+        drawRay(objScreenX, tipScreenY, originX, originY, 'rgba(129, 140, 248, 0.75)', 'solid');
+        if (v > 0) {
+            drawRay(originX, originY, imgScreenX, imgTipY, 'rgba(129, 140, 248, 0.75)', 'solid');
+        } else {
+            drawRay(originX, originY, logicalWidth, originY + (logicalWidth - originX) * (originY-tipScreenY)/(originX - objScreenX), 'rgba(129, 140, 248, 0.75)', 'solid');
+            drawRay(originX, originY, imgScreenX, imgTipY, 'rgba(129, 140, 248, 0.5)', 'dashed', false);
+        }
+    }
+}
+
+draw();
+</script>
+
+</body>
+</html>
